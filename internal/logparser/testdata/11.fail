@@ -1,0 +1,23 @@
+Section: "go test -short golang.org/x/tools/..."
+Pkg: ""
+Test: ""
+Mode: "build"
+Snippet:
+	godoc/redirect/redirect.go:22:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+	cmd/html2article/conv.go:21:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+	cmd/html2article/conv.go:22:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+	playground/socket/socket.go:37:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+Output:
+	godoc/redirect/redirect.go:22:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+	cmd/html2article/conv.go:21:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+	cmd/html2article/conv.go:22:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+	playground/socket/socket.go:37:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+---
+Section: "go test -short golang.org/x/tools/gopls/..."
+Pkg: ""
+Test: ""
+Mode: "build"
+Snippet:
+	../go/packages/external.go:15:2: golang.org/x/sys@v0.0.0-20220209214540-3681064d5158: unexpected EOF
+Output:
+	../go/packages/external.go:15:2: golang.org/x/sys@v0.0.0-20220209214540-3681064d5158: unexpected EOF

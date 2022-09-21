@@ -1,0 +1,88 @@
+openbsd-amd64-68 at 2d89bec2de0ee9d340346dea6b1506457f5f7722
+
+:: Running /tmp/workdir/go/src/make.bash with args ["/tmp/workdir/go/src/make.bash"] and env ["HOME=/" "PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin" "INRC=1" "_=/bin/sh" "WORKDIR=/tmp/workdir" "GOROOT_BOOTSTRAP=/tmp/workdir/go1.4" "GO_BUILDER_NAME=openbsd-amd64-68" "GOBIN=" "TMPDIR=/tmp/workdir/tmp" "GOCACHE=/tmp/workdir/gocache" "PWD=/tmp/workdir/go/src"] in dir /tmp/workdir/go/src
+
+Building Go cmd/dist using /tmp/workdir/go1.4. (go1.17.13 openbsd/amd64)
+Building Go toolchain1 using /tmp/workdir/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for openbsd/amd64.
+---
+Installed Go for openbsd/amd64 in /tmp/workdir/go
+Installed commands in /tmp/workdir/go/bin
+
+##### Test execution environment.
+# GOARCH: amd64
+# CPU: Intel(R) Xeon(R) CPU @ 2.80GHz
+# GOOS: openbsd
+# OS Version: OpenBSD 6.8 OpenBSD 6.8 (GENERIC.MP) #2: Sat Dec  5 07:17:48 MST 2020     root@syspatch-68-amd64.openbsd.org:/usr/src/sys/arch/amd64/compile/GENERIC.MP  amd64
+
+##### Testing packages.
+ok  	archive/tar	0.041s
+ok  	archive/zip	0.387s
+ok  	bufio	0.081s
+ok  	bytes	0.714s
+ok  	compress/bzip2	0.354s
+ok  	compress/flate	0.512s
+ok  	compress/gzip	0.978s
+ok  	compress/lzw	0.120s
+ok  	compress/zlib	0.444s
+ok  	container/heap	0.070s
+ok  	container/list	0.016s
+ok  	container/ring	0.064s
+ok  	context	0.097s
+ok  	crypto	0.057s
+ok  	crypto/aes	0.051s
+ok  	crypto/cipher	0.023s
+ok  	crypto/des	0.030s
+ok  	crypto/dsa	0.034s
+ok  	crypto/ecdh	0.082s
+ok  	crypto/ecdsa	0.021s
+ok  	crypto/ed25519	0.066s
+ok  	crypto/elliptic	0.030s
+ok  	crypto/hmac	0.029s
+ok  	crypto/internal/alias	0.014s
+ok  	crypto/internal/boring	0.016s
+ok  	crypto/internal/boring/bcache	0.111s
+ok  	crypto/internal/edwards25519	2.561s
+ok  	crypto/internal/edwards25519/field	2.339s
+ok  	crypto/internal/nistec	0.877s
+ok  	crypto/internal/nistec/fiat	0.029s [no tests to run]
+ok  	crypto/md5	0.022s
+ok  	crypto/rand	0.106s
+ok  	crypto/rc4	0.048s
+ok  	crypto/rsa	0.082s
+ok  	crypto/sha1	0.026s
+ok  	crypto/sha256	0.024s
+ok  	crypto/sha512	0.019s
+ok  	crypto/subtle	0.119s
+ok  	crypto/tls	0.298s
+ok  	crypto/x509	0.225s
+ok  	database/sql	0.549s
+ok  	database/sql/driver	0.016s
+ok  	debug/buildinfo	0.066s
+ok  	debug/dwarf	0.033s
+ok  	debug/elf	0.043s
+ok  	debug/gosym	0.083s
+ok  	debug/macho	0.053s
+ok  	debug/pe	0.029s
+ok  	debug/plan9obj	0.025s
+ok  	embed	0.017s [no tests to run]
+ok  	embed/internal/embedtest	0.037s
+ok  	encoding/ascii85	0.025s
+ok  	encoding/asn1	0.021s
+ok  	encoding/base32	0.038s
+ok  	encoding/base64	0.026s
+ok  	encoding/binary	0.020s
+ok  	encoding/csv	0.080s
+ok  	encoding/gob	0.064s
+ok  	encoding/hex	0.022s
+ok  	encoding/json	0.293s
+
+
+
+
+Test "go_test:encoding/pem" ran over 20m0s limit (20m0.000756227s); saw output:
+
+XXXBANNERXXX:Test execution environment.

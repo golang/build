@@ -1,0 +1,60 @@
+Section: "../test"
+Pkg: "fixedbugs/issue5162.go"
+Test: ""
+Mode: "test"
+Snippet:
+	# go run run.go -- fixedbugs/issue5162.go
+	exit status 2
+	# command-line-arguments
+	../../tmp/797079598/tmp__.go:16136:27: internal compiler error: bvset: index 0 is out of bounds with length 0
+
+
+	goroutine 92 [running]:
+	runtime/debug.Stack()
+		/workdir/go/src/runtime/debug/stack.go:24 +0x7a
+	cmd/compile/internal/base.FatalfAt({0x2, 0x3f081b0}, {0x11b0950, 0x30}, {0xc0008968e0, 0x2, 0x2})
+	...
+	cmd/compile/internal/ssagen.genssa(0xc00612fd40, 0xc001afc000)
+		/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:6894 +0x158
+	cmd/compile/internal/ssagen.Compile(0xc00070a3c0, 0x2)
+		/workdir/go/src/cmd/compile/internal/ssagen/pgen.go:193 +0x331
+	cmd/compile/internal/gc.compileFunctions.func4.1(0x2)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:153 +0x47
+	cmd/compile/internal/gc.compileFunctions.func3.1()
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:140 +0x52
+	created by cmd/compile/internal/gc.compileFunctions.func3
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:138 +0xa5
+Output:
+	# go run run.go -- fixedbugs/issue5162.go
+	exit status 2
+	# command-line-arguments
+	../../tmp/797079598/tmp__.go:16136:27: internal compiler error: bvset: index 0 is out of bounds with length 0
+
+
+	goroutine 92 [running]:
+	runtime/debug.Stack()
+		/workdir/go/src/runtime/debug/stack.go:24 +0x7a
+	cmd/compile/internal/base.FatalfAt({0x2, 0x3f081b0}, {0x11b0950, 0x30}, {0xc0008968e0, 0x2, 0x2})
+		/workdir/go/src/cmd/compile/internal/base/print.go:227 +0x22a
+	cmd/compile/internal/base.Fatalf({0x11b0950, 0x30}, {0xc0008968e0, 0x2, 0x2})
+		/workdir/go/src/cmd/compile/internal/base/print.go:196 +0x56
+	cmd/compile/internal/bitvec.BitVec.Set({0x0, {0x176dc20, 0x0, 0x0}}, 0x0)
+		/workdir/go/src/cmd/compile/internal/bitvec/bv.go:81 +0x14d
+	cmd/compile/internal/typebits.Set(0xc00037e770, 0x0, {0x0, {0x176dc20, 0x0, 0x0}})
+		/workdir/go/src/cmd/compile/internal/typebits/typebits.go:38 +0x607
+	cmd/compile/internal/liveness.(*liveness).pointerMap(0xc00674e000, {0x8, {0xc001ac2194, 0x1, 0x1}}, {0xc001af4040, 0x8, 0x8}, {0x0, {0x176dc20, ...}}, ...)
+		/workdir/go/src/cmd/compile/internal/liveness/plive.go:433 +0x18f
+	cmd/compile/internal/liveness.(*liveness).emit(0xc00674e000)
+		/workdir/go/src/cmd/compile/internal/liveness/plive.go:1316 +0x625
+	cmd/compile/internal/liveness.Compute(0xc00070a3c0, 0xc00612fd40, 0x0, 0xc001afc000)
+		/workdir/go/src/cmd/compile/internal/liveness/plive.go:1372 +0x3c5
+	cmd/compile/internal/ssagen.genssa(0xc00612fd40, 0xc001afc000)
+		/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:6894 +0x158
+	cmd/compile/internal/ssagen.Compile(0xc00070a3c0, 0x2)
+		/workdir/go/src/cmd/compile/internal/ssagen/pgen.go:193 +0x331
+	cmd/compile/internal/gc.compileFunctions.func4.1(0x2)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:153 +0x47
+	cmd/compile/internal/gc.compileFunctions.func3.1()
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:140 +0x52
+	created by cmd/compile/internal/gc.compileFunctions.func3
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:138 +0xa5

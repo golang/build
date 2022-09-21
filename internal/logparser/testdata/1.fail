@@ -1,0 +1,391 @@
+Section: "../test"
+Pkg: "escape_struct_param2.go"
+Test: ""
+Mode: "test"
+Snippet:
+	# go run run.go -- escape_struct_param2.go
+	exit status 1
+	/workdir/go/test/escape_struct_param2.go:25: leaking param: u to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:29: leaking param: u to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:33: leaking param: u to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:38: moved to heap: s
+	/workdir/go/test/escape_struct_param2.go:41: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:46: moved to heap: s
+	/workdir/go/test/escape_struct_param2.go:49: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:55: moved to heap: s
+	...
+	fatal error: fault
+	[signal SIGSEGV: segmentation violation code=0x1 addr=0x3a0000008f pc=0x3a0000008f]
+
+	goroutine 1 [running]:
+	runtime.throw({0x11a6896?, 0x10?})
+		/workdir/go/src/runtime/panic.go:1047 +0x5d fp=0xc00048cf68 sp=0xc00048cf38 pc=0x43cd7d
+	runtime.sigpanic()
+		/workdir/go/src/runtime/signal_unix.go:844 +0x1ca fp=0xc00048cf98 sp=0xc00048cf68 pc=0x453faa
+	math/rand.(*Rand).Int63(0xc00074e660)
+		/workdir/go/src/math/rand/rand.go:84 +0x38 fp=0xc00048cfc0 sp=0xc00048cf98 pc=0x5ea1b8
+	...
+	cmd/compile/internal/gc.compileFunctions()
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:163 +0x1f2 fp=0xc000491a90 sp=0xc000491a18 pc=0x10aaa52
+	cmd/compile/internal/gc.Main(0x11dd308)
+		/workdir/go/src/cmd/compile/internal/gc/main.go:301 +0x178c fp=0xc000491ed8 sp=0xc000491a90 pc=0x10ad1cc
+	main.main()
+		/workdir/go/src/cmd/compile/main.go:57 +0x171 fp=0xc000491f80 sp=0xc000491ed8 pc=0x10e5911
+	runtime.main()
+		/workdir/go/src/runtime/proc.go:250 +0x1d3 fp=0xc000491fe0 sp=0xc000491f80 pc=0x43f4d3
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000491fe8 sp=0xc000491fe0 pc=0x472061
+Output:
+	# go run run.go -- escape_struct_param2.go
+	exit status 1
+	/workdir/go/test/escape_struct_param2.go:25: leaking param: u to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:29: leaking param: u to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:33: leaking param: u to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:38: moved to heap: s
+	/workdir/go/test/escape_struct_param2.go:41: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:46: moved to heap: s
+	/workdir/go/test/escape_struct_param2.go:49: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:55: moved to heap: s
+	/workdir/go/test/escape_struct_param2.go:56: moved to heap: ps
+	/workdir/go/test/escape_struct_param2.go:58: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:62: leaking param: v to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:66: leaking param: v to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:70: leaking param: v to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:74: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:78: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:82: leaking param: v to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:86: leaking param: v to result ~r0 level=0
+	/workdir/go/test/escape_struct_param2.go:90: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:94: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:98: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:102: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:106: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:110: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param2.go:117: moved to heap: s2
+	/workdir/go/test/escape_struct_param2.go:118: moved to heap: s3
+	/workdir/go/test/escape_struct_param2.go:119: moved to heap: s4
+	/workdir/go/test/escape_struct_param2.go:120: moved to heap: s5
+	/workdir/go/test/escape_struct_param2.go:121: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:123: moved to heap: ps4
+	/workdir/go/test/escape_struct_param2.go:124: moved to heap: ps6
+	/workdir/go/test/escape_struct_param2.go:126: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:127: &U{...} escapes to heap
+	/workdir/go/test/escape_struct_param2.go:128: &V{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:135: moved to heap: s2
+	/workdir/go/test/escape_struct_param2.go:136: moved to heap: s3
+	/workdir/go/test/escape_struct_param2.go:137: moved to heap: s4
+	/workdir/go/test/escape_struct_param2.go:138: moved to heap: s5
+	/workdir/go/test/escape_struct_param2.go:139: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:141: moved to heap: ps4
+	/workdir/go/test/escape_struct_param2.go:142: moved to heap: ps6
+	/workdir/go/test/escape_struct_param2.go:144: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:145: &U{...} escapes to heap
+	/workdir/go/test/escape_struct_param2.go:146: &V{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:153: moved to heap: s2
+	/workdir/go/test/escape_struct_param2.go:154: moved to heap: s3
+	/workdir/go/test/escape_struct_param2.go:155: moved to heap: s4
+	/workdir/go/test/escape_struct_param2.go:156: moved to heap: s5
+	/workdir/go/test/escape_struct_param2.go:157: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:159: moved to heap: ps4
+	/workdir/go/test/escape_struct_param2.go:160: moved to heap: ps6
+	/workdir/go/test/escape_struct_param2.go:162: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:163: &U{...} escapes to heap
+	/workdir/go/test/escape_struct_param2.go:164: &V{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:171: moved to heap: s2
+	/workdir/go/test/escape_struct_param2.go:172: moved to heap: s3
+	/workdir/go/test/escape_struct_param2.go:173: moved to heap: s4
+	/workdir/go/test/escape_struct_param2.go:174: moved to heap: s5
+	/workdir/go/test/escape_struct_param2.go:175: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:177: moved to heap: ps4
+	/workdir/go/test/escape_struct_param2.go:178: moved to heap: ps6
+	/workdir/go/test/escape_struct_param2.go:180: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:181: &U{...} escapes to heap
+	/workdir/go/test/escape_struct_param2.go:182: &V{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:186: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param2.go:190: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param2.go:194: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param2.go:198: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param2.go:207: moved to heap: s4
+	/workdir/go/test/escape_struct_param2.go:208: moved to heap: s5
+	/workdir/go/test/escape_struct_param2.go:209: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:212: moved to heap: ps6
+	/workdir/go/test/escape_struct_param2.go:214: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:215: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:216: &V{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:225: moved to heap: s4
+	/workdir/go/test/escape_struct_param2.go:226: moved to heap: s5
+	/workdir/go/test/escape_struct_param2.go:227: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:230: moved to heap: ps6
+	/workdir/go/test/escape_struct_param2.go:232: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:233: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:234: &V{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:243: moved to heap: s4
+	/workdir/go/test/escape_struct_param2.go:244: moved to heap: s5
+	/workdir/go/test/escape_struct_param2.go:245: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:248: moved to heap: ps6
+	/workdir/go/test/escape_struct_param2.go:250: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:251: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:252: &V{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:261: moved to heap: s4
+	/workdir/go/test/escape_struct_param2.go:262: moved to heap: s5
+	/workdir/go/test/escape_struct_param2.go:263: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:266: moved to heap: ps6
+	/workdir/go/test/escape_struct_param2.go:268: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:269: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:270: &V{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:274: leaking param: v to result ~r0 level=3
+	/workdir/go/test/escape_struct_param2.go:289: moved to heap: s6
+	/workdir/go/test/escape_struct_param2.go:294: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:295: &U{...} does not escape
+	/workdir/go/test/escape_struct_param2.go:296: &V{...} does not escape
+	unexpected fault address 0x3a0000008f
+	fatal error: fault
+	[signal SIGSEGV: segmentation violation code=0x1 addr=0x3a0000008f pc=0x3a0000008f]
+
+	goroutine 1 [running]:
+	runtime.throw({0x11a6896?, 0x10?})
+		/workdir/go/src/runtime/panic.go:1047 +0x5d fp=0xc00048cf68 sp=0xc00048cf38 pc=0x43cd7d
+	runtime.sigpanic()
+		/workdir/go/src/runtime/signal_unix.go:844 +0x1ca fp=0xc00048cf98 sp=0xc00048cf68 pc=0x453faa
+	math/rand.(*Rand).Int63(0xc00074e660)
+		/workdir/go/src/math/rand/rand.go:84 +0x38 fp=0xc00048cfc0 sp=0xc00048cf98 pc=0x5ea1b8
+	math/rand.(*Rand).Int31(0xc00074e660)
+		/workdir/go/src/math/rand/rand.go:98 +0x2b fp=0xc00048cfe8 sp=0xc00048cfc0 pc=0x5ea32b
+	math/rand.(*Rand).Int31n(0xc00074e660, 0x2f)
+		/workdir/go/src/math/rand/rand.go:133 +0x93 fp=0xc00048d018 sp=0xc00048cfe8 pc=0x5ea5b3
+	math/rand.(*Rand).Intn(0xc00074e660, 0x2f)
+		/workdir/go/src/math/rand/rand.go:171 +0x53 fp=0xc00048d050 sp=0xc00048d018 pc=0x5ea7b3
+	cmd/compile/internal/ssa.Compile(0xc000583520)
+		/workdir/go/src/cmd/compile/internal/ssa/compile.go:91 +0x14f0 fp=0xc000490fd8 sp=0xc00048d050 pc=0x8acdb0
+	cmd/compile/internal/ssagen.buildssa(0xc000567cc0, 0x0)
+		/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:573 +0x224a fp=0xc0004917b0 sp=0xc000490fd8 pc=0xe2f5aa
+	cmd/compile/internal/ssagen.Compile(0xc000567cc0, 0x0)
+		/workdir/go/src/cmd/compile/internal/ssagen/pgen.go:183 +0x3e fp=0xc000491928 sp=0xc0004917b0 pc=0xe2513e
+	cmd/compile/internal/gc.compileFunctions.func4.1(0x0)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:153 +0x47 fp=0xc000491980 sp=0xc000491928 pc=0x10aad87
+	cmd/compile/internal/gc.compileFunctions.func2(0xc00074c0a0)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:125 +0x23 fp=0xc000491998 sp=0xc000491980 pc=0x10b0ce3
+	cmd/compile/internal/gc.compileFunctions.func4({0xc0000f9e00, 0x37, 0x40})
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:152 +0x17b fp=0xc000491a18 sp=0xc000491998 pc=0x10aacdb
+	cmd/compile/internal/gc.compileFunctions()
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:163 +0x1f2 fp=0xc000491a90 sp=0xc000491a18 pc=0x10aaa52
+	cmd/compile/internal/gc.Main(0x11dd308)
+		/workdir/go/src/cmd/compile/internal/gc/main.go:301 +0x178c fp=0xc000491ed8 sp=0xc000491a90 pc=0x10ad1cc
+	main.main()
+		/workdir/go/src/cmd/compile/main.go:57 +0x171 fp=0xc000491f80 sp=0xc000491ed8 pc=0x10e5911
+	runtime.main()
+		/workdir/go/src/runtime/proc.go:250 +0x1d3 fp=0xc000491fe0 sp=0xc000491f80 pc=0x43f4d3
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000491fe8 sp=0xc000491fe0 pc=0x472061
+
+	goroutine 2 [force gc (idle)]:
+	runtime.gopark(0x11de6a8, 0x1749830, 0x11, 0x14, 0x1)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000060f88 sp=0xc000060f58 pc=0x43f91d
+	runtime.goparkunlock(0x0?, 0x0?, 0x0?, 0x0?)
+		/workdir/go/src/runtime/proc.go:369 +0x2a fp=0xc000060fb8 sp=0xc000060f88 pc=0x43f9aa
+	runtime.forcegchelper()
+		/workdir/go/src/runtime/proc.go:302 +0xa5 fp=0xc000060fe0 sp=0xc000060fb8 pc=0x43f745
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000060fe8 sp=0xc000060fe0 pc=0x472061
+	created by runtime.init.5
+		/workdir/go/src/runtime/proc.go:290 +0x25
+
+	goroutine 3 [runnable]:
+	runtime.lock(0x1749c80?)
+		/workdir/go/src/runtime/lock_futex.go:47 +0x3f fp=0xc000061798 sp=0xc000061790 pc=0x40c6bf
+	runtime.bgsweep(0x0?)
+		/workdir/go/src/runtime/mgcsweep.go:289 +0xa6 fp=0xc0000617c8 sp=0xc000061798 pc=0x427bc6
+	runtime.gcenable.func1()
+		/workdir/go/src/runtime/mgc.go:178 +0x26 fp=0xc0000617e0 sp=0xc0000617c8 pc=0x41c1e6
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0000617e8 sp=0xc0000617e0 pc=0x472061
+	created by runtime.gcenable
+		/workdir/go/src/runtime/mgc.go:178 +0x6b
+
+	goroutine 4 [GC scavenge wait]:
+	runtime.gopark(0x11de6a8, 0x174a1e0, 0xd, 0x14, 0x2)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000061f48 sp=0xc000061f18 pc=0x43f91d
+	runtime.goparkunlock(0x3b9aca00?, 0x0?, 0x0?, 0x0?)
+		/workdir/go/src/runtime/proc.go:369 +0x2a fp=0xc000061f78 sp=0xc000061f48 pc=0x43f9aa
+	runtime.(*scavengerState).park(0x174a1e0)
+		/workdir/go/src/runtime/mgcscavenge.go:389 +0x4b fp=0xc000061fa0 sp=0xc000061f78 pc=0x42584b
+	runtime.bgscavenge(0x0?)
+		/workdir/go/src/runtime/mgcscavenge.go:622 +0x65 fp=0xc000061fc8 sp=0xc000061fa0 pc=0x425e45
+	runtime.gcenable.func2()
+		/workdir/go/src/runtime/mgc.go:179 +0x26 fp=0xc000061fe0 sp=0xc000061fc8 pc=0x41c186
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000061fe8 sp=0xc000061fe0 pc=0x472061
+	created by runtime.gcenable
+		/workdir/go/src/runtime/mgc.go:179 +0xaa
+
+	goroutine 5 [finalizer wait]:
+	runtime.gopark(0x11de6a8, 0x178bb88, 0x10, 0x14, 0x1)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc0000605f8 sp=0xc0000605c8 pc=0x43f91d
+	runtime.goparkunlock(0x0?, 0x30?, 0x7d?, 0xc000526000?)
+		/workdir/go/src/runtime/proc.go:369 +0x2a fp=0xc000060628 sp=0xc0000605f8 pc=0x43f9aa
+	runtime.runfinq()
+		/workdir/go/src/runtime/mfinal.go:186 +0x107 fp=0xc0000607e0 sp=0xc000060628 pc=0x41b287
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0000607e8 sp=0xc0000607e0 pc=0x472061
+	created by runtime.createfing
+		/workdir/go/src/runtime/mfinal.go:163 +0x45
+
+	goroutine 9 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc000026460, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000062748 sp=0xc000062718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc0000627e0 sp=0xc000062748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0000627e8 sp=0xc0000627e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 8 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc000114000, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000062f48 sp=0xc000062f18 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc000062fe0 sp=0xc000062f48 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000062fe8 sp=0xc000062fe0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 17 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc00050c000, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc00005c748 sp=0xc00005c718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc00005c7e0 sp=0xc00005c748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00005c7e8 sp=0xc00005c7e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 33 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc00050c020, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000512748 sp=0xc000512718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc0005127e0 sp=0xc000512748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0005127e8 sp=0xc0005127e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 34 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc00050c040, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000512f48 sp=0xc000512f18 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc000512fe0 sp=0xc000512f48 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000512fe8 sp=0xc000512fe0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 35 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc00050c060, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000513748 sp=0xc000513718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc0005137e0 sp=0xc000513748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0005137e8 sp=0xc0005137e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 36 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc00050c080, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000513f48 sp=0xc000513f18 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc000513fe0 sp=0xc000513f48 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000513fe8 sp=0xc000513fe0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 10 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc000026480, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000063748 sp=0xc000063718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc0000637e0 sp=0xc000063748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0000637e8 sp=0xc0000637e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 11 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc0000264a0, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000063f48 sp=0xc000063f18 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc000063fe0 sp=0xc000063f48 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000063fe8 sp=0xc000063fe0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 12 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc0000264c0, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc00050e748 sp=0xc00050e718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc00050e7e0 sp=0xc00050e748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00050e7e8 sp=0xc00050e7e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 13 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc0000264e0, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc00050ef48 sp=0xc00050ef18 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc00050efe0 sp=0xc00050ef48 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00050efe8 sp=0xc00050efe0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 14 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc000026500, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc00050f748 sp=0xc00050f718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc00050f7e0 sp=0xc00050f748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00050f7e8 sp=0xc00050f7e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 15 [runnable]:
+	runtime.gopark(0x11de530, 0xc000026520, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:346 +0x136 fp=0xc00050ff48 sp=0xc00050ff40 pc=0x43f956
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc00050ffe0 sp=0xc00050ff48 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00050ffe8 sp=0xc00050ffe0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 16 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc000026540, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000510748 sp=0xc000510718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc0005107e0 sp=0xc000510748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0005107e8 sp=0xc0005107e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 49 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc000026560, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000510f48 sp=0xc000510f18 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc000510fe0 sp=0xc000510f48 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000510fe8 sp=0xc000510fe0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+	goroutine 50 [GC worker (idle)]:
+	runtime.gopark(0x11de530, 0xc000026580, 0x18, 0x14, 0x0)
+		/workdir/go/src/runtime/proc.go:363 +0xfd fp=0xc000511748 sp=0xc000511718 pc=0x43f91d
+	runtime.gcBgMarkWorker()
+		/workdir/go/src/runtime/mgc.go:1234 +0x107 fp=0xc0005117e0 sp=0xc000511748 pc=0x41dae7
+	runtime.goexit()
+		/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0005117e8 sp=0xc0005117e0 pc=0x472061
+	created by runtime.gcBgMarkStartWorkers
+		/workdir/go/src/runtime/mgc.go:1158 +0x25

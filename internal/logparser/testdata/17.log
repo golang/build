@@ -1,0 +1,484 @@
+linux-arm-aws at 38edd9bd8da9d7fc7beeba5fd4fd9d605457b04e
+
+:: Running /workdir/go/src/make.bash with args ["/workdir/go/src/make.bash"] and env ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "HOSTNAME=buildlet-linux-arm-aws-rn70d2a45" "GO_BUILDER_ENV=host-linux-arm-aws" "GO_BUILD_KEY_PATH=/buildkey/gobuildkey" "GO_BUILD_KEY_DELETE_AFTER_READ=true" "DEBIAN_FRONTEND=noninteractive" "HOME=/root" "USER=root" "GO_STAGE0_NET_DELAY=0s" "GO_STAGE0_DL_DELAY=500ms" "WORKDIR=/workdir" "GOROOT_BOOTSTRAP=/workdir/go1.4" "GO_BUILDER_NAME=linux-arm-aws" "GOARCH=arm" "GOARM=6" "GOHOSTARCH=arm" "CGO_CFLAGS=-march=armv6" "CGO_LDFLAGS=-march=armv6" "GOBIN=" "TMPDIR=/workdir/tmp" "GOCACHE=/workdir/gocache" "PWD=/workdir/go/src"] in dir /workdir/go/src
+
+Building Go cmd/dist using /workdir/go1.4. (go1.17.13 linux/arm)
+Building Go toolchain1 using /workdir/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for linux/arm.
+---
+Installed Go for linux/arm in /workdir/go
+Installed commands in /workdir/go/bin
+
+##### Test execution environment.
+# GOARCH: arm
+# CPU: 
+# GOOS: linux
+# OS Version: Linux 4.19.0-12-arm64 #1 SMP Debian 4.19.152-1 (2020-10-18) armv8l
+
+##### Testing packages.
+ok  	archive/tar	0.023s
+ok  	archive/zip	0.594s
+ok  	bufio	0.068s
+ok  	bytes	4.938s
+ok  	compress/bzip2	0.070s
+ok  	compress/flate	0.527s
+ok  	compress/gzip	7.098s
+ok  	compress/lzw	0.122s
+ok  	compress/zlib	0.565s
+ok  	container/heap	0.013s
+ok  	container/list	0.013s
+ok  	container/ring	0.002s
+ok  	context	0.009s
+ok  	crypto	0.008s
+ok  	crypto/aes	0.023s
+ok  	crypto/cipher	0.017s
+ok  	crypto/des	0.020s
+ok  	crypto/dsa	0.018s
+ok  	crypto/ecdh	0.356s
+ok  	crypto/ecdsa	0.038s
+ok  	crypto/ed25519	0.430s
+ok  	crypto/elliptic	0.056s
+ok  	crypto/hmac	0.023s
+ok  	crypto/internal/alias	0.001s
+ok  	crypto/internal/boring	0.001s
+ok  	crypto/internal/boring/bcache	0.163s
+ok  	crypto/internal/edwards25519	23.591s
+ok  	crypto/internal/edwards25519/field	26.007s
+ok  	crypto/internal/nistec	7.094s
+ok  	crypto/internal/nistec/fiat	0.015s [no tests to run]
+ok  	crypto/md5	0.004s
+ok  	crypto/rand	0.040s
+ok  	crypto/rc4	0.028s
+ok  	crypto/rsa	0.248s
+ok  	crypto/sha1	0.009s
+ok  	crypto/sha256	0.004s
+ok  	crypto/sha512	0.019s
+ok  	crypto/subtle	0.104s
+ok  	crypto/tls	1.393s
+ok  	crypto/x509	2.450s
+ok  	database/sql	0.298s
+ok  	database/sql/driver	0.009s
+ok  	debug/buildinfo	0.023s
+ok  	debug/dwarf	0.013s
+ok  	debug/elf	0.017s
+ok  	debug/gosym	0.023s
+ok  	debug/macho	0.024s
+ok  	debug/pe	0.021s
+ok  	debug/plan9obj	0.002s
+ok  	embed	0.002s [no tests to run]
+ok  	embed/internal/embedtest	0.012s
+ok  	encoding/ascii85	0.003s
+ok  	encoding/asn1	0.003s
+ok  	encoding/base32	0.013s
+ok  	encoding/base64	0.014s
+ok  	encoding/binary	0.003s
+ok  	encoding/csv	0.015s
+ok  	encoding/gob	0.027s
+ok  	encoding/hex	0.002s
+ok  	encoding/json	0.123s
+ok  	encoding/pem	0.566s
+ok  	encoding/xml	0.033s
+ok  	errors	0.019s
+ok  	expvar	0.020s
+ok  	flag	0.012s
+ok  	fmt	0.065s
+ok  	go/ast	0.003s
+ok  	go/build	2.255s
+ok  	go/build/constraint	0.010s
+ok  	go/constant	0.008s
+ok  	go/doc	0.069s
+ok  	go/doc/comment	0.933s
+ok  	go/format	0.021s
+ok  	go/importer	0.028s
+ok  	go/internal/gccgoimporter	0.007s
+ok  	go/internal/gcimporter	4.798s
+ok  	go/internal/srcimporter	5.765s
+ok  	go/parser	0.214s
+ok  	go/printer	0.310s
+ok  	go/scanner	0.003s
+ok  	go/token	0.016s
+ok  	go/types	5.926s
+ok  	hash	0.002s
+ok  	hash/adler32	0.007s
+ok  	hash/crc32	0.004s
+ok  	hash/crc64	0.005s
+ok  	hash/fnv	0.002s
+ok  	hash/maphash	0.086s
+ok  	html	0.027s
+ok  	html/template	0.082s
+ok  	image	0.059s
+ok  	image/color	0.024s
+ok  	image/draw	0.090s
+ok  	image/gif	17.735s
+ok  	image/jpeg	2.957s
+ok  	image/png	0.210s
+ok  	index/suffixarray	1.016s
+ok  	internal/abi	0.017s
+ok  	internal/buildcfg	0.001s
+ok  	internal/cpu	0.003s
+ok  	internal/dag	0.022s
+ok  	internal/diff	0.013s
+ok  	internal/fmtsort	0.002s
+ok  	internal/fuzz	0.007s
+ok  	internal/godebug	0.001s
+ok  	internal/intern	0.288s
+ok  	internal/itoa	0.003s
+ok  	internal/poll	0.192s
+ok  	internal/profile	0.032s
+ok  	internal/reflectlite	0.049s
+ok  	internal/saferio	0.011s
+ok  	internal/singleflight	0.021s
+ok  	internal/testenv	0.012s
+ok  	internal/trace	0.036s
+ok  	internal/unsafeheader	0.020s
+ok  	internal/xcoff	0.006s
+ok  	io	0.023s
+ok  	io/fs	0.329s
+ok  	io/ioutil	0.002s
+ok  	log	0.003s
+ok  	log/syslog	1.209s
+ok  	math	0.005s
+ok  	math/big	1.736s
+ok  	math/bits	0.006s
+ok  	math/cmplx	0.007s
+ok  	math/rand	0.396s
+ok  	mime	0.007s
+ok  	mime/multipart	0.156s
+ok  	mime/quotedprintable	0.015s
+ok  	net	11.812s
+ok  	net/http	9.224s
+ok  	net/http/cgi	0.206s
+ok  	net/http/cookiejar	0.009s
+ok  	net/http/fcgi	0.104s
+ok  	net/http/httptest	0.090s
+ok  	net/http/httptrace	0.002s
+ok  	net/http/httputil	0.606s
+ok  	net/http/internal	0.010s
+ok  	net/http/internal/ascii	0.019s
+ok  	net/http/pprof	4.028s
+ok  	net/internal/socktest	0.002s
+ok  	net/mail	0.003s
+ok  	net/netip	0.370s
+ok  	net/rpc	0.021s
+ok  	net/rpc/jsonrpc	0.024s
+ok  	net/smtp	0.023s
+ok  	net/textproto	0.014s
+ok  	net/url	0.006s
+ok  	os	0.659s
+ok  	os/exec	1.057s
+ok  	os/exec/internal/fdtest	0.001s
+ok  	os/signal	1.849s
+ok  	os/user	0.003s
+ok  	path	0.002s
+ok  	path/filepath	0.015s
+ok  	plugin	0.003s
+ok  	reflect	0.186s
+ok  	regexp	0.134s
+ok  	regexp/syntax	0.420s
+ok  	runtime	24.377s
+ok  	runtime/cgo	0.002s
+ok  	runtime/debug	0.056s
+ok  	runtime/internal/atomic	0.104s
+ok  	runtime/internal/math	0.019s
+ok  	runtime/internal/sys	0.001s
+ok  	runtime/metrics	0.001s
+ok  	runtime/pprof	5.812s
+SIGQUIT: quit
+PC=0x86d24 m=7 sigcode=0
+
+goroutine 0 [idle]:
+runtime.futex()
+	/workdir/go/src/runtime/sys_linux_arm.s:421 +0x1c fp=0xec3fed9c sp=0xec3fed9c pc=0x86d24
+runtime.futexsleep(0x2fbadc, 0x0, 0xffffffffffffffff)
+	/workdir/go/src/runtime/os_linux.go:69 +0x60 fp=0xec3fedc4 sp=0xec3fed9c pc=0x4a424
+runtime.notesleep(0x2fbadc)
+	/workdir/go/src/runtime/lock_futex.go:160 +0xb8 fp=0xec3fede4 sp=0xec3fedc4 pc=0x1c138
+runtime.templateThread()
+	/workdir/go/src/runtime/proc.go:2216 +0x88 fp=0xec3fedf0 sp=0xec3fede4 pc=0x55eb0
+runtime.mstart1()
+	/workdir/go/src/runtime/proc.go:1425 +0x7c fp=0xec3fee00 sp=0xec3fedf0 pc=0x5479c
+runtime.mstart0()
+	/workdir/go/src/runtime/proc.go:1382 +0x68 fp=0xec3fee14 sp=0xec3fee00 pc=0x54704
+runtime.mstart()
+	/workdir/go/src/runtime/asm_arm.s:210 +0x8 fp=0xec3fee18 sp=0xec3fee14 pc=0x8401c
+
+goroutine 1 [chan receive, 6 minutes]:
+runtime.gopark(0x1d37d8, 0x181e370, 0xe, 0x17, 0x2)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1c90ce0 sp=0x1c90ccc pc=0x51d44
+runtime.chanrecv(0x181e340, 0x1c90d67, 0x1)
+	/workdir/go/src/runtime/chan.go:583 +0x538 fp=0x1c90d2c sp=0x1c90ce0 pc=0x17678
+runtime.chanrecv1(0x181e340, 0x1c90d67)
+	/workdir/go/src/runtime/chan.go:442 +0x20 fp=0x1c90d40 sp=0x1c90d2c pc=0x1713c
+testing.(*T).Run(0x18031d0, {0x1c8db6, 0x13}, 0x1d3994)
+	/workdir/go/src/testing/testing.go:1494 +0x3c0 fp=0x1c90d8c sp=0x1c90d40 pc=0xf4400
+testing.runTests.func1(0x18031d0)
+	/workdir/go/src/testing/testing.go:1846 +0x6c fp=0x1c90db0 sp=0x1c90d8c pc=0xf62a4
+testing.tRunner(0x18031d0, 0x191fe4c)
+	/workdir/go/src/testing/testing.go:1446 +0x118 fp=0x1c90df8 sp=0x1c90db0 pc=0xf3654
+testing.runTests(0x180e240, {0x2e6cd0, 0xa, 0xa}, {0xc0b7adcb010c5bd5, 0x53d1b51798, 0x2e9950})
+	/workdir/go/src/testing/testing.go:1844 +0x3e8 fp=0x1c90e5c sp=0x1c90df8 pc=0xf6120
+testing.(*M).Run(0x187e0a0)
+	/workdir/go/src/testing/testing.go:1726 +0x5f0 fp=0x1c90f80 sp=0x1c90e5c pc=0xf4ccc
+main.main()
+	_testmain.go:71 +0x1ac fp=0x1c90fc0 sp=0x1c90f80 pc=0x18a264
+runtime.main()
+	/workdir/go/src/runtime/proc.go:250 +0x268 fp=0x1c90fec sp=0x1c90fc0 pc=0x5187c
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1c90fec sp=0x1c90fec pc=0x85d14
+
+goroutine 2 [force gc (idle), 6 minutes]:
+runtime.gopark(0x1d38c0, 0x2e9708, 0x11, 0x14, 0x1)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x182afd8 sp=0x182afc4 pc=0x51d44
+runtime.goparkunlock(...)
+	/workdir/go/src/runtime/proc.go:369
+runtime.forcegchelper()
+	/workdir/go/src/runtime/proc.go:302 +0xc4 fp=0x182afec sp=0x182afd8 pc=0x51ba8
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x182afec sp=0x182afec pc=0x85d14
+created by runtime.init.4
+	/workdir/go/src/runtime/proc.go:290 +0x1c
+
+goroutine 3 [GC sweep wait]:
+runtime.gopark(0x1d38c0, 0x2e98d0, 0xc, 0x14, 0x1)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x182b7d0 sp=0x182b7bc pc=0x51d44
+runtime.goparkunlock(...)
+	/workdir/go/src/runtime/proc.go:369
+runtime.bgsweep(0x181e040)
+	/workdir/go/src/runtime/mgcsweep.go:298 +0x100 fp=0x182b7e4 sp=0x182b7d0 pc=0x39c3c
+runtime.gcenable.func1()
+	/workdir/go/src/runtime/mgc.go:178 +0x28 fp=0x182b7ec sp=0x182b7e4 pc=0x2a0e8
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x182b7ec sp=0x182b7ec pc=0x85d14
+created by runtime.gcenable
+	/workdir/go/src/runtime/mgc.go:178 +0x74
+
+goroutine 4 [sleep]:
+runtime.gopark(0x1d38c0, 0x2e9ad8, 0x13, 0x13, 0x2)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x182bf64 sp=0x182bf50 pc=0x51d44
+runtime.goparkunlock(...)
+	/workdir/go/src/runtime/proc.go:369
+runtime.(*scavengerState).sleep(0x2e9ad8, 0x40fcd51000000000)
+	/workdir/go/src/runtime/mgcscavenge.go:468 +0x174 fp=0x182bfc8 sp=0x182bf64 pc=0x378a0
+runtime.bgscavenge(0x181e040)
+	/workdir/go/src/runtime/mgcscavenge.go:626 +0x8c fp=0x182bfe4 sp=0x182bfc8 pc=0x37dd4
+runtime.gcenable.func2()
+	/workdir/go/src/runtime/mgc.go:179 +0x28 fp=0x182bfec sp=0x182bfe4 pc=0x2a094
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x182bfec sp=0x182bfec pc=0x85d14
+created by runtime.gcenable
+	/workdir/go/src/runtime/mgc.go:179 +0xbc
+
+goroutine 5 [finalizer wait, 6 minutes]:
+runtime.gopark(0x1d38c0, 0x2fb7c8, 0x10, 0x14, 0x1)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x182a78c sp=0x182a778 pc=0x51d44
+runtime.goparkunlock(...)
+	/workdir/go/src/runtime/proc.go:369
+runtime.runfinq()
+	/workdir/go/src/runtime/mfinal.go:186 +0x108 fp=0x182a7ec sp=0x182a78c pc=0x29128
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x182a7ec sp=0x182a7ec pc=0x85d14
+created by runtime.createfing
+	/workdir/go/src/runtime/mfinal.go:163 +0x54
+
+goroutine 32 [waiting]:
+runtime.systemstack_switch()
+	/workdir/go/src/runtime/asm_arm.s:274 +0x4 fp=0x183acdc sp=0x183acd8 pc=0x84088
+runtime.stopTheWorld({0x1c6ecd, 0xc})
+	/workdir/go/src/runtime/proc.go:1090 +0x98 fp=0x183acfc sp=0x183acdc pc=0x53e88
+runtime.stopTheWorldGC({0x1c6ecd, 0xc})
+	/workdir/go/src/runtime/proc.go:1137 +0x48 fp=0x183ad10 sp=0x183acfc pc=0x54054
+runtime.StopTrace()
+	/workdir/go/src/runtime/trace.go:320 +0x24 fp=0x183ad28 sp=0x183ad10 pc=0x74ab8
+runtime/trace.Stop()
+	/workdir/go/src/runtime/trace/trace.go:148 +0x78 fp=0x183ad44 sp=0x183ad28 pc=0xe697c
+runtime/trace_test.TestTraceCPUProfile(0x1c04e10)
+	/workdir/go/src/runtime/trace/trace_test.go:621 +0x1a4 fp=0x183af98 sp=0x183ad44 pc=0x1885ec
+testing.tRunner(0x1c04e10, 0x1d3994)
+	/workdir/go/src/testing/testing.go:1446 +0x118 fp=0x183afe0 sp=0x183af98 pc=0xf3654
+testing.(*T).Run.func1()
+	/workdir/go/src/testing/testing.go:1493 +0x30 fp=0x183afec sp=0x183afe0 pc=0xf44ac
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x183afec sp=0x183afec pc=0x85d14
+created by testing.(*T).Run
+	/workdir/go/src/testing/testing.go:1493 +0x3a0
+
+goroutine 11 [select (no cases), 6 minutes]:
+runtime.gopark(0x0, 0x0, 0xa, 0x10, 0x1)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x182d7d4 sp=0x182d7c0 pc=0x51d44
+runtime.block()
+	/workdir/go/src/runtime/select.go:103 +0x3c fp=0x182d7e8 sp=0x182d7d4 pc=0x64170
+runtime/trace_test.TestTraceSymbolize.func1()
+	/workdir/go/src/runtime/trace/trace_stack_test.go:41 +0x14 fp=0x182d7ec sp=0x182d7e8 pc=0x182560
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x182d7ec sp=0x182d7ec pc=0x85d14
+created by runtime/trace_test.TestTraceSymbolize
+	/workdir/go/src/runtime/trace/trace_stack_test.go:40 +0xe0
+
+goroutine 12 [chan send (nil chan), 6 minutes]:
+runtime.gopark(0x0, 0x0, 0x4, 0x10, 0x2)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1827784 sp=0x1827770 pc=0x51d44
+runtime.chansend(0x0, 0x203bdc, 0x1, 0x182594)
+	/workdir/go/src/runtime/chan.go:165 +0x658 fp=0x18277c8 sp=0x1827784 pc=0x16a94
+runtime.chansend1(0x0, 0x203bdc)
+	/workdir/go/src/runtime/chan.go:145 +0x28 fp=0x18277e0 sp=0x18277c8 pc=0x16438
+runtime/trace_test.TestTraceSymbolize.func2()
+	/workdir/go/src/runtime/trace/trace_stack_test.go:45 +0x24 fp=0x18277ec sp=0x18277e0 pc=0x182594
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x18277ec sp=0x18277ec pc=0x85d14
+created by runtime/trace_test.TestTraceSymbolize
+	/workdir/go/src/runtime/trace/trace_stack_test.go:43 +0xec
+
+goroutine 13 [chan receive (nil chan), 6 minutes]:
+runtime.gopark(0x0, 0x0, 0x3, 0x10, 0x2)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1827f80 sp=0x1827f6c pc=0x51d44
+runtime.chanrecv(0x0, 0x0, 0x1)
+	/workdir/go/src/runtime/chan.go:469 +0x6fc fp=0x1827fcc sp=0x1827f80 pc=0x1783c
+runtime.chanrecv1(0x0, 0x0)
+	/workdir/go/src/runtime/chan.go:442 +0x20 fp=0x1827fe0 sp=0x1827fcc pc=0x1713c
+runtime/trace_test.TestTraceSymbolize.func3()
+	/workdir/go/src/runtime/trace/trace_stack_test.go:49 +0x24 fp=0x1827fec sp=0x1827fe0 pc=0x1825d0
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1827fec sp=0x1827fec pc=0x85d14
+created by runtime/trace_test.TestTraceSymbolize
+	/workdir/go/src/runtime/trace/trace_stack_test.go:47 +0xf8
+
+goroutine 31 [select (no cases), 6 minutes]:
+runtime.gopark(0x0, 0x0, 0xa, 0x10, 0x1)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1829fd0 sp=0x1829fbc pc=0x51d44
+runtime.block()
+	/workdir/go/src/runtime/select.go:103 +0x3c fp=0x1829fe4 sp=0x1829fd0 pc=0x64170
+runtime/trace_test.TestTraceStressStartStop.func1.10()
+	/workdir/go/src/runtime/trace/trace_test.go:478 +0x20 fp=0x1829fec sp=0x1829fe4 pc=0x186850
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1829fec sp=0x1829fec pc=0x85d14
+created by runtime/trace_test.TestTraceStressStartStop.func1
+	/workdir/go/src/runtime/trace/trace_test.go:476 +0x748
+
+goroutine 51 [GC worker (idle), 6 minutes]:
+runtime.gopark(0x1d3804, 0x1c80030, 0x18, 0x14, 0x0)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1aa9790 sp=0x1aa977c pc=0x51d44
+runtime.gcBgMarkWorker()
+	/workdir/go/src/runtime/mgc.go:1234 +0x100 fp=0x1aa97ec sp=0x1aa9790 pc=0x2cd74
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1aa97ec sp=0x1aa97ec pc=0x85d14
+created by runtime.gcBgMarkStartWorkers
+	/workdir/go/src/runtime/mgc.go:1158 +0x20
+
+goroutine 34 [GC worker (idle), 6 minutes]:
+runtime.gopark(0x1d3804, 0x1c80000, 0x18, 0x14, 0x0)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1aa5790 sp=0x1aa577c pc=0x51d44
+runtime.gcBgMarkWorker()
+	/workdir/go/src/runtime/mgc.go:1234 +0x100 fp=0x1aa57ec sp=0x1aa5790 pc=0x2cd74
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1aa57ec sp=0x1aa57ec pc=0x85d14
+created by runtime.gcBgMarkStartWorkers
+	/workdir/go/src/runtime/mgc.go:1158 +0x20
+
+goroutine 50 [GC worker (idle), 6 minutes]:
+runtime.gopark(0x1d3804, 0x1c0e000, 0x18, 0x14, 0x0)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1c0b790 sp=0x1c0b77c pc=0x51d44
+runtime.gcBgMarkWorker()
+	/workdir/go/src/runtime/mgc.go:1234 +0x100 fp=0x1c0b7ec sp=0x1c0b790 pc=0x2cd74
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1c0b7ec sp=0x1c0b7ec pc=0x85d14
+created by runtime.gcBgMarkStartWorkers
+	/workdir/go/src/runtime/mgc.go:1158 +0x20
+
+goroutine 35 [GC worker (idle), 6 minutes]:
+runtime.gopark(0x1d3804, 0x1c0e018, 0x18, 0x14, 0x0)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1aa5f90 sp=0x1aa5f7c pc=0x51d44
+runtime.gcBgMarkWorker()
+	/workdir/go/src/runtime/mgc.go:1234 +0x100 fp=0x1aa5fec sp=0x1aa5f90 pc=0x2cd74
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1aa5fec sp=0x1aa5fec pc=0x85d14
+created by runtime.gcBgMarkStartWorkers
+	/workdir/go/src/runtime/mgc.go:1158 +0x20
+
+goroutine 36 [GC worker (idle)]:
+runtime.gopark(0x1d3804, 0x1c80018, 0x18, 0x14, 0x0)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1aa6790 sp=0x1aa677c pc=0x51d44
+runtime.gcBgMarkWorker()
+	/workdir/go/src/runtime/mgc.go:1234 +0x100 fp=0x1aa67ec sp=0x1aa6790 pc=0x2cd74
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1aa67ec sp=0x1aa67ec pc=0x85d14
+created by runtime.gcBgMarkStartWorkers
+	/workdir/go/src/runtime/mgc.go:1158 +0x20
+
+goroutine 33 [sleep]:
+runtime.gopark(0x1d38dc, 0x1812180, 0x13, 0x13, 0x1)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1aa778c sp=0x1aa7778 pc=0x51d44
+time.Sleep(0x5f5e100)
+	/workdir/go/src/runtime/time.go:195 +0x170 fp=0x1aa77a8 sp=0x1aa778c pc=0x837e0
+runtime/pprof.profileWriter({0x203ca8, 0x19181b0})
+	/workdir/go/src/runtime/pprof/pprof.go:798 +0x5c fp=0x1aa77e0 sp=0x1aa77a8 pc=0x12d61c
+runtime/pprof.StartCPUProfile.func2()
+	/workdir/go/src/runtime/pprof/pprof.go:783 +0x30 fp=0x1aa77ec sp=0x1aa77e0 pc=0x12d540
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1aa77ec sp=0x1aa77ec pc=0x85d14
+created by runtime/pprof.StartCPUProfile
+	/workdir/go/src/runtime/pprof/pprof.go:783 +0x134
+
+goroutine 45 [GC worker (idle), 6 minutes]:
+runtime.gopark(0x1d3804, 0x1c0e240, 0x18, 0x14, 0x0)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1aa4f90 sp=0x1aa4f7c pc=0x51d44
+runtime.gcBgMarkWorker()
+	/workdir/go/src/runtime/mgc.go:1234 +0x100 fp=0x1aa4fec sp=0x1aa4f90 pc=0x2cd74
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1aa4fec sp=0x1aa4fec pc=0x85d14
+created by runtime.gcBgMarkStartWorkers
+	/workdir/go/src/runtime/mgc.go:1158 +0x20
+
+goroutine 46 [GC worker (idle), 6 minutes]:
+runtime.gopark(0x1d3804, 0x1c0e258, 0x18, 0x14, 0x0)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1aaa790 sp=0x1aaa77c pc=0x51d44
+runtime.gcBgMarkWorker()
+	/workdir/go/src/runtime/mgc.go:1234 +0x100 fp=0x1aaa7ec sp=0x1aaa790 pc=0x2cd74
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1aaa7ec sp=0x1aaa7ec pc=0x85d14
+created by runtime.gcBgMarkStartWorkers
+	/workdir/go/src/runtime/mgc.go:1158 +0x20
+
+goroutine 47 [GC worker (idle)]:
+runtime.gopark(0x1d3804, 0x1c0e270, 0x18, 0x14, 0x0)
+	/workdir/go/src/runtime/proc.go:363 +0x100 fp=0x1aaaf90 sp=0x1aaaf7c pc=0x51d44
+runtime.gcBgMarkWorker()
+	/workdir/go/src/runtime/mgc.go:1234 +0x100 fp=0x1aaafec sp=0x1aaaf90 pc=0x2cd74
+runtime.goexit()
+	/workdir/go/src/runtime/asm_arm.s:824 +0x4 fp=0x1aaafec sp=0x1aaafec pc=0x85d14
+created by runtime.gcBgMarkStartWorkers
+	/workdir/go/src/runtime/mgc.go:1158 +0x20
+
+goroutine 82 [running]:
+	goroutine running on other thread; stack unavailable
+created by runtime/trace.Start
+	/workdir/go/src/runtime/trace/trace.go:128 +0xd4
+
+trap    0x0
+error   0x0
+oldmask 0x0
+r0      0x2fbadc
+r1      0x80
+r2      0x0
+r3      0x0
+r4      0x0
+r5      0x0
+r6      0x1
+r7      0xf0
+r8      0x182eb40
+r9      0xec3ff4c0
+r10     0x1802ff0
+fp      0x6
+ip      0xaf
+sp      0xec3fed9c
+lr      0x4a424
+pc      0x86d24
+cpsr    0xa0870010
+fault   0x0
+*** Test killed with quit: ran too long (7m0s).
+FAIL	runtime/trace	420.110s
+ok  	sort	0.100s
+FAIL
+go tool dist: Failed: exit status 1

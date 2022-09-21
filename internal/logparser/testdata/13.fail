@@ -1,0 +1,86 @@
+Section: "../misc/cgo/testsanitizers"
+Pkg: "misc/cgo/testsanitizers"
+Test: "TestShared"
+Mode: "test"
+Snippet:
+	--- FAIL: TestShared (0.00s)
+	    cshared_test.go:52: skipping msan_shared test on linux/ppc64le; -msan option is not supported.
+	    --- FAIL: TestShared/tsan_shared (4.36s)
+	        cshared_test.go:82: /workdir/tmp/TestShared1626997536/tsan_shared exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x03a9691c0000-0x03a9692c0000
+Output:
+	--- FAIL: TestShared (0.00s)
+	    cshared_test.go:52: skipping msan_shared test on linux/ppc64le; -msan option is not supported.
+	    --- FAIL: TestShared/tsan_shared (4.36s)
+	        cshared_test.go:82: /workdir/tmp/TestShared1626997536/tsan_shared exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x03a9691c0000-0x03a9692c0000
+---
+Section: "../misc/cgo/testsanitizers"
+Pkg: "misc/cgo/testsanitizers"
+Test: "TestTSAN"
+Mode: "test"
+Snippet:
+	--- FAIL: TestTSAN (40.50s)
+	    --- FAIL: TestTSAN/tsan (1.88s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN976278364/tsan exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x72d878000000-0x72d878100000
+	    --- FAIL: TestTSAN/tsan7 (1.93s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN3034476637/tsan7 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x72b520800000-0x72b520900000
+	    --- FAIL: TestTSAN/tsan12 (2.04s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN2934132569/tsan12 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x747feef00000-0x747fef000000
+	    --- FAIL: TestTSAN/tsan11 (1.98s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN19486457/tsan11 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x7bc25f400000-0x7bc25f500000
+	    --- FAIL: TestTSAN/tsan4 (2.08s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN2410919835/tsan4 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x7c1769300000-0x7c1769400000
+	    --- FAIL: TestTSAN/tsan9 (2.22s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN1870835556/tsan9 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x787f5a200000-0x787f5a300000
+	    --- FAIL: TestTSAN/tsan6 (1.95s)
+	...
+	    --- FAIL: TestTSAN/tsan2 (1.74s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN3428070092/tsan2 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x77c8d6600000-0x77c8d6700000
+	    --- FAIL: TestTSAN/tsan3 (1.91s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN4111085149/tsan3 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x78620df00000-0x78620e000000
+	    --- FAIL: TestTSAN/tsan5 (2.17s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN3885609494/tsan5 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x782ee5a00000-0x782ee5b00000
+	go tool dist: Failed: exit status 1
+Output:
+	--- FAIL: TestTSAN (40.50s)
+	    --- FAIL: TestTSAN/tsan (1.88s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN976278364/tsan exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x72d878000000-0x72d878100000
+	    --- FAIL: TestTSAN/tsan7 (1.93s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN3034476637/tsan7 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x72b520800000-0x72b520900000
+	    --- FAIL: TestTSAN/tsan12 (2.04s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN2934132569/tsan12 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x747feef00000-0x747fef000000
+	    --- FAIL: TestTSAN/tsan11 (1.98s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN19486457/tsan11 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x7bc25f400000-0x7bc25f500000
+	    --- FAIL: TestTSAN/tsan4 (2.08s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN2410919835/tsan4 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x7c1769300000-0x7c1769400000
+	    --- FAIL: TestTSAN/tsan9 (2.22s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN1870835556/tsan9 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x787f5a200000-0x787f5a300000
+	    --- FAIL: TestTSAN/tsan6 (1.95s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN2858450779/tsan6 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x713039800000-0x713039900000
+	    --- FAIL: TestTSAN/tsan2 (1.74s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN3428070092/tsan2 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x77c8d6600000-0x77c8d6700000
+	    --- FAIL: TestTSAN/tsan3 (1.91s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN4111085149/tsan3 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x78620df00000-0x78620e000000
+	    --- FAIL: TestTSAN/tsan5 (2.17s)
+	        tsan_test.go:53: /workdir/tmp/TestTSAN3885609494/tsan5 exited with exit status 66
+	            FATAL: ThreadSanitizer: unexpected memory mapping 0x782ee5a00000-0x782ee5b00000
+	go tool dist: Failed: exit status 1

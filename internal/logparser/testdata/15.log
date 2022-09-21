@@ -1,0 +1,702 @@
+darwin-arm64-11 at fd2ac5ef968545e8283e32160fe69a9de1e98842
+
+:: Running /tmp/buildlet/go/src/make.bash with args ["/tmp/buildlet/go/src/make.bash"] and env ["TERM_PROGRAM=Apple_Terminal" "SHELL=/bin/zsh" "TERM=xterm-256color" "TERM_PROGRAM_VERSION=440" "TERM_SESSION_ID=A8ECBED7-700A-45EA-B7CD-4C11F66CC14C" "USER=gopher" "SSH_AUTH_SOCK=/private/tmp/com.apple.launchd.S4BT2N0B0s/Listeners" "PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" "LaunchInstanceID=FA07DEC0-308C-413E-A8A8-185E891A1DAE" "__CFBundleIdentifier=com.apple.Terminal" "LANG=en_US.UTF-8" "XPC_FLAGS=0x0" "XPC_SERVICE_NAME=0" "SHLVL=2" "HOME=/Users/gopher" "LOGNAME=gopher" "SECURITYSESSIONID=186a4" "_=/Users/gopher/go/bin/buildlet" "WORKDIR=/tmp/buildlet" "GOROOT_BOOTSTRAP=/tmp/buildlet/go1.4" "GO_BUILDER_NAME=darwin-arm64-11" "GOBIN=" "TMPDIR=/tmp/buildlet/tmp" "GOCACHE=/tmp/buildlet/gocache" "PWD=/tmp/buildlet/go/src"] in dir /tmp/buildlet/go/src
+
+Building Go cmd/dist using /tmp/buildlet/go1.4. (go1.17.13 darwin/arm64)
+Building Go toolchain1 using /tmp/buildlet/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for darwin/arm64.
+---
+Installed Go for darwin/arm64 in /tmp/buildlet/go
+Installed commands in /tmp/buildlet/go/bin
+
+##### Test execution environment.
+# GOARCH: arm64
+# CPU:
+# GOOS: darwin
+# OS Version: Darwin 20.6.0 Darwin Kernel Version 20.6.0: Tue Feb 22 21:10:42 PST 2022; root:xnu-7195.141.26~1/RELEASE_ARM64_T8101 arm64
+
+##### Testing packages.
+ok  	archive/tar	0.087s
+ok  	archive/zip	0.168s
+ok  	bufio	0.090s
+ok  	bytes	0.854s
+ok  	compress/bzip2	0.132s
+ok  	compress/flate	0.267s
+ok  	compress/gzip	1.222s
+ok  	compress/lzw	0.134s
+ok  	compress/zlib	0.253s
+ok  	container/heap	0.070s
+ok  	container/list	0.140s
+ok  	container/ring	0.109s
+ok  	context	0.081s
+ok  	crypto	0.072s
+ok  	crypto/aes	0.075s
+ok  	crypto/cipher	0.059s
+ok  	crypto/des	0.084s
+ok  	crypto/dsa	0.078s
+ok  	crypto/ecdh	0.094s
+ok  	crypto/ecdsa	0.065s
+ok  	crypto/ed25519	0.131s
+ok  	crypto/elliptic	0.080s
+ok  	crypto/hmac	0.072s
+ok  	crypto/internal/alias	0.057s
+ok  	crypto/internal/boring	0.056s
+ok  	crypto/internal/boring/bcache	0.114s
+ok  	crypto/internal/edwards25519	1.712s
+ok  	crypto/internal/edwards25519/field	1.904s
+ok  	crypto/internal/nistec	0.401s
+ok  	crypto/internal/nistec/fiat	0.075s [no tests to run]
+ok  	crypto/md5	0.080s
+ok  	crypto/rand	0.134s
+ok  	crypto/rc4	0.080s
+ok  	crypto/rsa	0.104s
+ok  	crypto/sha1	0.074s
+ok  	crypto/sha256	0.061s
+ok  	crypto/sha512	0.082s
+ok  	crypto/subtle	0.129s
+ok  	crypto/tls	0.279s
+ok  	crypto/x509	0.214s
+ok  	database/sql	0.339s
+ok  	database/sql/driver	0.101s
+ok  	debug/buildinfo	0.078s
+ok  	debug/dwarf	0.064s
+ok  	debug/elf	0.069s
+ok  	debug/gosym	0.098s
+ok  	debug/macho	0.072s
+ok  	debug/pe	0.124s
+ok  	debug/plan9obj	0.071s
+ok  	embed	0.126s [no tests to run]
+ok  	embed/internal/embedtest	0.114s
+ok  	encoding/ascii85	0.074s
+ok  	encoding/asn1	0.073s
+ok  	encoding/base32	0.074s
+ok  	encoding/base64	0.073s
+ok  	encoding/binary	0.074s
+ok  	encoding/csv	0.075s
+ok  	encoding/gob	0.096s
+ok  	encoding/hex	0.084s
+ok  	encoding/json	0.140s
+ok  	encoding/pem	0.281s
+ok  	encoding/xml	0.113s
+ok  	errors	0.077s
+ok  	expvar	0.090s
+ok  	flag	0.099s
+ok  	fmt	0.113s
+ok  	go/ast	0.077s
+ok  	go/build	0.620s
+ok  	go/build/constraint	0.078s
+ok  	go/constant	0.122s
+ok  	go/doc	0.134s
+ok  	go/doc/comment	0.365s
+ok  	go/format	0.075s
+ok  	go/importer	0.117s
+ok  	go/internal/gccgoimporter	0.121s
+ok  	go/internal/gcimporter	4.302s
+ok  	go/internal/srcimporter	4.570s
+ok  	go/parser	0.136s
+ok  	go/printer	0.153s
+ok  	go/scanner	0.072s
+ok  	go/token	0.078s
+ok  	go/types	3.096s
+ok  	hash	0.073s
+ok  	hash/adler32	0.117s
+ok  	hash/crc32	0.058s
+ok  	hash/crc64	0.072s
+ok  	hash/fnv	0.106s
+ok  	hash/maphash	0.105s
+ok  	html	0.115s
+ok  	html/template	0.093s
+ok  	image	0.077s
+ok  	image/color	0.077s
+ok  	image/draw	0.089s
+ok  	image/gif	7.436s
+ok  	image/jpeg	1.379s
+ok  	image/png	0.216s
+ok  	index/suffixarray	0.146s
+ok  	internal/abi	0.092s
+ok  	internal/buildcfg	0.072s
+ok  	internal/cpu	0.074s
+ok  	internal/dag	0.118s
+ok  	internal/diff	0.072s
+ok  	internal/fmtsort	0.069s
+ok  	internal/fuzz	0.084s
+ok  	internal/godebug	0.123s
+ok  	internal/intern	0.488s
+ok  	internal/itoa	0.079s
+ok  	internal/poll	0.089s
+ok  	internal/profile	0.074s
+ok  	internal/reflectlite	0.090s
+ok  	internal/saferio	0.102s
+ok  	internal/singleflight	0.144s
+ok  	internal/testenv	0.101s
+ok  	internal/trace	0.105s
+ok  	internal/unsafeheader	0.073s
+ok  	internal/xcoff	0.071s
+ok  	io	0.102s
+ok  	io/fs	0.217s
+ok  	io/ioutil	0.119s
+ok  	log	0.147s
+ok  	log/syslog	1.351s
+ok  	math	0.075s
+ok  	math/big	0.502s
+ok  	math/bits	0.071s
+ok  	math/cmplx	0.081s
+ok  	math/rand	0.168s
+ok  	mime	0.079s
+ok  	mime/multipart	0.163s
+ok  	mime/quotedprintable	0.074s
+panic: test timed out after 3m0s
+
+goroutine 1188 [running]:
+panic({0x10288ec00, 0x1400005d8c0})
+	/tmp/buildlet/go/src/runtime/panic.go:987 +0x3c8 fp=0x14000056f80 sp=0x14000056ec0 pc=0x102659008
+testing.(*M).startAlarm.func1()
+	/tmp/buildlet/go/src/testing/testing.go:2064 +0x88 fp=0x14000056fd0 sp=0x14000056f80 pc=0x1026fed28
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000056fd0 sp=0x14000056fd0 pc=0x10268ca14
+created by time.goFunc
+	/tmp/buildlet/go/src/time/sleep.go:176 +0x38
+
+goroutine 1 [chan receive]:
+runtime.gopark(0x14000054a08?, 0x102629578?, 0x18?, 0x4a?, 0x1026312cc?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000054990 sp=0x14000054970 pc=0x10265bd74
+runtime.chanrecv(0x14000170fc0, 0x14000054a9f, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000054a20 sp=0x14000054990 pc=0x10262a8fc
+runtime.chanrecv1(0x14000114f90?, 0x1?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000054a50 sp=0x14000054a20 pc=0x10262a464
+testing.(*T).Run(0x14000104b60, {0x10281ea8e?, 0x198171adf6e933?}, 0x1028d5a70)
+	/tmp/buildlet/go/src/testing/testing.go:1522 +0x314 fp=0x14000054af0 sp=0x14000054a50 pc=0x1026fc214
+testing.runTests.func1(0x0?)
+	/tmp/buildlet/go/src/testing/testing.go:1874 +0x48 fp=0x14000054b40 sp=0x14000054af0 pc=0x1026fde48
+testing.tRunner(0x14000104b60, 0x14000054c58)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x14000054b90 sp=0x14000054b40 pc=0x1026fb57c
+testing.runTests(0x14000136280?, {0x102a27060, 0xf7, 0xf7}, {0x4?, 0x10281b245?, 0x102a2aa60?})
+	/tmp/buildlet/go/src/testing/testing.go:1872 +0x3e0 fp=0x14000054c80 sp=0x14000054b90 pc=0x1026fdd30
+testing.(*M).Run(0x14000136280)
+	/tmp/buildlet/go/src/testing/testing.go:1754 +0x4f0 fp=0x14000054e80 sp=0x14000054c80 pc=0x1026fcb20
+net.TestMain(0x140000466c8?)
+	/tmp/buildlet/go/src/net/main_test.go:52 +0x2c fp=0x14000054eb0 sp=0x14000054e80 pc=0x1027bf26c
+main.main()
+	_testmain.go:639 +0x1d4 fp=0x14000054f70 sp=0x14000054eb0 pc=0x1028182c4
+runtime.main()
+	/tmp/buildlet/go/src/runtime/proc.go:250 +0x248 fp=0x14000054fd0 sp=0x14000054f70 pc=0x10265b9a8
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000054fd0 sp=0x14000054fd0 pc=0x10268ca14
+
+goroutine 2 [force gc (idle)]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000046fa0 sp=0x14000046f80 pc=0x10265bd74
+runtime.goparkunlock(...)
+	/tmp/buildlet/go/src/runtime/proc.go:369
+runtime.forcegchelper()
+	/tmp/buildlet/go/src/runtime/proc.go:302 +0xb8 fp=0x14000046fd0 sp=0x14000046fa0 pc=0x10265bc08
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000046fd0 sp=0x14000046fd0 pc=0x10268ca14
+created by runtime.init.5
+	/tmp/buildlet/go/src/runtime/proc.go:290 +0x24
+
+goroutine 18 [GC sweep wait]:
+runtime.gopark(0x1?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000042770 sp=0x14000042750 pc=0x10265bd74
+runtime.goparkunlock(...)
+	/tmp/buildlet/go/src/runtime/proc.go:369
+runtime.bgsweep(0x0?)
+	/tmp/buildlet/go/src/runtime/mgcsweep.go:298 +0x10c fp=0x140000427b0 sp=0x14000042770 pc=0x1026474fc
+runtime.gcenable.func1()
+	/tmp/buildlet/go/src/runtime/mgc.go:178 +0x28 fp=0x140000427d0 sp=0x140000427b0 pc=0x10263c248
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140000427d0 sp=0x140000427d0 pc=0x10268ca14
+created by runtime.gcenable
+	/tmp/buildlet/go/src/runtime/mgc.go:178 +0x74
+
+goroutine 19 [sleep]:
+runtime.gopark(0x14000012050?, 0x19819bdc5387ad?, 0x0?, 0x0?, 0x1028d5f88?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000042f00 sp=0x14000042ee0 pc=0x10265bd74
+runtime.goparkunlock(...)
+	/tmp/buildlet/go/src/runtime/proc.go:369
+runtime.(*scavengerState).sleep(0x102a2aae0, 0x40aca80000000000)
+	/tmp/buildlet/go/src/runtime/mgcscavenge.go:468 +0x134 fp=0x14000042f80 sp=0x14000042f00 pc=0x102645644
+runtime.bgscavenge(0x0?)
+	/tmp/buildlet/go/src/runtime/mgcscavenge.go:626 +0x9c fp=0x14000042fb0 sp=0x14000042f80 pc=0x102645a3c
+runtime.gcenable.func2()
+	/tmp/buildlet/go/src/runtime/mgc.go:179 +0x28 fp=0x14000042fd0 sp=0x14000042fb0 pc=0x10263c1e8
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000042fd0 sp=0x14000042fd0 pc=0x10268ca14
+created by runtime.gcenable
+	/tmp/buildlet/go/src/runtime/mgc.go:179 +0xb8
+
+goroutine 34 [finalizer wait]:
+runtime.gopark(0x140000465a8?, 0x102631118?, 0x60?, 0x5?, 0x102b5ca90?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000046580 sp=0x14000046560 pc=0x10265bd74
+runtime.goparkunlock(...)
+	/tmp/buildlet/go/src/runtime/proc.go:369
+runtime.runfinq()
+	/tmp/buildlet/go/src/runtime/mfinal.go:186 +0x120 fp=0x140000467d0 sp=0x14000046580 pc=0x10263b3c0
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140000467d0 sp=0x140000467d0 pc=0x10268ca14
+created by runtime.createfing
+	/tmp/buildlet/go/src/runtime/mfinal.go:163 +0x84
+
+goroutine 27 [GC worker (idle)]:
+runtime.gopark(0x19819b76ad5e02?, 0x3?, 0x3?, 0x3e?, 0x10281ab00?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140002aaf40 sp=0x140002aaf20 pc=0x10265bd74
+runtime.gcBgMarkWorker()
+	/tmp/buildlet/go/src/runtime/mgc.go:1234 +0xec fp=0x140002aafd0 sp=0x140002aaf40 pc=0x10263df3c
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140002aafd0 sp=0x140002aafd0 pc=0x10268ca14
+created by runtime.gcBgMarkStartWorkers
+	/tmp/buildlet/go/src/runtime/mgc.go:1158 +0x28
+
+goroutine 574 [chan receive]:
+runtime.gopark(0x1400017b538?, 0x14000094000?, 0x0?, 0x86?, 0x1400017b558?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x1400017b4e0 sp=0x1400017b4c0 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x1400017b570 sp=0x1400017b4e0 pc=0x10262a8fc
+runtime.chanrecv1(0x1026fb4a3?, 0x1029c8600?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x1400017b5a0 sp=0x1400017b570 pc=0x10262a464
+testing.(*T).Parallel(0x140005a2680)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x1400017b610 sp=0x1400017b5a0 pc=0x1026fb370
+net.TestLookupGmailTXT(0x140005a2680)
+	/tmp/buildlet/go/src/net/lookup_test.go:218 +0x28 fp=0x1400017b760 sp=0x1400017b610 pc=0x1027b5e18
+testing.tRunner(0x140005a2680, 0x1028d58b8)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x1400017b7b0 sp=0x1400017b760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x1400017b7d0 sp=0x1400017b7b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x1400017b7d0 sp=0x1400017b7d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 803 [chan receive]:
+runtime.gopark(0x14000044608?, 0x14000094000?, 0xe?, 0xc6?, 0x14000044628?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140000445b0 sp=0x14000044590 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000044640 sp=0x140000445b0 pc=0x10262a8fc
+runtime.chanrecv1(0x1026fb4a3?, 0x1029c8600?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000044670 sp=0x14000044640 pc=0x10262a464
+testing.(*T).Parallel(0x14000249d40)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x140000446e0 sp=0x14000044670 pc=0x1026fb370
+net.TestPacketConnClose(0x0?)
+	/tmp/buildlet/go/src/net/net_test.go:267 +0x20 fp=0x14000044760 sp=0x140000446e0 pc=0x1027c7f40
+testing.tRunner(0x14000249d40, 0x1028d59c8)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140000447b0 sp=0x14000044760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140000447d0 sp=0x140000447b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140000447d0 sp=0x140000447d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 64 [GC worker (idle)]:
+runtime.gopark(0x3?, 0x0?, 0x60?, 0xe3?, 0x10288b301?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x1400023af40 sp=0x1400023af20 pc=0x10265bd74
+runtime.gcBgMarkWorker()
+	/tmp/buildlet/go/src/runtime/mgc.go:1234 +0xec fp=0x1400023afd0 sp=0x1400023af40 pc=0x10263df3c
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x1400023afd0 sp=0x1400023afd0 pc=0x10268ca14
+created by runtime.gcBgMarkStartWorkers
+	/tmp/buildlet/go/src/runtime/mgc.go:1158 +0x28
+
+goroutine 63 [GC worker (idle)]:
+runtime.gopark(0x140002aef58?, 0x102a2aa60?, 0xa8?, 0xef?, 0x1026fc201?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140002aef40 sp=0x140002aef20 pc=0x10265bd74
+runtime.gcBgMarkWorker()
+	/tmp/buildlet/go/src/runtime/mgc.go:1234 +0xec fp=0x140002aefd0 sp=0x140002aef40 pc=0x10263df3c
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140002aefd0 sp=0x140002aefd0 pc=0x10268ca14
+created by runtime.gcBgMarkStartWorkers
+	/tmp/buildlet/go/src/runtime/mgc.go:1158 +0x28
+
+goroutine 572 [chan receive]:
+runtime.gopark(0x10?, 0x14000094000?, 0x78?, 0x31?, 0x14000176dd8?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000176d60 sp=0x14000176d40 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000176df0 sp=0x14000176d60 pc=0x10262a8fc
+runtime.chanrecv1(0x1028cea60?, 0x140001180a0?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000176e20 sp=0x14000176df0 pc=0x10262a464
+testing.(*T).Parallel(0x14000083d40)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000176e90 sp=0x14000176e20 pc=0x1026fb370
+net.TestLookupGmailMX(0x14000083d40)
+	/tmp/buildlet/go/src/net/lookup_test.go:123 +0x24 fp=0x14000176f60 sp=0x14000176e90 pc=0x1027b57b4
+testing.tRunner(0x14000083d40, 0x1028d58a8)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x14000176fb0 sp=0x14000176f60 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x14000176fd0 sp=0x14000176fb0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000176fd0 sp=0x14000176fd0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 1205 [sleep]:
+runtime.gopark(0x19819b96bab60b?, 0x14000018c91?, 0x1?, 0x0?, 0x102890880?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000057d10 sp=0x14000057cf0 pc=0x10265bd74
+time.Sleep(0xfe502a)
+	/tmp/buildlet/go/src/runtime/time.go:195 +0x118 fp=0x14000057d50 sp=0x14000057d10 pc=0x1026895e8
+net.TestReadFromTimeout(0x140005a3860)
+	/tmp/buildlet/go/src/net/timeout_test.go:448 +0x564 fp=0x14000057f60 sp=0x14000057d50 pc=0x1027e4fd4
+testing.tRunner(0x140005a3860, 0x1028d5a70)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x14000057fb0 sp=0x14000057f60 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x14000057fd0 sp=0x14000057fb0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000057fd0 sp=0x14000057fd0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 1204 [chan receive]:
+runtime.gopark(0x14000238518?, 0x14000094000?, 0xe0?, 0x3e?, 0x14000238538?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140002384c0 sp=0x140002384a0 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000238550 sp=0x140002384c0 pc=0x10262a8fc
+runtime.chanrecv1(0x102a03ee0?, 0x10277986c?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000238580 sp=0x14000238550 pc=0x10262a464
+testing.(*T).Parallel(0x140005a36c0)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x140002385f0 sp=0x14000238580 pc=0x1026fb370
+net.TestReadTimeoutMustNotReturn(0x140005a36c0)
+	/tmp/buildlet/go/src/net/timeout_test.go:340 +0x38 fp=0x14000238760 sp=0x140002385f0 pc=0x1027e42f8
+testing.tRunner(0x140005a36c0, 0x1028d5a88)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140002387b0 sp=0x14000238760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140002387d0 sp=0x140002387b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140002387d0 sp=0x140002387d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 802 [chan receive]:
+runtime.gopark(0x80?, 0x14000094000?, 0x2d?, 0x20?, 0x14000043e18?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000043da0 sp=0x14000043d80 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000043e30 sp=0x14000043da0 pc=0x10262a8fc
+runtime.chanrecv1(0x1028cea60?, 0x1400014ce00?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000043e60 sp=0x14000043e30 pc=0x10262a464
+testing.(*T).Parallel(0x14000249ba0)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000043ed0 sp=0x14000043e60 pc=0x1026fb370
+net.TestListenerClose(0x14000249380?)
+	/tmp/buildlet/go/src/net/net_test.go:229 +0x24 fp=0x14000043f60 sp=0x14000043ed0 pc=0x1027c7b04
+testing.tRunner(0x14000249ba0, 0x1028d5870)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x14000043fb0 sp=0x14000043f60 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x14000043fd0 sp=0x14000043fb0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000043fd0 sp=0x14000043fd0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 769 [chan receive]:
+runtime.gopark(0x140001785f8?, 0x14000094000?, 0x2d?, 0x20?, 0x14000178618?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140001785a0 sp=0x14000178580 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000178630 sp=0x140001785a0 pc=0x10262a8fc
+runtime.chanrecv1(0x1028b2dc0?, 0x14000198900?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000178660 sp=0x14000178630 pc=0x10262a464
+testing.(*T).Parallel(0x14000249a00)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x140001786d0 sp=0x14000178660 pc=0x1026fb370
+net.TestConnClose(0x102a60d80?)
+	/tmp/buildlet/go/src/net/net_test.go:187 +0x24 fp=0x14000178760 sp=0x140001786d0 pc=0x1027c7304
+testing.tRunner(0x14000249a00, 0x1028d54f0)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140001787b0 sp=0x14000178760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140001787d0 sp=0x140001787b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140001787d0 sp=0x140001787d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 768 [chan receive]:
+runtime.gopark(0x14000174df8?, 0x14000094000?, 0x2d?, 0x20?, 0x14000174e18?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000174da0 sp=0x14000174d80 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000174e30 sp=0x14000174da0 pc=0x10262a8fc
+runtime.chanrecv1(0x14000174e78?, 0x140001988f8?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000174e60 sp=0x14000174e30 pc=0x10262a464
+testing.(*T).Parallel(0x14000249860)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000174ed0 sp=0x14000174e60 pc=0x1026fb370
+net.TestCloseWrite(0x14000249860)
+	/tmp/buildlet/go/src/net/net_test.go:79 +0x24 fp=0x14000174f60 sp=0x14000174ed0 pc=0x1027c6454
+testing.tRunner(0x14000249860, 0x1028d54b0)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x14000174fb0 sp=0x14000174f60 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x14000174fd0 sp=0x14000174fb0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000174fd0 sp=0x14000174fd0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 65 [GC worker (idle)]:
+runtime.gopark(0x19819b76af0b5f?, 0x140000980a0?, 0x18?, 0x14?, 0x0?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x1400023b740 sp=0x1400023b720 pc=0x10265bd74
+runtime.gcBgMarkWorker()
+	/tmp/buildlet/go/src/runtime/mgc.go:1234 +0xec fp=0x1400023b7d0 sp=0x1400023b740 pc=0x10263df3c
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x1400023b7d0 sp=0x1400023b7d0 pc=0x10268ca14
+created by runtime.gcBgMarkStartWorkers
+	/tmp/buildlet/go/src/runtime/mgc.go:1158 +0x28
+
+goroutine 767 [chan receive]:
+runtime.gopark(0x14000048df8?, 0x14000094000?, 0x2d?, 0x20?, 0x14000048e18?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000048da0 sp=0x14000048d80 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000048e30 sp=0x14000048da0 pc=0x10262a8fc
+runtime.chanrecv1(0x14000198440?, 0x140001988f0?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000048e60 sp=0x14000048e30 pc=0x10262a464
+testing.(*T).Parallel(0x140002496c0)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000048ed0 sp=0x14000048e60 pc=0x1026fb370
+net.TestCloseRead(0x14000249520?)
+	/tmp/buildlet/go/src/net/net_test.go:25 +0x24 fp=0x14000048f60 sp=0x14000048ed0 pc=0x1027c5bc4
+testing.tRunner(0x140002496c0, 0x1028d5490)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x14000048fb0 sp=0x14000048f60 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x14000048fd0 sp=0x14000048fb0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000048fd0 sp=0x14000048fd0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 201 [GC worker (idle)]:
+runtime.gopark(0x1400011c008?, 0x102818ae9?, 0x2?, 0x0?, 0x10281ab00?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000175740 sp=0x14000175720 pc=0x10265bd74
+runtime.gcBgMarkWorker()
+	/tmp/buildlet/go/src/runtime/mgc.go:1234 +0xec fp=0x140001757d0 sp=0x14000175740 pc=0x10263df3c
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140001757d0 sp=0x140001757d0 pc=0x10268ca14
+created by runtime.gcBgMarkStartWorkers
+	/tmp/buildlet/go/src/runtime/mgc.go:1158 +0x28
+
+goroutine 90 [GC worker (idle)]:
+runtime.gopark(0x0?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x1400023cf40 sp=0x1400023cf20 pc=0x10265bd74
+runtime.gcBgMarkWorker()
+	/tmp/buildlet/go/src/runtime/mgc.go:1234 +0xec fp=0x1400023cfd0 sp=0x1400023cf40 pc=0x10263df3c
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x1400023cfd0 sp=0x1400023cfd0 pc=0x10268ca14
+created by runtime.gcBgMarkStartWorkers
+	/tmp/buildlet/go/src/runtime/mgc.go:1158 +0x28
+
+goroutine 202 [GC worker (idle)]:
+runtime.gopark(0x19819b76aef660?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140002ab740 sp=0x140002ab720 pc=0x10265bd74
+runtime.gcBgMarkWorker()
+	/tmp/buildlet/go/src/runtime/mgc.go:1234 +0xec fp=0x140002ab7d0 sp=0x140002ab740 pc=0x10263df3c
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140002ab7d0 sp=0x140002ab7d0 pc=0x10268ca14
+created by runtime.gcBgMarkStartWorkers
+	/tmp/buildlet/go/src/runtime/mgc.go:1158 +0x28
+
+goroutine 203 [GC worker (idle)]:
+runtime.gopark(0x19819b687144d9?, 0x1?, 0x5f?, 0xf8?, 0x0?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140002abf40 sp=0x140002abf20 pc=0x10265bd74
+runtime.gcBgMarkWorker()
+	/tmp/buildlet/go/src/runtime/mgc.go:1234 +0xec fp=0x140002abfd0 sp=0x140002abf40 pc=0x10263df3c
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140002abfd0 sp=0x140002abfd0 pc=0x10268ca14
+created by runtime.gcBgMarkStartWorkers
+	/tmp/buildlet/go/src/runtime/mgc.go:1158 +0x28
+
+goroutine 571 [chan receive]:
+runtime.gopark(0x14000175d68?, 0x14000094000?, 0x7?, 0xd?, 0x14000175d88?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000175d10 sp=0x14000175cf0 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000175da0 sp=0x14000175d10 pc=0x10262a8fc
+runtime.chanrecv1(0x1028cea60?, 0x0?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000175dd0 sp=0x14000175da0 pc=0x10262a464
+testing.(*T).Parallel(0x14000083ba0)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000175e40 sp=0x14000175dd0 pc=0x1026fb370
+net.TestLookupGoogleSRV(0x14000083ba0)
+	/tmp/buildlet/go/src/net/lookup_test.go:74 +0x28 fp=0x14000175f60 sp=0x14000175e40 pc=0x1027b5408
+testing.tRunner(0x14000083ba0, 0x1028d58d8)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x14000175fb0 sp=0x14000175f60 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x14000175fd0 sp=0x14000175fb0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000175fd0 sp=0x14000175fd0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 573 [chan receive]:
+runtime.gopark(0x20?, 0x14000094000?, 0xb8?, 0xc5?, 0x140000455d8?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000045560 sp=0x14000045540 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x140000455f0 sp=0x14000045560 pc=0x10262a8fc
+runtime.chanrecv1(0x1028cea60?, 0x1400005c190?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000045620 sp=0x140000455f0 pc=0x10262a464
+testing.(*T).Parallel(0x140005a2000)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000045690 sp=0x14000045620 pc=0x1026fb370
+net.TestLookupGmailNS(0x140005a2000)
+	/tmp/buildlet/go/src/net/lookup_test.go:169 +0x24 fp=0x14000045760 sp=0x14000045690 pc=0x1027b5ae4
+testing.tRunner(0x140005a2000, 0x1028d58b0)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140000457b0 sp=0x14000045760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140000457d0 sp=0x140000457b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140000457d0 sp=0x140000457d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 1168 [chan receive]:
+runtime.gopark(0x1400055d588?, 0x14000094000?, 0xa0?, 0x2e?, 0x1400055d5a8?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x1400055d530 sp=0x1400055d510 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x1400055d5c0 sp=0x1400055d530 pc=0x10262a8fc
+runtime.chanrecv1(0x1026fb4a3?, 0x1029c8600?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x1400055d5f0 sp=0x1400055d5c0 pc=0x10262a464
+testing.(*T).Parallel(0x140005a3040)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x1400055d660 sp=0x1400055d5f0 pc=0x1026fb370
+net.TestAcceptTimeoutMustReturn(0x140005a3040)
+	/tmp/buildlet/go/src/net/timeout_test.go:193 +0x34 fp=0x1400055d760 sp=0x1400055d660 pc=0x1027e30c4
+testing.tRunner(0x140005a3040, 0x1028d53e8)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x1400055d7b0 sp=0x1400055d760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x1400055d7d0 sp=0x1400055d7b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x1400055d7d0 sp=0x1400055d7d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 747 [chan receive]:
+runtime.gopark(0x40?, 0x14000094000?, 0x0?, 0xe0?, 0x14000179e18?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000179da0 sp=0x14000179d80 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000179e30 sp=0x14000179da0 pc=0x10262a8fc
+runtime.chanrecv1(0x1028cea60?, 0x1400028a0a0?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000179e60 sp=0x14000179e30 pc=0x10262a464
+testing.(*T).Parallel(0x140005a31e0)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000179ed0 sp=0x14000179e60 pc=0x1026fb370
+net.TestLookupHostCancel(0x140005a31e0)
+	/tmp/buildlet/go/src/net/lookup_test.go:973 +0x3c fp=0x14000179f60 sp=0x14000179ed0 pc=0x1027bab3c
+testing.tRunner(0x140005a31e0, 0x1028d58e0)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x14000179fb0 sp=0x14000179f60 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x14000179fd0 sp=0x14000179fb0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x14000179fd0 sp=0x14000179fd0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 1175 [chan receive]:
+runtime.gopark(0x140002ade08?, 0x14000094000?, 0x38?, 0xde?, 0x140002ade28?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140002addb0 sp=0x140002add90 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x140002ade40 sp=0x140002addb0 pc=0x10262a8fc
+runtime.chanrecv1(0xf?, 0x102696780?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x140002ade70 sp=0x140002ade40 pc=0x10262a464
+testing.(*T).Parallel(0x14000003ba0)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x140002adee0 sp=0x140002ade70 pc=0x1026fb370
+net.TestTCPSpuriousConnSetupCompletionWithCancel(0x14000003ba0)
+	/tmp/buildlet/go/src/net/tcpsock_unix_test.go:86 +0x5c fp=0x140002adf60 sp=0x140002adee0 pc=0x1027e182c
+testing.tRunner(0x14000003ba0, 0x1028d5c20)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140002adfb0 sp=0x140002adf60 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140002adfd0 sp=0x140002adfb0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140002adfd0 sp=0x140002adfd0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 808 [chan receive]:
+runtime.gopark(0x140000485f8?, 0x14000094000?, 0x2d?, 0x20?, 0x14000048618?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x140000485a0 sp=0x14000048580 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000048630 sp=0x140000485a0 pc=0x10262a8fc
+runtime.chanrecv1(0x0?, 0x140001989f0?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000048660 sp=0x14000048630 pc=0x10262a464
+testing.(*T).Parallel(0x140000ea340)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x140000486d0 sp=0x14000048660 pc=0x1026fb370
+net.TestZeroByteRead(0xf?)
+	/tmp/buildlet/go/src/net/net_test.go:375 +0x24 fp=0x14000048760 sp=0x140000486d0 pc=0x1027c8da4
+testing.tRunner(0x140000ea340, 0x1028d5d60)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140000487b0 sp=0x14000048760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140000487d0 sp=0x140000487b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140000487d0 sp=0x140000487d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 782 [chan receive]:
+runtime.gopark(0x14000179658?, 0x14000094000?, 0x0?, 0x0?, 0x14000179678?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000179600 sp=0x140001795e0 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x14000179690 sp=0x14000179600 pc=0x10262a8fc
+runtime.chanrecv1(0x10268d960?, 0x14000179708?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x140001796c0 sp=0x14000179690 pc=0x10262a464
+testing.(*T).Parallel(0x140005a3a00)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000179730 sp=0x140001796c0 pc=0x1026fb370
+net.TestCloseUnblocksRead(0x1400021c480?)
+	/tmp/buildlet/go/src/net/net_test.go:509 +0x20 fp=0x14000179760 sp=0x14000179730 pc=0x1027ca1c0
+testing.tRunner(0x140005a3a00, 0x1028d54a8)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140001797b0 sp=0x14000179760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140001797d0 sp=0x140001797b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140001797d0 sp=0x140001797d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 783 [chan receive]:
+runtime.gopark(0x1400023c598?, 0x14000094000?, 0x88?, 0xc5?, 0x1400023c5b8?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x1400023c540 sp=0x1400023c520 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x1400023c5d0 sp=0x1400023c540 pc=0x10262a8fc
+runtime.chanrecv1(0x1028f202d?, 0xf?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x1400023c600 sp=0x1400023c5d0 pc=0x10262a464
+testing.(*T).Parallel(0x140005a3ba0)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x1400023c670 sp=0x1400023c600 pc=0x1026fb370
+net.TestNotTemporaryRead(0x140005a3ba0)
+	/tmp/buildlet/go/src/net/net_test.go:528 +0x30 fp=0x1400023c760 sp=0x1400023c670 pc=0x1027ca230
+testing.tRunner(0x140005a3ba0, 0x1028d5998)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x1400023c7b0 sp=0x1400023c760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x1400023c7d0 sp=0x1400023c7b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x1400023c7d0 sp=0x1400023c7d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 448 [chan receive]:
+runtime.gopark(0x14000047598?, 0x14000094000?, 0x0?, 0x28?, 0x140000475b8?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000047540 sp=0x14000047520 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x140000475d0 sp=0x14000047540 pc=0x10262a8fc
+runtime.chanrecv1(0x1028f202d?, 0xf?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x14000047600 sp=0x140000475d0 pc=0x10262a464
+testing.(*T).Parallel(0x140000eaea0)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000047670 sp=0x14000047600 pc=0x1026fb370
+net.TestSendfilePipe(0x140000eaea0)
+	/tmp/buildlet/go/src/net/sendfile_test.go:217 +0x34 fp=0x14000047760 sp=0x14000047670 pc=0x1027d5264
+testing.tRunner(0x140000eaea0, 0x1028d5b40)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140000477b0 sp=0x14000047760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140000477d0 sp=0x140000477b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140000477d0 sp=0x140000477d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+
+goroutine 1169 [chan receive]:
+runtime.gopark(0x100?, 0x14000094000?, 0xb8?, 0x95?, 0x14000239598?)
+	/tmp/buildlet/go/src/runtime/proc.go:363 +0xe4 fp=0x14000239520 sp=0x14000239500 pc=0x10265bd74
+runtime.chanrecv(0x140001001e0, 0x0, 0x1)
+	/tmp/buildlet/go/src/runtime/chan.go:583 +0x45c fp=0x140002395b0 sp=0x14000239520 pc=0x10262a8fc
+runtime.chanrecv1(0x1028cea60?, 0x140000ccd00?)
+	/tmp/buildlet/go/src/runtime/chan.go:442 +0x14 fp=0x140002395e0 sp=0x140002395b0 pc=0x10262a464
+testing.(*T).Parallel(0x140005a3380)
+	/tmp/buildlet/go/src/testing/testing.go:1299 +0x180 fp=0x14000239650 sp=0x140002395e0 pc=0x1026fb370
+net.TestAcceptTimeoutMustNotReturn(0x140005a3380)
+	/tmp/buildlet/go/src/net/timeout_test.go:236 +0x34 fp=0x14000239760 sp=0x14000239650 pc=0x1027e35b4
+testing.tRunner(0x140005a3380, 0x1028d53e0)
+	/tmp/buildlet/go/src/testing/testing.go:1474 +0x10c fp=0x140002397b0 sp=0x14000239760 pc=0x1026fb57c
+testing.(*T).Run.func1()
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x2c fp=0x140002397d0 sp=0x140002397b0 pc=0x1026fc2ac
+runtime.goexit()
+	/tmp/buildlet/go/src/runtime/asm_arm64.s:1172 +0x4 fp=0x140002397d0 sp=0x140002397d0 pc=0x10268ca14
+created by testing.(*T).Run
+	/tmp/buildlet/go/src/testing/testing.go:1521 +0x300
+FAIL	net	180.093s
+ok  	net/http	3.079s
+ok  	net/http/cgi	0.514s
+FAIL
+go tool dist: Failed: exit status 1

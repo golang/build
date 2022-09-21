@@ -1,0 +1,399 @@
+linux-ppc64le-power9osu at 2cc6983a2103d64cd33a0fb67dc7ea2adcac3ba8
+
+:: Running /workdir/go/src/make.bash with args ["/workdir/go/src/make.bash"] and env ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "HOSTNAME=power_01" "GO_BUILDER_ENV=host-linux-ppc64le-power9-osu" "GO_BUILD_KEY_PATH=/buildkey/gobuildkey" "GO_BUILD_KEY_DELETE_AFTER_READ=true" "DEBIAN_FRONTEND=noninteractive" "HOME=/root" "USER=root" "GO_STAGE0_NET_DELAY=100ms" "GO_STAGE0_DL_DELAY=500ms" "WORKDIR=/workdir" "GOROOT_BOOTSTRAP=/workdir/go1.4" "GO_BUILDER_NAME=linux-ppc64le-power9osu" "GO_BUILDER_FLAKY_NET=1" "GOPPC64=power9" "GO_TEST_TIMEOUT_SCALE=2" "GOBIN=" "TMPDIR=/workdir/tmp" "GOCACHE=/workdir/gocache" "PWD=/workdir/go/src"] in dir /workdir/go/src
+
+Building Go cmd/dist using /workdir/go1.4. (go1.17.13 linux/ppc64le)
+Building Go toolchain1 using /workdir/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for linux/ppc64le.
+---
+Installed Go for linux/ppc64le in /workdir/go
+Installed commands in /workdir/go/bin
+
+##### Test execution environment.
+# GOARCH: ppc64le
+# CPU: POWER9
+# GOOS: linux
+# OS Version: Linux 5.4.0-124-generic #140-Ubuntu SMP Thu Aug 4 02:24:16 UTC 2022 ppc64le
+
+##### Testing packages.
+ok  	archive/tar	0.031s
+ok  	archive/zip	1.103s
+ok  	bufio	0.182s
+ok  	bytes	2.777s
+ok  	compress/bzip2	0.244s
+ok  	compress/flate	1.070s
+ok  	compress/gzip	4.935s
+ok  	compress/lzw	0.180s
+ok  	compress/zlib	0.877s
+ok  	container/heap	0.007s
+ok  	container/list	0.003s
+ok  	container/ring	0.003s
+ok  	context	0.013s
+ok  	crypto	0.025s
+ok  	crypto/aes	0.036s
+ok  	crypto/cipher	0.072s
+ok  	crypto/des	0.066s
+ok  	crypto/dsa	0.018s
+ok  	crypto/ecdh	0.067s
+ok  	crypto/ecdsa	0.011s
+ok  	crypto/ed25519	0.088s
+ok  	crypto/elliptic	0.027s
+ok  	crypto/hmac	0.016s
+ok  	crypto/internal/alias	0.009s
+ok  	crypto/internal/boring	0.003s
+ok  	crypto/internal/boring/bcache	0.297s
+ok  	crypto/internal/edwards25519	8.702s
+ok  	crypto/internal/edwards25519/field	7.976s
+ok  	crypto/internal/nistec	0.669s
+ok  	crypto/internal/nistec/fiat	0.014s [no tests to run]
+ok  	crypto/md5	0.009s
+ok  	crypto/rand	0.063s
+ok  	crypto/rc4	0.118s
+ok  	crypto/rsa	0.145s
+ok  	crypto/sha1	0.036s
+ok  	crypto/sha256	0.016s
+ok  	crypto/sha512	0.041s
+ok  	crypto/subtle	0.268s
+ok  	crypto/tls	0.449s
+ok  	crypto/x509	0.664s
+ok  	database/sql	0.368s
+ok  	database/sql/driver	0.030s
+ok  	debug/buildinfo	0.029s
+ok  	debug/dwarf	0.029s
+ok  	debug/elf	0.023s
+ok  	debug/gosym	0.036s
+ok  	debug/macho	0.018s
+ok  	debug/pe	0.019s
+ok  	debug/plan9obj	0.003s
+ok  	embed	0.004s [no tests to run]
+ok  	embed/internal/embedtest	0.003s
+ok  	encoding/ascii85	0.008s
+ok  	encoding/asn1	0.006s
+ok  	encoding/base32	0.042s
+ok  	encoding/base64	0.022s
+ok  	encoding/binary	0.005s
+ok  	encoding/csv	0.034s
+ok  	encoding/gob	0.057s
+ok  	encoding/hex	0.045s
+ok  	encoding/json	0.320s
+ok  	encoding/pem	0.674s
+ok  	encoding/xml	0.094s
+ok  	errors	0.031s
+ok  	expvar	0.049s
+ok  	flag	0.237s
+ok  	fmt	0.193s
+ok  	go/ast	0.007s
+ok  	go/build	3.964s
+ok  	go/build/constraint	0.039s
+ok  	go/constant	0.012s
+ok  	go/doc	0.084s
+ok  	go/doc/comment	1.866s
+ok  	go/format	0.022s
+ok  	go/importer	0.077s
+ok  	go/internal/gccgoimporter	0.012s
+ok  	go/internal/gcimporter	16.543s
+ok  	go/internal/srcimporter	10.842s
+ok  	go/parser	0.349s
+ok  	go/printer	0.613s
+ok  	go/scanner	0.009s
+ok  	go/token	0.026s
+ok  	go/types	11.929s
+ok  	hash	0.006s
+ok  	hash/adler32	0.010s
+ok  	hash/crc32	0.007s
+ok  	hash/crc64	0.013s
+ok  	hash/fnv	0.014s
+ok  	hash/maphash	0.127s
+ok  	html	0.003s
+ok  	html/template	0.113s
+ok  	image	0.087s
+ok  	image/color	0.030s
+ok  	image/draw	0.240s
+ok  	image/gif	27.326s
+ok  	image/jpeg	4.798s
+ok  	image/png	0.381s
+ok  	index/suffixarray	0.341s
+ok  	internal/abi	0.032s
+ok  	internal/buildcfg	0.020s
+ok  	internal/cpu	0.005s
+ok  	internal/dag	0.004s
+ok  	internal/diff	0.003s
+ok  	internal/fmtsort	0.003s
+ok  	internal/fuzz	0.029s
+ok  	internal/godebug	0.005s
+ok  	internal/intern	0.629s
+ok  	internal/itoa	0.004s
+ok  	internal/poll	0.247s
+ok  	internal/profile	0.023s
+ok  	internal/reflectlite	0.145s
+ok  	internal/saferio	0.097s
+ok  	internal/singleflight	0.038s
+ok  	internal/testenv	0.015s
+ok  	internal/trace	0.061s
+ok  	internal/unsafeheader	0.012s
+ok  	internal/xcoff	0.059s
+ok  	io	0.029s
+ok  	io/fs	0.368s
+ok  	io/ioutil	0.006s
+ok  	log	0.005s
+ok  	log/syslog	1.260s
+ok  	math	0.008s
+ok  	math/big	2.530s
+ok  	math/bits	0.008s
+ok  	math/cmplx	0.014s
+ok  	math/rand	0.781s
+ok  	mime	0.020s
+ok  	mime/multipart	0.362s
+ok  	mime/quotedprintable	0.058s
+ok  	net	10.388s
+ok  	net/http	12.512s
+ok  	net/http/cgi	0.594s
+ok  	net/http/cookiejar	0.014s
+ok  	net/http/fcgi	0.136s
+ok  	net/http/httptest	0.053s
+ok  	net/http/httptrace	0.004s
+ok  	net/http/httputil	0.625s
+ok  	net/http/internal	0.037s
+ok  	net/http/internal/ascii	0.013s
+ok  	net/http/pprof	5.119s
+ok  	net/internal/socktest	0.004s
+ok  	net/mail	0.027s
+ok  	net/netip	0.651s
+ok  	net/rpc	0.031s
+ok  	net/rpc/jsonrpc	0.013s
+ok  	net/smtp	0.017s
+ok  	net/textproto	0.026s
+ok  	net/url	0.052s
+ok  	os	1.050s
+ok  	os/exec	1.730s
+ok  	os/exec/internal/fdtest	0.011s
+ok  	os/signal	75.650s
+ok  	os/user	0.005s
+ok  	path	0.005s
+ok  	path/filepath	0.055s
+ok  	plugin	0.021s
+ok  	reflect	0.550s
+ok  	regexp	0.118s
+ok  	regexp/syntax	1.001s
+ok  	runtime	58.597s
+ok  	runtime/cgo	0.004s
+ok  	runtime/debug	0.076s
+ok  	runtime/internal/atomic	0.157s
+ok  	runtime/internal/math	0.007s
+ok  	runtime/internal/sys	0.003s
+ok  	runtime/metrics	0.019s
+ok  	runtime/pprof	8.300s
+ok  	runtime/trace	3.085s
+ok  	sort	0.343s
+ok  	strconv	0.977s
+ok  	strings	1.994s
+ok  	sync	0.683s
+ok  	sync/atomic	2.153s
+ok  	syscall	0.080s
+ok  	testing	0.728s
+ok  	testing/fstest	0.016s
+ok  	testing/iotest	0.036s
+ok  	testing/quick	0.069s
+ok  	text/scanner	0.005s
+ok  	text/tabwriter	0.025s
+ok  	text/template	0.102s
+ok  	text/template/parse	0.079s
+ok  	time	2.057s
+ok  	unicode	0.017s
+ok  	unicode/utf16	0.003s
+ok  	unicode/utf8	0.021s
+ok  	cmd/addr2line	2.801s
+ok  	cmd/api	14.236s
+ok  	cmd/asm/internal/asm	1.446s
+ok  	cmd/asm/internal/lex	0.014s
+ok  	cmd/compile/internal/abt	0.069s
+ok  	cmd/compile/internal/amd64	0.005s
+ok  	cmd/compile/internal/dwarfgen	0.837s
+ok  	cmd/compile/internal/importer	1.658s
+ok  	cmd/compile/internal/ir	0.003s
+ok  	cmd/compile/internal/logopt	0.176s
+ok  	cmd/compile/internal/noder	0.006s
+ok  	cmd/compile/internal/reflectdata	0.027s [no tests to run]
+ok  	cmd/compile/internal/ssa	16.538s
+ok  	cmd/compile/internal/syntax	0.048s
+ok  	cmd/compile/internal/test	31.560s
+ok  	cmd/compile/internal/typecheck	0.880s
+ok  	cmd/compile/internal/types	0.004s
+ok  	cmd/compile/internal/types2	1.800s
+ok  	cmd/cover	2.681s
+ok  	cmd/dist	0.012s
+ok  	cmd/doc	0.488s
+ok  	cmd/fix	4.124s
+ok  	cmd/go	61.391s
+ok  	cmd/go/internal/auth	0.012s
+ok  	cmd/go/internal/cache	0.126s
+ok  	cmd/go/internal/fsys	0.025s
+ok  	cmd/go/internal/generate	0.014s
+ok  	cmd/go/internal/get	0.020s
+ok  	cmd/go/internal/imports	0.007s
+ok  	cmd/go/internal/load	0.013s
+ok  	cmd/go/internal/lockedfile	0.085s
+ok  	cmd/go/internal/lockedfile/internal/filelock	0.032s
+ok  	cmd/go/internal/modconv	0.016s
+ok  	cmd/go/internal/modfetch	0.005s
+ok  	cmd/go/internal/modfetch/codehost	0.007s
+ok  	cmd/go/internal/modfetch/zip_sum_test	0.024s
+ok  	cmd/go/internal/modindex	0.309s
+ok  	cmd/go/internal/modload	0.006s
+ok  	cmd/go/internal/mvs	0.042s
+ok  	cmd/go/internal/par	0.020s
+ok  	cmd/go/internal/search	0.004s
+ok  	cmd/go/internal/str	0.004s
+ok  	cmd/go/internal/test	0.014s
+ok  	cmd/go/internal/vcs	0.009s
+ok  	cmd/go/internal/web	0.023s
+ok  	cmd/go/internal/work	0.019s
+ok  	cmd/gofmt	0.059s
+ok  	cmd/internal/archive	1.187s
+ok  	cmd/internal/buildid	0.260s
+ok  	cmd/internal/dwarf	0.007s
+ok  	cmd/internal/edit	0.018s
+ok  	cmd/internal/goobj	0.003s
+ok  	cmd/internal/moddeps	2.049s
+ok  	cmd/internal/notsha256	0.024s
+ok  	cmd/internal/obj	1.374s
+ok  	cmd/internal/obj/ppc64	0.263s
+ok  	cmd/internal/obj/riscv	0.152s
+ok  	cmd/internal/obj/s390x	0.003s
+ok  	cmd/internal/obj/x86	5.373s
+ok  	cmd/internal/objabi	0.016s
+ok  	cmd/internal/pkgpath	0.061s
+ok  	cmd/internal/quoted	0.014s
+ok  	cmd/internal/src	0.003s
+ok  	cmd/internal/sys	0.014s
+ok  	cmd/internal/test2json	0.375s
+ok  	cmd/link	10.782s
+ok  	cmd/link/internal/benchmark	0.029s
+ok  	cmd/link/internal/ld	6.578s
+ok  	cmd/link/internal/loader	0.021s
+ok  	cmd/nm	3.437s
+ok  	cmd/objdump	4.120s
+ok  	cmd/pack	3.597s
+ok  	cmd/pprof	3.616s
+ok  	cmd/trace	0.249s
+ok  	cmd/vet	15.157s
+
+##### os/user with tag osusergo
+ok  	os/user	0.008s
+
+##### GOMAXPROCS=2 runtime -cpu=1,2,4 -quick
+ok  	runtime	35.238s
+
+##### cmd/go terminal test
+skipping terminal test; stdout/stderr not terminals
+
+##### moved GOROOT
+ok  	fmt	0.194s
+
+##### Testing without libgcc.
+ok  	net	0.018s
+ok  	os/user	0.005s
+
+##### internal linking of -buildmode=pie
+ok  	reflect	0.445s
+ok  	os/user	0.006s
+
+##### sync -cpu=10
+ok  	sync	0.412s
+
+##### Testing race detector
+ok  	runtime/race	21.995s
+ok  	flag	0.196s
+ok  	net	0.400s
+ok  	os	0.226s
+ok  	os/exec	0.102s
+ok  	encoding/gob	0.207s
+ok  	flag	0.114s
+ok  	os/exec	0.128s
+
+##### ../misc/cgo/stdio
+PASS
+
+##### ../misc/cgo/life
+PASS
+
+##### ../misc/cgo/test
+ok  	misc/cgo/test	9.320s
+ok  	misc/cgo/test	9.475s
+ok  	misc/cgo/test	9.931s
+ok  	misc/cgo/testtls	0.022s
+ok  	misc/cgo/testtls	0.022s
+ok  	misc/cgo/testtls	0.013s
+ok  	misc/cgo/nocgo	0.020s
+ok  	misc/cgo/nocgo	0.023s
+ok  	misc/cgo/nocgo	0.010s
+ok  	misc/cgo/test	11.354s
+ok  	misc/cgo/test	12.685s
+ok  	misc/cgo/test	11.088s
+ok  	misc/cgo/test	10.164s
+ok  	misc/cgo/testtls	0.106s
+ok  	misc/cgo/nocgo	0.014s
+
+##### ../misc/cgo/testgodefs
+PASS
+
+##### ../misc/cgo/testso
+ok  	misc/cgo/testso	1.308s
+
+##### ../misc/cgo/testsovar
+ok  	misc/cgo/testsovar	1.322s
+
+##### ../misc/cgo/testcarchive
+PASS
+
+##### ../misc/cgo/testcshared
+PASS
+
+##### ../misc/cgo/testshared
+ok  	misc/cgo/testshared	83.052s
+
+##### ../misc/cgo/testplugin
+ok  	misc/cgo/testplugin	47.704s
+
+##### ../misc/cgo/testsanitizers
+--- FAIL: TestShared (0.00s)
+    cshared_test.go:52: skipping msan_shared test on linux/ppc64le; -msan option is not supported.
+    --- FAIL: TestShared/tsan_shared (4.36s)
+        cshared_test.go:82: /workdir/tmp/TestShared1626997536/tsan_shared exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x03a9691c0000-0x03a9692c0000
+--- FAIL: TestTSAN (40.50s)
+    --- FAIL: TestTSAN/tsan (1.88s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN976278364/tsan exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x72d878000000-0x72d878100000
+    --- FAIL: TestTSAN/tsan7 (1.93s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN3034476637/tsan7 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x72b520800000-0x72b520900000
+    --- FAIL: TestTSAN/tsan12 (2.04s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN2934132569/tsan12 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x747feef00000-0x747fef000000
+    --- FAIL: TestTSAN/tsan11 (1.98s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN19486457/tsan11 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x7bc25f400000-0x7bc25f500000
+    --- FAIL: TestTSAN/tsan4 (2.08s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN2410919835/tsan4 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x7c1769300000-0x7c1769400000
+    --- FAIL: TestTSAN/tsan9 (2.22s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN1870835556/tsan9 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x787f5a200000-0x787f5a300000
+    --- FAIL: TestTSAN/tsan6 (1.95s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN2858450779/tsan6 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x713039800000-0x713039900000
+    --- FAIL: TestTSAN/tsan2 (1.74s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN3428070092/tsan2 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x77c8d6600000-0x77c8d6700000
+    --- FAIL: TestTSAN/tsan3 (1.91s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN4111085149/tsan3 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x78620df00000-0x78620e000000
+    --- FAIL: TestTSAN/tsan5 (2.17s)
+        tsan_test.go:53: /workdir/tmp/TestTSAN3885609494/tsan5 exited with exit status 66
+            FATAL: ThreadSanitizer: unexpected memory mapping 0x782ee5a00000-0x782ee5b00000
+FAIL
+go tool dist: Failed: exit status 1

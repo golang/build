@@ -1,0 +1,53 @@
+linux-amd64-wsl at 70de482d17863e501be44450f8e60500a6f1b459 building vuln at 5ae4b706aeb8b5eb531c485be9f1ab811569a506
+
+:: Running /tmp/workdir-host-linux-amd64-wsl/go/src/make.bash with args ["/tmp/workdir-host-linux-amd64-wsl/go/src/make.bash"] and env ["SHELL=/bin/bash" "LOGNAME=root" "GOARCH=amd64" "MOTD_SHOWN=update-motd" "HOME=/root" "LANG=C.UTF-8" "GO_BUILDER_ENV=host-linux-amd64-wsl" "GOROOT=/usr/lib/go" "LESSCLOSE=/usr/bin/lesspipe %s %s" "TERM=xterm-256color" "LESSOPEN=| /usr/bin/lesspipe %s" "USER=root" "GOPROXY=https://goproxy.io,direct" "SHLVL=1" "HTTPS_PROXY=http://proxy.golangcn.org:54288" "HTTP_PROXY=http://proxy.golangcn.org:54288" "GO111MODULE=on" "XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop" "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/lib/go/bin" "MAIL=/var/mail/root" "GOOS=linux" "OLDPWD=/root" "GOPATH=/data/golang" "_=/usr/local/build/cmd/buildlet/stage0/stage0" "GO_STAGE0_NET_DELAY=500ms" "GO_STAGE0_DL_DELAY=2s" "WORKDIR=/tmp/workdir-host-linux-amd64-wsl" "GOROOT_BOOTSTRAP=/tmp/workdir-host-linux-amd64-wsl/go1.4" "GO_BUILDER_NAME=linux-amd64-wsl" "GO_BUILDER_FLAKY_NET=1" "GOBIN=" "TMPDIR=/tmp/workdir-host-linux-amd64-wsl/tmp" "GOCACHE=/tmp/workdir-host-linux-amd64-wsl/gocache" "PWD=/tmp/workdir-host-linux-amd64-wsl/go/src"] in dir /tmp/workdir-host-linux-amd64-wsl/go/src
+
+Building Go cmd/dist using /tmp/workdir-host-linux-amd64-wsl/go1.4. (go1.17.13 linux/amd64)
+Building Go toolchain1 using /tmp/workdir-host-linux-amd64-wsl/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for linux/amd64.
+---
+Installed Go for linux/amd64 in /tmp/workdir-host-linux-amd64-wsl/go
+Installed commands in /tmp/workdir-host-linux-amd64-wsl/go/bin
+:: Running /tmp/workdir-host-linux-amd64-wsl/go/bin/go with args ["/tmp/workdir-host-linux-amd64-wsl/go/bin/go" "test" "-short" "./..."] and env ["SHELL=/bin/bash" "LOGNAME=root" "GOARCH=amd64" "MOTD_SHOWN=update-motd" "HOME=/root" "LANG=C.UTF-8" "GO_BUILDER_ENV=host-linux-amd64-wsl" "LESSCLOSE=/usr/bin/lesspipe %s %s" "TERM=xterm-256color" "LESSOPEN=| /usr/bin/lesspipe %s" "USER=root" "GOPROXY=https://goproxy.io,direct" "SHLVL=1" "HTTPS_PROXY=http://proxy.golangcn.org:54288" "HTTP_PROXY=http://proxy.golangcn.org:54288" "GO111MODULE=on" "XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop" "MAIL=/var/mail/root" "GOOS=linux" "OLDPWD=/root" "_=/usr/local/build/cmd/buildlet/stage0/stage0" "GO_STAGE0_NET_DELAY=500ms" "GO_STAGE0_DL_DELAY=2s" "WORKDIR=/tmp/workdir-host-linux-amd64-wsl" "GOROOT_BOOTSTRAP=/tmp/workdir-host-linux-amd64-wsl/go1.4" "GO_BUILDER_NAME=linux-amd64-wsl" "GO_BUILDER_FLAKY_NET=1" "GOROOT=/tmp/workdir-host-linux-amd64-wsl/go" "GOPATH=/tmp/workdir-host-linux-amd64-wsl/gopath" "TMPDIR=/tmp/workdir-host-linux-amd64-wsl/tmp" "GOCACHE=/tmp/workdir-host-linux-amd64-wsl/gocache" "PATH=/tmp/workdir-host-linux-amd64-wsl/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/lib/go/bin" "PWD=/tmp/workdir-host-linux-amd64-wsl/gopath/src/golang.org/x/vuln"] in dir /tmp/workdir-host-linux-amd64-wsl/gopath/src/golang.org/x/vuln
+
+go: downloading golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
+go: downloading golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
+go: downloading github.com/google/go-cmp v0.5.8
+go: downloading golang.org/x/tools v0.1.13-0.20220803210227-8b9a1fbdf5c3
+go: downloading golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
+go: downloading github.com/google/go-cmdtest v0.4.0
+go: downloading golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
+go: downloading github.com/google/renameio v0.1.0
+ok  	golang.org/x/vuln	23.673s
+ok  	golang.org/x/vuln/client	0.018s
+go: downloading golang.org/x/text v0.3.7
+novuln.go:6:2: golang.org/x/text@v0.3.7: Get "https://proxy.golang.com.cn/golang.org/x/text/@v/v0.3.7.zip": proxyconnect tcp: dial tcp 205.185.121.87:54288: i/o timeout
+--- FAIL: TestCommand (18.23s)
+    buildtest.go:74: exit status 1
+FAIL
+FAIL	golang.org/x/vuln/cmd/govulncheck	18.236s
+?   	golang.org/x/vuln/cmd/govulncheck/integration/k8s	[no test files]
+ok  	golang.org/x/vuln/cmd/govulncheck/internal/govulncheck	1.130s
+?   	golang.org/x/vuln/internal	[no test files]
+?   	golang.org/x/vuln/internal/buildtest	[no test files]
+?   	golang.org/x/vuln/internal/derrors	[no test files]
+ok  	golang.org/x/vuln/internal/semver	0.046s
+ok  	golang.org/x/vuln/osv	0.049s
+ok  	golang.org/x/vuln/vulncheck	6.794s
+ok  	golang.org/x/vuln/vulncheck/internal/binscan	7.280s
+ok  	golang.org/x/vuln/vulncheck/internal/gosym	1.365s
+FAIL
+:: Running /tmp/workdir-host-linux-amd64-wsl/go/src/make.bash with args ["/tmp/workdir-host-linux-amd64-wsl/go/src/make.bash"] and env ["SHELL=/bin/bash" "LOGNAME=root" "GOARCH=amd64" "MOTD_SHOWN=update-motd" "HOME=/root" "LANG=C.UTF-8" "GO_BUILDER_ENV=host-linux-amd64-wsl" "GOROOT=/usr/lib/go" "LESSCLOSE=/usr/bin/lesspipe %s %s" "TERM=xterm-256color" "LESSOPEN=| /usr/bin/lesspipe %s" "USER=root" "GOPROXY=https://goproxy.io,direct" "SHLVL=1" "HTTPS_PROXY=http://proxy.golangcn.org:54288" "HTTP_PROXY=http://proxy.golangcn.org:54288" "GO111MODULE=on" "XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop" "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/lib/go/bin" "MAIL=/var/mail/root" "GOOS=linux" "OLDPWD=/root" "GOPATH=/data/golang" "_=/usr/local/build/cmd/buildlet/stage0/stage0" "GO_STAGE0_NET_DELAY=500ms" "GO_STAGE0_DL_DELAY=2s" "WORKDIR=/tmp/workdir-host-linux-amd64-wsl" "GOROOT_BOOTSTRAP=/tmp/workdir-host-linux-amd64-wsl/go1.4" "GO_BUILDER_NAME=linux-amd64-wsl" "GO_BUILDER_FLAKY_NET=1" "GOBIN=" "TMPDIR=/tmp/workdir-host-linux-amd64-wsl/tmp" "GOCACHE=/tmp/workdir-host-linux-amd64-wsl/gocache" "PWD=/tmp/workdir-host-linux-amd64-wsl/go/src"] in dir /tmp/workdir-host-linux-amd64-wsl/go/src
+
+Building Go cmd/dist using /tmp/workdir-host-linux-amd64-wsl/go1.4. (go1.17.13 linux/amd64)
+Building Go toolchain1 using /tmp/workdir-host-linux-amd64-wsl/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for linux/amd64.
+---
+Installed Go for linux/amd64 in /tmp/workdir-host-linux-amd64-wsl/go
+Installed commands in /tmp/workdir-host-linux-amd64-wsl/go/bin

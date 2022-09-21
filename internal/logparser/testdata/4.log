@@ -1,0 +1,387 @@
+linux-amd64-noopt at 723a27994ddc926a2078bcc23ccbc33857577b4c
+
+:: Running /workdir/go/src/make.bash with args ["/workdir/go/src/make.bash"] and env ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "HOSTNAME=buildlet-linux-amd64-bullseye-rn223709e" "DEBIAN_FRONTEND=noninteractive" "HOME=/root" "USER=root" "GO_STAGE0_NET_DELAY=0s" "GO_STAGE0_DL_DELAY=100ms" "WORKDIR=/workdir" "GOROOT_BOOTSTRAP=/workdir/go1.4" "GO_BUILDER_NAME=linux-amd64-noopt" "GO_DISABLE_OUTBOUND_NETWORK=1" "GO_GCFLAGS=-N -l" "GOBIN=" "TMPDIR=/workdir/tmp" "GOCACHE=/workdir/gocache" "PWD=/workdir/go/src"] in dir /workdir/go/src
+
+Building Go cmd/dist using /workdir/go1.4. (go1.17.13 linux/amd64)
+Building Go toolchain1 using /workdir/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for linux/amd64.
+---
+Installed Go for linux/amd64 in /workdir/go
+Installed commands in /workdir/go/bin
+
+##### Test execution environment.
+# GOARCH: amd64
+# CPU: Intel(R) Xeon(R) CPU @ 2.20GHz
+# GOOS: linux
+# OS Version: Linux 5.10.133+ #1 SMP Thu Aug 18 14:49:28 UTC 2022 x86_64
+
+##### Testing packages.
+ok  	archive/tar	0.033s
+ok  	archive/zip	0.571s
+ok  	bufio	0.082s
+ok  	bytes	1.115s
+ok  	compress/bzip2	0.158s
+ok  	compress/flate	0.985s
+ok  	compress/gzip	2.402s
+ok  	compress/lzw	0.116s
+ok  	compress/zlib	0.924s
+ok  	container/heap	0.005s
+ok  	container/list	0.003s
+ok  	container/ring	0.004s
+ok  	context	0.013s
+ok  	crypto	0.003s
+ok  	crypto/aes	0.069s
+ok  	crypto/cipher	0.010s
+ok  	crypto/des	0.012s
+ok  	crypto/dsa	0.005s
+ok  	crypto/ecdh	0.253s
+ok  	crypto/ecdsa	0.015s
+ok  	crypto/ed25519	0.054s
+ok  	crypto/elliptic	0.018s
+ok  	crypto/hmac	0.003s
+ok  	crypto/internal/alias	0.003s
+ok  	crypto/internal/boring	0.003s
+ok  	crypto/internal/boring/bcache	0.104s
+ok  	crypto/internal/edwards25519	8.179s
+ok  	crypto/internal/edwards25519/field	5.294s
+ok  	crypto/internal/nistec	0.212s
+ok  	crypto/internal/nistec/fiat	0.003s [no tests to run]
+ok  	crypto/md5	0.007s
+ok  	crypto/rand	0.088s
+ok  	crypto/rc4	0.088s
+ok  	crypto/rsa	0.137s
+ok  	crypto/sha1	0.019s
+ok  	crypto/sha256	0.005s
+ok  	crypto/sha512	0.005s
+ok  	crypto/subtle	0.160s
+ok  	crypto/tls	0.755s
+ok  	crypto/x509	0.571s
+ok  	database/sql	0.280s
+ok  	database/sql/driver	0.003s
+ok  	debug/buildinfo	0.004s
+ok  	debug/dwarf	0.026s
+ok  	debug/elf	0.023s
+ok  	debug/gosym	0.031s
+ok  	debug/macho	0.007s
+ok  	debug/pe	0.016s
+ok  	debug/plan9obj	0.003s
+ok  	embed	0.004s [no tests to run]
+ok  	embed/internal/embedtest	0.004s
+ok  	encoding/ascii85	0.005s
+ok  	encoding/asn1	0.006s
+ok  	encoding/base32	0.021s
+ok  	encoding/base64	0.006s
+ok  	encoding/binary	0.006s
+ok  	encoding/csv	0.014s
+ok  	encoding/gob	0.047s
+ok  	encoding/hex	0.005s
+ok  	encoding/json	0.281s
+ok  	encoding/pem	0.789s
+ok  	encoding/xml	0.094s
+ok  	errors	0.005s
+ok  	expvar	0.009s
+ok  	flag	0.032s
+ok  	fmt	0.138s
+ok  	go/ast	0.006s
+ok  	go/build	2.311s
+ok  	go/build/constraint	0.007s
+ok  	go/constant	0.006s
+ok  	go/doc	0.089s
+ok  	go/doc/comment	0.924s
+ok  	go/format	0.011s
+ok  	go/importer	0.004s
+ok  	go/internal/gccgoimporter	0.013s
+ok  	go/internal/gcimporter	2.380s
+ok  	go/internal/srcimporter	2.582s
+ok  	go/parser	0.463s
+ok  	go/printer	0.308s
+ok  	go/scanner	0.005s
+ok  	go/token	0.023s
+ok  	go/types	0.888s
+ok  	hash	0.004s
+ok  	hash/adler32	0.010s
+ok  	hash/crc32	0.010s
+ok  	hash/crc64	0.007s
+ok  	hash/fnv	0.004s
+ok  	hash/maphash	0.169s
+ok  	html	0.004s
+ok  	html/template	0.125s
+ok  	image	0.116s
+ok  	image/color	0.157s
+ok  	image/draw	0.179s
+ok  	image/gif	40.198s
+ok  	image/jpeg	5.777s
+ok  	image/png	0.374s
+ok  	index/suffixarray	0.336s
+ok  	internal/abi	0.003s
+ok  	internal/buildcfg	0.005s
+ok  	internal/cpu	0.009s
+ok  	internal/dag	0.004s
+ok  	internal/diff	0.005s
+ok  	internal/fmtsort	0.003s
+ok  	internal/fuzz	0.011s
+ok  	internal/godebug	0.003s
+ok  	internal/intern	0.391s
+ok  	internal/itoa	0.005s
+ok  	internal/poll	0.222s
+ok  	internal/profile	0.004s
+ok  	internal/reflectlite	0.084s
+ok  	internal/saferio	0.059s
+ok  	internal/singleflight	0.016s
+ok  	internal/testenv	0.003s
+ok  	internal/trace	0.058s
+ok  	internal/unsafeheader	0.004s
+ok  	internal/xcoff	0.012s
+ok  	io	0.031s
+ok  	io/fs	0.775s
+ok  	io/ioutil	0.005s
+ok  	log	0.006s
+ok  	log/syslog	1.223s
+ok  	math	0.010s
+ok  	math/big	1.265s
+ok  	math/bits	0.009s
+ok  	math/cmplx	0.016s
+ok  	math/rand	0.425s
+ok  	mime	0.012s
+ok  	mime/multipart	0.323s
+ok  	mime/quotedprintable	0.012s
+ok  	net	8.764s
+ok  	net/http	3.187s
+ok  	net/http/cgi	0.249s
+ok  	net/http/cookiejar	0.010s
+ok  	net/http/fcgi	0.108s
+ok  	net/http/httptest	0.047s
+ok  	net/http/httptrace	0.005s
+ok  	net/http/httputil	0.604s
+ok  	net/http/internal	0.004s
+ok  	net/http/internal/ascii	0.004s
+ok  	net/http/pprof	5.086s
+ok  	net/internal/socktest	0.004s
+ok  	net/mail	0.008s
+ok  	net/netip	0.028s
+ok  	net/rpc	0.028s
+ok  	net/rpc/jsonrpc	0.009s
+ok  	net/smtp	0.017s
+ok  	net/textproto	0.009s
+ok  	net/url	0.016s
+ok  	os	0.425s
+ok  	os/exec	0.449s
+ok  	os/exec/internal/fdtest	0.003s
+ok  	os/signal	1.958s
+ok  	os/user	0.004s
+ok  	path	0.004s
+ok  	path/filepath	0.038s
+ok  	plugin	0.007s
+ok  	reflect	0.321s
+ok  	regexp	0.131s
+ok  	regexp/syntax	0.623s
+ok  	runtime	23.185s
+ok  	runtime/cgo	0.004s
+ok  	runtime/debug	0.035s
+ok  	runtime/internal/atomic	0.056s
+ok  	runtime/internal/math	0.003s
+ok  	runtime/internal/sys	0.003s
+ok  	runtime/metrics	0.003s
+ok  	runtime/pprof	4.707s
+ok  	runtime/trace	2.406s
+ok  	sort	0.080s
+ok  	strconv	0.920s
+ok  	strings	1.317s
+ok  	sync	0.308s
+ok  	sync/atomic	0.909s
+ok  	syscall	0.079s
+ok  	testing	1.273s
+ok  	testing/fstest	0.005s
+ok  	testing/iotest	0.003s
+ok  	testing/quick	0.061s
+ok  	text/scanner	0.006s
+ok  	text/tabwriter	0.005s
+ok  	text/template	0.047s
+ok  	text/template/parse	0.014s
+ok  	time	1.869s
+ok  	unicode	0.007s
+ok  	unicode/utf16	0.003s
+ok  	unicode/utf8	0.008s
+ok  	cmd/addr2line	0.003s
+ok  	cmd/api	7.685s
+ok  	cmd/asm/internal/asm	0.904s
+ok  	cmd/asm/internal/lex	0.005s
+ok  	cmd/compile/internal/abt	0.011s
+ok  	cmd/compile/internal/amd64	7.252s
+ok  	cmd/compile/internal/dwarfgen	0.005s
+ok  	cmd/compile/internal/importer	0.431s
+ok  	cmd/compile/internal/ir	0.003s
+ok  	cmd/compile/internal/logopt	0.003s
+ok  	cmd/compile/internal/noder	0.006s
+ok  	cmd/compile/internal/reflectdata	0.004s [no tests to run]
+ok  	cmd/compile/internal/ssa	0.152s
+ok  	cmd/compile/internal/syntax	0.052s
+ok  	cmd/compile/internal/test	0.087s
+ok  	cmd/compile/internal/typecheck	0.004s
+ok  	cmd/compile/internal/types	0.004s
+ok  	cmd/compile/internal/types2	0.329s
+ok  	cmd/cover	0.006s
+ok  	cmd/dist	0.003s
+ok  	cmd/doc	0.279s
+ok  	cmd/fix	0.617s
+ok  	cmd/go	0.015s [no tests to run]
+ok  	cmd/go/internal/auth	0.004s
+ok  	cmd/go/internal/cache	0.096s
+ok  	cmd/go/internal/fsys	0.020s
+ok  	cmd/go/internal/generate	0.015s
+ok  	cmd/go/internal/get	0.015s
+ok  	cmd/go/internal/imports	0.004s
+ok  	cmd/go/internal/load	0.014s
+ok  	cmd/go/internal/lockedfile	0.095s
+ok  	cmd/go/internal/lockedfile/internal/filelock	0.027s
+ok  	cmd/go/internal/modconv	0.010s
+ok  	cmd/go/internal/modfetch	0.006s
+ok  	cmd/go/internal/modfetch/codehost	0.005s
+ok  	cmd/go/internal/modfetch/zip_sum_test	0.006s
+ok  	cmd/go/internal/modindex	0.166s
+ok  	cmd/go/internal/modload	0.006s
+ok  	cmd/go/internal/mvs	0.010s
+ok  	cmd/go/internal/par	0.040s
+ok  	cmd/go/internal/search	0.005s
+ok  	cmd/go/internal/str	0.003s
+ok  	cmd/go/internal/test	0.013s
+ok  	cmd/go/internal/vcs	0.008s
+ok  	cmd/go/internal/web	0.005s
+ok  	cmd/go/internal/work	0.022s
+ok  	cmd/gofmt	0.060s
+ok  	cmd/internal/archive	0.003s
+ok  	cmd/internal/buildid	0.232s
+ok  	cmd/internal/dwarf	0.003s
+ok  	cmd/internal/edit	0.003s
+ok  	cmd/internal/goobj	0.003s
+ok  	cmd/internal/moddeps	0.003s
+ok  	cmd/internal/notsha256	0.004s
+ok  	cmd/internal/obj	0.003s
+ok  	cmd/internal/obj/ppc64	0.003s
+ok  	cmd/internal/obj/riscv	0.004s
+ok  	cmd/internal/obj/s390x	0.003s
+ok  	cmd/internal/obj/x86	0.004s
+ok  	cmd/internal/objabi	0.003s
+ok  	cmd/internal/pkgpath	0.014s
+ok  	cmd/internal/quoted	0.003s
+ok  	cmd/internal/src	0.004s
+ok  	cmd/internal/sys	0.003s
+ok  	cmd/internal/test2json	0.163s
+ok  	cmd/link	0.005s
+ok  	cmd/link/internal/benchmark	0.015s
+ok  	cmd/link/internal/ld	0.014s
+ok  	cmd/link/internal/loader	0.020s
+ok  	cmd/nm	0.003s
+ok  	cmd/objdump	0.004s
+ok  	cmd/pack	0.005s
+ok  	cmd/pprof	0.006s
+ok  	cmd/trace	0.258s
+ok  	cmd/vet	0.005s
+
+##### os/user with tag osusergo
+ok  	os/user	0.006s
+
+##### GOMAXPROCS=2 runtime -cpu=1,2,4 -quick
+ok  	runtime	22.215s
+
+##### cmd/go terminal test
+skipping terminal test; stdout/stderr not terminals
+
+##### moved GOROOT
+ok  	fmt	0.088s
+
+##### Testing without libgcc.
+ok  	net	0.010s
+ok  	os/user	0.004s
+
+##### internal linking of -buildmode=pie
+ok  	reflect	0.233s
+ok  	os/user	0.005s
+
+##### sync -cpu=10
+ok  	sync	0.271s
+
+##### Testing race detector
+ok  	runtime/race	0.040s
+ok  	flag	0.041s
+ok  	net	0.136s
+ok  	os	0.160s
+ok  	os/exec	0.100s
+ok  	encoding/gob	0.061s
+ok  	flag	0.043s
+ok  	os/exec	0.104s
+
+##### ../misc/cgo/stdio
+PASS
+
+##### ../misc/cgo/life
+PASS
+
+##### ../misc/cgo/fortran
+PASS
+ok  	misc/cgo/fortran	0.003s
+
+##### ../misc/swig/stdio
+ok  	misc/swig/stdio	0.004s
+
+##### ../misc/cgo/test
+ok  	misc/cgo/test	3.485s
+ok  	misc/cgo/test	3.496s
+ok  	misc/cgo/test	3.453s
+ok  	misc/cgo/testtls	0.004s
+ok  	misc/cgo/testtls	0.003s
+ok  	misc/cgo/testtls	0.003s
+ok  	misc/cgo/nocgo	0.003s
+ok  	misc/cgo/nocgo	0.004s
+ok  	misc/cgo/nocgo	0.005s
+ok  	misc/cgo/test	3.396s
+ok  	misc/cgo/test	3.908s
+ok  	misc/cgo/test	3.408s
+ok  	misc/cgo/test	3.232s
+ok  	misc/cgo/testtls	0.004s
+ok  	misc/cgo/nocgo	0.003s
+
+##### ../test/bench/go1
+
+##### ../test
+# go run run.go -- fixedbugs/issue5162.go
+exit status 2
+# command-line-arguments
+../../tmp/797079598/tmp__.go:16136:27: internal compiler error: bvset: index 0 is out of bounds with length 0
+
+
+goroutine 92 [running]:
+runtime/debug.Stack()
+	/workdir/go/src/runtime/debug/stack.go:24 +0x7a
+cmd/compile/internal/base.FatalfAt({0x2, 0x3f081b0}, {0x11b0950, 0x30}, {0xc0008968e0, 0x2, 0x2})
+	/workdir/go/src/cmd/compile/internal/base/print.go:227 +0x22a
+cmd/compile/internal/base.Fatalf({0x11b0950, 0x30}, {0xc0008968e0, 0x2, 0x2})
+	/workdir/go/src/cmd/compile/internal/base/print.go:196 +0x56
+cmd/compile/internal/bitvec.BitVec.Set({0x0, {0x176dc20, 0x0, 0x0}}, 0x0)
+	/workdir/go/src/cmd/compile/internal/bitvec/bv.go:81 +0x14d
+cmd/compile/internal/typebits.Set(0xc00037e770, 0x0, {0x0, {0x176dc20, 0x0, 0x0}})
+	/workdir/go/src/cmd/compile/internal/typebits/typebits.go:38 +0x607
+cmd/compile/internal/liveness.(*liveness).pointerMap(0xc00674e000, {0x8, {0xc001ac2194, 0x1, 0x1}}, {0xc001af4040, 0x8, 0x8}, {0x0, {0x176dc20, ...}}, ...)
+	/workdir/go/src/cmd/compile/internal/liveness/plive.go:433 +0x18f
+cmd/compile/internal/liveness.(*liveness).emit(0xc00674e000)
+	/workdir/go/src/cmd/compile/internal/liveness/plive.go:1316 +0x625
+cmd/compile/internal/liveness.Compute(0xc00070a3c0, 0xc00612fd40, 0x0, 0xc001afc000)
+	/workdir/go/src/cmd/compile/internal/liveness/plive.go:1372 +0x3c5
+cmd/compile/internal/ssagen.genssa(0xc00612fd40, 0xc001afc000)
+	/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:6894 +0x158
+cmd/compile/internal/ssagen.Compile(0xc00070a3c0, 0x2)
+	/workdir/go/src/cmd/compile/internal/ssagen/pgen.go:193 +0x331
+cmd/compile/internal/gc.compileFunctions.func4.1(0x2)
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:153 +0x47
+cmd/compile/internal/gc.compileFunctions.func3.1()
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:140 +0x52
+created by cmd/compile/internal/gc.compileFunctions.func3
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:138 +0xa5
+
+
+FAIL	fixedbugs/issue5162.go	3.344s
+2022/08/23 20:47:07 Failed: exit status 1
+go tool dist: FAILED

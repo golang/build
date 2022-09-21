@@ -1,0 +1,473 @@
+darwin-amd64-12_0 at 25d74f324dde687e1bbf486ef444a1f73f48f4eb
+
+:: Running /Users/gopher/workdir/go/src/make.bash with args ["/Users/gopher/workdir/go/src/make.bash"] and env ["TERM_PROGRAM=Apple_Terminal" "TERM=xterm-256color" "SHELL=/bin/zsh" "TERM_PROGRAM_VERSION=443" "TERM_SESSION_ID=8FFB5DBE-B59A-46E4-B123-E05734A83FCC" "USER=gopher" "SSH_AUTH_SOCK=/private/tmp/com.apple.launchd.BmTzZxf9er/Listeners" "PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" "GO_BUILDER_ENV=macstadium_vm" "LaunchInstanceID=FA5EFB22-7A87-40D6-89A9-B7982DC3585A" "__CFBundleIdentifier=com.apple.Terminal" "LANG=en_US.UTF-8" "XPC_FLAGS=0x0" "XPC_SERVICE_NAME=0" "SHLVL=3" "HOME=/Users/gopher" "LOGNAME=gopher" "SECURITYSESSIONID=186a5" "_=./buildlet" "WORKDIR=/Users/gopher/workdir" "GOROOT_BOOTSTRAP=/Users/gopher/workdir/go1.4" "GO_BUILDER_NAME=darwin-amd64-12_0" "GOBIN=" "TMPDIR=/Users/gopher/workdir/tmp" "GOCACHE=/Users/gopher/workdir/gocache" "PWD=/Users/gopher/workdir/go/src"] in dir /Users/gopher/workdir/go/src
+
+Building Go cmd/dist using /Users/gopher/workdir/go1.4. (go1.17.13 darwin/amd64)
+Building Go toolchain1 using /Users/gopher/workdir/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for darwin/amd64.
+---
+Installed Go for darwin/amd64 in /Users/gopher/workdir/go
+Installed commands in /Users/gopher/workdir/go/bin
+
+##### Test execution environment.
+# GOARCH: amd64
+# CPU: Intel(R) Xeon(R) CPU E5-1650 v2 @ 3.50GHz
+# GOOS: darwin
+# OS Version: Darwin 21.1.0 Darwin Kernel Version 21.1.0: Wed Oct 13 17:33:23 PDT 2021; root:xnu-8019.41.5~1/RELEASE_X86_64 x86_64
+
+##### Testing packages.
+ok  	archive/tar	0.159s
+ok  	archive/zip	0.374s
+ok  	bufio	0.165s
+ok  	bytes	1.350s
+ok  	compress/bzip2	0.201s
+ok  	compress/flate	0.449s
+ok  	compress/gzip	1.828s
+ok  	compress/lzw	0.160s
+ok  	compress/zlib	0.524s
+ok  	container/heap	0.128s
+ok  	container/list	0.299s
+ok  	container/ring	0.233s
+ok  	context	0.133s
+ok  	crypto	0.151s
+ok  	crypto/aes	0.165s
+ok  	crypto/cipher	0.129s
+ok  	crypto/des	0.236s
+ok  	crypto/dsa	0.169s
+ok  	crypto/ecdsa	0.140s
+ok  	crypto/ed25519	0.196s
+ok  	crypto/elliptic	0.173s
+ok  	crypto/hmac	0.126s
+ok  	crypto/internal/boring	0.122s
+ok  	crypto/internal/boring/bcache	0.290s
+ok  	crypto/internal/edwards25519	3.512s
+ok  	crypto/internal/edwards25519/field	2.725s
+ok  	crypto/internal/nistec	0.927s
+ok  	crypto/internal/nistec/fiat	0.125s [no tests to run]
+ok  	crypto/internal/subtle	0.229s
+ok  	crypto/md5	0.272s
+ok  	crypto/rand	0.243s
+ok  	crypto/rc4	0.178s
+ok  	crypto/rsa	0.209s
+ok  	crypto/sha1	0.250s
+ok  	crypto/sha256	0.124s
+ok  	crypto/sha512	0.129s
+ok  	crypto/subtle	0.137s
+ok  	crypto/tls	0.475s
+ok  	crypto/x509	0.442s
+ok  	database/sql	0.410s
+ok  	database/sql/driver	0.141s
+ok  	debug/buildinfo	0.222s
+ok  	debug/dwarf	0.147s
+ok  	debug/elf	0.139s
+ok  	debug/gosym	0.159s
+ok  	debug/macho	0.167s
+ok  	debug/pe	0.218s
+ok  	debug/plan9obj	0.127s
+ok  	embed	0.237s [no tests to run]
+ok  	embed/internal/embedtest	0.225s
+ok  	encoding/ascii85	0.131s
+ok  	encoding/asn1	0.137s
+ok  	encoding/base32	0.136s
+ok  	encoding/base64	0.130s
+ok  	encoding/binary	0.126s
+ok  	encoding/csv	0.168s
+ok  	encoding/gob	0.175s
+ok  	encoding/hex	0.144s
+ok  	encoding/json	0.375s
+ok  	encoding/pem	0.598s
+ok  	encoding/xml	0.176s
+ok  	errors	0.137s
+ok  	expvar	0.147s
+ok  	flag	0.215s
+ok  	fmt	0.210s
+ok  	go/ast	0.218s
+ok  	go/build	1.359s
+ok  	go/build/constraint	0.147s
+ok  	go/constant	0.151s
+ok  	go/doc	0.191s
+ok  	go/doc/comment	0.894s
+ok  	go/format	0.140s
+ok  	go/importer	0.201s
+ok  	go/internal/gccgoimporter	0.293s
+ok  	go/internal/gcimporter	8.364s
+ok  	go/internal/srcimporter	7.830s
+ok  	go/parser	0.274s
+ok  	go/printer	0.279s
+ok  	go/scanner	0.159s
+ok  	go/token	0.200s
+ok  	go/types	9.494s
+ok  	hash	0.127s
+ok  	hash/adler32	0.233s
+ok  	hash/crc32	0.126s
+ok  	hash/crc64	0.130s
+ok  	hash/fnv	0.197s
+ok  	hash/maphash	0.310s
+ok  	html	0.150s
+ok  	html/template	0.210s
+ok  	image	0.179s
+ok  	image/color	0.148s
+ok  	image/draw	0.280s
+ok  	image/gif	9.284s
+ok  	image/jpeg	2.470s
+ok  	image/png	0.397s
+ok  	index/suffixarray	0.287s
+ok  	internal/abi	0.175s
+ok  	internal/buildcfg	0.129s
+ok  	internal/cpu	0.214s
+ok  	internal/dag	0.155s
+ok  	internal/diff	0.325s
+ok  	internal/fmtsort	0.124s
+ok  	internal/fuzz	0.238s
+ok  	internal/godebug	0.123s
+ok  	internal/intern	0.315s
+ok  	internal/itoa	0.170s
+ok  	internal/poll	0.147s
+ok  	internal/profile	0.154s
+ok  	internal/reflectlite	0.174s
+ok  	internal/singleflight	0.156s
+ok  	internal/trace	0.190s
+ok  	internal/unsafeheader	0.179s
+ok  	internal/xcoff	0.361s
+ok  	io	0.161s
+ok  	io/fs	0.458s
+ok  	io/ioutil	0.152s
+ok  	log	0.314s
+ok  	log/syslog	1.369s
+ok  	math	0.130s
+ok  	math/big	1.011s
+ok  	math/bits	0.132s
+ok  	math/cmplx	0.192s
+ok  	math/rand	0.324s
+ok  	mime	0.137s
+ok  	mime/multipart	0.289s
+ok  	mime/quotedprintable	0.135s
+ok  	net	9.463s
+panic: test timed out after 3m0s
+
+goroutine 11191 [running]:
+panic({0x143a5e0, 0xc0004c80f0})
+	/Users/gopher/workdir/go/src/runtime/panic.go:987 +0x3ba fp=0xc000942f98 sp=0xc000942ed8 pc=0x1037a7a
+testing.(*M).startAlarm.func1()
+	/Users/gopher/workdir/go/src/testing/testing.go:2036 +0x8e fp=0xc000942fe0 sp=0xc000942f98 pc=0x10f57ce
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000942fe8 sp=0xc000942fe0 pc=0x106bb61
+created by time.goFunc
+	/Users/gopher/workdir/go/src/time/sleep.go:176 +0x32
+
+goroutine 1 [chan receive, 2 minutes]:
+runtime.gopark(0xc000094000?, 0xc0000dd990?, 0x7f?, 0x75?, 0x1022fc5?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc0000dd958 sp=0xc0000dd938 pc=0x103abb6
+runtime.chanrecv(0xc00054a230, 0x0, 0x1)
+	/Users/gopher/workdir/go/src/runtime/chan.go:583 +0x49b fp=0xc0000dd9e8 sp=0xc0000dd958 pc=0x1007c1b
+runtime.chanrecv1(0xc0000981e0?, 0xc00054a288?)
+	/Users/gopher/workdir/go/src/runtime/chan.go:442 +0x18 fp=0xc0000dda10 sp=0xc0000dd9e8 pc=0x1007718
+testing.tRunner.func1()
+	/Users/gopher/workdir/go/src/testing/testing.go:1412 +0x4a5 fp=0xc0000ddb78 sp=0xc0000dda10 pc=0x10f2005
+testing.tRunner(0xc000083380, 0xc0000e9c80)
+	/Users/gopher/workdir/go/src/testing/testing.go:1452 +0x144 fp=0xc0000ddbc8 sp=0xc0000ddb78 pc=0x10f1ae4
+testing.runTests(0xc0000c4d20?, {0x182b5a0, 0x22f, 0x22f}, {0x14c5ac4?, 0xf?, 0x1831040?})
+	/Users/gopher/workdir/go/src/testing/testing.go:1844 +0x456 fp=0xc0000ddcb0 sp=0xc0000ddbc8 pc=0x10f4696
+testing.(*M).Run(0xc0000c4d20)
+	/Users/gopher/workdir/go/src/testing/testing.go:1726 +0x5d9 fp=0xc0000ddea8 sp=0xc0000ddcb0 pc=0x10f3179
+net/http_test.TestMain(0xffffffffffffffff?)
+	/Users/gopher/workdir/go/src/net/http/main_test.go:23 +0x19 fp=0xc0000ddec8 sp=0xc0000ddea8 pc=0x136b459
+main.main()
+	_testmain.go:1233 +0x1d3 fp=0xc0000ddf80 sp=0xc0000ddec8 pc=0x140feb3
+runtime.main()
+	/Users/gopher/workdir/go/src/runtime/proc.go:250 +0x207 fp=0xc0000ddfe0 sp=0xc0000ddf80 pc=0x103a7e7
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0000ddfe8 sp=0xc0000ddfe0 pc=0x106bb61
+
+goroutine 2 [force gc (idle), 2 minutes]:
+runtime.gopark(0x8c71bd5386?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc00004afb0 sp=0xc00004af90 pc=0x103abb6
+runtime.goparkunlock(...)
+	/Users/gopher/workdir/go/src/runtime/proc.go:369
+runtime.forcegchelper()
+	/Users/gopher/workdir/go/src/runtime/proc.go:302 +0xad fp=0xc00004afe0 sp=0xc00004afb0 pc=0x103aa4d
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00004afe8 sp=0xc00004afe0 pc=0x106bb61
+created by runtime.init.5
+	/Users/gopher/workdir/go/src/runtime/proc.go:290 +0x25
+
+goroutine 18 [GC sweep wait, 2 minutes]:
+runtime.gopark(0x1?, 0x0?, 0x0?, 0x0?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc000046790 sp=0xc000046770 pc=0x103abb6
+runtime.goparkunlock(...)
+	/Users/gopher/workdir/go/src/runtime/proc.go:369
+runtime.bgsweep(0x0?)
+	/Users/gopher/workdir/go/src/runtime/mgcsweep.go:298 +0xd7 fp=0xc0000467c8 sp=0xc000046790 pc=0x1025d97
+runtime.gcenable.func1()
+	/Users/gopher/workdir/go/src/runtime/mgc.go:178 +0x26 fp=0xc0000467e0 sp=0xc0000467c8 pc=0x101a9a6
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0000467e8 sp=0xc0000467e0 pc=0x106bb61
+created by runtime.gcenable
+	/Users/gopher/workdir/go/src/runtime/mgc.go:178 +0x6b
+
+goroutine 19 [GC scavenge wait]:
+runtime.gopark(0x6429d287f6?, 0x93ba2?, 0x0?, 0x0?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc000046f70 sp=0xc000046f50 pc=0x103abb6
+runtime.goparkunlock(...)
+	/Users/gopher/workdir/go/src/runtime/proc.go:369
+runtime.(*scavengerState).park(0x18310c0)
+	/Users/gopher/workdir/go/src/runtime/mgcscavenge.go:389 +0x53 fp=0xc000046fa0 sp=0xc000046f70 pc=0x1023df3
+runtime.bgscavenge(0x0?)
+	/Users/gopher/workdir/go/src/runtime/mgcscavenge.go:622 +0x65 fp=0xc000046fc8 sp=0xc000046fa0 pc=0x10243e5
+runtime.gcenable.func2()
+	/Users/gopher/workdir/go/src/runtime/mgc.go:179 +0x26 fp=0xc000046fe0 sp=0xc000046fc8 pc=0x101a946
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000046fe8 sp=0xc000046fe0 pc=0x106bb61
+created by runtime.gcenable
+	/Users/gopher/workdir/go/src/runtime/mgc.go:179 +0xaa
+
+goroutine 20 [finalizer wait, 2 minutes]:
+runtime.gopark(0x0?, 0x150c710?, 0x0?, 0xc0?, 0x2000000020?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc00004a628 sp=0xc00004a608 pc=0x103abb6
+runtime.goparkunlock(...)
+	/Users/gopher/workdir/go/src/runtime/proc.go:369
+runtime.runfinq()
+	/Users/gopher/workdir/go/src/runtime/mfinal.go:186 +0x10f fp=0xc00004a7e0 sp=0xc00004a628 pc=0x1019aaf
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00004a7e8 sp=0xc00004a7e0 pc=0x106bb61
+created by runtime.createfing
+	/Users/gopher/workdir/go/src/runtime/mfinal.go:163 +0x45
+
+goroutine 35 [GC worker (idle), 2 minutes]:
+runtime.gopark(0x1862320?, 0x1?, 0xaf?, 0x5a?, 0xc000206000?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc000218750 sp=0xc000218730 pc=0x103abb6
+runtime.gcBgMarkWorker()
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1234 +0xf1 fp=0xc0002187e0 sp=0xc000218750 pc=0x101caf1
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0002187e8 sp=0xc0002187e0 pc=0x106bb61
+created by runtime.gcBgMarkStartWorkers
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+goroutine 53 [GC worker (idle), 2 minutes]:
+runtime.gopark(0x8c71cfccc5?, 0xc00022c020?, 0x18?, 0x14?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc00004bf50 sp=0xc00004bf30 pc=0x103abb6
+runtime.gcBgMarkWorker()
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1234 +0xf1 fp=0xc00004bfe0 sp=0xc00004bf50 pc=0x101caf1
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00004bfe8 sp=0xc00004bfe0 pc=0x106bb61
+created by runtime.gcBgMarkStartWorkers
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+goroutine 54 [GC worker (idle), 2 minutes]:
+runtime.gopark(0x635c4dfa7a?, 0x2?, 0x83?, 0x34?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc00004c750 sp=0xc00004c730 pc=0x103abb6
+runtime.gcBgMarkWorker()
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1234 +0xf1 fp=0xc00004c7e0 sp=0xc00004c750 pc=0x101caf1
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00004c7e8 sp=0xc00004c7e0 pc=0x106bb61
+created by runtime.gcBgMarkStartWorkers
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+goroutine 55 [GC worker (idle)]:
+runtime.gopark(0x1862320?, 0x2?, 0x7e?, 0xaa?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc00004cf50 sp=0xc00004cf30 pc=0x103abb6
+runtime.gcBgMarkWorker()
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1234 +0xf1 fp=0xc00004cfe0 sp=0xc00004cf50 pc=0x101caf1
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00004cfe8 sp=0xc00004cfe0 pc=0x106bb61
+created by runtime.gcBgMarkStartWorkers
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+goroutine 56 [GC worker (idle), 2 minutes]:
+runtime.gopark(0x635c4b2017?, 0x3?, 0xf6?, 0x20?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc00004d750 sp=0xc00004d730 pc=0x103abb6
+runtime.gcBgMarkWorker()
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1234 +0xf1 fp=0xc00004d7e0 sp=0xc00004d750 pc=0x101caf1
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00004d7e8 sp=0xc00004d7e0 pc=0x106bb61
+created by runtime.gcBgMarkStartWorkers
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+goroutine 36 [GC worker (idle)]:
+runtime.gopark(0x1862320?, 0x2?, 0xc1?, 0xb9?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc000218f50 sp=0xc000218f30 pc=0x103abb6
+runtime.gcBgMarkWorker()
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1234 +0xf1 fp=0xc000218fe0 sp=0xc000218f50 pc=0x101caf1
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000218fe8 sp=0xc000218fe0 pc=0x106bb61
+created by runtime.gcBgMarkStartWorkers
+	/Users/gopher/workdir/go/src/runtime/mgc.go:1158 +0x25
+
+goroutine 5760 [IO wait, 2 minutes]:
+runtime.gopark(0xd?, 0xc0004a7811?, 0x1?, 0x0?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc00056f5e8 sp=0xc00056f5c8 pc=0x103abb6
+runtime.netpollblock(0x1079489?, 0x143a820?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/netpoll.go:526 +0xf7 fp=0xc00056f620 sp=0xc00056f5e8 pc=0x1033c17
+internal/poll.runtime_pollWait(0x2a081a8, 0x72)
+	/Users/gopher/workdir/go/src/runtime/netpoll.go:305 +0x89 fp=0xc00056f640 sp=0xc00056f620 pc=0x1065c29
+internal/poll.(*pollDesc).wait(0xc000138d80?, 0xc0004a7811?, 0x0)
+	/Users/gopher/workdir/go/src/internal/poll/fd_poll_runtime.go:84 +0x32 fp=0xc00056f668 sp=0xc00056f640 pc=0x1097392
+internal/poll.(*pollDesc).waitRead(...)
+	/Users/gopher/workdir/go/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc000138d80, {0xc0004a7811, 0x1, 0x1})
+	/Users/gopher/workdir/go/src/internal/poll/fd_unix.go:167 +0x25a fp=0xc00056f6e8 sp=0xc00056f668 pc=0x10980fa
+net.(*netFD).Read(0xc000138d80, {0xc0004a7811?, 0x1007659?, 0x12db2e7?})
+	/Users/gopher/workdir/go/src/net/fd_posix.go:55 +0x29 fp=0xc00056f730 sp=0xc00056f6e8 pc=0x11f0489
+net.(*conn).Read(0xc000520060, {0xc0004a7811?, 0xc000336b40?, 0x1597bd0?})
+	/Users/gopher/workdir/go/src/net/net.go:183 +0x45 fp=0xc00056f778 sp=0xc00056f730 pc=0x11fc2e5
+net/http.(*connReader).backgroundRead(0xc0004a7800)
+	/Users/gopher/workdir/go/src/net/http/server.go:678 +0x3f fp=0xc00056f7c8 sp=0xc00056f778 pc=0x12cdbff
+net/http.(*connReader).startBackgroundRead.func2()
+	/Users/gopher/workdir/go/src/net/http/server.go:674 +0x26 fp=0xc00056f7e0 sp=0xc00056f7c8 pc=0x12cdb26
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc00056f7e8 sp=0xc00056f7e0 pc=0x106bb61
+created by net/http.(*connReader).startBackgroundRead
+	/Users/gopher/workdir/go/src/net/http/server.go:674 +0xca
+
+goroutine 5729 [select, 2 minutes]:
+runtime.gopark(0xc000803ca8?, 0x6?, 0x0?, 0x30?, 0xc000803abc?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc000803920 sp=0xc000803900 pc=0x103abb6
+runtime.selectgo(0xc000803ca8, 0xc000803ab0, 0x14c52ae?, 0x0, 0xc000803cf0?, 0x1)
+	/Users/gopher/workdir/go/src/runtime/select.go:328 +0x7bc fp=0xc000803a60 sp=0xc000803920 pc=0x104a8dc
+net/http.(*persistConn).roundTrip(0xc0004845a0, 0xc0004307c0)
+	/Users/gopher/workdir/go/src/net/http/transport.go:2620 +0x974 fp=0xc000803d18 sp=0xc000803a60 pc=0x12f2894
+net/http.(*Transport).roundTrip(0xc0005e9900, 0xc000443a00)
+	/Users/gopher/workdir/go/src/net/http/transport.go:595 +0x7ba fp=0xc000803f40 sp=0xc000803d18 pc=0x12e639a
+net/http.(*Transport).RoundTrip(0x15982b0?, 0xc0000aa008?)
+	/Users/gopher/workdir/go/src/net/http/roundtrip.go:17 +0x19 fp=0xc000803f60 sp=0xc000803f40 pc=0x12cc4d9
+net/http_test.TestHandlerAbortRacesBodyRead.func2()
+	/Users/gopher/workdir/go/src/net/http/transport_test.go:6560 +0x106 fp=0xc000803fe0 sp=0xc000803f60 pc=0x1403106
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000803fe8 sp=0xc000803fe0 pc=0x106bb61
+created by net/http_test.TestHandlerAbortRacesBodyRead
+	/Users/gopher/workdir/go/src/net/http/transport_test.go:6554 +0xca
+
+goroutine 5727 [IO wait, 2 minutes]:
+runtime.gopark(0x0?, 0xc0005a5ce8?, 0x40?, 0xaa?, 0xe?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc0005a5c20 sp=0xc0005a5c00 pc=0x103abb6
+runtime.netpollblock(0x4?, 0x1004449?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/netpoll.go:526 +0xf7 fp=0xc0005a5c58 sp=0xc0005a5c20 pc=0x1033c17
+internal/poll.runtime_pollWait(0x2a07488, 0x72)
+	/Users/gopher/workdir/go/src/runtime/netpoll.go:305 +0x89 fp=0xc0005a5c78 sp=0xc0005a5c58 pc=0x1065c29
+internal/poll.(*pollDesc).wait(0xc000403100?, 0x1004449?, 0x0)
+	/Users/gopher/workdir/go/src/internal/poll/fd_poll_runtime.go:84 +0x32 fp=0xc0005a5ca0 sp=0xc0005a5c78 pc=0x1097392
+internal/poll.(*pollDesc).waitRead(...)
+	/Users/gopher/workdir/go/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Accept(0xc000403100)
+	/Users/gopher/workdir/go/src/internal/poll/fd_unix.go:614 +0x234 fp=0xc0005a5d38 sp=0xc0005a5ca0 pc=0x1098bf4
+net.(*netFD).accept(0xc000403100)
+	/Users/gopher/workdir/go/src/net/fd_unix.go:172 +0x35 fp=0xc0005a5df0 sp=0xc0005a5d38 pc=0x11f16d5
+net.(*TCPListener).accept(0xc0002408b8)
+	/Users/gopher/workdir/go/src/net/tcpsock_posix.go:142 +0x28 fp=0xc0005a5e20 sp=0xc0005a5df0 pc=0x1203908
+net.(*TCPListener).Accept(0xc0002408b8)
+	/Users/gopher/workdir/go/src/net/tcpsock.go:288 +0x3d fp=0xc0005a5e50 sp=0xc0005a5e20 pc=0x1202afd
+net/http.(*onceCloseListener).Accept(0xc000115170?)
+	<autogenerated>:1 +0x2a fp=0xc0005a5e68 sp=0xc0005a5e50 pc=0x131f2aa
+net/http.(*Server).Serve(0xc0005f81e0, {0x1597990, 0xc0002408b8})
+	/Users/gopher/workdir/go/src/net/http/server.go:3070 +0x385 fp=0xc0005a5f98 sp=0xc0005a5e68 pc=0x12d93c5
+net/http/httptest.(*Server).goServe.func1()
+	/Users/gopher/workdir/go/src/net/http/httptest/server.go:310 +0x6a fp=0xc0005a5fe0 sp=0xc0005a5f98 pc=0x1324c6a
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0005a5fe8 sp=0xc0005a5fe0 pc=0x106bb61
+created by net/http/httptest.(*Server).goServe
+	/Users/gopher/workdir/go/src/net/http/httptest/server.go:308 +0x6a
+
+goroutine 5260 [semacquire, 2 minutes]:
+runtime.gopark(0xc000269c20?, 0x0?, 0x20?, 0x47?, 0x100e77f?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc0005a8e38 sp=0xc0005a8e18 pc=0x103abb6
+runtime.goparkunlock(...)
+	/Users/gopher/workdir/go/src/runtime/proc.go:369
+runtime.semacquire1(0xc000269c38, 0x0?, 0x1, 0x0)
+	/Users/gopher/workdir/go/src/runtime/sema.go:150 +0x1fe fp=0xc0005a8ea0 sp=0xc0005a8e38 pc=0x104b99e
+sync.runtime_Semacquire(0xc000240900?)
+	/Users/gopher/workdir/go/src/runtime/sema.go:62 +0x25 fp=0xc0005a8ed0 sp=0xc0005a8ea0 pc=0x1067485
+sync.(*WaitGroup).Wait(0x1595640?)
+	/Users/gopher/workdir/go/src/sync/waitgroup.go:139 +0x52 fp=0xc0005a8ef8 sp=0xc0005a8ed0 pc=0x10743b2
+net/http_test.TestHandlerAbortRacesBodyRead(0xc00057a680)
+	/Users/gopher/workdir/go/src/net/http/transport_test.go:6567 +0x145 fp=0xc0005a8f70 sp=0xc0005a8ef8 pc=0x1402fa5
+testing.tRunner(0xc00057a680, 0x150d300)
+	/Users/gopher/workdir/go/src/testing/testing.go:1446 +0x10b fp=0xc0005a8fc0 sp=0xc0005a8f70 pc=0x10f1aab
+testing.(*T).Run.func1()
+	/Users/gopher/workdir/go/src/testing/testing.go:1493 +0x2a fp=0xc0005a8fe0 sp=0xc0005a8fc0 pc=0x10f294a
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0005a8fe8 sp=0xc0005a8fe0 pc=0x106bb61
+created by testing.(*T).Run
+	/Users/gopher/workdir/go/src/testing/testing.go:1493 +0x35f
+
+goroutine 5862 [select, 2 minutes]:
+runtime.gopark(0xc0005a4f90?, 0x2?, 0xd8?, 0x4d?, 0xc0005a4f24?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc0005a4d90 sp=0xc0005a4d70 pc=0x103abb6
+runtime.selectgo(0xc0005a4f90, 0xc0005a4f20, 0xc000430800?, 0x0, 0xc0001efc20?, 0x1)
+	/Users/gopher/workdir/go/src/runtime/select.go:328 +0x7bc fp=0xc0005a4ed0 sp=0xc0005a4d90 pc=0x104a8dc
+net/http.(*persistConn).writeLoop(0xc0004845a0)
+	/Users/gopher/workdir/go/src/net/http/transport.go:2392 +0xf5 fp=0xc0005a4fc8 sp=0xc0005a4ed0 pc=0x12f19d5
+net/http.(*Transport).dialConn.func6()
+	/Users/gopher/workdir/go/src/net/http/transport.go:1752 +0x26 fp=0xc0005a4fe0 sp=0xc0005a4fc8 pc=0x12ee486
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0005a4fe8 sp=0xc0005a4fe0 pc=0x106bb61
+created by net/http.(*Transport).dialConn
+	/Users/gopher/workdir/go/src/net/http/transport.go:1752 +0x1791
+
+goroutine 5861 [IO wait, 2 minutes]:
+runtime.gopark(0xb?, 0xc000610000?, 0x0?, 0x10?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc0009d1af8 sp=0xc0009d1ad8 pc=0x103abb6
+runtime.netpollblock(0x1079489?, 0x0?, 0x0?)
+	/Users/gopher/workdir/go/src/runtime/netpoll.go:526 +0xf7 fp=0xc0009d1b30 sp=0xc0009d1af8 pc=0x1033c17
+internal/poll.runtime_pollWait(0x1fab150, 0x72)
+	/Users/gopher/workdir/go/src/runtime/netpoll.go:305 +0x89 fp=0xc0009d1b50 sp=0xc0009d1b30 pc=0x1065c29
+internal/poll.(*pollDesc).wait(0xc00051a800?, 0xc000610000?, 0x0)
+	/Users/gopher/workdir/go/src/internal/poll/fd_poll_runtime.go:84 +0x32 fp=0xc0009d1b78 sp=0xc0009d1b50 pc=0x1097392
+internal/poll.(*pollDesc).waitRead(...)
+	/Users/gopher/workdir/go/src/internal/poll/fd_poll_runtime.go:89
+internal/poll.(*FD).Read(0xc00051a800, {0xc000610000, 0x1000, 0x1000})
+	/Users/gopher/workdir/go/src/internal/poll/fd_unix.go:167 +0x25a fp=0xc0009d1bf8 sp=0xc0009d1b78 pc=0x10980fa
+net.(*netFD).Read(0xc00051a800, {0xc000610000?, 0x1?, 0xc00002c341?})
+	/Users/gopher/workdir/go/src/net/fd_posix.go:55 +0x29 fp=0xc0009d1c40 sp=0xc0009d1bf8 pc=0x11f0489
+net.(*conn).Read(0xc0001bd8e8, {0xc000610000?, 0x106d460?, 0xc00002c341?})
+	/Users/gopher/workdir/go/src/net/net.go:183 +0x45 fp=0xc0009d1c88 sp=0xc0009d1c40 pc=0x11fc2e5
+net/http.(*persistConn).Read(0xc0004845a0, {0xc000610000?, 0x10068e6?, 0x60?})
+	/Users/gopher/workdir/go/src/net/http/transport.go:1929 +0x4e fp=0xc0009d1ce8 sp=0xc0009d1c88 pc=0x12eeeee
+bufio.(*Reader).fill(0xc000282360)
+	/Users/gopher/workdir/go/src/bufio/bufio.go:106 +0xff fp=0xc0009d1d20 sp=0xc0009d1ce8 pc=0x10f6e5f
+bufio.(*Reader).Peek(0xc000282360, 0x1)
+	/Users/gopher/workdir/go/src/bufio/bufio.go:144 +0x5d fp=0xc0009d1d40 sp=0xc0009d1d20 pc=0x10f6fbd
+net/http.(*persistConn).readLoop(0xc0004845a0)
+	/Users/gopher/workdir/go/src/net/http/transport.go:2093 +0x1ac fp=0xc0009d1fc8 sp=0xc0009d1d40 pc=0x12efd0c
+net/http.(*Transport).dialConn.func5()
+	/Users/gopher/workdir/go/src/net/http/transport.go:1751 +0x26 fp=0xc0009d1fe0 sp=0xc0009d1fc8 pc=0x12ee4e6
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc0009d1fe8 sp=0xc0009d1fe0 pc=0x106bb61
+created by net/http.(*Transport).dialConn
+	/Users/gopher/workdir/go/src/net/http/transport.go:1751 +0x173e
+
+goroutine 5845 [sync.Cond.Wait, 2 minutes]:
+runtime.gopark(0xc0004149c0?, 0x0?, 0x1?, 0xf7?, 0x1831040?)
+	/Users/gopher/workdir/go/src/runtime/proc.go:363 +0xd6 fp=0xc000a06830 sp=0xc000a06810 pc=0x103abb6
+runtime.goparkunlock(...)
+	/Users/gopher/workdir/go/src/runtime/proc.go:369
+sync.runtime_notifyListWait(0xc00025e850, 0x1)
+	/Users/gopher/workdir/go/src/runtime/sema.go:517 +0x14c fp=0xc000a06878 sp=0xc000a06830 pc=0x106778c
+sync.(*Cond).Wait(0xc000520060?)
+	/Users/gopher/workdir/go/src/sync/cond.go:70 +0x8c fp=0xc000a068b0 sp=0xc000a06878 pc=0x1070f2c
+net/http.(*connReader).abortPendingRead(0xc0004a7800)
+	/Users/gopher/workdir/go/src/net/http/server.go:726 +0xb5 fp=0xc000a06900 sp=0xc000a068b0 pc=0x12cdd95
+net/http.(*conn).serve.func1()
+	/Users/gopher/workdir/go/src/net/http/server.go:1858 +0x1ab fp=0xc000a069a0 sp=0xc000a06900 pc=0x12d4cab
+panic({0x14494a0, 0xc000090c40})
+	/Users/gopher/workdir/go/src/runtime/panic.go:890 +0x262 fp=0xc000a06a60 sp=0xc000a069a0 pc=0x1037922
+net/http_test.TestHandlerAbortRacesBodyRead.func1({0x132521c?, 0x144efa0?}, 0xc0004a7170?)
+	/Users/gopher/workdir/go/src/net/http/transport_test.go:6547 +0xbe fp=0xc000a06aa0 sp=0xc000a06a60 pc=0x1402d9e
+net/http.HandlerFunc.ServeHTTP(0x0?, {0x1597ba0?, 0xc0002b9180?}, 0x12e4774?)
+	/Users/gopher/workdir/go/src/net/http/server.go:2109 +0x2f fp=0xc000a06ac8 sp=0xc000a06aa0 pc=0x12d534f
+net/http.serverHandler.ServeHTTP({0x1596a50?}, {0x1597ba0, 0xc0002b9180}, 0xc0002c8a00)
+	/Users/gopher/workdir/go/src/net/http/server.go:2947 +0x30c fp=0xc000a06b78 sp=0xc000a06ac8 pc=0x12d8c2c
+net/http.(*conn).serve(0xc0002ceab0, {0x1598320, 0xc00070bf50})
+	/Users/gopher/workdir/go/src/net/http/server.go:1991 +0x607 fp=0xc000a06fb8 sp=0xc000a06b78 pc=0x12d3e27
+net/http.(*Server).Serve.func3()
+	/Users/gopher/workdir/go/src/net/http/server.go:3102 +0x2e fp=0xc000a06fe0 sp=0xc000a06fb8 pc=0x12d97ae
+runtime.goexit()
+	/Users/gopher/workdir/go/src/runtime/asm_amd64.s:1594 +0x1 fp=0xc000a06fe8 sp=0xc000a06fe0 pc=0x106bb61
+created by net/http.(*Server).Serve
+	/Users/gopher/workdir/go/src/net/http/server.go:3102 +0x4db
+FAIL	net/http	180.258s
+ok  	net/http/cgi	0.993s
+FAIL
+go tool dist: Failed: exit status 1

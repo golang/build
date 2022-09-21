@@ -1,0 +1,536 @@
+linux-amd64-noopt at f4becf15bdbcb098ec6cfb5373ad113b3d991d43
+
+:: Running /workdir/go/src/make.bash with args ["/workdir/go/src/make.bash"] and env ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" "HOSTNAME=buildlet-linux-amd64-bullseye-rn970e8f3" "DEBIAN_FRONTEND=noninteractive" "HOME=/root" "USER=root" "GO_STAGE0_NET_DELAY=0s" "GO_STAGE0_DL_DELAY=100ms" "WORKDIR=/workdir" "GOROOT_BOOTSTRAP=/workdir/go1.4" "GO_BUILDER_NAME=linux-amd64-noopt" "GO_DISABLE_OUTBOUND_NETWORK=1" "GO_GCFLAGS=-N -l" "GOBIN=" "TMPDIR=/workdir/tmp" "GOCACHE=/workdir/gocache" "PWD=/workdir/go/src"] in dir /workdir/go/src
+
+Building Go cmd/dist using /workdir/go1.4. (go1.17.13 linux/amd64)
+Building Go toolchain1 using /workdir/go1.4.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for linux/amd64.
+---
+Installed Go for linux/amd64 in /workdir/go
+Installed commands in /workdir/go/bin
+
+##### Test execution environment.
+# GOARCH: amd64
+# CPU: Intel(R) Xeon(R) CPU @ 2.20GHz
+# GOOS: linux
+# OS Version: Linux 5.15.65+ #1 SMP Fri Sep 9 20:39:51 UTC 2022 x86_64
+
+##### Testing packages.
+ok  	archive/tar	0.026s
+ok  	archive/zip	0.480s
+ok  	bufio	0.074s
+ok  	bytes	0.982s
+ok  	compress/bzip2	0.166s
+ok  	compress/flate	0.810s
+ok  	compress/gzip	2.022s
+ok  	compress/lzw	0.102s
+ok  	compress/zlib	0.768s
+ok  	container/heap	0.004s
+ok  	container/list	0.003s
+ok  	container/ring	0.003s
+ok  	context	0.012s
+ok  	crypto	0.003s
+ok  	crypto/aes	0.044s
+ok  	crypto/cipher	0.008s
+ok  	crypto/des	0.009s
+ok  	crypto/dsa	0.003s
+ok  	crypto/ecdh	0.230s
+ok  	crypto/ecdsa	0.012s
+ok  	crypto/ed25519	0.051s
+ok  	crypto/elliptic	0.015s
+ok  	crypto/hmac	0.003s
+ok  	crypto/internal/alias	0.002s
+ok  	crypto/internal/boring	0.002s
+ok  	crypto/internal/boring/bcache	0.073s
+ok  	crypto/internal/edwards25519	7.775s
+ok  	crypto/internal/edwards25519/field	4.898s
+ok  	crypto/internal/nistec	0.202s
+ok  	crypto/internal/nistec/fiat	0.002s [no tests to run]
+ok  	crypto/md5	0.005s
+ok  	crypto/rand	0.063s
+ok  	crypto/rc4	0.074s
+ok  	crypto/rsa	0.134s
+ok  	crypto/sha1	0.018s
+ok  	crypto/sha256	0.004s
+ok  	crypto/sha512	0.004s
+ok  	crypto/subtle	0.147s
+ok  	crypto/tls	0.707s
+ok  	crypto/x509	0.521s
+ok  	database/sql	0.275s
+ok  	database/sql/driver	0.002s
+ok  	debug/buildinfo	0.005s
+ok  	debug/dwarf	0.020s
+ok  	debug/elf	0.021s
+ok  	debug/gosym	0.023s
+ok  	debug/macho	0.005s
+ok  	debug/pe	0.012s
+ok  	debug/plan9obj	0.002s
+ok  	embed	0.003s [no tests to run]
+ok  	embed/internal/embedtest	0.003s
+ok  	encoding/ascii85	0.004s
+ok  	encoding/asn1	0.004s
+ok  	encoding/base32	0.018s
+ok  	encoding/base64	0.005s
+ok  	encoding/binary	0.004s
+ok  	encoding/csv	0.010s
+ok  	encoding/gob	0.034s
+ok  	encoding/hex	0.004s
+ok  	encoding/json	0.203s
+ok  	encoding/pem	0.597s
+ok  	encoding/xml	0.074s
+ok  	errors	0.006s
+ok  	expvar	0.007s
+ok  	flag	0.022s
+ok  	fmt	0.108s
+ok  	go/ast	0.005s
+ok  	go/build	1.833s
+ok  	go/build/constraint	0.005s
+ok  	go/constant	0.005s
+ok  	go/doc	0.054s
+ok  	go/doc/comment	0.744s
+ok  	go/format	0.010s
+ok  	go/importer	0.003s
+ok  	go/internal/gccgoimporter	0.010s
+ok  	go/internal/gcimporter	1.941s
+ok  	go/internal/srcimporter	2.359s
+ok  	go/parser	0.350s
+ok  	go/printer	0.246s
+ok  	go/scanner	0.004s
+ok  	go/token	0.019s
+ok  	go/types	0.713s
+ok  	hash	0.003s
+ok  	hash/adler32	0.009s
+ok  	hash/crc32	0.008s
+ok  	hash/crc64	0.004s
+ok  	hash/fnv	0.002s
+ok  	hash/maphash	0.121s
+ok  	html	0.003s
+ok  	html/template	0.079s
+ok  	image	0.101s
+ok  	image/color	0.145s
+ok  	image/draw	0.142s
+ok  	image/gif	30.358s
+ok  	image/jpeg	5.021s
+ok  	image/png	0.323s
+ok  	index/suffixarray	0.315s
+ok  	internal/abi	0.002s
+ok  	internal/buildcfg	0.002s
+ok  	internal/cpu	0.006s
+ok  	internal/dag	0.003s
+ok  	internal/diff	0.010s
+ok  	internal/fmtsort	0.002s
+ok  	internal/fuzz	0.010s
+ok  	internal/godebug	0.002s
+ok  	internal/intern	0.242s
+ok  	internal/itoa	0.003s
+ok  	internal/poll	0.204s
+ok  	internal/profile	0.003s
+ok  	internal/reflectlite	0.077s
+ok  	internal/saferio	0.039s
+ok  	internal/singleflight	0.013s
+ok  	internal/testenv	0.002s
+ok  	internal/trace	0.044s
+ok  	internal/unsafeheader	0.003s
+ok  	internal/xcoff	0.015s
+ok  	io	0.026s
+ok  	io/fs	0.719s
+ok  	io/ioutil	0.004s
+ok  	log	0.005s
+ok  	log/syslog	1.217s
+ok  	math	0.008s
+ok  	math/big	1.150s
+ok  	math/bits	0.006s
+ok  	math/cmplx	0.004s
+ok  	math/rand	0.372s
+ok  	mime	0.007s
+ok  	mime/multipart	0.262s
+ok  	mime/quotedprintable	0.018s
+ok  	net	8.493s
+ok  	net/http	3.034s
+ok  	net/http/cgi	0.200s
+ok  	net/http/cookiejar	0.007s
+ok  	net/http/fcgi	0.106s
+ok  	net/http/httptest	0.039s
+ok  	net/http/httptrace	0.003s
+ok  	net/http/httputil	0.573s
+ok  	net/http/internal	0.003s
+ok  	net/http/internal/ascii	0.002s
+ok  	net/http/pprof	5.077s
+ok  	net/internal/socktest	0.003s
+ok  	net/mail	0.006s
+ok  	net/netip	0.024s
+ok  	net/rpc	0.023s
+ok  	net/rpc/jsonrpc	0.006s
+ok  	net/smtp	0.013s
+ok  	net/textproto	0.018s
+ok  	net/url	0.013s
+ok  	os	0.391s
+ok  	os/exec	0.406s
+ok  	os/exec/internal/fdtest	0.002s
+ok  	os/signal	1.878s
+ok  	os/user	0.003s
+ok  	path	0.005s
+ok  	path/filepath	0.030s
+ok  	plugin	0.004s
+ok  	reflect	0.287s
+ok  	regexp	0.082s
+ok  	regexp/syntax	0.484s
+ok  	runtime	21.888s
+ok  	runtime/cgo	0.003s
+ok  	runtime/debug	0.030s
+ok  	runtime/internal/atomic	0.051s
+ok  	runtime/internal/math	0.002s
+ok  	runtime/internal/sys	0.002s
+ok  	runtime/metrics	0.003s
+ok  	runtime/pprof	3.822s
+ok  	runtime/trace	1.958s
+ok  	sort	0.068s
+ok  	strconv	0.723s
+ok  	strings	1.104s
+ok  	sync	0.288s
+ok  	sync/atomic	0.701s
+ok  	syscall	0.071s
+ok  	testing	1.016s
+ok  	testing/fstest	0.004s
+ok  	testing/iotest	0.003s
+ok  	testing/quick	0.052s
+ok  	text/scanner	0.005s
+ok  	text/tabwriter	0.003s
+ok  	text/template	0.028s
+ok  	text/template/parse	0.006s
+ok  	time	1.824s
+ok  	unicode	0.005s
+ok  	unicode/utf16	0.002s
+ok  	unicode/utf8	0.006s
+ok  	cmd/addr2line	0.003s
+ok  	cmd/api	6.053s
+ok  	cmd/asm/internal/asm	0.738s
+ok  	cmd/asm/internal/lex	0.003s
+ok  	cmd/compile/internal/abt	0.009s
+ok  	cmd/compile/internal/amd64	6.097s
+ok  	cmd/compile/internal/compare	0.003s
+ok  	cmd/compile/internal/dwarfgen	0.004s
+ok  	cmd/compile/internal/importer	0.370s
+ok  	cmd/compile/internal/ir	0.003s
+ok  	cmd/compile/internal/logopt	0.002s
+ok  	cmd/compile/internal/noder	0.004s
+ok  	cmd/compile/internal/reflectdata	0.003s [no tests to run]
+ok  	cmd/compile/internal/ssa	0.131s
+ok  	cmd/compile/internal/syntax	0.030s
+ok  	cmd/compile/internal/test	0.072s
+ok  	cmd/compile/internal/typecheck	0.003s
+ok  	cmd/compile/internal/types	0.003s
+ok  	cmd/compile/internal/types2	0.253s
+ok  	cmd/cover	0.003s
+ok  	cmd/dist	0.002s
+ok  	cmd/doc	0.115s
+ok  	cmd/fix	0.477s
+ok  	cmd/go	0.008s [no tests to run]
+ok  	cmd/go/internal/auth	0.004s
+ok  	cmd/go/internal/cache	0.057s
+ok  	cmd/go/internal/fsys	0.017s
+ok  	cmd/go/internal/generate	0.007s
+ok  	cmd/go/internal/get	0.007s
+ok  	cmd/go/internal/imports	0.003s
+ok  	cmd/go/internal/load	0.006s
+ok  	cmd/go/internal/lockedfile	0.057s
+ok  	cmd/go/internal/lockedfile/internal/filelock	0.025s
+ok  	cmd/go/internal/modconv	0.006s
+ok  	cmd/go/internal/modfetch	0.005s
+ok  	cmd/go/internal/modfetch/codehost	0.004s
+ok  	cmd/go/internal/modfetch/zip_sum_test	0.005s
+ok  	cmd/go/internal/modindex	0.120s
+ok  	cmd/go/internal/modload	0.005s
+ok  	cmd/go/internal/mvs	0.008s
+ok  	cmd/go/internal/par	0.027s
+ok  	cmd/go/internal/search	0.003s
+ok  	cmd/go/internal/str	0.002s
+ok  	cmd/go/internal/test	0.007s
+ok  	cmd/go/internal/vcs	0.006s
+ok  	cmd/go/internal/web	0.004s
+ok  	cmd/go/internal/work	0.011s
+ok  	cmd/gofmt	0.036s
+ok  	cmd/internal/archive	0.003s
+ok  	cmd/internal/buildid	0.193s
+ok  	cmd/internal/dwarf	0.002s
+ok  	cmd/internal/edit	0.002s
+ok  	cmd/internal/goobj	0.002s
+ok  	cmd/internal/moddeps	0.002s
+ok  	cmd/internal/notsha256	0.003s
+ok  	cmd/internal/obj	0.003s
+ok  	cmd/internal/obj/ppc64	0.003s
+ok  	cmd/internal/obj/riscv	0.003s
+ok  	cmd/internal/obj/s390x	0.003s
+ok  	cmd/internal/obj/x86	0.003s
+ok  	cmd/internal/objabi	0.002s
+ok  	cmd/internal/pkgpath	0.010s
+ok  	cmd/internal/quoted	0.003s
+ok  	cmd/internal/src	0.003s
+ok  	cmd/internal/sys	0.002s
+ok  	cmd/internal/test2json	0.117s
+ok  	cmd/link	0.004s
+ok  	cmd/link/internal/benchmark	0.004s
+ok  	cmd/link/internal/ld	0.011s
+ok  	cmd/link/internal/loader	0.015s
+ok  	cmd/nm	0.003s
+ok  	cmd/objdump	0.003s
+ok  	cmd/pack	0.004s
+ok  	cmd/pprof	0.005s
+ok  	cmd/trace	0.236s
+ok  	cmd/vet	0.004s
+
+##### os/user with tag osusergo
+ok  	os/user	0.005s
+
+##### GOMAXPROCS=2 runtime -cpu=1,2,4 -quick
+ok  	runtime	24.130s
+
+##### cmd/go terminal test
+skipping terminal test; stdout/stderr not terminals
+
+##### moved GOROOT
+ok  	fmt	0.063s
+
+##### Testing without libgcc.
+ok  	net	0.007s
+ok  	os/user	0.003s
+
+##### internal linking of -buildmode=pie
+ok  	reflect	0.455s
+ok  	os/user	0.004s
+
+##### sync -cpu=10
+ok  	sync	0.255s
+
+##### Testing race detector
+ok  	runtime/race	0.027s
+ok  	flag	0.034s
+ok  	net	0.110s
+ok  	os	0.129s
+ok  	os/exec	0.092s
+ok  	encoding/gob	0.066s
+ok  	flag	0.040s
+ok  	os/exec	0.091s
+
+##### ../misc/cgo/stdio
+PASS
+
+##### ../misc/cgo/life
+PASS
+
+##### ../misc/cgo/fortran
+PASS
+ok  	misc/cgo/fortran	0.003s
+
+##### ../misc/swig/stdio
+ok  	misc/swig/stdio	0.003s
+
+##### ../misc/cgo/test
+ok  	misc/cgo/test	2.723s
+ok  	misc/cgo/test	2.745s
+ok  	misc/cgo/test	2.751s
+ok  	misc/cgo/testtls	0.003s
+ok  	misc/cgo/testtls	0.003s
+ok  	misc/cgo/testtls	0.002s
+ok  	misc/cgo/nocgo	0.002s
+ok  	misc/cgo/nocgo	0.003s
+ok  	misc/cgo/nocgo	0.002s
+ok  	misc/cgo/test	2.755s
+ok  	misc/cgo/test	3.118s
+ok  	misc/cgo/test	2.669s
+ok  	misc/cgo/test	2.801s
+ok  	misc/cgo/testtls	0.003s
+ok  	misc/cgo/nocgo	0.004s
+
+##### ../test/bench/go1
+
+##### ../test
+# go run run.go -- escape_struct_param1.go
+exit status 1
+/workdir/go/test/escape_struct_param1.go:25: leaking param: u to result ~r0 level=1
+/workdir/go/test/escape_struct_param1.go:29: leaking param: u to result ~r0 level=1
+/workdir/go/test/escape_struct_param1.go:33: leaking param: u to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:38: moved to heap: s
+/workdir/go/test/escape_struct_param1.go:41: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:46: moved to heap: s
+/workdir/go/test/escape_struct_param1.go:49: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:55: moved to heap: s
+/workdir/go/test/escape_struct_param1.go:56: moved to heap: ps
+/workdir/go/test/escape_struct_param1.go:58: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:62: leaking param: v to result ~r0 level=1
+/workdir/go/test/escape_struct_param1.go:66: leaking param: v to result ~r0 level=1
+/workdir/go/test/escape_struct_param1.go:70: leaking param: v to result ~r0 level=1
+/workdir/go/test/escape_struct_param1.go:74: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:78: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:82: leaking param: v to result ~r0 level=1
+/workdir/go/test/escape_struct_param1.go:86: leaking param: v to result ~r0 level=1
+/workdir/go/test/escape_struct_param1.go:90: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:94: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:98: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:102: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:106: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:110: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:117: moved to heap: s2
+/workdir/go/test/escape_struct_param1.go:118: moved to heap: s3
+/workdir/go/test/escape_struct_param1.go:119: moved to heap: s4
+/workdir/go/test/escape_struct_param1.go:120: moved to heap: s5
+/workdir/go/test/escape_struct_param1.go:121: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:123: moved to heap: ps4
+/workdir/go/test/escape_struct_param1.go:124: moved to heap: ps6
+/workdir/go/test/escape_struct_param1.go:126: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:127: &U{...} escapes to heap
+/workdir/go/test/escape_struct_param1.go:128: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:135: moved to heap: s2
+/workdir/go/test/escape_struct_param1.go:136: moved to heap: s3
+/workdir/go/test/escape_struct_param1.go:137: moved to heap: s4
+/workdir/go/test/escape_struct_param1.go:138: moved to heap: s5
+/workdir/go/test/escape_struct_param1.go:139: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:141: moved to heap: ps4
+/workdir/go/test/escape_struct_param1.go:142: moved to heap: ps6
+/workdir/go/test/escape_struct_param1.go:144: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:145: &U{...} escapes to heap
+/workdir/go/test/escape_struct_param1.go:146: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:153: moved to heap: s2
+/workdir/go/test/escape_struct_param1.go:154: moved to heap: s3
+/workdir/go/test/escape_struct_param1.go:155: moved to heap: s4
+/workdir/go/test/escape_struct_param1.go:156: moved to heap: s5
+/workdir/go/test/escape_struct_param1.go:157: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:159: moved to heap: ps4
+/workdir/go/test/escape_struct_param1.go:160: moved to heap: ps6
+/workdir/go/test/escape_struct_param1.go:162: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:163: &U{...} escapes to heap
+/workdir/go/test/escape_struct_param1.go:164: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:171: moved to heap: s2
+/workdir/go/test/escape_struct_param1.go:172: moved to heap: s3
+/workdir/go/test/escape_struct_param1.go:173: moved to heap: s4
+/workdir/go/test/escape_struct_param1.go:174: moved to heap: s5
+/workdir/go/test/escape_struct_param1.go:175: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:177: moved to heap: ps4
+/workdir/go/test/escape_struct_param1.go:178: moved to heap: ps6
+/workdir/go/test/escape_struct_param1.go:180: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:181: &U{...} escapes to heap
+/workdir/go/test/escape_struct_param1.go:182: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:186: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:190: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:194: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:198: leaking param: v to result ~r0 level=2
+/workdir/go/test/escape_struct_param1.go:207: moved to heap: s4
+/workdir/go/test/escape_struct_param1.go:208: moved to heap: s5
+/workdir/go/test/escape_struct_param1.go:209: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:212: moved to heap: ps6
+/workdir/go/test/escape_struct_param1.go:214: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:215: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:216: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:225: moved to heap: s4
+/workdir/go/test/escape_struct_param1.go:226: moved to heap: s5
+/workdir/go/test/escape_struct_param1.go:227: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:230: moved to heap: ps6
+/workdir/go/test/escape_struct_param1.go:232: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:233: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:234: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:243: moved to heap: s4
+/workdir/go/test/escape_struct_param1.go:244: moved to heap: s5
+/workdir/go/test/escape_struct_param1.go:245: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:248: moved to heap: ps6
+/workdir/go/test/escape_struct_param1.go:250: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:251: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:252: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:261: moved to heap: s4
+/workdir/go/test/escape_struct_param1.go:262: moved to heap: s5
+/workdir/go/test/escape_struct_param1.go:263: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:266: moved to heap: ps6
+/workdir/go/test/escape_struct_param1.go:268: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:269: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:270: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:274: leaking param: v to result ~r0 level=4
+/workdir/go/test/escape_struct_param1.go:289: moved to heap: s6
+/workdir/go/test/escape_struct_param1.go:294: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:295: &U{...} does not escape
+/workdir/go/test/escape_struct_param1.go:296: &V{...} does not escape
+/workdir/go/test/escape_struct_param1.go:141: internal compiler error: 'tUPiSPb': panic during lower while compiling tUPiSPb:
+
+runtime error: invalid memory address or nil pointer dereference
+
+goroutine 1 [running]:
+cmd/compile/internal/ssa.Compile.func1()
+	/workdir/go/src/cmd/compile/internal/ssa/compile.go:49 +0xa5
+panic({0x11325c0, 0x16bbe60})
+	/workdir/go/src/runtime/panic.go:890 +0x262
+math/rand.(*Rand).Int63(0xc00079c2d0)
+	/workdir/go/src/math/rand/rand.go:89 +0x27
+math/rand.(*Rand).Int31(0xc00079c2d0)
+	/workdir/go/src/math/rand/rand.go:103 +0x2b
+math/rand.(*Rand).Int31n(0xc00079c2d0, 0x40)
+	/workdir/go/src/math/rand/rand.go:135 +0x46
+math/rand.(*Rand).Intn(0xc00079c2d0, 0x40)
+	/workdir/go/src/math/rand/rand.go:176 +0x45
+cmd/compile/internal/ssa.Compile(0xc00019fd40)
+	/workdir/go/src/cmd/compile/internal/ssa/compile.go:90 +0x1490
+cmd/compile/internal/ssagen.buildssa(0xc0000ba000, 0x0)
+	/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:574 +0x21e5
+cmd/compile/internal/ssagen.Compile(0xc0000ba000, 0x0)
+	/workdir/go/src/cmd/compile/internal/ssagen/pgen.go:187 +0x3e
+cmd/compile/internal/gc.compileFunctions.func4.1(0x0)
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:153 +0x47
+cmd/compile/internal/gc.compileFunctions.func2(0xc000796320)
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:125 +0x23
+cmd/compile/internal/gc.compileFunctions.func4({0xc0003f1e00, 0x26, 0x40})
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:152 +0x176
+cmd/compile/internal/gc.compileFunctions()
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:163 +0x1f2
+cmd/compile/internal/gc.Main(0x11dbab8)
+	/workdir/go/src/cmd/compile/internal/gc/main.go:301 +0x1775
+main.main()
+	/workdir/go/src/cmd/compile/main.go:57 +0x171
+
+
+
+goroutine 1 [running]:
+runtime/debug.Stack()
+	/workdir/go/src/runtime/debug/stack.go:24 +0x7a
+cmd/compile/internal/base.FatalfAt({0x2, 0x8d061}, {0xc0007880c0, 0x32}, {0xc0008120a0, 0x5, 0x5})
+	/workdir/go/src/cmd/compile/internal/base/print.go:227 +0x22a
+cmd/compile/internal/base.Fatalf({0xc0007880c0, 0x32}, {0xc0008120a0, 0x5, 0x5})
+	/workdir/go/src/cmd/compile/internal/base/print.go:196 +0x56
+cmd/compile/internal/ssagen.(*ssafn).Fatalf(0xc000779e30, {0x2, 0x8d061}, {0x11cba23, 0x2c}, {0xc0007985c0, 0x4, 0x4})
+	/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:7851 +0x28a
+cmd/compile/internal/ssa.(*Func).Fatalf(0xc00019fd40, {0x11cba23, 0x2c}, {0xc0007985c0, 0x4, 0x4})
+	/workdir/go/src/cmd/compile/internal/ssa/func.go:762 +0x3b7
+cmd/compile/internal/ssa.Compile.func1()
+	/workdir/go/src/cmd/compile/internal/ssa/compile.go:54 +0x270
+panic({0x11325c0, 0x16bbe60})
+	/workdir/go/src/runtime/panic.go:890 +0x262
+math/rand.(*Rand).Int63(0xc00079c2d0)
+	/workdir/go/src/math/rand/rand.go:89 +0x27
+math/rand.(*Rand).Int31(0xc00079c2d0)
+	/workdir/go/src/math/rand/rand.go:103 +0x2b
+math/rand.(*Rand).Int31n(0xc00079c2d0, 0x40)
+	/workdir/go/src/math/rand/rand.go:135 +0x46
+math/rand.(*Rand).Intn(0xc00079c2d0, 0x40)
+	/workdir/go/src/math/rand/rand.go:176 +0x45
+cmd/compile/internal/ssa.Compile(0xc00019fd40)
+	/workdir/go/src/cmd/compile/internal/ssa/compile.go:90 +0x1490
+cmd/compile/internal/ssagen.buildssa(0xc0000ba000, 0x0)
+	/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:574 +0x21e5
+cmd/compile/internal/ssagen.Compile(0xc0000ba000, 0x0)
+	/workdir/go/src/cmd/compile/internal/ssagen/pgen.go:187 +0x3e
+cmd/compile/internal/gc.compileFunctions.func4.1(0x0)
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:153 +0x47
+cmd/compile/internal/gc.compileFunctions.func2(0xc000796320)
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:125 +0x23
+cmd/compile/internal/gc.compileFunctions.func4({0xc0003f1e00, 0x26, 0x40})
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:152 +0x176
+cmd/compile/internal/gc.compileFunctions()
+	/workdir/go/src/cmd/compile/internal/gc/compile.go:163 +0x1f2
+cmd/compile/internal/gc.Main(0x11dbab8)
+	/workdir/go/src/cmd/compile/internal/gc/main.go:301 +0x1775
+main.main()
+	/workdir/go/src/cmd/compile/main.go:57 +0x171
+
+
+FAIL	escape_struct_param1.go	0.122s
+2022/09/19 16:05:49 Failed: exit status 1
+go tool dist: FAILED

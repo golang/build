@@ -1,0 +1,394 @@
+openbsd-386-68 at e6d9057e2f3442b133afe7e37bec72bb9b780b04 building tools at eb45e986a7f1b6c4699cac573516739609bffd8a
+
+:: Running /tmp/workdir/go/bin/go with args ["/tmp/workdir/go/bin/go" "test" "-short" "./..."] and env ["HOME=/" "INRC=1" "_=/bin/sh" "WORKDIR=/tmp/workdir" "GOROOT_BOOTSTRAP=/tmp/workdir/go1.4" "GO_BUILDER_NAME=openbsd-386-68" "GOROOT=/tmp/workdir/go" "GOPATH=/tmp/workdir/gopath" "GOPROXY=http://gk3-services-nap-jetxd907-8ae6730a-wn5j.c.symbolic-datum-552.internal:30157" "TMPDIR=/tmp/workdir/tmp" "GOCACHE=/tmp/workdir/gocache" "PATH=/tmp/workdir/go/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin" "PWD=/tmp/workdir/gopath/src/golang.org/x/tools"] in dir /tmp/workdir/gopath/src/golang.org/x/tools
+
+go: downloading golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
+go: downloading golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+go: downloading golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
+go: downloading github.com/yuin/goldmark v1.4.13
+ok  	golang.org/x/tools/benchmark/parse	0.461s
+ok  	golang.org/x/tools/blog	0.792s
+?   	golang.org/x/tools/blog/atom	[no test files]
+?   	golang.org/x/tools/cmd/auth/authtest	[no test files]
+?   	golang.org/x/tools/cmd/auth/cookieauth	[no test files]
+?   	golang.org/x/tools/cmd/auth/gitauth	[no test files]
+?   	golang.org/x/tools/cmd/auth/netrcauth	[no test files]
+ok  	golang.org/x/tools/cmd/benchcmp	0.448s
+ok  	golang.org/x/tools/cmd/bundle	23.209s
+ok  	golang.org/x/tools/cmd/callgraph	170.128s
+?   	golang.org/x/tools/cmd/compilebench	[no test files]
+ok  	golang.org/x/tools/cmd/cover	35.611s
+ok  	golang.org/x/tools/cmd/digraph	0.841s
+?   	golang.org/x/tools/cmd/eg	[no test files]
+ok  	golang.org/x/tools/cmd/file2fuzz	3.157s
+ok  	golang.org/x/tools/cmd/fiximports	316.613s
+ok  	golang.org/x/tools/cmd/getgo	0.751s
+?   	golang.org/x/tools/cmd/getgo/server	[no test files]
+ok  	golang.org/x/tools/cmd/go-contrib-init	0.668s
+?   	golang.org/x/tools/cmd/godex	[no test files]
+ok  	golang.org/x/tools/cmd/godoc	170.116s
+?   	golang.org/x/tools/cmd/goimports	[no test files]
+?   	golang.org/x/tools/cmd/gomvpkg	[no test files]
+ok  	golang.org/x/tools/cmd/gorename	287.133s
+?   	golang.org/x/tools/cmd/gotype	[no test files]
+?   	golang.org/x/tools/cmd/goyacc	[no test files]
+ok  	golang.org/x/tools/cmd/guru	0.824s
+?   	golang.org/x/tools/cmd/guru/serial	[no test files]
+?   	golang.org/x/tools/cmd/html2article	[no test files]
+?   	golang.org/x/tools/cmd/present	[no test files]
+?   	golang.org/x/tools/cmd/present2md	[no test files]
+ok  	golang.org/x/tools/cmd/signature-fuzzer/fuzz-driver	26.324s
+ok  	golang.org/x/tools/cmd/signature-fuzzer/fuzz-runner	197.447s
+ok  	golang.org/x/tools/cmd/signature-fuzzer/internal/fuzz-generator	161.559s
+?   	golang.org/x/tools/cmd/splitdwarf	[no test files]
+ok  	golang.org/x/tools/cmd/splitdwarf/internal/macho	2.009s
+?   	golang.org/x/tools/cmd/ssadump	[no test files]
+?   	golang.org/x/tools/cmd/stress	[no test files]
+Note: the following messages should indicate an out-of-bounds compiler error
+# command-line-arguments
+/tmp/workdir/tmp/stringer3302685186/day_string.go:11:8: invalid argument: index 1 out of bounds [0:1]
+/tmp/workdir/tmp/stringer3302685186/day_string.go:12:8: invalid argument: index 1 out of bounds [0:1]
+/tmp/workdir/tmp/stringer3302685186/day_string.go:13:8: invalid argument: index 1 out of bounds [0:1]
+/tmp/workdir/tmp/stringer3302685186/day_string.go:14:8: invalid argument: index 1 out of bounds [0:1]
+/tmp/workdir/tmp/stringer3302685186/day_string.go:15:8: invalid argument: index 1 out of bounds [0:1]
+/tmp/workdir/tmp/stringer3302685186/day_string.go:16:8: invalid argument: index 1 out of bounds [0:1]
+/tmp/workdir/tmp/stringer3302685186/day_string.go:17:8: invalid argument: index Sunday - 6 (constant -6 of type Day) must not be negative
+panic: test timed out after 10m0s
+
+goroutine 97 [running]:
+testing.(*M).startAlarm.func1()
+	/tmp/workdir/go/src/testing/testing.go:2083 +0xc5
+created by time.goFunc
+	/tmp/workdir/go/src/time/sleep.go:176 +0x29
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0x6bc06c30, {0x82d349c, 0xa}, 0x82e7828)
+	/tmp/workdir/go/src/testing/testing.go:1529 +0x392
+testing.runTests.func1(0x6bc06c30)
+	/tmp/workdir/go/src/testing/testing.go:1893 +0x45
+testing.tRunner(0x6bc06c30, 0x6bd11e2c)
+	/tmp/workdir/go/src/testing/testing.go:1481 +0x10d
+testing.runTests(0x6bc10230, {0x84809c0, 0x5, 0x5}, {0xc0c4d43f58c0321a, 0x8bb8400c9d, 0x8483780})
+	/tmp/workdir/go/src/testing/testing.go:1891 +0x3b3
+testing.(*M).Run(0x6bc740f0)
+	/tmp/workdir/go/src/testing/testing.go:1763 +0x695
+main.main()
+	_testmain.go:55 +0x17f
+
+goroutine 19 [select]:
+golang.org/x/tools/internal/gocommand.runCmdContext({0x8323128, 0x6bea7e00}, 0x6beaa4d0)
+	/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:265 +0x25b
+golang.org/x/tools/internal/gocommand.(*Invocation).run(0x6bedd3e8, {0x8323128, 0x6bea7e00}, {0x8321870, 0x6bea9638}, {0x8321870, 0x6bea9650})
+	/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:234 +0xd2f
+golang.org/x/tools/internal/gocommand.(*Invocation).runWithFriendlyError(0x6bedd3e8, {0x8323128, 0x6bea7e00}, {0x8321870, 0x6bea9638}, {0x8321870, 0x6bea9650})
+	/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:156 +0x4f
+golang.org/x/tools/internal/gocommand.(*Runner).runConcurrent(0x6bea9578, {0x8323128, 0x6bea7e00}, {{0x82d1b86, 0x4}, {0x6bea7e30, 0x5, 0x5}, {0x6be8b1f8, 0x1, ...}, ...})
+	/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:100 +0x17c
+golang.org/x/tools/internal/gocommand.(*Runner).RunRaw(0x6bea9578, {0x8323128, 0x6bea7e00}, {{0x82d1b86, 0x4}, {0x6bea7e30, 0x5, 0x5}, {0x6be8b1f8, 0x1, ...}, ...})
+	/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:75 +0x5e
+golang.org/x/tools/internal/gocommand.(*Runner).Run(...)
+	/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:57
+golang.org/x/tools/internal/gocommand.GoVersion({0x8323128, 0x6bea7e00}, {{0x82d1b86, 0x4}, {0x6bea7e30, 0x5, 0x5}, {0x6be8b1f8, 0x1, 0x1}, ...}, ...)
+	/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/version.go:33 +0x591
+golang.org/x/tools/go/packages.(*golistState).getGoVersion.func1()
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:761 +0xeb
+sync.(*Once).doSlow(0x6beb64bc, 0x6bedd6bc)
+	/tmp/workdir/go/src/sync/once.go:74 +0xad
+sync.(*Once).Do(0x6beb64bc, 0x6bedd6bc)
+	/tmp/workdir/go/src/sync/once.go:65 +0x39
+golang.org/x/tools/go/packages.(*golistState).getGoVersion(0x6beb6480)
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:760 +0x46
+golang.org/x/tools/go/packages.(*golistState).createDriverResponse(0x6beb6480, {0x6be8b1f0, 0x1, 0x1})
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:449 +0x2c
+golang.org/x/tools/go/packages.goListDriver(0x6beac604, {0x6be8b1d0, 0x1, 0x1})
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:199 +0x787
+golang.org/x/tools/go/packages.defaultDriver(0x6beac604, {0x6be8b1d0, 0x1, 0x1})
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages.go:271 +0x52
+golang.org/x/tools/go/packages.Load(0x6bedde24, {0x6be8b1d0, 0x1, 0x1})
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages.go:254 +0x4c
+golang.org/x/tools/cmd/stringer.(*Generator).parsePackage(0x6bea7da0, {0x6be8b1d0, 0x1, 0x1}, {0x0, 0x0, 0x0})
+	/tmp/workdir/gopath/src/golang.org/x/tools/cmd/stringer/stringer.go:226 +0x150
+golang.org/x/tools/cmd/stringer.TestGolden(0x6bc823c0)
+	/tmp/workdir/gopath/src/golang.org/x/tools/cmd/stringer/golden_test.go:474 +0x47f
+testing.tRunner(0x6bc823c0, 0x82e7828)
+	/tmp/workdir/go/src/testing/testing.go:1481 +0x10d
+created by testing.(*T).Run
+	/tmp/workdir/go/src/testing/testing.go:1528 +0x373
+
+FAIL	golang.org/x/tools/cmd/stringer	602.227s
+?   	golang.org/x/tools/cmd/toolstash	[no test files]
+ok  	golang.org/x/tools/container/intsets	15.067s
+ok  	golang.org/x/tools/copyright	50.207s
+ok  	golang.org/x/tools/cover	0.774s
+ok  	golang.org/x/tools/go/analysis	0.994s
+ok  	golang.org/x/tools/go/analysis/analysistest	28.107s
+ok  	golang.org/x/tools/go/analysis/internal/analysisflags	0.632s
+ok  	golang.org/x/tools/go/analysis/internal/checker	141.096s
+ok  	golang.org/x/tools/go/analysis/internal/facts	25.475s
+ok  	golang.org/x/tools/go/analysis/multichecker	1.685s
+ok  	golang.org/x/tools/go/analysis/passes/asmdecl	36.394s
+ok  	golang.org/x/tools/go/analysis/passes/assign	20.298s
+ok  	golang.org/x/tools/go/analysis/passes/atomic	7.936s
+ok  	golang.org/x/tools/go/analysis/passes/atomicalign	20.890s
+ok  	golang.org/x/tools/go/analysis/passes/bools	23.447s
+ok  	golang.org/x/tools/go/analysis/passes/buildssa	17.566s
+ok  	golang.org/x/tools/go/analysis/passes/buildtag	10.007s
+ok  	golang.org/x/tools/go/analysis/passes/cgocall	110.273s
+ok  	golang.org/x/tools/go/analysis/passes/composite	28.728s
+ok  	golang.org/x/tools/go/analysis/passes/copylock	18.117s
+ok  	golang.org/x/tools/go/analysis/passes/ctrlflow	27.460s
+ok  	golang.org/x/tools/go/analysis/passes/deepequalerrors	21.497s
+ok  	golang.org/x/tools/go/analysis/passes/errorsas	16.826s
+ok  	golang.org/x/tools/go/analysis/passes/fieldalignment	3.475s
+?   	golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment	[no test files]
+ok  	golang.org/x/tools/go/analysis/passes/findcall	17.880s
+?   	golang.org/x/tools/go/analysis/passes/findcall/cmd/findcall	[no test files]
+ok  	golang.org/x/tools/go/analysis/passes/framepointer	2.439s
+ok  	golang.org/x/tools/go/analysis/passes/httpresponse	44.222s
+ok  	golang.org/x/tools/go/analysis/passes/ifaceassert	18.909s
+?   	golang.org/x/tools/go/analysis/passes/ifaceassert/cmd/ifaceassert	[no test files]
+?   	golang.org/x/tools/go/analysis/passes/inspect	[no test files]
+ok  	golang.org/x/tools/go/analysis/passes/internal/analysisutil	1.241s
+ok  	golang.org/x/tools/go/analysis/passes/loopclosure	26.988s
+ok  	golang.org/x/tools/go/analysis/passes/lostcancel	24.951s
+?   	golang.org/x/tools/go/analysis/passes/lostcancel/cmd/lostcancel	[no test files]
+ok  	golang.org/x/tools/go/analysis/passes/nilfunc	9.677s
+ok  	golang.org/x/tools/go/analysis/passes/nilness	12.943s
+?   	golang.org/x/tools/go/analysis/passes/nilness/cmd/nilness	[no test files]
+ok  	golang.org/x/tools/go/analysis/passes/pkgfact	4.693s
+ok  	golang.org/x/tools/go/analysis/passes/printf	30.994s
+ok  	golang.org/x/tools/go/analysis/passes/reflectvaluecompare	21.006s
+ok  	golang.org/x/tools/go/analysis/passes/shadow	21.738s
+?   	golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow	[no test files]
+ok  	golang.org/x/tools/go/analysis/passes/shift	6.987s
+ok  	golang.org/x/tools/go/analysis/passes/sigchanyzer	23.657s
+ok  	golang.org/x/tools/go/analysis/passes/sortslice	18.963s
+ok  	golang.org/x/tools/go/analysis/passes/stdmethods	53.435s
+ok  	golang.org/x/tools/go/analysis/passes/stringintconv	3.606s
+?   	golang.org/x/tools/go/analysis/passes/stringintconv/cmd/stringintconv	[no test files]
+ok  	golang.org/x/tools/go/analysis/passes/structtag	22.118s
+ok  	golang.org/x/tools/go/analysis/passes/testinggoroutine	32.148s
+ok  	golang.org/x/tools/go/analysis/passes/tests	31.899s
+ok  	golang.org/x/tools/go/analysis/passes/timeformat	24.306s
+ok  	golang.org/x/tools/go/analysis/passes/unmarshal	27.346s
+?   	golang.org/x/tools/go/analysis/passes/unmarshal/cmd/unmarshal	[no test files]
+ok  	golang.org/x/tools/go/analysis/passes/unreachable	7.224s
+ok  	golang.org/x/tools/go/analysis/passes/unsafeptr	20.205s
+ok  	golang.org/x/tools/go/analysis/passes/unusedresult	18.997s
+ok  	golang.org/x/tools/go/analysis/passes/unusedwrite	4.128s
+ok  	golang.org/x/tools/go/analysis/passes/usesgenerics	5.834s
+?   	golang.org/x/tools/go/analysis/singlechecker	[no test files]
+ok  	golang.org/x/tools/go/analysis/unitchecker	1.456s
+ok  	golang.org/x/tools/go/ast/astutil	0.990s
+ok  	golang.org/x/tools/go/ast/inspector	3.018s
+ok  	golang.org/x/tools/go/buildutil	13.057s
+?   	golang.org/x/tools/go/callgraph	[no test files]
+ok  	golang.org/x/tools/go/callgraph/cha	1.664s
+ok  	golang.org/x/tools/go/callgraph/rta	0.671s
+ok  	golang.org/x/tools/go/callgraph/static	1.647s
+ok  	golang.org/x/tools/go/callgraph/vta	4.529s
+ok  	golang.org/x/tools/go/callgraph/vta/internal/trie	13.775s
+ok  	golang.org/x/tools/go/cfg	0.938s
+ok  	golang.org/x/tools/go/expect	0.756s
+ok  	golang.org/x/tools/go/gccgoexportdata	0.718s
+ok  	golang.org/x/tools/go/gcexportdata	15.453s
+?   	golang.org/x/tools/go/internal/cgo	[no test files]
+ok  	golang.org/x/tools/go/internal/gccgoimporter	1.447s
+ok  	golang.org/x/tools/go/internal/gcimporter	65.079s
+?   	golang.org/x/tools/go/internal/packagesdriver	[no test files]
+?   	golang.org/x/tools/go/internal/pkgbits	[no test files]
+ok  	golang.org/x/tools/go/loader	93.448s
+panic: test timed out after 10m0s
+
+goroutine 19205 [running]:
+testing.(*M).startAlarm.func1()
+	/tmp/workdir/go/src/testing/testing.go:2083 +0xc5
+created by time.goFunc
+	/tmp/workdir/go/src/time/sleep.go:176 +0x29
+
+goroutine 1 [chan receive]:
+testing.tRunner.func1()
+	/tmp/workdir/go/src/testing/testing.go:1447 +0x54c
+testing.tRunner(0x6b5023c0, 0x6b55ddd8)
+	/tmp/workdir/go/src/testing/testing.go:1487 +0x143
+testing.runTests(0x6b52c300, {0x84aed60, 0x4c, 0x4c}, {0xc0c4d4b9950253c6, 0x8bbc196885, 0x84b0480})
+	/tmp/workdir/go/src/testing/testing.go:1891 +0x3b3
+testing.(*M).Run(0x6b53a0f0)
+	/tmp/workdir/go/src/testing/testing.go:1763 +0x695
+golang.org/x/tools/go/packages_test.TestMain(0x6b53a0f0)
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages_test.go:54 +0x161
+main.main()
+	_testmain.go:201 +0x183
+
+goroutine 3554 [chan receive]:
+testing.(*T).Run(0x7443e960, {0x82ed5b8, 0x5}, 0x72c10540)
+	/tmp/workdir/go/src/testing/testing.go:1529 +0x392
+golang.org/x/tools/go/packages_test.testInvalidFilesBeforeOverlayContains(0x7443e960, {0x834578c, 0x84c373c})
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/overlay_test.go:815 +0x8f4
+golang.org/x/tools/go/packages_test.testAllOrModulesParallel.func1(0x7443e960, {0x834578c, 0x84c373c})
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages_test.go:81 +0x185
+golang.org/x/tools/go/packages/packagestest.TestAll.func1(0x7443e960)
+	/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packagestest/export.go:163 +0x51
+testing.tRunner(0x7443e960, 0x72982440)
+	/tmp/workdir/go/src/testing/testing.go:1481 +0x10d
+created by testing.(*T).Run
+	/tmp/workdir/go/src/testing/testing.go:1528 +0x373
+
+goroutine 18368 [sync.Mutex.Lock]:
+sync.runtime_SemacquireMutex(0x72514ef8, 0x0, 0x1)
+	/tmp/workdir/go/src/runtime/sema.go:77 +0x39
+sync.(*Mutex).lockSlow(0x72514ef4)
+	/tmp/workdir/go/src/sync/mutex.go:171 +0x24f
+sync.(*Mutex).Lock(0x72514ef4)
+	/tmp/workdir/go/src/sync/mutex.go:90 +0x46
+FAIL	golang.org/x/tools/go/packages	615.584s
+?   	golang.org/x/tools/go/packages/gopackages	[no test files]
+ok  	golang.org/x/tools/go/packages/packagestest	19.901s
+ok  	golang.org/x/tools/go/pointer	37.551s
+ok  	golang.org/x/tools/go/ssa	47.840s
+ok  	golang.org/x/tools/go/ssa/interp	32.170s
+ok  	golang.org/x/tools/go/ssa/ssautil	35.950s
+ok  	golang.org/x/tools/go/types/objectpath	1.245s
+ok  	golang.org/x/tools/go/types/typeutil	0.696s
+ok  	golang.org/x/tools/go/vcs	0.860s
+ok  	golang.org/x/tools/godoc	20.686s
+?   	golang.org/x/tools/godoc/analysis	[no test files]
+ok  	golang.org/x/tools/godoc/redirect	1.686s
+ok  	golang.org/x/tools/godoc/static	65.636s
+?   	golang.org/x/tools/godoc/util	[no test files]
+ok  	golang.org/x/tools/godoc/vfs	0.391s
+ok  	golang.org/x/tools/godoc/vfs/gatefs	0.596s
+?   	golang.org/x/tools/godoc/vfs/httpfs	[no test files]
+ok  	golang.org/x/tools/godoc/vfs/mapfs	0.835s
+ok  	golang.org/x/tools/godoc/vfs/zipfs	0.750s
+?   	golang.org/x/tools/imports	[no test files]
+?   	golang.org/x/tools/internal/analysisinternal	[no test files]
+ok  	golang.org/x/tools/internal/apidiff	28.503s
+ok  	golang.org/x/tools/internal/bug	1.360s
+ok  	golang.org/x/tools/internal/diff	2.614s
+ok  	golang.org/x/tools/internal/diff/difftest	0.605s
+ok  	golang.org/x/tools/internal/diff/lcs	2.600s
+ok  	golang.org/x/tools/internal/diff/myers	2.181s
+ok  	golang.org/x/tools/internal/event	0.721s [no tests to run]
+?   	golang.org/x/tools/internal/event/core	[no test files]
+ok  	golang.org/x/tools/internal/event/export	4.101s
+?   	golang.org/x/tools/internal/event/export/eventtest	[no test files]
+?   	golang.org/x/tools/internal/event/export/metric	[no test files]
+ok  	golang.org/x/tools/internal/event/export/ocagent	0.944s
+ok  	golang.org/x/tools/internal/event/export/ocagent/wire	1.917s
+?   	golang.org/x/tools/internal/event/export/prometheus	[no test files]
+?   	golang.org/x/tools/internal/event/keys	[no test files]
+ok  	golang.org/x/tools/internal/event/label	1.787s
+?   	golang.org/x/tools/internal/event/tag	[no test files]
+?   	golang.org/x/tools/internal/fakenet	[no test files]
+ok  	golang.org/x/tools/internal/fastwalk	6.260s
+ok  	golang.org/x/tools/internal/fuzzy	3.639s
+ok  	golang.org/x/tools/internal/gocommand	7.420s
+ok  	golang.org/x/tools/internal/gopathwalk	1.603s
+ok  	golang.org/x/tools/internal/imports	379.362s
+ok  	golang.org/x/tools/internal/jsonrpc2	5.798s
+ok  	golang.org/x/tools/internal/jsonrpc2/servertest	1.717s
+ok  	golang.org/x/tools/internal/jsonrpc2_v2	6.356s
+?   	golang.org/x/tools/internal/loopclosure	[no test files]
+ok  	golang.org/x/tools/internal/memoize	0.587s
+?   	golang.org/x/tools/internal/packagesinternal	[no test files]
+ok  	golang.org/x/tools/internal/persistent	10.517s
+ok  	golang.org/x/tools/internal/proxydir	2.446s
+ok  	golang.org/x/tools/internal/span	0.482s
+ok  	golang.org/x/tools/internal/stack	1.228s
+?   	golang.org/x/tools/internal/stack/gostacks	[no test files]
+?   	golang.org/x/tools/internal/stack/stacktest	[no test files]
+?   	golang.org/x/tools/internal/testenv	[no test files]
+?   	golang.org/x/tools/internal/tool	[no test files]
+ok  	golang.org/x/tools/internal/typeparams	2.351s
+?   	golang.org/x/tools/internal/typeparams/genericfeatures	[no test files]
+?   	golang.org/x/tools/internal/typesinternal	[no test files]
+?   	golang.org/x/tools/internal/xcontext	[no test files]
+?   	golang.org/x/tools/playground	[no test files]
+ok  	golang.org/x/tools/playground/socket	3.659s
+ok  	golang.org/x/tools/present	3.623s
+ok  	golang.org/x/tools/refactor/eg	203.006s
+ok  	golang.org/x/tools/refactor/importgraph	42.022s
+ok  	golang.org/x/tools/refactor/rename	9.908s
+ok  	golang.org/x/tools/refactor/satisfy	4.945s
+ok  	golang.org/x/tools/txtar	4.872s
+FAIL
+:: Running /tmp/workdir/go/bin/go with args ["/tmp/workdir/go/bin/go" "test" "-short" "./..."] and env ["HOME=/" "INRC=1" "_=/bin/sh" "WORKDIR=/tmp/workdir" "GOROOT_BOOTSTRAP=/tmp/workdir/go1.4" "GO_BUILDER_NAME=openbsd-386-68" "GOROOT=/tmp/workdir/go" "GOPATH=/tmp/workdir/gopath" "GOPROXY=http://gk3-services-nap-jetxd907-8ae6730a-wn5j.c.symbolic-datum-552.internal:30157" "TMPDIR=/tmp/workdir/tmp" "GOCACHE=/tmp/workdir/gocache" "PATH=/tmp/workdir/go/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin" "PWD=/tmp/workdir/gopath/src/golang.org/x/tools/gopls"] in dir /tmp/workdir/gopath/src/golang.org/x/tools/gopls
+
+go: downloading github.com/google/go-cmp v0.5.8
+go: downloading github.com/jba/printsrc v0.2.2
+go: downloading github.com/sergi/go-diff v1.1.0
+go: downloading honnef.co/go/tools v0.3.3
+go: downloading mvdan.cc/gofumpt v0.3.1
+go: downloading mvdan.cc/xurls/v2 v2.4.0
+go: downloading golang.org/x/sys v0.0.0-20220808155132-1c4a2a72c664
+go: downloading golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
+go: downloading golang.org/x/vuln v0.0.0-20220919155316-41b1fc70d0a6
+go: downloading golang.org/x/text v0.3.7
+go: downloading github.com/jba/templatecheck v0.6.0
+go: downloading golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
+go: downloading github.com/google/safehtml v0.0.2
+go: downloading golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e
+go: downloading github.com/BurntSushi/toml v1.2.0
+?   	golang.org/x/tools/gopls	[no test files]
+?   	golang.org/x/tools/gopls/api-diff	[no test files]
+ok  	golang.org/x/tools/gopls/doc	70.889s
+?   	golang.org/x/tools/gopls/integration/govim	[no test files]
+ok  	golang.org/x/tools/gopls/internal/govulncheck	16.369s
+ok  	golang.org/x/tools/gopls/internal/govulncheck/semver	0.934s
+ok  	golang.org/x/tools/gopls/internal/hooks	6.714s
+ok  	golang.org/x/tools/gopls/internal/lsp	522.290s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/embeddirective	23.470s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/fillreturns	33.420s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/fillstruct	25.489s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/infertypeargs	3.056s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/nonewvars	24.550s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/noresultvalues	6.826s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/simplifycompositelit	4.970s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/simplifyrange	27.061s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/simplifyslice	6.307s
+?   	golang.org/x/tools/gopls/internal/lsp/analysis/stubmethods	[no test files]
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/undeclaredname	22.098s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/unusedparams	36.470s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/unusedvariable	26.347s
+ok  	golang.org/x/tools/gopls/internal/lsp/analysis/useany	5.385s
+?   	golang.org/x/tools/gopls/internal/lsp/browser	[no test files]
+ok  	golang.org/x/tools/gopls/internal/lsp/cache	1.910s
+ok  	golang.org/x/tools/gopls/internal/lsp/cmd	20.274s
+?   	golang.org/x/tools/gopls/internal/lsp/cmd/test	[no test files]
+ok  	golang.org/x/tools/gopls/internal/lsp/command	22.620s
+?   	golang.org/x/tools/gopls/internal/lsp/command/commandmeta	[no test files]
+?   	golang.org/x/tools/gopls/internal/lsp/command/gen	[no test files]
+ok  	golang.org/x/tools/gopls/internal/lsp/debug	1.638s
+?   	golang.org/x/tools/gopls/internal/lsp/debug/log	[no test files]
+ok  	golang.org/x/tools/gopls/internal/lsp/fake	2.550s
+?   	golang.org/x/tools/gopls/internal/lsp/helper	[no test files]
+ok  	golang.org/x/tools/gopls/internal/lsp/lsppos	0.848s
+ok  	golang.org/x/tools/gopls/internal/lsp/lsprpc	105.240s
+ok  	golang.org/x/tools/gopls/internal/lsp/mod	2.234s
+ok  	golang.org/x/tools/gopls/internal/lsp/progress	0.844s
+?   	golang.org/x/tools/gopls/internal/lsp/protocol	[no test files]
+ok  	golang.org/x/tools/gopls/internal/lsp/regtest	1.190s
+ok  	golang.org/x/tools/gopls/internal/lsp/safetoken	51.882s
+ok  	golang.org/x/tools/gopls/internal/lsp/snippet	0.319s
+ok  	golang.org/x/tools/gopls/internal/lsp/source	371.097s
+ok  	golang.org/x/tools/gopls/internal/lsp/source/completion	3.536s
+ok  	golang.org/x/tools/gopls/internal/lsp/template	0.676s
+?   	golang.org/x/tools/gopls/internal/lsp/tests	[no test files]
+ok  	golang.org/x/tools/gopls/internal/lsp/tests/compare	0.281s
+?   	golang.org/x/tools/gopls/internal/lsp/work	[no test files]
+ok  	golang.org/x/tools/gopls/internal/regtest/bench	3.852s
+ok  	golang.org/x/tools/gopls/internal/regtest/codelens	3.970s
+ok  	golang.org/x/tools/gopls/internal/regtest/completion	6.245s
+ok  	golang.org/x/tools/gopls/internal/regtest/debug	5.032s
+ok  	golang.org/x/tools/gopls/internal/regtest/diagnostics	6.278s
+ok  	golang.org/x/tools/gopls/internal/regtest/inlayhints	7.152s
+ok  	golang.org/x/tools/gopls/internal/regtest/misc	3.380s
+ok  	golang.org/x/tools/gopls/internal/regtest/modfile	5.772s
+ok  	golang.org/x/tools/gopls/internal/regtest/template	9.042s
+ok  	golang.org/x/tools/gopls/internal/regtest/watch	4.332s
+ok  	golang.org/x/tools/gopls/internal/regtest/workspace	4.396s
+ok  	golang.org/x/tools/gopls/internal/vulncheck	21.065s
+?   	golang.org/x/tools/gopls/release	[no test files]
+ok  	golang.org/x/tools/gopls/test	327.336s
+ok  	golang.org/x/tools/gopls/test/debug	22.699s

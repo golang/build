@@ -1,0 +1,8 @@
+Section: "Testing packages."
+Pkg: ""
+Test: ""
+Mode: ""
+Snippet:
+	Test "go_test:encoding/pem" ran over 20m0s limit (20m0.000756227s); saw output:
+Output:
+	Test "go_test:encoding/pem" ran over 20m0s limit (20m0.000756227s); saw output:

@@ -1,0 +1,39 @@
+linux-amd64-wsl at 1ed3c127daceaffb9aadc806ba60f0b51b47421b building tools at 9b6c01892a361929559f87c2ba1b87825744596c
+
+:: Running /tmp/workdir-host-linux-amd64-wsl/go/src/make.bash with args ["/tmp/workdir-host-linux-amd64-wsl/go/src/make.bash"] and env ["SHELL=/bin/bash" "LOGNAME=root" "GOARCH=amd64" "MOTD_SHOWN=update-motd" "HOME=/root" "LANG=C.UTF-8" "GO_BUILDER_ENV=host-linux-amd64-wsl" "GOROOT=/usr/lib/go" "LESSCLOSE=/usr/bin/lesspipe %s %s" "TERM=xterm-256color" "LESSOPEN=| /usr/bin/lesspipe %s" "USER=root" "GOPROXY=https://goproxy.io,direct" "SHLVL=1" "HTTPS_PROXY=http://proxy.golangcn.org:54288" "HTTP_PROXY=http://proxy.golangcn.org:54288" "GO111MODULE=on" "XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop" "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/lib/go/bin" "MAIL=/var/mail/root" "GOOS=linux" "OLDPWD=/root" "GOPATH=/data/golang" "_=/usr/local/build/cmd/buildlet/stage0/stage0" "GO_STAGE0_NET_DELAY=400ms" "GO_STAGE0_DL_DELAY=4s" "WORKDIR=/tmp/workdir-host-linux-amd64-wsl" "GO_BUILDER_NAME=linux-amd64-wsl" "GO_BUILDER_FLAKY_NET=1" "GOROOT_BOOTSTRAP=/usr/lib/go" "GOBIN=" "TMPDIR=/tmp/workdir-host-linux-amd64-wsl/tmp" "GOCACHE=/tmp/workdir-host-linux-amd64-wsl/gocache" "PWD=/tmp/workdir-host-linux-amd64-wsl/go/src"] in dir /tmp/workdir-host-linux-amd64-wsl/go/src
+
+Building Go cmd/dist using /usr/lib/go. (go1.15.6 linux/amd64)
+Building Go toolchain1 using /usr/lib/go.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building packages and commands for linux/amd64.
+---
+Installed Go for linux/amd64 in /tmp/workdir-host-linux-amd64-wsl/go
+Installed commands in /tmp/workdir-host-linux-amd64-wsl/go/bin
+:: Running /tmp/workdir-host-linux-amd64-wsl/go/bin/go with args ["/tmp/workdir-host-linux-amd64-wsl/go/bin/go" "test" "-short" "golang.org/x/tools/..."] and env ["SHELL=/bin/bash" "LOGNAME=root" "GOARCH=amd64" "MOTD_SHOWN=update-motd" "HOME=/root" "LANG=C.UTF-8" "GO_BUILDER_ENV=host-linux-amd64-wsl" "LESSCLOSE=/usr/bin/lesspipe %s %s" "TERM=xterm-256color" "LESSOPEN=| /usr/bin/lesspipe %s" "USER=root" "GOPROXY=https://goproxy.io,direct" "SHLVL=1" "HTTPS_PROXY=http://proxy.golangcn.org:54288" "HTTP_PROXY=http://proxy.golangcn.org:54288" "GO111MODULE=on" "XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop" "MAIL=/var/mail/root" "GOOS=linux" "OLDPWD=/root" "_=/usr/local/build/cmd/buildlet/stage0/stage0" "GO_STAGE0_NET_DELAY=400ms" "GO_STAGE0_DL_DELAY=4s" "WORKDIR=/tmp/workdir-host-linux-amd64-wsl" "GO_BUILDER_NAME=linux-amd64-wsl" "GO_BUILDER_FLAKY_NET=1" "GOROOT_BOOTSTRAP=/usr/lib/go" "GOROOT=/tmp/workdir-host-linux-amd64-wsl/go" "GOPATH=/tmp/workdir-host-linux-amd64-wsl/gopath" "TMPDIR=/tmp/workdir-host-linux-amd64-wsl/tmp" "GOCACHE=/tmp/workdir-host-linux-amd64-wsl/gocache" "PATH=/tmp/workdir-host-linux-amd64-wsl/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/lib/go/bin" "PWD=/tmp/workdir-host-linux-amd64-wsl/gopath/src/golang.org/x/tools"] in dir /tmp/workdir-host-linux-amd64-wsl/gopath/src/golang.org/x/tools
+
+go: downloading golang.org/x/sys v0.0.0-20211019181941-9d821ace8654
+go: downloading golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f
+go: downloading golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
+go: downloading github.com/yuin/goldmark v1.4.1
+go: downloading golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+go: downloading golang.org/x/text v0.3.7
+godoc/redirect/redirect.go:22:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+cmd/html2article/conv.go:21:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+cmd/html2article/conv.go:22:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+playground/socket/socket.go:37:2: golang.org/x/net@v0.0.0-20211015210444-4f30a5c0130f: unexpected EOF
+:: Running /tmp/workdir-host-linux-amd64-wsl/go/bin/go with args ["/tmp/workdir-host-linux-amd64-wsl/go/bin/go" "test" "-short" "golang.org/x/tools/gopls/..."] and env ["SHELL=/bin/bash" "LOGNAME=root" "GOARCH=amd64" "MOTD_SHOWN=update-motd" "HOME=/root" "LANG=C.UTF-8" "GO_BUILDER_ENV=host-linux-amd64-wsl" "LESSCLOSE=/usr/bin/lesspipe %s %s" "TERM=xterm-256color" "LESSOPEN=| /usr/bin/lesspipe %s" "USER=root" "GOPROXY=https://goproxy.io,direct" "SHLVL=1" "HTTPS_PROXY=http://proxy.golangcn.org:54288" "HTTP_PROXY=http://proxy.golangcn.org:54288" "GO111MODULE=on" "XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop" "MAIL=/var/mail/root" "GOOS=linux" "OLDPWD=/root" "_=/usr/local/build/cmd/buildlet/stage0/stage0" "GO_STAGE0_NET_DELAY=400ms" "GO_STAGE0_DL_DELAY=4s" "WORKDIR=/tmp/workdir-host-linux-amd64-wsl" "GO_BUILDER_NAME=linux-amd64-wsl" "GO_BUILDER_FLAKY_NET=1" "GOROOT_BOOTSTRAP=/usr/lib/go" "GOROOT=/tmp/workdir-host-linux-amd64-wsl/go" "GOPATH=/tmp/workdir-host-linux-amd64-wsl/gopath" "TMPDIR=/tmp/workdir-host-linux-amd64-wsl/tmp" "GOCACHE=/tmp/workdir-host-linux-amd64-wsl/gocache" "PATH=/tmp/workdir-host-linux-amd64-wsl/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/lib/go/bin" "PWD=/tmp/workdir-host-linux-amd64-wsl/gopath/src/golang.org/x/tools/gopls"] in dir /tmp/workdir-host-linux-amd64-wsl/gopath/src/golang.org/x/tools/gopls
+
+go: downloading github.com/sergi/go-diff v1.1.0
+go: downloading honnef.co/go/tools v0.3.2
+go: downloading mvdan.cc/gofumpt v0.3.0
+go: downloading mvdan.cc/xurls/v2 v2.4.0
+go: downloading github.com/jba/printsrc v0.2.2
+go: downloading github.com/jba/templatecheck v0.6.0
+go: downloading golang.org/x/sys v0.0.0-20220209214540-3681064d5158
+go: downloading github.com/google/go-cmp v0.5.7
+go: downloading golang.org/x/exp/typeparams v0.0.0-20220218215828-6cf2b201936e
+go: downloading github.com/BurntSushi/toml v1.0.0
+go: downloading github.com/google/safehtml v0.0.2
+../go/packages/external.go:15:2: golang.org/x/sys@v0.0.0-20220209214540-3681064d5158: unexpected EOF

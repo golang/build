@@ -1,0 +1,219 @@
+Section: "../test"
+Pkg: "escape_struct_param1.go"
+Test: ""
+Mode: "test"
+Snippet:
+	# go run run.go -- escape_struct_param1.go
+	exit status 1
+	/workdir/go/test/escape_struct_param1.go:25: leaking param: u to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:29: leaking param: u to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:33: leaking param: u to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:38: moved to heap: s
+	/workdir/go/test/escape_struct_param1.go:41: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:46: moved to heap: s
+	/workdir/go/test/escape_struct_param1.go:49: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:55: moved to heap: s
+	...
+	/workdir/go/test/escape_struct_param1.go:141: internal compiler error: 'tUPiSPb': panic during lower while compiling tUPiSPb:
+
+	runtime error: invalid memory address or nil pointer dereference
+
+	goroutine 1 [running]:
+	cmd/compile/internal/ssa.Compile.func1()
+		/workdir/go/src/cmd/compile/internal/ssa/compile.go:49 +0xa5
+	panic({0x11325c0, 0x16bbe60})
+		/workdir/go/src/runtime/panic.go:890 +0x262
+	math/rand.(*Rand).Int63(0xc00079c2d0)
+	...
+	cmd/compile/internal/gc.compileFunctions.func2(0xc000796320)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:125 +0x23
+	cmd/compile/internal/gc.compileFunctions.func4({0xc0003f1e00, 0x26, 0x40})
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:152 +0x176
+	cmd/compile/internal/gc.compileFunctions()
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:163 +0x1f2
+	cmd/compile/internal/gc.Main(0x11dbab8)
+		/workdir/go/src/cmd/compile/internal/gc/main.go:301 +0x1775
+	main.main()
+		/workdir/go/src/cmd/compile/main.go:57 +0x171
+Output:
+	# go run run.go -- escape_struct_param1.go
+	exit status 1
+	/workdir/go/test/escape_struct_param1.go:25: leaking param: u to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:29: leaking param: u to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:33: leaking param: u to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:38: moved to heap: s
+	/workdir/go/test/escape_struct_param1.go:41: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:46: moved to heap: s
+	/workdir/go/test/escape_struct_param1.go:49: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:55: moved to heap: s
+	/workdir/go/test/escape_struct_param1.go:56: moved to heap: ps
+	/workdir/go/test/escape_struct_param1.go:58: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:62: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:66: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:70: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:74: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:78: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:82: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:86: leaking param: v to result ~r0 level=1
+	/workdir/go/test/escape_struct_param1.go:90: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:94: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:98: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:102: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:106: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:110: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:117: moved to heap: s2
+	/workdir/go/test/escape_struct_param1.go:118: moved to heap: s3
+	/workdir/go/test/escape_struct_param1.go:119: moved to heap: s4
+	/workdir/go/test/escape_struct_param1.go:120: moved to heap: s5
+	/workdir/go/test/escape_struct_param1.go:121: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:123: moved to heap: ps4
+	/workdir/go/test/escape_struct_param1.go:124: moved to heap: ps6
+	/workdir/go/test/escape_struct_param1.go:126: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:127: &U{...} escapes to heap
+	/workdir/go/test/escape_struct_param1.go:128: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:135: moved to heap: s2
+	/workdir/go/test/escape_struct_param1.go:136: moved to heap: s3
+	/workdir/go/test/escape_struct_param1.go:137: moved to heap: s4
+	/workdir/go/test/escape_struct_param1.go:138: moved to heap: s5
+	/workdir/go/test/escape_struct_param1.go:139: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:141: moved to heap: ps4
+	/workdir/go/test/escape_struct_param1.go:142: moved to heap: ps6
+	/workdir/go/test/escape_struct_param1.go:144: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:145: &U{...} escapes to heap
+	/workdir/go/test/escape_struct_param1.go:146: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:153: moved to heap: s2
+	/workdir/go/test/escape_struct_param1.go:154: moved to heap: s3
+	/workdir/go/test/escape_struct_param1.go:155: moved to heap: s4
+	/workdir/go/test/escape_struct_param1.go:156: moved to heap: s5
+	/workdir/go/test/escape_struct_param1.go:157: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:159: moved to heap: ps4
+	/workdir/go/test/escape_struct_param1.go:160: moved to heap: ps6
+	/workdir/go/test/escape_struct_param1.go:162: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:163: &U{...} escapes to heap
+	/workdir/go/test/escape_struct_param1.go:164: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:171: moved to heap: s2
+	/workdir/go/test/escape_struct_param1.go:172: moved to heap: s3
+	/workdir/go/test/escape_struct_param1.go:173: moved to heap: s4
+	/workdir/go/test/escape_struct_param1.go:174: moved to heap: s5
+	/workdir/go/test/escape_struct_param1.go:175: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:177: moved to heap: ps4
+	/workdir/go/test/escape_struct_param1.go:178: moved to heap: ps6
+	/workdir/go/test/escape_struct_param1.go:180: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:181: &U{...} escapes to heap
+	/workdir/go/test/escape_struct_param1.go:182: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:186: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:190: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:194: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:198: leaking param: v to result ~r0 level=2
+	/workdir/go/test/escape_struct_param1.go:207: moved to heap: s4
+	/workdir/go/test/escape_struct_param1.go:208: moved to heap: s5
+	/workdir/go/test/escape_struct_param1.go:209: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:212: moved to heap: ps6
+	/workdir/go/test/escape_struct_param1.go:214: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:215: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:216: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:225: moved to heap: s4
+	/workdir/go/test/escape_struct_param1.go:226: moved to heap: s5
+	/workdir/go/test/escape_struct_param1.go:227: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:230: moved to heap: ps6
+	/workdir/go/test/escape_struct_param1.go:232: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:233: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:234: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:243: moved to heap: s4
+	/workdir/go/test/escape_struct_param1.go:244: moved to heap: s5
+	/workdir/go/test/escape_struct_param1.go:245: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:248: moved to heap: ps6
+	/workdir/go/test/escape_struct_param1.go:250: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:251: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:252: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:261: moved to heap: s4
+	/workdir/go/test/escape_struct_param1.go:262: moved to heap: s5
+	/workdir/go/test/escape_struct_param1.go:263: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:266: moved to heap: ps6
+	/workdir/go/test/escape_struct_param1.go:268: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:269: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:270: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:274: leaking param: v to result ~r0 level=4
+	/workdir/go/test/escape_struct_param1.go:289: moved to heap: s6
+	/workdir/go/test/escape_struct_param1.go:294: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:295: &U{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:296: &V{...} does not escape
+	/workdir/go/test/escape_struct_param1.go:141: internal compiler error: 'tUPiSPb': panic during lower while compiling tUPiSPb:
+
+	runtime error: invalid memory address or nil pointer dereference
+
+	goroutine 1 [running]:
+	cmd/compile/internal/ssa.Compile.func1()
+		/workdir/go/src/cmd/compile/internal/ssa/compile.go:49 +0xa5
+	panic({0x11325c0, 0x16bbe60})
+		/workdir/go/src/runtime/panic.go:890 +0x262
+	math/rand.(*Rand).Int63(0xc00079c2d0)
+		/workdir/go/src/math/rand/rand.go:89 +0x27
+	math/rand.(*Rand).Int31(0xc00079c2d0)
+		/workdir/go/src/math/rand/rand.go:103 +0x2b
+	math/rand.(*Rand).Int31n(0xc00079c2d0, 0x40)
+		/workdir/go/src/math/rand/rand.go:135 +0x46
+	math/rand.(*Rand).Intn(0xc00079c2d0, 0x40)
+		/workdir/go/src/math/rand/rand.go:176 +0x45
+	cmd/compile/internal/ssa.Compile(0xc00019fd40)
+		/workdir/go/src/cmd/compile/internal/ssa/compile.go:90 +0x1490
+	cmd/compile/internal/ssagen.buildssa(0xc0000ba000, 0x0)
+		/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:574 +0x21e5
+	cmd/compile/internal/ssagen.Compile(0xc0000ba000, 0x0)
+		/workdir/go/src/cmd/compile/internal/ssagen/pgen.go:187 +0x3e
+	cmd/compile/internal/gc.compileFunctions.func4.1(0x0)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:153 +0x47
+	cmd/compile/internal/gc.compileFunctions.func2(0xc000796320)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:125 +0x23
+	cmd/compile/internal/gc.compileFunctions.func4({0xc0003f1e00, 0x26, 0x40})
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:152 +0x176
+	cmd/compile/internal/gc.compileFunctions()
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:163 +0x1f2
+	cmd/compile/internal/gc.Main(0x11dbab8)
+		/workdir/go/src/cmd/compile/internal/gc/main.go:301 +0x1775
+	main.main()
+		/workdir/go/src/cmd/compile/main.go:57 +0x171
+
+
+
+	goroutine 1 [running]:
+	runtime/debug.Stack()
+		/workdir/go/src/runtime/debug/stack.go:24 +0x7a
+	cmd/compile/internal/base.FatalfAt({0x2, 0x8d061}, {0xc0007880c0, 0x32}, {0xc0008120a0, 0x5, 0x5})
+		/workdir/go/src/cmd/compile/internal/base/print.go:227 +0x22a
+	cmd/compile/internal/base.Fatalf({0xc0007880c0, 0x32}, {0xc0008120a0, 0x5, 0x5})
+		/workdir/go/src/cmd/compile/internal/base/print.go:196 +0x56
+	cmd/compile/internal/ssagen.(*ssafn).Fatalf(0xc000779e30, {0x2, 0x8d061}, {0x11cba23, 0x2c}, {0xc0007985c0, 0x4, 0x4})
+		/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:7851 +0x28a
+	cmd/compile/internal/ssa.(*Func).Fatalf(0xc00019fd40, {0x11cba23, 0x2c}, {0xc0007985c0, 0x4, 0x4})
+		/workdir/go/src/cmd/compile/internal/ssa/func.go:762 +0x3b7
+	cmd/compile/internal/ssa.Compile.func1()
+		/workdir/go/src/cmd/compile/internal/ssa/compile.go:54 +0x270
+	panic({0x11325c0, 0x16bbe60})
+		/workdir/go/src/runtime/panic.go:890 +0x262
+	math/rand.(*Rand).Int63(0xc00079c2d0)
+		/workdir/go/src/math/rand/rand.go:89 +0x27
+	math/rand.(*Rand).Int31(0xc00079c2d0)
+		/workdir/go/src/math/rand/rand.go:103 +0x2b
+	math/rand.(*Rand).Int31n(0xc00079c2d0, 0x40)
+		/workdir/go/src/math/rand/rand.go:135 +0x46
+	math/rand.(*Rand).Intn(0xc00079c2d0, 0x40)
+		/workdir/go/src/math/rand/rand.go:176 +0x45
+	cmd/compile/internal/ssa.Compile(0xc00019fd40)
+		/workdir/go/src/cmd/compile/internal/ssa/compile.go:90 +0x1490
+	cmd/compile/internal/ssagen.buildssa(0xc0000ba000, 0x0)
+		/workdir/go/src/cmd/compile/internal/ssagen/ssa.go:574 +0x21e5
+	cmd/compile/internal/ssagen.Compile(0xc0000ba000, 0x0)
+		/workdir/go/src/cmd/compile/internal/ssagen/pgen.go:187 +0x3e
+	cmd/compile/internal/gc.compileFunctions.func4.1(0x0)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:153 +0x47
+	cmd/compile/internal/gc.compileFunctions.func2(0xc000796320)
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:125 +0x23
+	cmd/compile/internal/gc.compileFunctions.func4({0xc0003f1e00, 0x26, 0x40})
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:152 +0x176
+	cmd/compile/internal/gc.compileFunctions()
+		/workdir/go/src/cmd/compile/internal/gc/compile.go:163 +0x1f2
+	cmd/compile/internal/gc.Main(0x11dbab8)
+		/workdir/go/src/cmd/compile/internal/gc/main.go:301 +0x1775
+	main.main()
+		/workdir/go/src/cmd/compile/main.go:57 +0x171

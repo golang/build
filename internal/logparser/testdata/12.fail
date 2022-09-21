@@ -1,0 +1,12 @@
+Section: "go test -short ./..."
+Pkg: "golang.org/x/vuln/cmd/govulncheck"
+Test: "TestCommand"
+Mode: "test"
+Snippet:
+	novuln.go:6:2: golang.org/x/text@v0.3.7: Get "https://proxy.golang.com.cn/golang.org/x/text/@v/v0.3.7.zip": proxyconnect tcp: dial tcp 205.185.121.87:54288: i/o timeout
+	--- FAIL: TestCommand (18.23s)
+	    buildtest.go:74: exit status 1
+Output:
+	novuln.go:6:2: golang.org/x/text@v0.3.7: Get "https://proxy.golang.com.cn/golang.org/x/text/@v/v0.3.7.zip": proxyconnect tcp: dial tcp 205.185.121.87:54288: i/o timeout
+	--- FAIL: TestCommand (18.23s)
+	    buildtest.go:74: exit status 1

@@ -1,0 +1,156 @@
+Section: "go test -short ./..."
+Pkg: "command-line-arguments"
+Test: "TestGolden"
+Mode: "build"
+Snippet:
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:11:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:12:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:13:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:14:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:15:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:16:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:17:8: invalid argument: index Sunday - 6 (constant -6 of type Day) must not be negative
+	panic: test timed out after 10m0s
+
+	golang.org/x/tools/internal/gocommand.runCmdContext({0x8323128, 0x6bea7e00}, 0x6beaa4d0)
+	...
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:199 +0x787
+	golang.org/x/tools/go/packages.defaultDriver(0x6beac604, {0x6be8b1d0, 0x1, 0x1})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages.go:271 +0x52
+	golang.org/x/tools/go/packages.Load(0x6bedde24, {0x6be8b1d0, 0x1, 0x1})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages.go:254 +0x4c
+	golang.org/x/tools/cmd/stringer.(*Generator).parsePackage(0x6bea7da0, {0x6be8b1d0, 0x1, 0x1}, {0x0, 0x0, 0x0})
+		/tmp/workdir/gopath/src/golang.org/x/tools/cmd/stringer/stringer.go:226 +0x150
+	golang.org/x/tools/cmd/stringer.TestGolden(0x6bc823c0)
+		/tmp/workdir/gopath/src/golang.org/x/tools/cmd/stringer/golden_test.go:474 +0x47f
+	testing.tRunner(0x6bc823c0, 0x82e7828)
+Output:
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:11:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:12:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:13:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:14:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:15:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:16:8: invalid argument: index 1 out of bounds [0:1]
+	/tmp/workdir/tmp/stringer3302685186/day_string.go:17:8: invalid argument: index Sunday - 6 (constant -6 of type Day) must not be negative
+	panic: test timed out after 10m0s
+
+	goroutine 97 [running]:
+	testing.(*M).startAlarm.func1()
+		/tmp/workdir/go/src/testing/testing.go:2083 +0xc5
+	created by time.goFunc
+		/tmp/workdir/go/src/time/sleep.go:176 +0x29
+
+	goroutine 1 [chan receive]:
+	testing.(*T).Run(0x6bc06c30, {0x82d349c, 0xa}, 0x82e7828)
+		/tmp/workdir/go/src/testing/testing.go:1529 +0x392
+	testing.runTests.func1(0x6bc06c30)
+		/tmp/workdir/go/src/testing/testing.go:1893 +0x45
+	testing.tRunner(0x6bc06c30, 0x6bd11e2c)
+		/tmp/workdir/go/src/testing/testing.go:1481 +0x10d
+	testing.runTests(0x6bc10230, {0x84809c0, 0x5, 0x5}, {0xc0c4d43f58c0321a, 0x8bb8400c9d, 0x8483780})
+		/tmp/workdir/go/src/testing/testing.go:1891 +0x3b3
+	testing.(*M).Run(0x6bc740f0)
+		/tmp/workdir/go/src/testing/testing.go:1763 +0x695
+	main.main()
+		_testmain.go:55 +0x17f
+
+	goroutine 19 [select]:
+	golang.org/x/tools/internal/gocommand.runCmdContext({0x8323128, 0x6bea7e00}, 0x6beaa4d0)
+		/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:265 +0x25b
+	golang.org/x/tools/internal/gocommand.(*Invocation).run(0x6bedd3e8, {0x8323128, 0x6bea7e00}, {0x8321870, 0x6bea9638}, {0x8321870, 0x6bea9650})
+		/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:234 +0xd2f
+	golang.org/x/tools/internal/gocommand.(*Invocation).runWithFriendlyError(0x6bedd3e8, {0x8323128, 0x6bea7e00}, {0x8321870, 0x6bea9638}, {0x8321870, 0x6bea9650})
+		/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:156 +0x4f
+	golang.org/x/tools/internal/gocommand.(*Runner).runConcurrent(0x6bea9578, {0x8323128, 0x6bea7e00}, {{0x82d1b86, 0x4}, {0x6bea7e30, 0x5, 0x5}, {0x6be8b1f8, 0x1, ...}, ...})
+		/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:100 +0x17c
+	golang.org/x/tools/internal/gocommand.(*Runner).RunRaw(0x6bea9578, {0x8323128, 0x6bea7e00}, {{0x82d1b86, 0x4}, {0x6bea7e30, 0x5, 0x5}, {0x6be8b1f8, 0x1, ...}, ...})
+		/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:75 +0x5e
+	golang.org/x/tools/internal/gocommand.(*Runner).Run(...)
+		/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/invoke.go:57
+	golang.org/x/tools/internal/gocommand.GoVersion({0x8323128, 0x6bea7e00}, {{0x82d1b86, 0x4}, {0x6bea7e30, 0x5, 0x5}, {0x6be8b1f8, 0x1, 0x1}, ...}, ...)
+		/tmp/workdir/gopath/src/golang.org/x/tools/internal/gocommand/version.go:33 +0x591
+	golang.org/x/tools/go/packages.(*golistState).getGoVersion.func1()
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:761 +0xeb
+	sync.(*Once).doSlow(0x6beb64bc, 0x6bedd6bc)
+		/tmp/workdir/go/src/sync/once.go:74 +0xad
+	sync.(*Once).Do(0x6beb64bc, 0x6bedd6bc)
+		/tmp/workdir/go/src/sync/once.go:65 +0x39
+	golang.org/x/tools/go/packages.(*golistState).getGoVersion(0x6beb6480)
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:760 +0x46
+	golang.org/x/tools/go/packages.(*golistState).createDriverResponse(0x6beb6480, {0x6be8b1f0, 0x1, 0x1})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:449 +0x2c
+	golang.org/x/tools/go/packages.goListDriver(0x6beac604, {0x6be8b1d0, 0x1, 0x1})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/golist.go:199 +0x787
+	golang.org/x/tools/go/packages.defaultDriver(0x6beac604, {0x6be8b1d0, 0x1, 0x1})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages.go:271 +0x52
+	golang.org/x/tools/go/packages.Load(0x6bedde24, {0x6be8b1d0, 0x1, 0x1})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages.go:254 +0x4c
+	golang.org/x/tools/cmd/stringer.(*Generator).parsePackage(0x6bea7da0, {0x6be8b1d0, 0x1, 0x1}, {0x0, 0x0, 0x0})
+		/tmp/workdir/gopath/src/golang.org/x/tools/cmd/stringer/stringer.go:226 +0x150
+	golang.org/x/tools/cmd/stringer.TestGolden(0x6bc823c0)
+		/tmp/workdir/gopath/src/golang.org/x/tools/cmd/stringer/golden_test.go:474 +0x47f
+	testing.tRunner(0x6bc823c0, 0x82e7828)
+		/tmp/workdir/go/src/testing/testing.go:1481 +0x10d
+	created by testing.(*T).Run
+		/tmp/workdir/go/src/testing/testing.go:1528 +0x373
+---
+Section: "go test -short ./..."
+Pkg: "golang.org/x/tools/go/packages"
+Test: "TestAll"
+Mode: "test"
+Snippet:
+	panic: test timed out after 10m0s
+
+	testing.(*T).Run(0x7443e960, {0x82ed5b8, 0x5}, 0x72c10540)
+		/tmp/workdir/go/src/testing/testing.go:1529 +0x392
+	golang.org/x/tools/go/packages_test.testInvalidFilesBeforeOverlayContains(0x7443e960, {0x834578c, 0x84c373c})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/overlay_test.go:815 +0x8f4
+	golang.org/x/tools/go/packages_test.testAllOrModulesParallel.func1(0x7443e960, {0x834578c, 0x84c373c})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages_test.go:81 +0x185
+	golang.org/x/tools/go/packages/packagestest.TestAll.func1(0x7443e960)
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packagestest/export.go:163 +0x51
+	testing.tRunner(0x7443e960, 0x72982440)
+Output:
+	panic: test timed out after 10m0s
+
+	goroutine 19205 [running]:
+	testing.(*M).startAlarm.func1()
+		/tmp/workdir/go/src/testing/testing.go:2083 +0xc5
+	created by time.goFunc
+		/tmp/workdir/go/src/time/sleep.go:176 +0x29
+
+	goroutine 1 [chan receive]:
+	testing.tRunner.func1()
+		/tmp/workdir/go/src/testing/testing.go:1447 +0x54c
+	testing.tRunner(0x6b5023c0, 0x6b55ddd8)
+		/tmp/workdir/go/src/testing/testing.go:1487 +0x143
+	testing.runTests(0x6b52c300, {0x84aed60, 0x4c, 0x4c}, {0xc0c4d4b9950253c6, 0x8bbc196885, 0x84b0480})
+		/tmp/workdir/go/src/testing/testing.go:1891 +0x3b3
+	testing.(*M).Run(0x6b53a0f0)
+		/tmp/workdir/go/src/testing/testing.go:1763 +0x695
+	golang.org/x/tools/go/packages_test.TestMain(0x6b53a0f0)
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages_test.go:54 +0x161
+	main.main()
+		_testmain.go:201 +0x183
+
+	goroutine 3554 [chan receive]:
+	testing.(*T).Run(0x7443e960, {0x82ed5b8, 0x5}, 0x72c10540)
+		/tmp/workdir/go/src/testing/testing.go:1529 +0x392
+	golang.org/x/tools/go/packages_test.testInvalidFilesBeforeOverlayContains(0x7443e960, {0x834578c, 0x84c373c})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/overlay_test.go:815 +0x8f4
+	golang.org/x/tools/go/packages_test.testAllOrModulesParallel.func1(0x7443e960, {0x834578c, 0x84c373c})
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packages_test.go:81 +0x185
+	golang.org/x/tools/go/packages/packagestest.TestAll.func1(0x7443e960)
+		/tmp/workdir/gopath/src/golang.org/x/tools/go/packages/packagestest/export.go:163 +0x51
+	testing.tRunner(0x7443e960, 0x72982440)
+		/tmp/workdir/go/src/testing/testing.go:1481 +0x10d
+	created by testing.(*T).Run
+		/tmp/workdir/go/src/testing/testing.go:1528 +0x373
+
+	goroutine 18368 [sync.Mutex.Lock]:
+	sync.runtime_SemacquireMutex(0x72514ef8, 0x0, 0x1)
+		/tmp/workdir/go/src/runtime/sema.go:77 +0x39
+	sync.(*Mutex).lockSlow(0x72514ef4)
+		/tmp/workdir/go/src/sync/mutex.go:171 +0x24f
+	sync.(*Mutex).Lock(0x72514ef4)
+		/tmp/workdir/go/src/sync/mutex.go:90 +0x46
