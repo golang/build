@@ -164,7 +164,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-12-aws": {
 		IsReverse:       true,
-		ExpectNum:       2,
+		ExpectNum:       6,
 		Notes:           "AWS macOS Monterey (12) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
