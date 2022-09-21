@@ -105,7 +105,7 @@ func TestServerHomeHandler(t *testing.T) {
 	p := testDB(ctx, t)
 
 	q := db.New(p)
-	wf := db.CreateWorkflowParams{ID: uuid.New()}
+	wf := db.CreateWorkflowParams{ID: uuid.New(), Name: nullString("test workflow")}
 	if _, err := q.CreateWorkflow(ctx, wf); err != nil {
 		t.Fatalf("CreateWorkflow(_, %v) = _, %v, wanted no error", wf, err)
 	}

@@ -170,6 +170,7 @@ type homeResponse struct {
 	SiteHeader        SiteHeader
 	ActiveWorkflows   []db.Workflow
 	InactiveWorkflows []db.Workflow
+	Schedules         []ScheduleEntry
 }
 
 func workflowParams(wf db.Workflow) (map[string]string, error) {
@@ -197,10 +198,10 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	var others []string
 	for _, name := range names {
-		if s.w.dh.Definition(name.String) != nil {
+		if s.w.dh.Definition(name) != nil {
 			continue
 		}
-		others = append(others, name.String)
+		others = append(others, name)
 	}
 
 	name := r.URL.Query().Get("name")
@@ -211,11 +212,14 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	case "all", "All", "":
 		ws, err = q.Workflows(r.Context())
 		hr.SiteHeader.NameParam = "All Workflows"
+		hr.Schedules = s.scheduler.Entries()
 	case "others", "Others":
 		ws, err = q.WorkflowsByNames(r.Context(), others)
 		hr.SiteHeader.NameParam = "Others"
+		hr.Schedules = s.scheduler.Entries(others...)
 	default:
 		ws, err = q.WorkflowsByName(r.Context(), sql.NullString{String: name, Valid: true})
+		hr.Schedules = s.scheduler.Entries(name)
 	}
 	if err != nil {
 		log.Printf("homeHandler: %v", err)

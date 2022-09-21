@@ -20,6 +20,71 @@
     </div>
     <h2>Active Workflows</h2>
     {{template "workflow_list" .ActiveWorkflows}}
+    <h2>Scheduled Workflows</h2>
+    <table class="WorkflowList">
+      <thead>
+      <tr class="WorkflowList-itemHeader">
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemStateHeader">State</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemName">Name</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemCreated">Next Run</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemUpdated">Last Run</th>
+      </tr>
+      </thead>
+      <tbody>
+
+      </tbody>
+      {{- /* gotype: golang.org/x/build/internal/relui.ScheduleEntry */ -}}
+      {{range $schedule := .Schedules}}
+        <tr class="WorkflowList-item">
+          <td class="WorkflowList-itemState">
+              {{if ne $schedule.LastRun.WorkflowError.String ""}}
+                <img
+                        class="WorkflowList-itemStateIcon"
+                        alt="{{$schedule.LastRun.WorkflowError.String}}"
+                        src="{{baseLink "/static/images/error_red_24dp.svg"}}" />
+              {{else if $schedule.LastRun.WorkflowFinished.Bool}}
+                <img
+                        class="WorkflowList-itemStateIcon"
+                        alt="finished"
+                        src="{{baseLink "/static/images/check_circle_green_24dp.svg"}}" />
+              {{else if not $schedule.LastRun.WorkflowCreatedAt.Time.IsZero }}
+                <img
+                        class="WorkflowList-itemStateIcon"
+                        alt="started"
+                        src="{{baseLink "/static/images/pending_yellow_24dp.svg"}}" />
+              {{else}}
+                <img
+                        class="WorkflowList-itemStateIcon"
+                        alt="pending"
+                        src="{{baseLink "/static/images/pending_grey_24dp.svg"}}" />
+              {{end}}
+          </td>
+          <td class="WorkflowList-itemName">
+            {{with $schedule.WorkflowJob}}
+              {{.Schedule.WorkflowName}}
+            {{end}}
+          </td>
+          <td class="WorkflowList-itemCreated">
+            {{if not $schedule.Next.IsZero}}
+              {{$schedule.Next.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+            {{end}}
+          </td>
+          <td class="WorkflowList-itemUpdated">
+            {{if not $schedule.LastRun.WorkflowCreatedAt.Time.IsZero }}
+              <a href="{{baseLink "/workflows/" $schedule.LastRun.WorkflowID.String}}">
+                {{$schedule.LastRun.WorkflowCreatedAt.Time.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+              </a>
+            {{else if not $schedule.Prev.IsZero}}
+              {{$schedule.Prev.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+            {{end}}
+          </td>
+        </tr>
+      {{else}}
+        <tr>
+          <td>None</td>
+        </tr>
+      {{end}}
+    </table>
     <h2>Completed Workflows</h2>
     {{template "workflow_list" .InactiveWorkflows}}
   </section>

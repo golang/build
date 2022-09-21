@@ -52,7 +52,7 @@ func TestSchedulerCreate(t *testing.T) {
 				UpdatedAt: now,
 			},
 			wantEntries: []ScheduleEntry{
-				{
+				{Entry: cron.Entry{
 					Schedule: &RunOnce{next: now.UTC().AddDate(1, 0, 0)},
 					Next:     now.UTC().AddDate(1, 0, 0),
 					Job: &WorkflowSchedule{
@@ -68,7 +68,7 @@ func TestSchedulerCreate(t *testing.T) {
 						},
 						Params: map[string]any{"greeting": "hello", "farewell": "bye"},
 					},
-				},
+				}},
 			},
 		},
 		{
@@ -87,7 +87,7 @@ func TestSchedulerCreate(t *testing.T) {
 				UpdatedAt: now,
 			},
 			wantEntries: []ScheduleEntry{
-				{
+				{Entry: cron.Entry{
 					Schedule: mustParseSpec(t, "* * * * *"),
 					Next:     now.Add(time.Minute),
 					Job: &WorkflowSchedule{
@@ -103,7 +103,7 @@ func TestSchedulerCreate(t *testing.T) {
 						},
 						Params: map[string]any{"greeting": "hello", "farewell": "bye"},
 					},
-				},
+				}},
 			},
 		},
 		{
@@ -134,7 +134,7 @@ func TestSchedulerCreate(t *testing.T) {
 				cmpopts.EquateApproxTime(time.Minute),
 				cmpopts.IgnoreFields(db.Schedule{}, "ID"),
 				cmpopts.IgnoreUnexported(RunOnce{}, WorkflowSchedule{}, time.Location{}),
-				cmpopts.IgnoreFields(ScheduleEntry{}, "ID", "WrappedJob"),
+				cmpopts.IgnoreFields(ScheduleEntry{}, "ID", "LastRun.ID", "WrappedJob"),
 			}
 			if diff := cmp.Diff(c.wantEntries, got, diffOpts...); diff != "" {
 				t.Fatalf("s.Entries() mismatch (-want +got):\n%s", diff)
@@ -167,7 +167,7 @@ func TestSchedulerResume(t *testing.T) {
 				},
 			},
 			want: []ScheduleEntry{
-				{
+				{Entry: cron.Entry{
 					Schedule: &RunOnce{next: now.UTC().AddDate(1, 0, 0)},
 					Next:     now.UTC().AddDate(1, 0, 0),
 					Job: &WorkflowSchedule{
@@ -183,7 +183,7 @@ func TestSchedulerResume(t *testing.T) {
 						},
 						Params: map[string]any{"greeting": "hello", "farewell": "bye"},
 					},
-				},
+				}},
 			},
 		},
 		{
@@ -201,7 +201,7 @@ func TestSchedulerResume(t *testing.T) {
 				},
 			},
 			want: []ScheduleEntry{
-				{
+				{Entry: cron.Entry{
 					Schedule: mustParseSpec(t, "* * * * *"),
 					Next:     now.Add(time.Minute),
 					Job: &WorkflowSchedule{
@@ -217,7 +217,7 @@ func TestSchedulerResume(t *testing.T) {
 						},
 						Params: map[string]any{"greeting": "hello", "farewell": "bye"},
 					},
-				},
+				}},
 			},
 		},
 		{
@@ -259,7 +259,7 @@ func TestSchedulerResume(t *testing.T) {
 				cmpopts.EquateApproxTime(time.Minute),
 				cmpopts.IgnoreFields(db.Schedule{}, "ID"),
 				cmpopts.IgnoreUnexported(RunOnce{}, WorkflowSchedule{}, time.Location{}),
-				cmpopts.IgnoreFields(ScheduleEntry{}, "ID", "WrappedJob"),
+				cmpopts.IgnoreFields(ScheduleEntry{}, "ID", "LastRun.ID", "WrappedJob"),
 			}
 			if diff := cmp.Diff(c.want, got, diffOpts...); diff != "" {
 				t.Fatalf("s.Entries() mismatch (-want +got):\n%s", diff)

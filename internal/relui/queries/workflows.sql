@@ -20,7 +20,7 @@ WHERE name = ANY(@names::text[])
 ORDER BY created_at DESC;
 
 -- name: WorkflowNames :many
-SELECT DISTINCT name
+SELECT DISTINCT name::text
 FROM workflows;
 
 -- name: Workflow :one
@@ -192,3 +192,17 @@ DELETE
 FROM schedules
 WHERE id = $1
 RETURNING *;
+
+-- name: SchedulesLastRun :many
+WITH last_scheduled_run AS (
+    SELECT DISTINCT ON (schedule_id) schedule_id, id, created_at, workflows.error, finished
+    FROM workflows
+    ORDER BY schedule_id, workflows.created_at DESC
+)
+SELECT schedules.id,
+       last_scheduled_run.id AS workflow_id,
+       last_scheduled_run.created_at AS workflow_created_at,
+       last_scheduled_run.error AS workflow_error,
+       last_scheduled_run.finished AS workflow_finished
+FROM schedules
+LEFT OUTER JOIN last_scheduled_run ON last_scheduled_run.schedule_id = schedules.id;

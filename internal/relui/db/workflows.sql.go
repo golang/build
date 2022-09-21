@@ -328,6 +328,55 @@ func (q *Queries) Schedules(ctx context.Context) ([]Schedule, error) {
 	return items, nil
 }
 
+const schedulesLastRun = `-- name: SchedulesLastRun :many
+WITH last_scheduled_run AS (
+    SELECT DISTINCT ON (schedule_id) schedule_id, id, created_at, workflows.error, finished
+    FROM workflows
+    ORDER BY schedule_id, workflows.created_at DESC
+)
+SELECT schedules.id,
+       last_scheduled_run.id AS workflow_id,
+       last_scheduled_run.created_at AS workflow_created_at,
+       last_scheduled_run.error AS workflow_error,
+       last_scheduled_run.finished AS workflow_finished
+FROM schedules
+LEFT OUTER JOIN last_scheduled_run ON last_scheduled_run.schedule_id = schedules.id
+`
+
+type SchedulesLastRunRow struct {
+	ID                int32
+	WorkflowID        uuid.UUID
+	WorkflowCreatedAt sql.NullTime
+	WorkflowError     sql.NullString
+	WorkflowFinished  sql.NullBool
+}
+
+func (q *Queries) SchedulesLastRun(ctx context.Context) ([]SchedulesLastRunRow, error) {
+	rows, err := q.db.Query(ctx, schedulesLastRun)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SchedulesLastRunRow
+	for rows.Next() {
+		var i SchedulesLastRunRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowID,
+			&i.WorkflowCreatedAt,
+			&i.WorkflowError,
+			&i.WorkflowFinished,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const task = `-- name: Task :one
 SELECT tasks.workflow_id, tasks.name, tasks.finished, tasks.result, tasks.error, tasks.created_at, tasks.updated_at, tasks.approved_at, tasks.ready_for_approval, tasks.started, tasks.retry_count
 FROM tasks
@@ -834,19 +883,19 @@ func (q *Queries) WorkflowFinished(ctx context.Context, arg WorkflowFinishedPara
 }
 
 const workflowNames = `-- name: WorkflowNames :many
-SELECT DISTINCT name
+SELECT DISTINCT name::text
 FROM workflows
 `
 
-func (q *Queries) WorkflowNames(ctx context.Context) ([]sql.NullString, error) {
+func (q *Queries) WorkflowNames(ctx context.Context) ([]string, error) {
 	rows, err := q.db.Query(ctx, workflowNames)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []sql.NullString
+	var items []string
 	for rows.Next() {
-		var name sql.NullString
+		var name string
 		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}

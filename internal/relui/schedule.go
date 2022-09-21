@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/robfig/cron/v3"
 	"golang.org/x/build/internal/relui/db"
+	"golang.org/x/exp/slices"
 )
 
 // ScheduleType determines whether a workflow runs immediately or on
@@ -194,16 +195,40 @@ func (s *Scheduler) Resume(ctx context.Context) error {
 }
 
 // Entries returns a slice of active jobs.
-func (s *Scheduler) Entries() []ScheduleEntry {
+//
+// Entries are filtered by workflowNames. An empty slice returns
+// all entries.
+func (s *Scheduler) Entries(workflowNames ...string) []ScheduleEntry {
+	q := db.New(s.db)
+	rows, err := q.SchedulesLastRun(context.Background())
+	if err != nil {
+		log.Printf("q.SchedulesLastRun() = _, %q, wanted no error", err)
+	}
+	rowMap := make(map[int32]db.SchedulesLastRunRow)
+	for _, row := range rows {
+		rowMap[row.ID] = row
+	}
 	entries := s.cron.Entries()
-	ret := make([]ScheduleEntry, len(entries))
-	for i, e := range s.cron.Entries() {
-		ret[i] = (ScheduleEntry)(e)
+	ret := make([]ScheduleEntry, 0, len(entries))
+	for _, e := range s.cron.Entries() {
+		entry := ScheduleEntry{Entry: e}
+		if len(workflowNames) != 0 && !slices.Contains(workflowNames, entry.WorkflowJob().Schedule.WorkflowName) {
+			continue
+		}
+		if row, ok := rowMap[entry.WorkflowJob().Schedule.ID]; ok {
+			entry.LastRun = row
+		}
+		ret = append(ret, entry)
 	}
 	return ret
 }
 
-type ScheduleEntry cron.Entry
+type ScheduleEntry struct {
+	cron.Entry
+	LastRun db.SchedulesLastRunRow
+}
+
+// type ScheduleEntry cron.Entry
 
 // WorkflowJob returns a *WorkflowSchedule for the ScheduleEntry.
 func (s *ScheduleEntry) WorkflowJob() *WorkflowSchedule {
