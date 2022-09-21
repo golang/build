@@ -42,20 +42,21 @@ require (
 	github.com/sendgrid/sendgrid-go v3.11.1+incompatible
 	github.com/shurcooL/githubv4 v0.0.0-20220520033151-0b4e3294ff00
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
-	github.com/yuin/goldmark v1.4.12
+	github.com/yuin/goldmark v1.4.13
 	go.opencensus.io v0.23.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
-	golang.org/x/crypto v0.0.0-20220307211146-efcb8507fb70
+	golang.org/x/crypto v0.1.0
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 	golang.org/x/image v0.0.0-20210628002857-a66eb6448b8d
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
-	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
+	golang.org/x/mod v0.6.0
+	golang.org/x/net v0.1.0
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
 	golang.org/x/perf v0.0.0-20220913151710-7c6e287988f3
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
-	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
+	golang.org/x/sys v0.1.0
+	golang.org/x/term v0.1.0
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
+	golang.org/x/tools v0.2.0
 	google.golang.org/api v0.70.0
 	google.golang.org/appengine v1.6.7
 	google.golang.org/genproto v0.0.0-20220222213610-43724f9ea8cf
@@ -110,7 +111,7 @@ require (
 	github.com/shurcooL/graphql v0.0.0-20220520033453-bdb1221e171e // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	go.uber.org/atomic v1.6.0 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/text v0.4.0 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gonum.org/v1/plot v0.10.0 // indirect
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6 // indirect

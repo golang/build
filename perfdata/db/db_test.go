@@ -85,8 +85,8 @@ func checkQueryResults(t *testing.T, db *DB, query, results string) {
 	if err := q.Err(); err != nil {
 		t.Fatalf("Err: %v", err)
 	}
-	if diff := diff.Diff(buf.String(), results); diff != "" {
-		t.Errorf("wrong results: (- have/+ want)\n%s", diff)
+	if diff := diff.Diff("have", buf.Bytes(), "want", []byte(results)); diff != nil {
+		t.Errorf("wrong results:\n%s", diff)
 	}
 }
 

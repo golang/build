@@ -64,8 +64,8 @@ func TestQuery(t *testing.T) {
 		t.Fatalf("Err: %v", err)
 	}
 	want := "key: value\nBenchmarkOne 5 ns/op\nkey: value2\nBenchmarkTwo 10 ns/op\n"
-	if diff := diff.Diff(buf.String(), want); diff != "" {
-		t.Errorf("wrong results: (- have/+ want)\n%s", diff)
+	if diff := diff.Diff("have", buf.Bytes(), "want", []byte(want)); diff != nil {
+		t.Errorf("wrong results:\n%s", diff)
 	}
 }
 

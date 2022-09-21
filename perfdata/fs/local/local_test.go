@@ -44,7 +44,7 @@ func TestNewWriter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile = %v", err)
 	}
-	if d := diff.Diff(string(have), want); d != "" {
-		t.Errorf("file contents differ. have (-)/want (+)\n%s", d)
+	if d := diff.Diff("have", have, "want", []byte(want)); d != nil {
+		t.Errorf("file contents differ:\n%s", d)
 	}
 }
