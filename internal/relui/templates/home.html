@@ -28,6 +28,7 @@
         <th class="WorkflowList-itemHeaderCol WorkflowList-itemName">Name</th>
         <th class="WorkflowList-itemHeaderCol WorkflowList-itemCreated">Next Run</th>
         <th class="WorkflowList-itemHeaderCol WorkflowList-itemUpdated">Last Run</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemActions">Actions</th>
       </tr>
       </thead>
       <tbody>
@@ -77,6 +78,18 @@
             {{else if not $schedule.Prev.IsZero}}
               {{$schedule.Prev.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
             {{end}}
+          </td>
+          <td class="WorkflowList-itemAction">
+            <div class="WorkflowList-deleteSchedule">
+              <form action="{{baseLink (printf "/schedules/%d/delete" $schedule.WorkflowJob.Schedule.ID)}}" method="post">
+                <input type="hidden" name="schedule.id" value="{{$schedule.WorkflowJob.Schedule.ID}}" />
+                <input class="Button Button--small"
+                       name="schedule.delete"
+                       type="submit"
+                       value="Delete"
+                       onclick="return this.form.reportValidity() && confirm('This will cancel and permanently delete the schedule.\n\nReady to proceed?')" />
+              </form>
+            </div>
           </td>
         </tr>
       {{else}}

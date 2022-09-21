@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -90,6 +91,7 @@ func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *
 	s.m.POST("/workflows/:id/stop", s.stopWorkflowHandler)
 	s.m.POST("/workflows/:id/tasks/:name/retry", s.retryTaskHandler)
 	s.m.POST("/workflows/:id/tasks/:name/approve", s.approveTaskHandler)
+	s.m.POST("/schedules/:id/delete", s.deleteScheduleHandler)
 	s.m.Handler(http.MethodGet, "/metrics", ms)
 	s.m.Handler(http.MethodGet, "/new_workflow", http.HandlerFunc(s.newWorkflowHandler))
 	s.m.Handler(http.MethodPost, "/workflows", http.HandlerFunc(s.createWorkflowHandler))
@@ -462,6 +464,26 @@ func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	}
+	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
+}
+
+func (s *Server) deleteScheduleHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+	id, err := strconv.Atoi(params.ByName("id"))
+	if err != nil {
+		log.Printf("deleteScheduleHandler(_, _, %v) strconv.Atoi(%q) = %d, %v", params, params.ByName("id"), id, err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	err = s.scheduler.Delete(r.Context(), id)
+	if err == ErrScheduleNotFound {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("deleteScheduleHandler(_, _, %v) s.scheduler.Delete(_, %d) = %v", params, id, err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
 }
 

@@ -193,6 +193,12 @@ FROM schedules
 WHERE id = $1
 RETURNING *;
 
+-- name: ClearWorkflowSchedule :many
+UPDATE workflows
+SET schedule_id = NULL
+WHERE schedule_id = $1::int
+RETURNING id;
+
 -- name: SchedulesLastRun :many
 WITH last_scheduled_run AS (
     SELECT DISTINCT ON (schedule_id) schedule_id, id, created_at, workflows.error, finished

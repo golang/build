@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -221,6 +222,33 @@ func (s *Scheduler) Entries(workflowNames ...string) []ScheduleEntry {
 		ret = append(ret, entry)
 	}
 	return ret
+}
+
+var ErrScheduleNotFound = errors.New("schedule not found")
+
+// Delete removes a schedule from the scheduler, preventing subsequent
+// runs, and deletes the schedule from the database.
+//
+// Jobs in progress are not interrupted, but will be prevented from
+// starting again.
+func (s *Scheduler) Delete(ctx context.Context, id int) error {
+	entries := s.Entries()
+	i := slices.IndexFunc(entries, func(e ScheduleEntry) bool { return int(e.WorkflowJob().Schedule.ID) == id })
+	if i == -1 {
+		return ErrScheduleNotFound
+	}
+	entry := entries[i]
+	s.cron.Remove(entry.ID)
+	return s.db.BeginFunc(ctx, func(tx pgx.Tx) error {
+		q := db.New(tx)
+		if _, err := q.ClearWorkflowSchedule(ctx, int32(id)); err != nil {
+			return err
+		}
+		if _, err := q.DeleteSchedule(ctx, int32(id)); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 type ScheduleEntry struct {

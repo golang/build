@@ -267,3 +267,81 @@ func TestSchedulerResume(t *testing.T) {
 		})
 	}
 }
+
+func TestScheduleDelete(t *testing.T) {
+	now := time.Now()
+	cases := []struct {
+		desc          string
+		sched         Schedule
+		workflowName  string
+		params        map[string]any
+		wantErr       bool
+		wantEntries   []ScheduleEntry
+		want          []db.Schedule
+		wantWorkflows []db.Workflow
+	}{
+		{
+			desc:         "success",
+			sched:        Schedule{Once: now.AddDate(1, 0, 0), Type: ScheduleOnce},
+			workflowName: "echo",
+			params:       map[string]any{"greeting": "hello", "farewell": "bye"},
+			wantEntries:  []ScheduleEntry{},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.desc, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			p := testDB(ctx, t)
+			q := db.New(p)
+			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}))
+			row, err := s.Create(ctx, c.sched, c.workflowName, c.params)
+			if err != nil {
+				t.Fatalf("s.Create(_, %v, %q, %v) = %v, %v, wanted no error", c.sched, c.workflowName, c.params, row, err)
+			}
+			// simulate a single run
+			wfid, err := s.w.StartWorkflow(ctx, c.workflowName, c.params, int(row.ID))
+			if err != nil {
+				t.Fatalf("s.w.StartWorkflow(_, %q, %v, %d) = %q, %v, wanted no error", c.workflowName, c.params, row.ID, wfid.String(), err)
+			}
+
+			err = s.Delete(ctx, int(row.ID))
+			if (err != nil) != c.wantErr {
+				t.Fatalf("s.Delete(%d) = %v, wantErr: %t", row.ID, err, c.wantErr)
+			}
+
+			entries := s.Entries()
+			diffOpts := []cmp.Option{
+				cmpopts.EquateApproxTime(time.Minute),
+				cmpopts.IgnoreFields(db.Schedule{}, "ID"),
+				cmpopts.IgnoreUnexported(RunOnce{}, WorkflowSchedule{}, time.Location{}),
+				cmpopts.IgnoreFields(ScheduleEntry{}, "ID", "LastRun.ID", "WrappedJob"),
+			}
+			if c.sched.Type == ScheduleCron {
+				diffOpts = append(diffOpts, cmpopts.IgnoreFields(ScheduleEntry{}, "Next"))
+			}
+			if diff := cmp.Diff(c.wantEntries, entries, diffOpts...); diff != "" {
+				t.Errorf("s.Entries() mismatch (-want +got):\n%s", diff)
+			}
+			got, err := q.Schedules(ctx)
+			if err != nil {
+				t.Fatalf("q.Schedules() = %v, %v, wanted no error", got, err)
+			}
+			if diff := cmp.Diff(c.want, got, diffOpts...); diff != "" {
+				t.Errorf("q.Schedules() mismatch (-want +got):\n%s", diff)
+			}
+			wfs, err := q.Workflows(ctx)
+			if err != nil {
+				t.Fatalf("q.Workflows() = %v, %v, wanted no error", wfs, err)
+			}
+			if len(wfs) != 1 {
+				t.Errorf("len(q.Workflows()) = %d, wanted %d", len(wfs), 1)
+			}
+			for _, w := range wfs {
+				if w.ScheduleID.Int32 == row.ID {
+					t.Errorf("w.ScheduleID = %d, wanted != %d", w.ScheduleID.Int32, row.ID)
+				}
+			}
+		})
+	}
+}

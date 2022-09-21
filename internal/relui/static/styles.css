@@ -484,6 +484,9 @@ h6 {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.WorkflowList-itemActions {
+  width: 12.8125rem;
+}
 .WorkflowList-itemStateHeader,
 .WorkflowList-itemState {
   width: 2.5rem;

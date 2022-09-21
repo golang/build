@@ -47,6 +47,33 @@ func (q *Queries) ApproveTask(ctx context.Context, arg ApproveTaskParams) (Task,
 	return i, err
 }
 
+const clearWorkflowSchedule = `-- name: ClearWorkflowSchedule :many
+UPDATE workflows
+SET schedule_id = NULL
+WHERE schedule_id = $1::int
+RETURNING id
+`
+
+func (q *Queries) ClearWorkflowSchedule(ctx context.Context, dollar_1 int32) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, clearWorkflowSchedule, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createSchedule = `-- name: CreateSchedule :one
 INSERT INTO schedules (workflow_name, workflow_params, spec, once, interval_minutes, created_at, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
