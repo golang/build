@@ -43,4 +43,4 @@ args=(
   -display vnc=127.0.0.1:"$PORT"
 )
 
-DYLD_LIBRARY_PATH="$HOME/sysroot-macos-x86_64/lib" "$HOME/sysroot-macos-x86_64/bin/qemu-system-x86_64" "${args[@]}" ${EXTRA_ARGS:+"$EXTRA_ARGS"}
+DYLD_LIBRARY_PATH="$HOME/sysroot-macos-x86_64/lib" "$HOME/sysroot-macos-x86_64/bin/qemu-system-x86_64" "${args[@]}" ${EXTRA_ARGS:+$EXTRA_ARGS}
