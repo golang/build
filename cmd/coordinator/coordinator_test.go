@@ -331,7 +331,7 @@ func TestSlowBotsFromComments(t *testing.T) {
 			},
 			{
 				Version: 2,
-				Message: "arm64, mac aix ",
+				Message: "arm64, darwin aix ",
 			},
 			{
 				Version: 1,
@@ -344,7 +344,7 @@ func TestSlowBotsFromComments(t *testing.T) {
 	for _, bc := range slowBots {
 		got = append(got, bc.Name)
 	}
-	want := []string{"aix-ppc64", "darwin-amd64-10_14", "linux-arm64-aws"}
+	want := []string{"aix-ppc64", "darwin-amd64-12_0", "linux-arm64-aws"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
 	}

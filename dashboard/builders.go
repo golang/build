@@ -69,8 +69,6 @@ var slowBotAliases = map[string]string{
 	"linux-s390x":          "linux-s390x-ibm",
 	"longtest":             "linux-amd64-longtest",
 	"loong64":              "linux-loong64-3a5000",
-	"mac":                  "darwin-amd64-10_14",
-	"macos":                "darwin-amd64-10_14",
 	"mips":                 "linux-mips-rtrk",
 	"mips64":               "linux-mips64-rtrk",
 	"mips64le":             "linux-mips64le-rtrk",
