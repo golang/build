@@ -22,6 +22,7 @@ ALL=\
 	buildlet.freebsd-arm \
 	buildlet.freebsd-arm-5 \
 	buildlet.freebsd-arm-7 \
+	buildlet.freebsd-riscv64 \
 	buildlet.illumos-amd64 \
 	buildlet.linux-amd64 \
 	buildlet.linux-arm \
