@@ -172,6 +172,9 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-amd64-wsl", "host-linux-riscv64-unmatched":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+	case "host-freebsd-riscv64-unmatched":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	}
 	switch osArch {
 	case "linux/s390x":
