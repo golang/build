@@ -146,12 +146,33 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 	},
+	"host-darwin-amd64-10_14-aws": {
+		IsReverse:       true,
+		ExpectNum:       2,
+		Notes:           "AWS macOS Mojave (10.14) VM under QEMU",
+		SSHUsername:     "gopher",
+		HermeticReverse: true, // we destroy the VM when done & recreate
+	},
 	"host-darwin-amd64-10_15": {
 		IsReverse:       true,
 		ExpectNum:       3,
 		Notes:           "MacStadium macOS Catalina (10.15) VM under VMWare ESXi",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+	},
+	"host-darwin-amd64-10_15-aws": {
+		IsReverse:       true,
+		ExpectNum:       2,
+		Notes:           "AWS macOS Catalina (10.15) VM under QEMU",
+		SSHUsername:     "gopher",
+		HermeticReverse: true, // we destroy the VM when done & recreate
+	},
+	"host-darwin-amd64-11-aws": {
+		IsReverse:       true,
+		ExpectNum:       2,
+		Notes:           "AWS macOS Big Sur (11) VM under QEMU",
+		SSHUsername:     "gopher",
+		HermeticReverse: true, // we destroy the VM when done & recreate
 	},
 	"host-darwin-amd64-11_0": {
 		IsReverse:       true,
@@ -162,10 +183,10 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-12-aws": {
 		IsReverse:       true,
-		ExpectNum:       1,
-		Notes:           "AWS macOS Monterey (12)",
+		ExpectNum:       2,
+		Notes:           "AWS macOS Monterey (12) VM under QEMU",
 		SSHUsername:     "gopher",
-		HermeticReverse: true,
+		HermeticReverse: true, // we destroy the VM when done & recreate
 	},
 	"host-darwin-amd64-12_0": {
 		IsReverse:       true,
@@ -2275,16 +2296,44 @@ func init() {
 		buildsRepo:     defaultPlusExp,
 	})
 	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-10_14-aws",
+		HostType:       "host-darwin-amd64-10_14-aws",
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
+		KnownIssues:    []int{48945},
+	})
+	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_15",
 		HostType:       "host-darwin-amd64-10_15",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
 	})
 	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-10_15-aws",
+		HostType:       "host-darwin-amd64-10_15-aws",
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
+		KnownIssues:    []int{48945},
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-11-aws",
+		HostType:       "host-darwin-amd64-11-aws",
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
+		KnownIssues:    []int{48945},
+	})
+	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-11_0",
 		HostType:       "host-darwin-amd64-11_0",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-12-aws",
+		HostType:       "host-darwin-amd64-12-aws",
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
+		KnownIssues:    []int{48945},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-12_0",
@@ -2299,10 +2348,10 @@ func init() {
 		env:            []string{"CGO_ENABLED=0"},
 	})
 	addBuilder(BuildConfig{
-		Name:           "darwin-amd64-12-aws",
+		Name:           "darwin-amd64-nocgo-aws",
 		HostType:       "host-darwin-amd64-12-aws",
-		distTestAdjust: macTestPolicy,
-		buildsRepo:     defaultPlusExpBuild,
+		distTestAdjust: noTestDirAndNoReboot,
+		env:            []string{"CGO_ENABLED=0"},
 		KnownIssues:    []int{48945},
 	})
 	addBuilder(BuildConfig{
@@ -2322,6 +2371,13 @@ func init() {
 		HostType:       "host-darwin-amd64-12_0",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     onlyGo,
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-race-aws",
+		HostType:       "host-darwin-amd64-12-aws",
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     onlyGo,
+		KnownIssues:    []int{48945},
 	})
 	addBuilder(BuildConfig{
 		Name:     "ios-arm64-corellium",
