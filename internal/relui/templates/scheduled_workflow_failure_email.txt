@@ -1,0 +1,6 @@
+{{- /*gotype: golang.org/x/build/internal/relui.scheduledFailureEmailBody*/ -}}
+The scheduled workflow "{{.Workflow.Name.String}}" ({{.Workflow.ID.String}}) failed at {{.Workflow.UpdatedAt.UTC.Format "2006/01/02 15:04 MST"}}.
+
+See the following page for details:
+
+{{baseLink "/workflows/" .Workflow.ID.String}}

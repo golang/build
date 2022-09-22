@@ -121,7 +121,8 @@ func TestServerHomeHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
-	s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil, SiteHeader{}, nil)
+	s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil)
+
 	s.homeHandler(w, req)
 	resp := w.Result()
 
@@ -292,7 +293,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			rec := httptest.NewRecorder()
 			q := db.New(p)
 
-			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil, SiteHeader{}, nil)
+			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil)
 			s.createWorkflowHandler(rec, req)
 			resp := rec.Result()
 
@@ -626,7 +627,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", c.params["id"], "tasks", url.PathEscape(c.params["name"]), "approve"), nil)
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			rec := httptest.NewRecorder()
-			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}), nil, SiteHeader{}, nil)
+			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil)
 
 			s.m.ServeHTTP(rec, req)
 			resp := rec.Result()

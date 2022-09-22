@@ -132,6 +132,13 @@ func (w *Worker) run(wf *workflow.Workflow) error {
 	}
 }
 
+func (w *Worker) workflowRunning(id uuid.UUID) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, ok := w.running[id.String()]
+	return ok
+}
+
 // StartWorkflow persists and starts running a workflow.
 func (w *Worker) StartWorkflow(ctx context.Context, name string, params map[string]interface{}, scheduleID int) (uuid.UUID, error) {
 	d := w.dh.Definition(name)

@@ -4,7 +4,9 @@
 
 package relui
 
-import "embed"
+import (
+	"embed"
+)
 
 // static is our static web server content.
 //

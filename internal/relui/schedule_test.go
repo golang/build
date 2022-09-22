@@ -120,7 +120,7 @@ func TestSchedulerCreate(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			p := testDB(ctx, t)
-			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}))
+			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}))
 			row, err := s.Create(ctx, c.sched, c.workflowName, c.params)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("s.Create(_, %v, %q, %v) = %v, %v, wantErr: %t", c.sched, c.workflowName, c.params, row, err, c.wantErr)
@@ -243,7 +243,7 @@ func TestSchedulerResume(t *testing.T) {
 			defer cancel()
 			p := testDB(ctx, t)
 			q := db.New(p)
-			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}))
+			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}))
 
 			for _, csp := range c.scheds {
 				if _, err := q.CreateSchedule(ctx, csp); err != nil {
@@ -294,7 +294,7 @@ func TestScheduleDelete(t *testing.T) {
 			defer cancel()
 			p := testDB(ctx, t)
 			q := db.New(p)
-			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{p}))
+			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}))
 			row, err := s.Create(ctx, c.sched, c.workflowName, c.params)
 			if err != nil {
 				t.Fatalf("s.Create(_, %v, %q, %v) = %v, %v, wanted no error", c.sched, c.workflowName, c.params, row, err)

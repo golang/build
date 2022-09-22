@@ -544,6 +544,11 @@ type verboseListener struct {
 	outputListener func(string, interface{})
 }
 
+func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
+	l.t.Logf("workflow %q: stalled", workflowID.String())
+	return nil
+}
+
 func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.TaskState) error {
 	switch {
 	case !st.Finished:

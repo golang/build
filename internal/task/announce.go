@@ -109,7 +109,7 @@ type AnnounceMailTasks struct {
 	// Email delivery happens asynchronously, so SendMail returns a nil error
 	// if the transmission was started successfully, but that error value
 	// doesn't indicate anything about the status of the delivery.
-	SendMail func(MailHeader, mailContent) error
+	SendMail func(MailHeader, MailContent) error
 
 	// AnnounceMailHeader is the header to use for the release (pre-)announcement email.
 	AnnounceMailHeader MailHeader
@@ -282,8 +282,8 @@ type MailHeader struct {
 	BCC  []mail.Address
 }
 
-// A mailContent holds the content of an email.
-type mailContent struct {
+// A MailContent holds the content of an email.
+type MailContent struct {
 	Subject  string
 	BodyHTML string
 	BodyText string
@@ -293,7 +293,7 @@ type mailContent struct {
 // which must be one of these types:
 //   - releaseAnnouncement for a release announcement
 //   - releasePreAnnouncement for a release pre-announcement
-func announcementMail(data any) (mailContent, error) {
+func announcementMail(data any) (MailContent, error) {
 	// Select the appropriate template name.
 	var name string
 	switch r := data.(type) {
@@ -307,7 +307,7 @@ func announcementMail(data any) (mailContent, error) {
 		} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
 			name = "announce-minor.md"
 		} else {
-			return mailContent{}, fmt.Errorf("unknown version format: %q", r.Version)
+			return MailContent{}, fmt.Errorf("unknown version format: %q", r.Version)
 		}
 
 		if len(r.Security) > 0 && name != "announce-minor.md" {
@@ -317,14 +317,14 @@ func announcementMail(data any) (mailContent, error) {
 			// Note: Maybe in the future we'd want to consider support for including sentences like
 			// "This beta release includes the same security fixes as in Go X.Y.Z and Go A.B.C.",
 			// but we'll have a better idea after these initial templates get more practical use.
-			return mailContent{}, fmt.Errorf("email template %q doesn't support the Security field; this field can only be used in minor releases", name)
+			return MailContent{}, fmt.Errorf("email template %q doesn't support the Security field; this field can only be used in minor releases", name)
 		} else if r.SecondaryVersion != "" && name != "announce-minor.md" {
-			return mailContent{}, fmt.Errorf("email template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
+			return MailContent{}, fmt.Errorf("email template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
 		}
 	case releasePreAnnouncement:
 		name = "pre-announce-minor.md"
 	default:
-		return mailContent{}, fmt.Errorf("unknown template data type %T", data)
+		return MailContent{}, fmt.Errorf("unknown template data type %T", data)
 	}
 
 	// Render the (pre-)announcement email template.
@@ -332,28 +332,28 @@ func announcementMail(data any) (mailContent, error) {
 	// It'll produce a valid message with a MIME header and a body, so parse it as such.
 	var buf bytes.Buffer
 	if err := announceTmpl.ExecuteTemplate(&buf, name, data); err != nil {
-		return mailContent{}, err
+		return MailContent{}, err
 	}
 	m, err := mail.ReadMessage(&buf)
 	if err != nil {
-		return mailContent{}, fmt.Errorf(`email template must be formatted like a mail message, but reading it failed: %v`, err)
+		return MailContent{}, fmt.Errorf(`email template must be formatted like a mail message, but reading it failed: %v`, err)
 	}
 
 	// Get the email subject (it's a plain string, no further processing needed).
 	if _, ok := m.Header["Subject"]; !ok {
-		return mailContent{}, fmt.Errorf(`email template must have a "Subject" key in its MIME header, but it's not found`)
+		return MailContent{}, fmt.Errorf(`email template must have a "Subject" key in its MIME header, but it's not found`)
 	} else if n := len(m.Header["Subject"]); n != 1 {
-		return mailContent{}, fmt.Errorf(`email template must have a single "Subject" value in its MIME header, but have %d values`, n)
+		return MailContent{}, fmt.Errorf(`email template must have a single "Subject" value in its MIME header, but have %d values`, n)
 	}
 	subject := m.Header.Get("Subject")
 
 	// Render the email body, in Markdown format at this point, to HTML and plain text.
 	html, text, err := renderMarkdown(m.Body)
 	if err != nil {
-		return mailContent{}, err
+		return MailContent{}, err
 	}
 
-	return mailContent{subject, html, text}, nil
+	return MailContent{subject, html, text}, nil
 }
 
 // announceTmpl holds templates for Go release announcement emails.
@@ -428,7 +428,7 @@ func NewSendGridMailClient(sendgridAPIKey string) realSendGridMailClient {
 }
 
 // SendMail sends an email by making an authenticated request to the SendGrid API.
-func (c realSendGridMailClient) SendMail(h MailHeader, m mailContent) error {
+func (c realSendGridMailClient) SendMail(h MailHeader, m MailContent) error {
 	from, to := sendgridmail.Email(h.From), sendgridmail.Email(h.To)
 	req := sendgridmail.NewSingleEmail(&from, m.Subject, &to, m.BodyText, m.BodyHTML)
 	if len(req.Personalizations) != 1 {

@@ -5,26 +5,51 @@
 package relui
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 	"golang.org/x/build/internal/relui/db"
+	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
 
-func NewPGListener(db db.PGDBTX) *PGListener {
-	return &PGListener{db}
-}
-
 // PGListener implements workflow.Listener for recording workflow state.
 type PGListener struct {
-	db db.PGDBTX
+	DB db.PGDBTX
+
+	BaseURL *url.URL
+
+	ScheduleFailureMailHeader task.MailHeader
+	SendMail                  func(task.MailHeader, task.MailContent) error
+
+	templ *template.Template
+}
+
+// WorkflowStalled is called when no tasks are runnable.
+func (l *PGListener) WorkflowStalled(workflowID uuid.UUID) error {
+	wf, err := db.New(l.DB).Workflow(context.Background(), workflowID)
+	if err != nil || wf.ScheduleID.Int32 == 0 {
+		return err
+	}
+	var buf bytes.Buffer
+	body := scheduledFailureEmailBody{Workflow: wf}
+	if err := l.template("scheduled_workflow_failure_email.txt").Execute(&buf, body); err != nil {
+		log.Printf("WorkflowFinished: Execute(_, %v) = %q", body, err)
+		return err
+	}
+	return l.SendMail(l.ScheduleFailureMailHeader, task.MailContent{
+		Subject:  fmt.Sprintf("[relui] Scheduled workflow %q failed", wf.Name.String),
+		BodyText: buf.String(),
+	})
 }
 
 // TaskStateChanged is called whenever a task is updated by the
@@ -38,7 +63,7 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 	if err != nil {
 		return err
 	}
-	err = l.db.BeginFunc(ctx, func(tx pgx.Tx) error {
+	err = l.DB.BeginFunc(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		updated := time.Now()
 		_, err := q.UpsertTask(ctx, db.UpsertTaskParams{
@@ -62,7 +87,7 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 
 // WorkflowStarted persists a new workflow execution in the database.
 func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}, scheduleID int) error {
-	q := db.New(l.db)
+	q := db.New(l.DB)
 	m, err := json.Marshal(params)
 	if err != nil {
 		return err
@@ -80,11 +105,16 @@ func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, 
 	return err
 }
 
+type scheduledFailureEmailBody struct {
+	Workflow db.Workflow
+	Err      error
+}
+
 // WorkflowFinished saves the final state of a workflow after its run
 // has completed.
 func (l *PGListener) WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, workflowErr error) error {
-	log.Printf("WorkflowCompleted(%q, %v, %q)", workflowID, outputs, workflowErr)
-	q := db.New(l.db)
+	log.Printf("WorkflowFinished(%q, %v, %q)", workflowID, outputs, workflowErr)
+	q := db.New(l.DB)
 	m, err := json.Marshal(outputs)
 	if err != nil {
 		return err
@@ -102,9 +132,21 @@ func (l *PGListener) WorkflowFinished(ctx context.Context, workflowID uuid.UUID,
 	return err
 }
 
+func (l *PGListener) template(name string) *template.Template {
+	if l.templ == nil {
+		helpers := map[string]any{"baseLink": l.baseLink}
+		l.templ = template.Must(template.New("").Funcs(helpers).ParseFS(templates, "templates/*.txt"))
+	}
+	return l.templ.Lookup(name)
+}
+
+func (l *PGListener) baseLink(target string, extras ...string) string {
+	return BaseLink(l.BaseURL)(target, extras...)
+}
+
 func (l *PGListener) Logger(workflowID uuid.UUID, taskName string) workflow.Logger {
 	return &postgresLogger{
-		db:         l.db,
+		db:         l.DB,
 		workflowID: workflowID,
 		taskName:   taskName,
 	}
@@ -135,4 +177,9 @@ func (l *postgresLogger) Printf(format string, v ...interface{}) {
 	if err != nil {
 		log.Printf("l.Printf(%q, %v) = %v", format, v, err)
 	}
+}
+
+func LogOnlyMailer(header task.MailHeader, content task.MailContent) error {
+	log.Println("Logging but not sending mail:", header, content)
+	return nil
 }

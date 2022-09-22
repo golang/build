@@ -73,6 +73,10 @@ func main() {
 	addressVarFlag(&annMail.From, "announce-mail-from", "The From address to use for the (pre-)announcement mail.")
 	addressVarFlag(&annMail.To, "announce-mail-to", "The To address to use for the (pre-)announcement mail.")
 	addressListVarFlag(&annMail.BCC, "announce-mail-bcc", "The BCC address list to use for the (pre-)announcement mail.")
+	var schedMail task.MailHeader
+	addressVarFlag(&schedMail.From, "schedule-mail-from", "The From address to use for the scheduled workflow failure mail.")
+	addressVarFlag(&schedMail.To, "schedule-mail-to", "The To address to use for the the scheduled workflow failure mail.")
+	addressListVarFlag(&schedMail.BCC, "schedule-mail-bcc", "The BCC address list to use for the scheduled workflow failure mail.")
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
 	masterKey := secret.Flag("builder-master-key", "Builder master key")
@@ -212,17 +216,23 @@ func main() {
 	}
 	dh.RegisterDefinition("Tag x/ repos", tagTasks.NewDefinition())
 
-	w := relui.NewWorker(dh, dbPool, relui.NewPGListener(dbPool))
-	go w.Run(ctx)
-	if err := w.ResumeAll(ctx); err != nil {
-		log.Printf("w.ResumeAll() = %v", err)
-	}
 	var base *url.URL
 	if *baseURL != "" {
 		base, err = url.Parse(*baseURL)
 		if err != nil {
 			log.Fatalf("url.Parse(%q) = %v, %v", *baseURL, base, err)
 		}
+	}
+	l := &relui.PGListener{
+		DB:                        dbPool,
+		BaseURL:                   base,
+		ScheduleFailureMailHeader: schedMail,
+		SendMail:                  relui.LogOnlyMailer,
+	}
+	w := relui.NewWorker(dh, dbPool, l)
+	go w.Run(ctx)
+	if err := w.ResumeAll(ctx); err != nil {
+		log.Printf("w.ResumeAll() = %v", err)
 	}
 	s := relui.NewServer(dbPool, w, base, siteHeader, ms)
 	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: GRPCHandler(grpcServer, s)}))

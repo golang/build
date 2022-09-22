@@ -593,6 +593,11 @@ func runWorkflow(t *testing.T, w *wf.Workflow, listener wf.Listener) map[string]
 
 type verboseListener struct{ t *testing.T }
 
+func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
+	l.t.Logf("workflow %q: stalled", workflowID.String())
+	return nil
+}
+
 func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *wf.TaskState) error {
 	switch {
 	case !st.Started:

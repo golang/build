@@ -478,6 +478,8 @@ type Listener interface {
 	TaskStateChanged(workflowID uuid.UUID, taskID string, state *TaskState) error
 	// Logger is called to obtain a Logger for a particular task.
 	Logger(workflowID uuid.UUID, taskID string) Logger
+	// WorkflowStalled is called when there are no runnable tasks.
+	WorkflowStalled(workflowID uuid.UUID) error
 }
 
 // TaskState contains the state of a task in a running workflow. Once Finished
@@ -707,6 +709,8 @@ func unmarshalNew(t reflect.Type, data []byte) (interface{}, error) {
 // and when they finish. It should be used only for monitoring and persistence
 // purposes. Register Outputs to read task results.
 func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]interface{}, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	if listener == nil {
 		listener = &defaultListener{}
 	}
@@ -761,6 +765,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:
+				listener.WorkflowStalled(w.ID)
 			}
 		}
 
@@ -895,6 +900,10 @@ func (w *Workflow) expand(expanded *Definition) error {
 }
 
 type defaultListener struct{}
+
+func (s *defaultListener) WorkflowStalled(workflowID uuid.UUID) error {
+	return nil
+}
 
 func (s *defaultListener) TaskStateChanged(_ uuid.UUID, _ string, _ *TaskState) error {
 	return nil

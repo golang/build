@@ -151,20 +151,26 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.m.ServeHTTP(w, r)
 }
 
-func (s *Server) BaseLink(target string, extras ...string) string {
-	u, err := url.Parse(target)
-	if err != nil {
-		log.Printf("BaseLink: url.Parse(%q) = %v, %v", target, u, err)
-		return path.Join(append([]string{target}, extras...)...)
-	}
-	u.Path = path.Join(append([]string{u.Path}, extras...)...)
-	if s.baseURL == nil || u.IsAbs() {
+func BaseLink(baseURL *url.URL) func(target string, extras ...string) string {
+	return func(target string, extras ...string) string {
+		u, err := url.Parse(target)
+		if err != nil {
+			log.Printf("BaseLink: url.Parse(%q) = %v, %v", target, u, err)
+			return path.Join(append([]string{target}, extras...)...)
+		}
+		u.Path = path.Join(append([]string{u.Path}, extras...)...)
+		if baseURL == nil || u.IsAbs() {
+			return u.String()
+		}
+		u.Scheme = baseURL.Scheme
+		u.Host = baseURL.Host
+		u.Path = path.Join(baseURL.Path, u.Path)
 		return u.String()
 	}
-	u.Scheme = s.baseURL.Scheme
-	u.Host = s.baseURL.Host
-	u.Path = path.Join(s.baseURL.Path, u.Path)
-	return u.String()
+}
+
+func (s *Server) BaseLink(target string, extras ...string) string {
+	return BaseLink(s.baseURL)(target, extras...)
 }
 
 type homeResponse struct {
@@ -215,7 +221,7 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, w := range ws {
-		if _, ok := s.w.running[w.ID.String()]; ok {
+		if ok := s.w.workflowRunning(w.ID); ok {
 			hr.ActiveWorkflows = append(hr.ActiveWorkflows, w)
 			continue
 		}

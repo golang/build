@@ -9,7 +9,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"testing"
@@ -30,7 +29,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 	wg := sync.WaitGroup{}
 	dh := NewDefinitionHolder()
 	w := NewWorker(dh, dbp, &testWorkflowListener{
-		Listener:   &PGListener{dbp},
+		Listener:   &PGListener{DB: dbp},
 		onFinished: wg.Done,
 	})
 
@@ -91,7 +90,7 @@ func TestWorkerResume(t *testing.T) {
 	wg := sync.WaitGroup{}
 	dh := NewDefinitionHolder()
 	w := NewWorker(dh, dbp, &testWorkflowListener{
-		Listener:   &PGListener{dbp},
+		Listener:   &PGListener{DB: dbp},
 		onFinished: wg.Done,
 	})
 
@@ -130,7 +129,7 @@ func TestWorkerResumeMissingDefinition(t *testing.T) {
 	defer cancel()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
-	w := NewWorker(NewDefinitionHolder(), dbp, &PGListener{dbp})
+	w := NewWorker(NewDefinitionHolder(), dbp, &PGListener{DB: dbp})
 
 	cwp := db.CreateWorkflowParams{ID: uuid.New(), Name: nullString(t.Name()), Params: nullString("{}")}
 	if wf, err := q.CreateWorkflow(ctx, cwp); err != nil {
@@ -150,7 +149,7 @@ func TestWorkflowResumeAll(t *testing.T) {
 	wg := sync.WaitGroup{}
 	dh := NewDefinitionHolder()
 	w := NewWorker(dh, dbp, &testWorkflowListener{
-		Listener:   &PGListener{dbp},
+		Listener:   &PGListener{DB: dbp},
 		onFinished: wg.Done,
 	})
 
@@ -207,7 +206,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 	defer cancel()
 	dbp := testDB(ctx, t)
 	dh := NewDefinitionHolder()
-	w := NewWorker(dh, dbp, &PGListener{dbp})
+	w := NewWorker(dh, dbp, &PGListener{DB: dbp})
 
 	counter := 0
 	blockingChan := make(chan bool)
@@ -252,7 +251,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 	defer cancel()
 	wfDone := make(chan bool, 1)
 	w = NewWorker(dh, dbp, &testWorkflowListener{
-		Listener:   &PGListener{dbp},
+		Listener:   &PGListener{DB: dbp},
 		onFinished: func() { wfDone <- true },
 	})
 
@@ -300,28 +299,21 @@ type testWorkflowListener struct {
 	Listener
 
 	onFinished func()
+	onStalled  func()
 }
 
-func (t *testWorkflowListener) WorkflowFinished(ctx context.Context, wfid uuid.UUID, outputs map[string]interface{}, err error) error {
-	defer t.onFinished()
-	return t.Listener.WorkflowFinished(ctx, wfid, outputs, err)
+func (t *testWorkflowListener) WorkflowFinished(ctx context.Context, wfid uuid.UUID, outputs map[string]interface{}, wferr error) error {
+	err := t.Listener.WorkflowFinished(ctx, wfid, outputs, wferr)
+	if t.onFinished != nil {
+		t.onFinished()
+	}
+	return err
 }
 
-type unimplementedListener struct {
-}
-
-func (u *unimplementedListener) TaskStateChanged(uuid.UUID, string, *workflow.TaskState) error {
-	return errors.New("method TaskStateChanged not implemented")
-}
-
-func (u *unimplementedListener) Logger(uuid.UUID, string) workflow.Logger {
-	return log.Default()
-}
-
-func (u *unimplementedListener) WorkflowStarted(context.Context, uuid.UUID, string, map[string]interface{}, int) error {
-	return errors.New("method WorkflowStarted not implemented")
-}
-
-func (u *unimplementedListener) WorkflowFinished(context.Context, uuid.UUID, map[string]interface{}, error) error {
-	return errors.New("method WorkflowFinished not implemented")
+func (t *testWorkflowListener) WorkflowStalled(workflowID uuid.UUID) error {
+	err := t.Listener.WorkflowStalled(workflowID)
+	if t.onStalled != nil {
+		t.onStalled()
+	}
+	return err
 }
