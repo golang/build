@@ -36,7 +36,8 @@ args=(
   -drive id=MacHDD,if=none,format=qcow2,file="$DISK"
   -device ide-hd,bus=sata.2,drive=MacHDD
   -netdev user,id=net0 # add ,hostfwd=tcp::5555-:22 to forward SSH to localhost:5555.
-  -device virtio-net-pci,netdev=net0,id=net0,mac=52:54:00:c9:18:27
+  -device virtio-net-pci,netdev=net0,id=net0,mac=52:54:00:c9:18:27 # for macOS >= 11
+  # -device vmxnet3,netdev=net0,id=net0,mac=52:54:00:c9:18:27 # for macOS < 11
   -monitor stdio
   -device VGA,vgamem_mb=128
   -M accel=hvf

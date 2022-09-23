@@ -76,6 +76,9 @@ Steps to create a new QEMU macOS guest image:
 6. Use `$HOME/start-installer.sh macos-monterey.qcow2 opencore.img
    Monetery-recovery.dmg $OSK_VALUE` to launch the macOS installer in QEMU.
 
+NOTE: If networking isn't working on older versions of macOS, swap the
+networking flag in `qemu.sh`.
+
 This starts QEMU with the display on a VNC server at `localhost:5901`. Use SSH
 port forwarding to forward this to your local machine:
 
@@ -102,10 +105,10 @@ Once macOS is fully installed, we will install OpenCore on the primary disk and
 configure it to autoboot to macOS.
 
 1. In the guest, find the OpenCore and primary disks with `diskutil list`.
-    * The OpenCore disk contains only one parition, of type "EFI". It is likely
-      /dev/disk0, EFI partition /dev/disk0s1.
+    * The OpenCore disk contains only one parition, of type "EFI". e.g., it may
+      be /dev/disk0, EFI partition /dev/disk0s1.
     * The primary disk contains two paritions, one of type "EFI", one of type
-      "Apple_APFS". It is likely /dev/disk2, EFI partition /dev/disk2s1.
+      "Apple_APFS". e.g., it may be /dev/disk2, EFI partition /dev/disk2s1.
 2. Copy the OpenCore EFI partition over the primary disk EFI partition.
     * `sudo dd if=/dev/disk0s1 of=/dev/disk2s1`
 3. Mount the primary disk EFI partition to edit the configuration.
@@ -123,7 +126,8 @@ configure it to autoboot to macOS.
 $ $HOME/start-mutable.sh macos-monterey.qcow2 $OSK_VALUE
 ```
 
-Now complete the remainder of the [machine setup](../setup-notes.md).
+Now complete the remainder of the [machine setup](../setup-notes.md). See the
+`hostfwd` option in `qemu.sh` if you would like SSH access to the guest.
 
 Copy complete images to `s3://go-builder-data/darwin/` for use on other
 builders.
