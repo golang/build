@@ -2373,7 +2373,7 @@ func init() {
 		buildsRepo:     onlyGo,
 	})
 	addBuilder(BuildConfig{
-		Name:           "darwin-amd64-race-aws",
+		Name:           "darwin-amd64-aws-race",
 		HostType:       "host-darwin-amd64-12-aws",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     onlyGo,
