@@ -1879,7 +1879,7 @@ func init() {
 					return false
 				}
 				switch distTest {
-				case "cmd/go", "nolibgcc:crypto/x509", "reboot":
+				case "nolibgcc:crypto/x509", "reboot":
 					return false
 				}
 			}
