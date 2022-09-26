@@ -241,10 +241,14 @@ var Hosts = map[string]*HostConfig{
 		Owners:    []*gophers.Person{gh("dmgk")},
 	},
 	"host-freebsd-riscv64-unmatched": {
-		IsReverse: true, // afaik
-		ExpectNum: 1,    // actually unspecified
-		Notes:     "SiFive HiFive Unmatched RISC-V board. 16 GB RAM.",
-		Owners:    []*gophers.Person{gh("mengzhuo")},
+		IsReverse:   true,
+		ExpectNum:   1,
+		Notes:       "SiFive HiFive Unmatched RISC-V board. 16 GB RAM. FreeBSD 13.1-RELEASE",
+		Owners:      []*gophers.Person{gh("mengzhuo")},
+		GoBootstrap: "none",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/home/gopher/go-freebsd-riscv64-bootstrap",
+		},
 	},
 	"host-illumos-amd64-jclulow": {
 		Notes:       "SmartOS base64@19.1.0 zone",
