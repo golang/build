@@ -5,11 +5,12 @@
 package buildlet
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -45,7 +46,20 @@ type GCEError struct {
 }
 
 func (q *GCEError) Error() string {
-	return fmt.Sprintf("failed with errors: %+v", q.OpErrors)
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%d GCE operation errors: ", len(q.OpErrors))
+	for i, e := range q.OpErrors {
+		if i != 0 {
+			buf.WriteString("; ")
+		}
+		b, err := json.Marshal(e)
+		if err != nil {
+			fmt.Fprintf(&buf, "json.Marshal(OpErrors[%d]): %v", i, err)
+			continue
+		}
+		buf.Write(b)
+	}
+	return buf.String()
 }
 
 func (q *GCEError) Is(target error) bool {
@@ -239,7 +253,6 @@ OpLoop:
 			if op.Error != nil {
 				err := &GCEError{OpErrors: make([]*compute.OperationErrorErrors, len(op.Error.Errors))}
 				copy(err.OpErrors, op.Error.Errors)
-				log.Println(err.Error())
 				return nil, err
 			}
 			break OpLoop
