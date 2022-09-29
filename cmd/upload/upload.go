@@ -145,7 +145,6 @@ var bucketProject = map[string]string{
 	"go-builder-data":        "symbolic-datum-552",
 	"go-build-log":           "symbolic-datum-552",
 	"http2-demo-server-tls":  "symbolic-datum-552",
-	"winstrap":               "999119582588",
 	"gobuilder":              "999119582588", // deprecated
 	"golang":                 "999119582588",
 }
