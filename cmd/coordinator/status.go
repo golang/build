@@ -762,7 +762,6 @@ type statusData struct {
 	GCEPoolStatus     template.HTML // TODO: embed template
 	EC2PoolStatus     template.HTML // TODO: embed template
 	ReversePoolStatus template.HTML // TODO: embed template
-	RemoteBuildlets   template.HTML
 	GomoteInstances   template.HTML
 	SchedState        schedule.SchedulerState
 	DiskFree          string
