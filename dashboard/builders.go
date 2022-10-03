@@ -2689,10 +2689,14 @@ func init() {
 		HostType: "host-freebsd-arm64-dmgk",
 	})
 	addBuilder(BuildConfig{
-		Name:        "freebsd-riscv64-unmatched",
-		HostType:    "host-freebsd-riscv64-unmatched",
-		env:         []string{"GO_TEST_TIMEOUT_SCALE=4"},
-		KnownIssues: []int{53466},
+		Name:           "freebsd-riscv64-unmatched",
+		HostType:       "host-freebsd-riscv64-unmatched",
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
+		KnownIssues:    []int{53466},
+		FlakyNet:       true,
+		distTestAdjust: riscvDistTestPolicy,
+		privateGoProxy: true, // this builder is behind firewall
+		SkipSnapshot:   true, // The builder has a slow uplink bandwidth.
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-arm",
