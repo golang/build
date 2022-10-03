@@ -320,7 +320,7 @@ func (ss *SSHServer) setupRemoteSSHEnv(bconf *dashboard.BuildConfig, workDir str
 			fmt.Fprintf(f, "set %s\n", env)
 		}
 		fmt.Fprintf(f, `set GOPATH=%s\gopath`+"\n", workDir)
-		fmt.Fprintf(f, `set PATH=$PATH;%s\go\bin`+"\n", workDir)
+		fmt.Fprintf(f, `set PATH=%%PATH%%;%s\go\bin`+"\n", workDir)
 		fmt.Fprintf(f, `cd %s\go\src`+"\n", workDir)
 	case "plan9":
 		// TODO
