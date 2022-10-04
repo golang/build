@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 )
@@ -15,6 +16,7 @@ import (
 type Target struct {
 	Name            string
 	GOOS, GOARCH    string
+	SecondClass     bool
 	Builder         string
 	BuildOnly       bool
 	LongTestBuilder string
@@ -25,6 +27,20 @@ type Target struct {
 // ReleaseTargets maps a target name (usually but not always $GOOS-$GOARCH)
 // to its target.
 type ReleaseTargets map[string]*Target
+
+type OSArch struct {
+	OS, Arch string
+}
+
+func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
+	result := map[OSArch]bool{}
+	for _, target := range rt {
+		if !target.SecondClass {
+			result[OSArch{target.GOOS, target.GOARCH}] = true
+		}
+	}
+	return result
+}
 
 // allReleases contains all the targets for all releases we're currently
 // supporting. To reduce duplication, targets from earlier versions are
@@ -44,11 +60,13 @@ var allReleases = map[int]ReleaseTargets{
 			Race:    true,
 		},
 		"freebsd-386": &Target{
-			Builder: "freebsd-386-12_3",
+			SecondClass: true,
+			Builder:     "freebsd-386-12_3",
 		},
 		"freebsd-amd64": &Target{
-			Builder: "freebsd-amd64-12_3",
-			Race:    true,
+			SecondClass: true,
+			Builder:     "freebsd-amd64-12_3",
+			Race:        true,
 		},
 		"linux-386": &Target{
 			Builder:         "linux-386-stretch",
@@ -67,12 +85,14 @@ var allReleases = map[int]ReleaseTargets{
 			Race:            true,
 		},
 		"linux-s390x": &Target{
-			Builder:   "linux-s390x-crosscompile",
-			BuildOnly: true,
+			SecondClass: true,
+			Builder:     "linux-s390x-crosscompile",
+			BuildOnly:   true,
 		},
 		"linux-ppc64le": &Target{
-			Builder:   "linux-ppc64le-buildlet",
-			BuildOnly: true,
+			SecondClass: true,
+			Builder:     "linux-ppc64le-buildlet",
+			BuildOnly:   true,
 		},
 		"windows-386": &Target{
 			Builder: "windows-386-2008",
@@ -83,7 +103,8 @@ var allReleases = map[int]ReleaseTargets{
 			Race:            true,
 		},
 		"windows-arm64": &Target{
-			Builder: "windows-arm64-11",
+			SecondClass: true,
+			Builder:     "windows-arm64-11",
 		},
 	},
 	19: {
@@ -154,4 +175,23 @@ func TargetsForVersion(versionStr string) (ReleaseTargets, bool) {
 		return nil, false
 	}
 	return TargetsForGo1Point(x), true
+}
+
+var latestFCPs map[OSArch]bool
+var latestFCPsOnce sync.Once
+
+// LatestFirstClassPorts returns the first class ports in the upcoming release.
+func LatestFirstClassPorts() map[OSArch]bool {
+	latestFCPsOnce.Do(func() {
+		rels := sortedReleases()
+		latest := rels[len(rels)-1]
+		latestFCPs = TargetsForGo1Point(latest).FirstClassPorts()
+	})
+	return latestFCPs
+}
+
+// IsFirstClass reports whether the given port is first class in the upcoming
+// release.
+func IsFirstClass(os, arch string) bool {
+	return LatestFirstClassPorts()[OSArch{os, arch}]
 }

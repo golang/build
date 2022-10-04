@@ -25,6 +25,7 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"golang.org/x/build/types"
@@ -650,23 +651,7 @@ func isRace(s string) bool {
 }
 
 func unsupported(builder string) bool {
-	_, ok := firstClassPorts[osArch{builderOS(builder), builderArch(builder)}]
-	return !ok
-}
-
-type osArch struct{ OS, Arch string }
-
-// firstClassPorts is the set of first-class ports, copied from the
-// canonical source at go.dev/wiki/PortingPolicy#first-class-ports.
-var firstClassPorts = map[osArch]struct{}{
-	{"darwin", "amd64"}:  {},
-	{"darwin", "arm64"}:  {},
-	{"linux", "386"}:     {},
-	{"linux", "amd64"}:   {},
-	{"linux", "arm"}:     {},
-	{"linux", "arm64"}:   {},
-	{"windows", "386"}:   {},
-	{"windows", "amd64"}: {},
+	return !releasetargets.IsFirstClass(builderOS(builder), builderArch(builder))
 }
 
 // osPriority encodes priorities for specific operating systems.

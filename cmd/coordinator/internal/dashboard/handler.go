@@ -22,22 +22,10 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"google.golang.org/grpc"
 )
-
-// firstClassPorts is the set of first-class ports, copied from the
-// canonical source at go.dev/wiki/PortingPolicy#first-class-ports.
-var firstClassPorts = map[string]bool{
-	"darwin-amd64":  true,
-	"darwin-arm64":  true,
-	"linux-386":     true,
-	"linux-amd64":   true,
-	"linux-arm":     true,
-	"linux-arm64":   true,
-	"windows-386":   true,
-	"windows-amd64": true,
-}
 
 type data struct {
 	Branch    string
@@ -151,10 +139,7 @@ func (a arch) FirstClass() bool {
 	if len(segs) < 2 {
 		return false
 	}
-	if fc, ok := firstClassPorts[strings.Join(segs[0:2], "-")]; ok {
-		return fc
-	}
-	return false
+	return releasetargets.IsFirstClass(segs[0], segs[1])
 }
 
 type archSlice []*arch
