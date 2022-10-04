@@ -1,0 +1,15 @@
+[Unit]
+Description=Run Buildlets in Docker
+After=network.target
+
+[Install]
+WantedBy=network-online.target
+
+[Service]
+Type=simple
+# The (-n * -cpu) values must currently be <= number of host cores.
+# The host has 20 cores 32GB ram, so the -n=5 (five containers) * -cpu=4 (four CPUs per container) == 20.
+ExecStart=/usr/local/bin/rundockerbuildlet -basename=power_ -image=golang/buildlet-stage0 -n=5 -cpu=4 -memory=6g --env=host-linux-ppc64-sid
+Restart=always
+RestartSec=2
+StartLimitInterval=0

@@ -1,0 +1,96 @@
+From 55b2d59738979b6b27983d961dd5730ffc0786a5 Mon Sep 17 00:00:00 2001
+From: "Paul E. Murphy" <murp@ibm.com>
+Date: Tue, 4 Oct 2022 20:55:48 +0000
+Subject: [PATCH] HACK: build on ppc64
+
+Build the static docker binaries, disable pie, disable cgo, and
+dependencies which break if cgo is disabled.
+---
+ debian/docker.io.install         |  2 +-
+ debian/patches/nopie-ppc64.patch | 15 +++++++++++++++
+ debian/patches/series            |  1 +
+ debian/rules                     |  8 +++++---
+ 4 files changed, 22 insertions(+), 4 deletions(-)
+ create mode 100644 debian/patches/nopie-ppc64.patch
+
+diff --git a/debian/docker.io.install b/debian/docker.io.install
+index 9de7672..4080d24 100644
+--- a/debian/docker.io.install
++++ b/debian/docker.io.install
+@@ -1,5 +1,5 @@
+ _build/bin/docker usr/bin/
+-_build/src/github.com/docker/docker/bundles/dynbinary-daemon/dockerd usr/sbin/
++_build/src/github.com/docker/docker/bundles/binary-daemon/dockerd usr/sbin/
+ 
+ engine/contrib/check-config.sh                usr/share/docker.io/contrib/
+ engine/contrib/dockerd-rootless.sh            usr/share/docker.io/contrib/
+diff --git a/debian/patches/nopie-ppc64.patch b/debian/patches/nopie-ppc64.patch
+new file mode 100644
+index 0000000..474f8b0
+--- /dev/null
++++ b/debian/patches/nopie-ppc64.patch
+@@ -0,0 +1,15 @@
++Disable pie on ppc64. It is not supported by golang.
++--- a/engine/hack/make/.binary
+++++ b/engine/hack/make/.binary
++@@ -70,9 +70,9 @@
++ 		esac
++ 	fi
++ 
++-	# -buildmode=pie is not supported on Windows and Linux on mips and riscv64.
+++	# -buildmode=pie is not supported on Windows and Linux on mips, riscv64, and ppc64.
++ 	case "$(go env GOOS)/$(go env GOARCH)" in
++-		windows/* | linux/mips* | linux/riscv*) ;;
+++		windows/* | linux/mips* | linux/riscv* | linux/ppc64) ;;
++ 
++ 		*)
++ 			BUILDFLAGS+=("-buildmode=pie")
+diff --git a/debian/patches/series b/debian/patches/series
+index 300f0d6..4b5bf8c 100644
+--- a/debian/patches/series
++++ b/debian/patches/series
+@@ -30,3 +30,4 @@ test--skip-pkg-system-chtimes-mips64.patch
+ test--skip-TestGetRootUIDGID.patch
+ test--skip-TestStateRunStop.patch
+ avoid-consul.patch
++nopie-ppc64.patch
+diff --git a/debian/rules b/debian/rules
+index 4cab23e..b54d0d2 100755
+--- a/debian/rules
++++ b/debian/rules
+@@ -42,11 +42,13 @@ endif
+ 
+ # Cf. scripts/build/binary scripts/build/.variables
+ CLI_BUILDTIME := $(shell date -u -d "@$(SOURCE_DATE_EPOCH)" +"%Y-%m-%dT%H:%M:%SZ")
++ifeq (,$(filter $(DEB_BUILD_ARCH), ppc64))
+ CLI_BUILDTAGS := pkcs11
++endif
+ CLI_LDFLAGS   += -X $(CLI_PKG)/cli/version.BuildTime=$(CLI_BUILDTIME)
+ CLI_LDFLAGS   += -X $(CLI_PKG)/cli/version.GitCommit=$(CLI_GITCOMMIT)
+ CLI_LDFLAGS   += -X $(CLI_PKG)/cli/version.Version=$(DOCKER_VERSION)
+-ifeq (,$(filter $(DEB_BUILD_ARCH), mipsel mips64el))
++ifeq (,$(filter $(DEB_BUILD_ARCH), mipsel mips64el ppc64))
+ CLI_BUILDMODE := -buildmode=pie
+ endif
+ 
+@@ -117,7 +119,7 @@ override_dh_auto_build:
+ ##	build ("cd" first to ensure we build from within GOPATH)
+ 	cd $(GOPATH)/src/$(ENGINE_PKG) \
+ 	&& KEEPBUNDLE=$(ENGINE_KEEPBUNDLE) VERSION=$(DOCKER_VERSION) DOCKER_BUILDTAGS='$(ENGINE_BUILDTAGS)' \
+-	   DOCKER_GITCOMMIT=$(ENGINE_GITCOMMIT) PRODUCT=docker ./hack/make.sh dynbinary
++	   DOCKER_GITCOMMIT=$(ENGINE_GITCOMMIT) PRODUCT=docker ./hack/make.sh binary
+ 
+ 	DH_GOPKG=$(CLI_PKG) DH_GOLANG_BUILDPKG=$(CLI_PKG)/cmd/docker \
+ 	  dh_auto_build -v -- -tags '$(CLI_BUILDTAGS)' -ldflags '$(CLI_LDFLAGS)' $(CLI_BUILDMODE)
+@@ -136,7 +138,7 @@ endif
+ 
+ override_dh_install:
+ 	## Rename binaries
+-	cd $(GOPATH)/src/$(ENGINE_PKG)/bundles/dynbinary-daemon \
++	cd $(GOPATH)/src/$(ENGINE_PKG)/bundles/binary-daemon \
+ 	&& mv dockerd-$(DOCKER_VERSION) dockerd
+ 	cd $(GOPATH)/bin \
+ 	&& mv proxy docker-proxy
+-- 
+2.37.2
+

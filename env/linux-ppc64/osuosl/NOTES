@@ -15,4 +15,82 @@ Machines:
 
   Linux go-be-debian-1 5.10.0-1-powerpc64 #1 SMP Debian 5.10.4-1 (2020-12-31) ppc64 GNU/Linux
 
-TODO: document VM setup and quirks.
+# Setting up the debian ppc64 builder for containerized CI
+
+Copy the files and folders inside this directory onto the CI which preserving
+the directory structure.
+
+There are 3 main tasks, in chronological order:
+- install debian packaging tools
+- build/install debian upstream's golang-defaults and docker.io package for ppc64
+- install rundockerbuilder and systemd unit file, and start the service
+
+Since this is a rolling distro, these steps may change with time.
+
+## Building and installing docker.io
+
+Install golang-1.19-go, git and the debian packaging tools. The following
+is a list of commands which could be used to create the docker.io package.
+Note, these may change with time as this is a rolling distro.
+
+```
+mkdir ~/debs
+cd ~/debs
+git clone https://salsa.debian.org/go-team/compiler/golang-defaults.git
+cd golang-defaults
+git am ~/deb-patches/golang-defaults-hack.patch
+debuild -us -uc -tc
+cd ~/debs
+dpkg -i gccgo-go_1.19~1_ppc64.deb
+
+# Build docker. Note, the version used is/was the tips of master.
+# One day it will not be, and the git checkout command will need updated.
+git clone https://salsa.debian.org/docker-team/docker.git
+cd docker
+git am ~/deb-patches/docker-hack.patch
+origtarz --unpack
+DEB_BUILD_OPTIONS="nocheck nostrip" debuild -us -uc -tc
+cd ~/debs/
+dpkg -i docker.io_20.10.17+dfsg1-1_ppc64.deb
+sudo usermod -aG docker $USER
+```
+
+## Debian sid base image
+
+Run build-sid.sh inside ~/sid-image
+
+Use the build-sid.sh script to generate a small ppc64 debian rootfs
+
+## Buildlet image
+
+from ~/buildlet-image, run `sudo docker build --tag=golang/buildlet-stage0 .`
+to generate the docker image used to run the CI.
+
+## Installing and starting rundockerbuildlet
+
+Build cmd/rundockerbuildlet from this repo for GOOS=linux GOARCH=ppc64, and
+copy it to ~/
+
+Run the following to install the command and systemd unit files to start
+running the service:
+
+```
+sudo install ~/rundockerbuildlet /usr/local/bin/rundockerbuildlet
+sudo systemctl enable /etc/systemd/user/rundockerbuildlet.service || true
+sudo systemctl daemon-reload || true
+sudo systemctl restart docker.service
+sudo systemctl restart rundockerbuildlet.service
+```
+
+# Warnings and other notes
+
+- Do not update the kernel (yet), #54547 causes big problems. The docker.io
+  packages need rebuilt when the go1.19 packages are updated to include this
+  fix. Likewise, the bootstrap toolchain for CI will need to be updated to
+  the latest go1.18 release (the oldest toolchain with this fix).
+
+- Following the above, grub is set to boot from the older kernel. This
+  will need updated if new kernel packages are installed or removed.
+
+- Likewise, the kernel should boot with the `systemd.unified_cgroup_hierarchy=0`
+  option. This is needed to run docker (more) reliably on ppc64.

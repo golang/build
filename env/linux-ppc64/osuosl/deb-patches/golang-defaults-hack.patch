@@ -1,0 +1,37 @@
+From 4bd7adfd4bb0d4b0edc00e2289300b1e8d381b25 Mon Sep 17 00:00:00 2001
+From: "Paul E. Murphy" <murp@ibm.com>
+Date: Tue, 4 Oct 2022 20:35:24 +0000
+Subject: [PATCH] HACK: build for ppc64
+
+This was disabled because golang doesn't support <P8 anymore.
+
+This is needed to build docker.io
+---
+ debian/control | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/debian/control b/debian/control
+index bee3f27..cea1ced 100644
+--- a/debian/control
++++ b/debian/control
+@@ -18,7 +18,7 @@ Vcs-Git: https://salsa.debian.org/go-team/compiler/golang-defaults.git
+ Homepage: https://golang.org
+ 
+ Package: golang-go
+-Architecture: amd64 arm64 armel armhf i386 mips mips64el mipsel ppc64el riscv64 s390x
++Architecture: amd64 arm64 armel armhf i386 mips mips64el mipsel ppc64 ppc64el riscv64 s390x
+ Multi-Arch: same
+ Depends: golang-${golang:GOVER}-go,
+          golang-src (>= ${source:Version}),
+@@ -150,7 +150,7 @@ Description: Go programming language - documentation
+  http://localhost:6060/doc/install.html.
+ 
+ Package: golang
+-Architecture: amd64 arm64 armel armhf i386 mips mips64el mipsel ppc64el riscv64 s390x
++Architecture: amd64 arm64 armel armhf i386 mips mips64el mipsel ppc64 ppc64el riscv64 s390x
+ Multi-Arch: same
+ Depends: golang-${golang:GOVER},
+          golang-doc (>= ${source:Version}),
+-- 
+2.37.2
+

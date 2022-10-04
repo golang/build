@@ -381,6 +381,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-ppc64-sid": {
 		Notes:           "Debian sid; run by Go team on osuosl.org",
+		Owners:          []*gophers.Person{gh("pmur")},
 		IsReverse:       true,
 		ExpectNum:       5,
 		SSHUsername:     "root",

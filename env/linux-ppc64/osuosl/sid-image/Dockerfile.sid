@@ -1,0 +1,3 @@
+FROM scratch
+COPY ./debian_sid/ /
+CMD ["/bin/bash"]
