@@ -122,6 +122,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-solaris",
 				"misc-compile-other-1",
 				"misc-compile-other-2",
+				"misc-compile-go1.20",
 			},
 		},
 		{
@@ -825,9 +826,7 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	// All completed ports should have either a real TryBot or at least a misc-compile TryBot,
 	// so this map is meant to be used to temporarily fix tests
 	// when the work of adding a new port is actively underway.
-	knownMissing := map[string]bool{
-		"freebsd-riscv64": true, // TODO(go.dev/issue/53466) Add builder for freeBSD/riscv64
-	}
+	knownMissing := map[string]bool{}
 
 	var done = make(map[string]bool)
 	check := func(goos, goarch string) {

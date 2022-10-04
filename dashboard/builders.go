@@ -1578,6 +1578,7 @@ func init() {
 	addMiscCompile("-solaris", "solaris-amd64", "illumos-amd64")
 	addMiscCompile("-other-1", "dragonfly-amd64", "linux-loong64")
 	addMiscCompile("-other-2", "linux-riscv64", "linux-s390x", "linux-arm-arm5") // 'linux-arm-arm5' is linux/arm with GOARM=5.
+	addMiscCompileGo1(20, "-go1.20", "freebsd-riscv64")
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
 	// Then consider subrepos too, so "mobile" can at least be included
