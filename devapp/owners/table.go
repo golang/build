@@ -175,9 +175,13 @@ var entries = map[string]*Entry{
 	"go/src/cmd/cgo": {
 		Primary: []Owner{compilerTeam},
 	},
+	"go/src/cmd/covdata": {
+		Primary:   []Owner{thanm},
+		Secondary: []Owner{compilerTeam},
+	},
 	"go/src/cmd/cover": {
-		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{thanm},
+		Primary:   []Owner{thanm},
+		Secondary: []Owner{compilerTeam},
 	},
 	"go/src/cmd/doc": {
 		Primary:   []Owner{r},
@@ -199,6 +203,10 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/internal/codesign": {
 		Primary: []Owner{compilerTeam},
+	},
+	"go/src/cmd/internal/cov": {
+		Primary:   []Owner{thanm},
+		Secondary: []Owner{compilerTeam},
 	},
 	"go/src/cmd/internal/dwarf": {
 		Primary: []Owner{compilerTeam},
@@ -424,6 +432,10 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{khr, martisch},
 	},
+	"go/src/internal/coverage": {
+		Primary:   []Owner{thanm},
+		Secondary: []Owner{compilerTeam},
+	},
 	"go/src/internal/fuzz": {
 		Primary: []Owner{katie, roland},
 	},
@@ -597,6 +609,10 @@ var entries = map[string]*Entry{
 	"go/src/runtime/cgo": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{iant, cherryyz},
+	},
+	"go/src/runtime/coverage": {
+		Primary:   []Owner{thanm},
+		Secondary: []Owner{compilerTeam},
 	},
 	"go/src/runtime/internal/atomic": {
 		Primary:   []Owner{runtimeTeam},
