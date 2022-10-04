@@ -533,7 +533,7 @@ func advisoryTryBots(major int) []*dashboard.BuildConfig {
 		if !bc.BuildsRepoPostSubmit("go", fmt.Sprintf("release-branch.go1.%d", major), "") {
 			continue
 		}
-		if !bc.IsVM() && !bc.IsContainer() {
+		if !bc.HostConfig().IsGoogle() {
 			continue
 		}
 		extras = append(extras, bc)

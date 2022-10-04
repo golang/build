@@ -143,6 +143,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "MacStadium macOS Mojave (10.14) VM under VMWare ESXi",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+		GoogleReverse:   true,
 	},
 	"host-darwin-amd64-10_14-aws": {
 		IsReverse:       true,
@@ -150,6 +151,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "AWS macOS Mojave (10.14) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
+		GoogleReverse:   true,
 	},
 	"host-darwin-amd64-10_15": {
 		IsReverse:       true,
@@ -157,6 +159,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "MacStadium macOS Catalina (10.15) VM under VMWare ESXi",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+		GoogleReverse:   true,
 	},
 	"host-darwin-amd64-10_15-aws": {
 		IsReverse:       true,
@@ -164,6 +167,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "AWS macOS Catalina (10.15) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
+		GoogleReverse:   true,
 	},
 	"host-darwin-amd64-11-aws": {
 		IsReverse:       true,
@@ -171,6 +175,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "AWS macOS Big Sur (11) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
+		GoogleReverse:   true,
 	},
 	"host-darwin-amd64-11_0": {
 		IsReverse:       true,
@@ -178,6 +183,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "MacStadium macOS Big Sur (11) VM under VMWare ESXi",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+		GoogleReverse:   true,
 	},
 	"host-darwin-amd64-12-aws": {
 		IsReverse:       true,
@@ -185,6 +191,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "AWS macOS Monterey (12) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
+		GoogleReverse:   true,
 	},
 	"host-darwin-amd64-12_0": {
 		IsReverse:       true,
@@ -192,18 +199,21 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "MacStadium macOS Monterey (12) VM under VMWare ESXi",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
+		GoogleReverse:   true,
 	},
 	"host-darwin-arm64-11": {
-		IsReverse:   true,
-		Notes:       "macOS Big Sur (11) ARM64 (M1) on Mac minis in a Google office",
-		ExpectNum:   3,
-		SSHUsername: "gopher",
+		IsReverse:     true,
+		Notes:         "macOS Big Sur (11) ARM64 (M1) on Mac minis in a Google office",
+		ExpectNum:     3,
+		SSHUsername:   "gopher",
+		GoogleReverse: true,
 	},
 	"host-darwin-arm64-12": {
-		IsReverse:   true,
-		ExpectNum:   3,
-		Notes:       "macOS Big Sur (12) ARM64 (M1) on Mac minis in a Google office",
-		SSHUsername: "gopher",
+		IsReverse:     true,
+		ExpectNum:     3,
+		Notes:         "macOS Big Sur (12) ARM64 (M1) on Mac minis in a Google office",
+		SSHUsername:   "gopher",
+		GoogleReverse: true,
 	},
 	"host-dragonfly-amd64-622": {
 		Notes:       "DragonFly BSD 6.2.2 on GCE, built from build/env/dragonfly-amd64",
@@ -679,6 +689,7 @@ type HostConfig struct {
 	// Reverse options
 	ExpectNum       int  // expected number of reverse buildlets of this type
 	HermeticReverse bool // whether reverse buildlet has fresh env per conn
+	GoogleReverse   bool // whether this reverse builder is owned by Google
 
 	// Container image options, if ContainerImage != "":
 	NestedVirt    bool   // container requires VMX nested virtualization. e2 and n2d instances are not supported.
@@ -1333,6 +1344,18 @@ func (c *HostConfig) IsHermetic() bool {
 		return true
 	}
 	panic("unknown builder type")
+}
+
+// IsGoogle reports whether this host is operated by Google,
+// implying that we trust it to be secure and available.
+func (c *HostConfig) IsGoogle() bool {
+	if c.IsContainer() || c.IsVM() {
+		return true
+	}
+	if c.IsReverse && c.GoogleReverse {
+		return true
+	}
+	return false
 }
 
 // NumTestHelpers reports how many additional buildlets
@@ -2765,6 +2788,9 @@ func addBuilder(c BuildConfig) {
 	}
 	if _, dup := Builders[c.Name]; dup {
 		panic("dup name " + c.Name)
+	}
+	if c.HostConfig().GoogleReverse && !c.IsReverse() {
+		panic("GoogleReverse is set but the builder isn't reverse")
 	}
 	if _, ok := Hosts[c.HostType]; !ok {
 		panic(fmt.Sprintf("undefined HostType %q for builder %q", c.HostType, c.Name))
