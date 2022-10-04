@@ -7,14 +7,19 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/build/buildlet"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/releasetargets"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/types"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/semver"
 	"golang.org/x/net/context/ctxhttp"
@@ -25,6 +30,7 @@ type TagXReposTasks struct {
 	GerritURL        string
 	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
 	LatestGoBinaries func(context.Context) (string, error)
+	DashboardURL     string
 }
 
 func (x *TagXReposTasks) NewDefinition() *wf.Definition {
@@ -233,15 +239,15 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[s
 	repoName, branch := wf.Const(repo.Name), wf.Const("master")
 
 	head := wf.Task2(wd, "read branch head", x.Gerrit.ReadBranchHead, repoName, branch)
-	tagCommit := head
+	tagCandidate := head
 	if len(deps) != 0 {
 		gomod := wf.Task3(wd, "generate updated go.mod", x.UpdateGoMod, wf.Const(repo), wf.Slice(deps...), head)
 		cl := wf.Task2(wd, "mail updated go.mod", x.MailGoMod, repoName, gomod)
 		versionTasks := &VersionTasks{Gerrit: x.Gerrit}
-		tagCommit = wf.Task2(wd, "wait for submit", versionTasks.AwaitCL, cl, wf.Const(""))
+		tagCandidate = wf.Task2(wd, "wait for submit", versionTasks.AwaitCL, cl, wf.Const(""))
 	}
-	green := wf.Action2(wd, "wait for green post-submit", x.AwaitGreen, repoName, tagCommit)
-	tagged := wf.Task2(wd, "tag if appropriate", x.MaybeTag, wf.Const(repo), tagCommit, wf.After(green))
+	greenCommit := wf.Task2(wd, "wait for green post-submit", x.AwaitGreen, wf.Const(repo), tagCandidate)
+	tagged := wf.Task2(wd, "tag if appropriate", x.MaybeTag, wf.Const(repo), greenCommit)
 	return tagged, true
 }
 
@@ -358,9 +364,120 @@ func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, gomod Updat
 		"go.sum": gomod.Sum,
 	})
 }
+func (x *TagXReposTasks) AwaitGreen(ctx *wf.TaskContext, repo TagRepo, commit string) (string, error) {
+	return AwaitCondition(ctx, time.Minute, func() (string, bool, error) {
+		return x.findGreen(ctx, repo, commit)
+	})
+}
 
-func (x *TagXReposTasks) AwaitGreen(ctx *wf.TaskContext, repo, commit string) error {
-	return nil
+func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit string) (string, bool, error) {
+	// Read the front status page to discover live Go release branches.
+	frontStatus, err := x.getBuildStatus("")
+	if err != nil {
+		return "", false, fmt.Errorf("reading dashboard front page: %v", err)
+	}
+	branchSet := map[string]bool{}
+	for _, rev := range frontStatus.Revisions {
+		if rev.GoBranch != "" {
+			branchSet[rev.GoBranch] = true
+		}
+	}
+	var refs []string
+	for b := range branchSet {
+		refs = append(refs, "refs/heads/"+b)
+	}
+
+	// Read the page for the given repo to get the list of commits and statuses.
+	repoStatus, err := x.getBuildStatus(repo.ModPath)
+	if err != nil {
+		return "", false, fmt.Errorf("reading dashboard for %q: %v", repo.ModPath, err)
+	}
+
+	// Associate Go revisions with branches.
+	var goCommits []string
+	for _, rev := range repoStatus.Revisions {
+		goCommits = append(goCommits, rev.GoRevision)
+	}
+	commitsInRefs, err := x.Gerrit.GetCommitsInRefs(ctx, "go", goCommits, refs)
+	if err != nil {
+		return "", false, err
+	}
+
+	// Determine which builders have to pass to consider a CL green.
+	firstClass := releasetargets.LatestFirstClassPorts()
+	required := map[string][]bool{}
+	for goBranch := range branchSet {
+		required[goBranch] = make([]bool, len(repoStatus.Builders))
+		for i, b := range repoStatus.Builders {
+			cfg, ok := dashboard.Builders[b]
+			if !ok {
+				ctx.Printf("missing builder definition %q; if newly added, redeploy relui?", b)
+				continue
+			}
+			runs := cfg.BuildsRepoPostSubmit(repo.Name, "master", goBranch)
+			ki := len(cfg.KnownIssues) != 0
+			fc := firstClass[releasetargets.OSArch{OS: cfg.GOOS(), Arch: cfg.GOARCH()}]
+			google := cfg.HostConfig().IsGoogle()
+			required[goBranch][i] = runs && !ki && fc && google
+		}
+	}
+
+	// x/ repo statuses are:
+	// <x commit> <go commit>
+	//            <go commit>
+	//            <go commit>
+	// Process one x/ commit at a time, looking for green go commits from
+	// each release branch.
+	var currentRevision, earliestGreen string
+	greenOnBranches := map[string]bool{}
+	for i := 0; i <= len(repoStatus.Revisions); i++ {
+		if currentRevision != "" && (i == len(repoStatus.Revisions) || repoStatus.Revisions[i].Revision != currentRevision) {
+			// Finished an x/ commit.
+			if len(greenOnBranches) == len(branchSet) {
+				// All the branches were green, so this is a candidate.
+				earliestGreen = currentRevision
+			}
+			if currentRevision == commit {
+				// We've passed the desired commit. Stop.
+				break
+			}
+			greenOnBranches = map[string]bool{}
+		}
+		if i == len(repoStatus.Revisions) {
+			break
+		}
+
+		rev := repoStatus.Revisions[i]
+		currentRevision = rev.Revision
+
+		for _, ref := range commitsInRefs[rev.GoRevision] {
+			branch := strings.TrimPrefix(ref, "refs/heads/")
+			allOK := true
+			for i, result := range rev.Results {
+				allOK = allOK && (result == "ok" || !required[branch][i])
+			}
+			if allOK {
+				greenOnBranches[branch] = true
+			}
+		}
+	}
+	return earliestGreen, earliestGreen != "", nil
+}
+
+func (x *TagXReposTasks) getBuildStatus(modPath string) (*types.BuildStatus, error) {
+	resp, err := http.Get(x.DashboardURL + "/?mode=json&repo=" + url.QueryEscape(modPath))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %v", resp.Status)
+	}
+	status := &types.BuildStatus{}
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return nil, err
+	}
+	return status, nil
 }
 
 // MaybeTag tags repo at commit with the next version, unless commit is already

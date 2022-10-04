@@ -22,7 +22,7 @@ type GerritClient interface {
 	// trybots. If the CL is submitted, returns the submitted commit hash.
 	// If parentCommit is non-empty, the submitted CL's parent must match it.
 	Submitted(ctx context.Context, changeID, parentCommit string) (string, bool, error)
-
+	// GetTag returns tag information for a specified tag.
 	GetTag(ctx context.Context, project, tag string) (gerrit.TagInfo, error)
 	// Tag creates a tag on project at the specified commit.
 	Tag(ctx context.Context, project, tag, commit string) error
@@ -34,6 +34,8 @@ type GerritClient interface {
 	ListProjects(ctx context.Context) ([]string, error)
 	// ReadFile reads a file from project at the specified commit.
 	ReadFile(ctx context.Context, project, commit, file string) ([]byte, error)
+	// GetCommitsInRefs gets refs in which the specified commits were merged into.
+	GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error)
 }
 
 type RealGerritClient struct {
@@ -179,6 +181,10 @@ func (c *RealGerritClient) ReadFile(ctx context.Context, project, commit, file s
 	}
 	defer body.Close()
 	return io.ReadAll(body)
+}
+
+func (c *RealGerritClient) GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error) {
+	return c.Client.GetCommitsInRefs(ctx, project, commits, refs)
 }
 
 // ChangeLink returns a link to the review page for the CL with the specified

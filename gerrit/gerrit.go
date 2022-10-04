@@ -1154,3 +1154,15 @@ func (c *Client) GetRelatedChanges(ctx context.Context, changeID, revision strin
 	err := c.do(ctx, &changes, "GET", "/changes/"+changeID+"/revisions/"+revision+"/related")
 	return changes, err
 }
+
+// GetCommitsInRefs gets refs in which the specified commits were merged into.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#commits-included-in.
+func (c *Client) GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error) {
+	result := map[string][]string{}
+	vals := url.Values{}
+	vals["commit"] = commits
+	vals["ref"] = refs
+	err := c.do(ctx, &result, "GET", "/projects/"+project+"/commits:in", urlValues(vals))
+	return result, err
+}

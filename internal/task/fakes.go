@@ -412,6 +412,18 @@ func (g *FakeGerrit) Tag(ctx context.Context, project, tag, commit string) error
 	return nil
 }
 
+func (g *FakeGerrit) GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error) {
+	repo, err := g.repo(project)
+	if err != nil {
+		return nil, err
+	}
+	result := map[string][]string{}
+	for _, commit := range repo.history {
+		result[commit] = []string{"master"}
+	}
+	return result, nil
+}
+
 func (g *FakeGerrit) GerritURL() string {
 	return g.serverURL
 }
