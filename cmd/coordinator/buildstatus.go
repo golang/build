@@ -328,19 +328,23 @@ func (st *buildStatus) forceSnapshotUsage() {
 func (st *buildStatus) checkDep(ctx context.Context, dep string) (have bool, err error) {
 	span := st.CreateSpan("ask_maintner_has_ancestor")
 	defer func() { span.Done(err) }()
-	tries := 0
+	fails := 0
 	for {
-		tries++
 		res, err := maintnerClient.HasAncestor(ctx, &apipb.HasAncestorRequest{
 			Commit:   st.Rev,
 			Ancestor: dep,
 		})
 		if err != nil {
-			if tries == 3 {
+			fails++
+			if fails == 3 {
 				span.Done(err)
 				return false, err
 			}
-			time.Sleep(1 * time.Second)
+			select {
+			case <-ctx.Done():
+				return false, ctx.Err()
+			case <-time.After(1 * time.Second):
+			}
 			continue
 		}
 		if res.UnknownCommit {
