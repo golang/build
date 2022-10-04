@@ -388,14 +388,16 @@ var Hosts = map[string]*HostConfig{
 		HermeticReverse: true,
 	},
 	"host-linux-ppc64le-osu": {
-		Notes:           "Debian Buster; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
+		Notes:           "Ubuntu 20.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
+		Owners:          []*gophers.Person{gh("pmur")},
 		IsReverse:       true,
 		ExpectNum:       5,
 		SSHUsername:     "root",
 		HermeticReverse: true,
 	},
 	"host-linux-ppc64le-power9-osu": {
-		Notes:           "Debian Buster; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
+		Notes:           "Ubuntu 20.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
+		Owners:          []*gophers.Person{gh("pmur")},
 		IsReverse:       true,
 		env:             []string{"GOPPC64=power9"},
 		SSHUsername:     "root",

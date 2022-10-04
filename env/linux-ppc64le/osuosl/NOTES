@@ -1,7 +1,7 @@
 The linux-ppc64le buildlets run on PPC64 VMs at osuosl.org (OSU Open Source Lab).
 
-They run Ubuntu bionic on the host, with Docker images running
-debian:buster running the buildlets.
+They run Ubuntu 20.04 on the host, with buildlets running inside an
+Ubuntu 20.04 container.
 
 Filing tickets: https://support.osuosl.org/
     Ticket username: bradfitz@golang.org
@@ -9,14 +9,14 @@ Filing tickets: https://support.osuosl.org/
 
 Machines:
 
-* go-le-bionic-1: (20 GB RAM, 50 GB disk, 10 cores, POWER9)
-  Linux go-le-bionic-1 4.15.0-65-generic #74-Ubuntu SMP Tue Sep 17 17:08:54 UTC 2019 ppc64le ppc64le ppc64le GNU/Linux
+* go-le-bionic-1: (30 GB RAM, 50 GB disk, 20 cores, POWER9)
+  Linux go-le-bionic-2 5.4.0-125-generic #141-Ubuntu SMP Wed Aug 10 13:41:48 UTC 2022 ppc64le ppc64le ppc64le GNU/Linux
 
   ssh -i ~/.ssh/id_ed25519_golang1 ubuntu@140.211.169.171
   (key from go/go-builders-ssh)
 
-* go-le-bionic-2: (20 GB RAM, 50 GB disk, 10 cores, POWER8)
-  Linux go-le-bionic-2 4.15.0-65-generic #74-Ubuntu SMP Tue Sep 17 17:08:54 UTC 2019 ppc64le ppc64le ppc64le GNU/Linux
+* go-le-bionic-2: (30 GB RAM, 50 GB disk, 20 cores, POWER8)
+  Linux go-le-bionic-2 5.4.0-125-generic #141-Ubuntu SMP Wed Aug 10 13:41:48 UTC 2022 ppc64le ppc64le ppc64le GNU/Linux
 
   ssh -i ~/.ssh/id_ed25519_golang1 ubuntu@140.211.169.160
   (key from go/go-builders-ssh)

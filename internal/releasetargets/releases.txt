@@ -32,7 +32,7 @@ linux-armv6l    linux      arm        linux-arm-aws
 
 linux-ppc64le   linux      ppc64le    linux-ppc64le-buildlet
 	Build only
-	Running on reverse builder: Debian Buster; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl
+	Running on reverse builder: Ubuntu 20.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl
 
 linux-s390x     linux      s390x      linux-s390x-crosscompile
 	Build only
@@ -84,7 +84,7 @@ linux-armv6l    linux      arm        linux-arm-aws
 
 linux-ppc64le   linux      ppc64le    linux-ppc64le-buildlet
 	Build only
-	Running on reverse builder: Debian Buster; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl
+	Running on reverse builder: Ubuntu 20.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl
 
 linux-s390x     linux      s390x      linux-s390x-crosscompile
 	Build only
