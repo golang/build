@@ -1491,8 +1491,8 @@ func init() {
 		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
-		GoDeps: []string{
-			"5c4ed73f1c3f2052d8f60ce5ed45d9d4f9686331", // CL 397895, "internal/goexperiment: add GOEXPERIMENT=boringcrypto"
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 19) && buildRepoByDefault(repo)
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1651,9 +1651,6 @@ func init() {
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GOEXPERIMENT=unified",
 		},
-		GoDeps: []string{
-			"804ecc2581caf33ae347d6a1ce67436d1f74e93b", // CL 328215, which added GOEXPERIMENT=unified on dev.typeparams
-		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
 		KnownIssues:       []int{52150},
@@ -1671,9 +1668,6 @@ func init() {
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GOEXPERIMENT=nounified",
-		},
-		GoDeps: []string{
-			"804ecc2581caf33ae347d6a1ce67436d1f74e93b", // CL 328215, which added GOEXPERIMENT=unified on dev.typeparams
 		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
@@ -2506,8 +2500,8 @@ func init() {
 			"GOEXPERIMENT=boringcrypto",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
-		GoDeps: []string{
-			"5c4ed73f1c3f2052d8f60ce5ed45d9d4f9686331", // CL 397895, "internal/goexperiment: add GOEXPERIMENT=boringcrypto"
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 19) && buildRepoByDefault(repo)
 		},
 	})
 	addBuilder(BuildConfig{
