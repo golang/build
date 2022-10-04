@@ -61,8 +61,7 @@ var slowBotAliases = map[string]string{
 	"linux-mips64":         "linux-mips64-rtrk",
 	"linux-mips64le":       "linux-mips64le-rtrk",
 	"linux-mipsle":         "linux-mipsle-rtrk",
-	"linux-ppc64":          "linux-ppc64-buildlet",
-	"linux-ppc64-sid":      "linux-ppc64-sid-buildlet", // TODO make default when stable
+	"linux-ppc64":          "linux-ppc64-sid-buildlet",
 	"linux-ppc64le":        "linux-ppc64le-buildlet",
 	"linux-ppc64le-power9": "linux-ppc64le-power9osu",
 	"linux-riscv64":        "linux-riscv64-unmatched",
@@ -88,8 +87,7 @@ var slowBotAliases = map[string]string{
 	"plan9":                "plan9-arm",
 	"plan9-386":            "plan9-386-0intro",
 	"plan9-amd64":          "plan9-amd64-0intro",
-	"ppc64":                "linux-ppc64-buildlet",
-	"ppc64-sid":            "linux-ppc64-sid-buildlet", // TODO make default when stable
+	"ppc64":                "linux-ppc64-sid-buildlet",
 	"ppc64le":              "linux-ppc64le-buildlet",
 	"ppc64lep9":            "linux-ppc64le-power9osu",
 	"riscv64":              "linux-riscv64-unmatched",
@@ -381,19 +379,12 @@ var Hosts = map[string]*HostConfig{
 		IsReverse: true,
 		ExpectNum: 1,
 	},
-	"host-linux-ppc64-osu": {
-		Notes:           "Debian jessie; run by Go team on osuosl.org",
-		IsReverse:       true,
-		ExpectNum:       5,
-		SSHUsername:     "root",
-		HermeticReverse: false, // TODO: run in chroots with overlayfs? https://github.com/golang/go/issues/34830#issuecomment-543386764
-	},
-	"host-linux-ppc64-sid": { // TODO rename to "host-linux-ppc64-osu" when stable
+	"host-linux-ppc64-sid": {
 		Notes:           "Debian sid; run by Go team on osuosl.org",
 		IsReverse:       true,
 		ExpectNum:       5,
 		SSHUsername:     "root",
-		HermeticReverse: false, // TODO: run in chroots with overlayfs? https://github.com/golang/go/issues/34830#issuecomment-543386764
+		HermeticReverse: true,
 	},
 	"host-linux-ppc64le-osu": {
 		Notes:           "Debian Buster; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
@@ -2479,13 +2470,6 @@ func init() {
 		KnownIssues: []int{51443},
 	})
 	addBuilder(BuildConfig{
-		Name:           "linux-ppc64-buildlet",
-		HostType:       "host-linux-ppc64-osu",
-		FlakyNet:       true,
-		distTestAdjust: ppc64DistTestPolicy,
-		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
-	})
-	addBuilder(BuildConfig{ // TODO rename to "linux-ppc64-buildlet"/"host-linux-ppc64-osu" when "Sid" becomes default
 		Name:           "linux-ppc64-sid-buildlet",
 		HostType:       "host-linux-ppc64-sid",
 		FlakyNet:       true,
