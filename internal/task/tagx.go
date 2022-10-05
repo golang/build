@@ -73,14 +73,6 @@ func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
 	return repos, nil
 }
 
-var breakCycles = map[string]bool{
-	// golang.org/x/text/message/pipeline is "UNDER DEVELOPMENT"; ignore its deps.
-	"golang.org/x/text->golang.org/x/tools": true,
-	"golang.org/x/text->golang.org/x/mod":   true,
-	// test-only dependency, the reverse is much more real
-	"golang.org/x/mod->golang.org/x/tools": true,
-}
-
 func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo, error) {
 	head, err := x.Gerrit.ReadBranchHead(ctx, project, "master")
 	if errors.Is(err, gerrit.ErrResourceNotExist) {
@@ -119,12 +111,20 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		Name:    project,
 		ModPath: mf.Module.Mod.Path,
 	}
+
+require:
 	for _, req := range mf.Require {
 		if !isX(req.Mod.Path) {
 			continue
 		}
-		if breakCycles[result.ModPath+"->"+req.Mod.Path] {
-			continue
+		for _, c := range req.Syntax.Comments.Suffix {
+			// We have cycles in the x repo dependency graph. Allow a magic
+			// comment, `// tagx:ignore`, to exclude requirements from
+			// consideration.
+			if strings.Contains(c.Token, "tagx:ignore") {
+				ctx.Printf("ignoring %v's requirement on %v: %q", project, req.Mod, c.Token)
+				continue require
+			}
 		}
 		result.Deps = append(result.Deps, req.Mod.Path)
 
