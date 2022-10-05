@@ -379,10 +379,17 @@ func LatestGoBinaries(ctx context.Context) (string, error) {
 }
 
 func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, gomod UpdatedModSum) (string, error) {
+	const subject = `go.mod: update golang.org/x dependencies
+
+Update golang.org/x dependencies to their latest tagged versions.
+Once this CL is submitted, and post-submit testing succeeds on all
+first-class ports across all supported Go versions, this repository
+will be tagged with its next minor version.
+`
 	return x.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: repo,
 		Branch:  "master",
-		Subject: "update x/ dependencies",
+		Subject: subject,
 	}, nil, map[string]string{
 		"go.mod": gomod.Mod,
 		"go.sum": gomod.Sum,
