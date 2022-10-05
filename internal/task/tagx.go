@@ -73,6 +73,18 @@ func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
 	return repos, nil
 }
 
+var initialTags = map[string]bool{
+	"arch":   true,
+	"crypto": true,
+	"image":  true,
+	"net":    true,
+	"oauth2": true,
+	"sync":   true,
+	"sys":    true,
+	"term":   true,
+	"time":   true,
+}
+
 func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo, error) {
 	head, err := x.Gerrit.ReadBranchHead(ctx, project, "master")
 	if errors.Is(err, gerrit.ErrResourceNotExist) {
@@ -81,6 +93,18 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	tag, err := x.latestReleaseTag(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	if tag == "" && initialTags[project] {
+		tag = "v0.0.1"
+	}
+	if tag == "" {
+		ctx.Printf("ignoring %v: no semver tag", project)
+		return nil, nil
 	}
 
 	gomod, err := x.Gerrit.ReadFile(ctx, project, head, "go.mod")
@@ -483,19 +507,9 @@ func (x *TagXReposTasks) getBuildStatus(modPath string) (*types.BuildStatus, err
 // MaybeTag tags repo at commit with the next version, unless commit is already
 // the latest tagged version. repo is returned with Version populated.
 func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit string) (TagRepo, error) {
-	tags, err := x.Gerrit.ListTags(ctx, repo.Name)
-	if err != nil {
-		return TagRepo{}, err
-	}
-	highestRelease := ""
-	for _, tag := range tags {
-		if semver.IsValid(tag) && semver.Prerelease(tag) == "" &&
-			(highestRelease == "" || semver.Compare(highestRelease, tag) < 0) {
-			highestRelease = tag
-		}
-	}
+	highestRelease, err := x.latestReleaseTag(ctx, repo.Name)
 	if highestRelease == "" {
-		return TagRepo{}, fmt.Errorf("no semver tags found in %v", tags)
+		return TagRepo{}, fmt.Errorf("no semver tags found in %v", repo.Name)
 	}
 
 	tagInfo, err := x.Gerrit.GetTag(ctx, repo.Name, highestRelease)
@@ -512,6 +526,21 @@ func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit stri
 		return TagRepo{}, fmt.Errorf("couldn't pick next version for %v: %v", repo.Name, err)
 	}
 	return repo, x.Gerrit.Tag(ctx, repo.Name, repo.Version, commit)
+}
+
+func (x *TagXReposTasks) latestReleaseTag(ctx context.Context, repo string) (string, error) {
+	tags, err := x.Gerrit.ListTags(ctx, repo)
+	if err != nil {
+		return "", err
+	}
+	highestRelease := ""
+	for _, tag := range tags {
+		if semver.IsValid(tag) && semver.Prerelease(tag) == "" &&
+			(highestRelease == "" || semver.Compare(highestRelease, tag) < 0) {
+			highestRelease = tag
+		}
+	}
+	return highestRelease, nil
 }
 
 var majorMinorRestRe = regexp.MustCompile(`^v(\d+)\.(\d+)\..*$`)
