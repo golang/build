@@ -282,6 +282,7 @@ func (st *State) CreateMac(ctx context.Context, ver *Version) (slotName string, 
 		"-on=false",
 		"-net", "Private-1", // 172.17.20.0/24
 		"-g", gt,
+		"-pool", fmt.Sprintf("%s/Resources", *flagCluster),
 		// Put the config on the host's datastore, which
 		// forces the VM to run on that host:
 		"-ds", fmt.Sprintf("BOOT_%d", hostNum),
