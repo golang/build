@@ -363,6 +363,24 @@ func (repo *FakeRepo) Tag(tag, commit string) {
 	repo.tags[tag] = commit
 }
 
+// GetRepoContent returns the content of repo based on the value of commit:
+// - commit is "master": return content of the most recent revision
+// - commit is tag: return content of the repo associating with the commit that the tag maps to
+// - commit is neither "master" or tag: return content of the repo associated with that commit
+func (repo *FakeRepo) GetRepoContent(commit string) (map[string]string, error) {
+	rev := commit
+	if commit == "master" {
+		l := len(repo.history)
+		if l == 0 {
+			return nil, fmt.Errorf("repo %v history is empty", repo.name)
+		}
+		rev = repo.history[l-1]
+	} else if val, ok := repo.tags[commit]; ok {
+		rev = val
+	}
+	return repo.content[rev], nil
+}
+
 var _ GerritClient = (*FakeGerrit)(nil)
 
 func (g *FakeGerrit) ListProjects(ctx context.Context) ([]string, error) {
@@ -394,11 +412,15 @@ func (g *FakeGerrit) ReadFile(ctx context.Context, project string, commit string
 	if err != nil {
 		return nil, err
 	}
-	content := repo.content[commit][file]
-	if content == "" {
+	repoContent, err := repo.GetRepoContent(commit)
+	if err != nil {
+		return nil, err
+	}
+	fileContent := repoContent[file]
+	if fileContent == "" {
 		return nil, fmt.Errorf("commit/file not found %v at %v: %w", file, commit, gerrit.ErrResourceNotExist)
 	}
-	return []byte(content), nil
+	return []byte(fileContent), nil
 }
 
 func (g *FakeGerrit) ListTags(ctx context.Context, project string) ([]string, error) {
@@ -475,5 +497,10 @@ func (g *FakeGerrit) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rev := strings.TrimSuffix(parts[3], ".tar.gz")
-	ServeTarball("", repo.content[rev], w, r)
+	repoContent, err := repo.GetRepoContent(rev)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	ServeTarball("", repoContent, w, r)
 }

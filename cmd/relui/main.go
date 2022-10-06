@@ -113,10 +113,6 @@ func main() {
 	gerritClient := &task.RealGerritClient{
 		Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
-	versionTasks := &task.VersionTasks{
-		Gerrit:    gerritClient,
-		GoProject: "go",
-	}
 	commTasks := task.CommunicationTasks{
 		AnnounceMailTasks: task.AnnounceMailTasks{
 			SendMail:           task.NewSendGridMailClient(*sendgridAPIKey).SendMail,
@@ -195,6 +191,11 @@ func main() {
 		RepoOwner:     "golang",
 		RepoName:      "go",
 		ApproveAction: relui.ApproveActionDep(dbPool),
+	}
+	versionTasks := &task.VersionTasks{
+		Gerrit:         gerritClient,
+		GoProject:      "go",
+		CreateBuildlet: coordinator.CreateBuildlet,
 	}
 	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, commTasks); err != nil {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)

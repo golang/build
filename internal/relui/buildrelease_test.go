@@ -56,6 +56,31 @@ func TestSecurity(t *testing.T) {
 	})
 }
 
+const fakeGo = `#!/bin/bash -eu
+
+case "$1" in
+"get")
+  ls go.mod go.sum >/dev/null
+  for i in "${@:2}"; do
+    echo -e "// pretend we've upgraded to $i" >> go.mod
+    echo "$i h1:asdasd" | tr '@' ' ' >> go.sum
+  done
+  ;;
+"mod")
+  ls go.mod go.sum >/dev/null
+  echo "tidied!" >> go.mod
+  ;;
+"generate")
+  mkdir -p internal/imports
+  cd internal/imports && echo "package imports" >> zstdlib.go
+  ;;
+*)
+  echo unexpected command $@
+  exit 1
+  ;;
+esac
+`
+
 type releaseTestDeps struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -142,12 +167,30 @@ esac
 	base := goRepo.Commit(goFiles)
 	goRepo.Tag("go1.17", base)
 	dlRepo := task.NewFakeRepo(t, "dl")
-	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo)
+	toolsRepo := task.NewFakeRepo(t, "tools")
+	toolsRepo1 := toolsRepo.Commit(map[string]string{
+		"go.mod":                       "module golang.org/x/tools\n",
+		"go.sum":                       "\n",
+		"internal/imports/mkstdlib.go": "package imports\nconst C=1",
+	})
+	toolsRepo.Tag("master", toolsRepo1)
+	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo, toolsRepo)
 
 	gerrit := &reviewerCheckGerrit{FakeGerrit: fakeGerrit}
+	goServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		task.ServeTarball("dl/go1.19.linux-amd64.tar.gz", map[string]string{
+			"go/bin/go": fakeGo,
+		}, w, r)
+	}))
+	t.Cleanup(goServer.Close)
 	versionTasks := &task.VersionTasks{
-		Gerrit:    gerrit,
-		GoProject: "go",
+		Gerrit:         gerrit,
+		GerritURL:      fakeGerrit.GerritURL(),
+		GoProject:      "go",
+		CreateBuildlet: fakeBuildlets.CreateBuildlet,
+		LatestGoBinaries: func(context.Context) (string, error) {
+			return goServer.URL + "/dl/go1.19.linux-amd64.tar.gz", nil
+		},
 	}
 	milestoneTasks := &task.MilestoneTasks{
 		Client:    &fakeGitHub{},

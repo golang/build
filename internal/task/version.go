@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/net/context"
@@ -13,8 +14,11 @@ import (
 
 // VersionTasks contains tasks related to versioning the release.
 type VersionTasks struct {
-	Gerrit    GerritClient
-	GoProject string
+	Gerrit           GerritClient
+	GerritURL        string
+	GoProject        string
+	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
+	LatestGoBinaries func(context.Context) (string, error)
 }
 
 func (t *VersionTasks) GetCurrentMajor(ctx context.Context) (int, error) {
@@ -137,4 +141,59 @@ func (t *VersionTasks) ReadBranchHead(ctx *workflow.TaskContext, branch string) 
 // TagRelease tags commit as version.
 func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit string) error {
 	return t.Gerrit.Tag(ctx, t.GoProject, version, commit)
+}
+
+func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, branch string, reviewers []string, version string) (string, error) {
+	var files = make(map[string]string) // Map key is relative path, and map value is file content.
+
+	binaries, err := t.LatestGoBinaries(ctx)
+	if err != nil {
+		return "", err
+	}
+	bc, err := t.CreateBuildlet(ctx, "linux-amd64-longtest")
+	if err != nil {
+		return "", err
+	}
+	defer bc.Close()
+	if err := bc.PutTarFromURL(ctx, binaries, ""); err != nil {
+		return "", err
+	}
+	toolsTarURL := fmt.Sprintf("%s/%s/+archive/%s.tar.gz", t.GerritURL, "tools", "master")
+	if err := bc.PutTarFromURL(ctx, toolsTarURL, "tools"); err != nil {
+		return "", err
+	}
+	writer := &LogWriter{Logger: ctx}
+	go writer.Run(ctx)
+	remoteErr, execErr := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
+		Dir:    "tools",
+		Args:   []string{"generate", "./internal/imports"},
+		Output: writer,
+	})
+	if execErr != nil {
+		return "", fmt.Errorf("Exec failed: %v", execErr)
+	}
+	if remoteErr != nil {
+		return "", fmt.Errorf("Command failed: %v", remoteErr)
+	}
+	tgz, err := bc.GetTar(context.Background(), "tools/internal/imports")
+	if err != nil {
+		return "", err
+	}
+	defer tgz.Close()
+	tools, err := tgzToMap(tgz)
+	if err != nil {
+		return "", err
+	}
+	files["internal/imports/zstdlib.go"] = tools["zstdlib.go"]
+
+	major, err := t.GetCurrentMajor(ctx)
+	if err != nil {
+		return "", err
+	}
+	changeInput := gerrit.ChangeInput{
+		Project: "tools",
+		Subject: fmt.Sprintf("internal/imports: update stdlib index for %v", major),
+		Branch:  "master",
+	}
+	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
 }
