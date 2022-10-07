@@ -17,7 +17,7 @@ func gh(githubUsername string) Owner {
 }
 
 var (
-	adonovan     = gh("alandonovan")
+	adonovan     = gh("adonovan")
 	agl          = gh("agl")
 	agnivade     = gh("agnivade")
 	alexbrainman = gh("alexbrainman")
@@ -790,8 +790,7 @@ var entries = map[string]*Entry{
 	// default owners of x/tools/...
 	"tools": {
 		// for issue triage.
-		Primary:   []Owner{toolsTeam},
-		Secondary: []Owner{findleyr, hyangah},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/cmd/bundle": {
 		Primary: []Owner{adonovan},
@@ -951,8 +950,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{cherryyz},
 	},
 	"vscode-go": {
-		Primary:   []Owner{toolsTeam},
-		Secondary: []Owner{hyangah, suzmue, jamalc},
+		Primary: []Owner{toolsTeam},
 	},
 
 	// These components are domains, not Go packages.
