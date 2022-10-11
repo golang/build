@@ -676,10 +676,23 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, repo *maintner.GitHubR
 		log.Printf("[dry-run] would add comment to github.com/%s/issues/%d: %v", repo.ID(), issueNum, msg)
 		return nil
 	}
-	_, _, err = b.ghc.Issues.CreateComment(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueComment{
+	_, resp, createError := b.ghc.Issues.CreateComment(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueComment{
 		Body: github.String(msg),
 	})
-	return err
+	if createError != nil && resp != nil && resp.StatusCode == http.StatusUnprocessableEntity {
+		// While maintner's tracking of deleted issues is incomplete (see go.dev/issue/30184),
+		// we sometimes see a deleted issue whose /comments endpoint returns 200 OK with an
+		// empty list, so the error check from ListComments doesn't catch it. (The deleted
+		// issue 55403 is an example of such a case.) So check again with the Get endpoint,
+		// which seems to return 404 more reliably in such cases at least as of 2022-10-11.
+		if _, resp, err := b.ghc.Issues.Get(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum)); err != nil &&
+			resp != nil && resp.StatusCode == http.StatusNotFound {
+			log.Printf("addGitHubComment: Issue %v#%v returned a 404 after posting comment failed with 422. Skipping. See go.dev/issue/30184.", repo.ID(), issueNum)
+			b.deletedIssues[githubIssue{repo.ID(), issueNum}] = true
+			return nil
+		}
+	}
+	return createError
 }
 
 // createGitHubIssue returns the number of the created issue, or 4242 in dry-run mode.
