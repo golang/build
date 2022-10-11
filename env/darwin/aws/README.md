@@ -126,8 +126,9 @@ configure it to autoboot to macOS.
 $ $HOME/start-mutable.sh macos-monterey.qcow2 $OSK_VALUE
 ```
 
-Now complete the remainder of the [machine setup](../setup-notes.md). See the
-`hostfwd` option in `qemu.sh` if you would like SSH access to the guest.
+Now complete the remainder of the [machine setup](../setup-notes.md). For SSH
+access, the guest should be reachable at 192.168.1.2 or 192.168.1.3 from the
+host machine.
 
 Copy complete images to `s3://go-builder-data/darwin/` for use on other
 builders.

@@ -107,6 +107,9 @@ In System Preferences:
 - Sharing > enable ssh (leave the default administrators setting)
 - Users & Groups > Gopher Gopherson > Login Items > add run-builder
 - Users & Groups > Login Options > auto-login Gopher Gopherson
+- Network -> Ethernet -> Advanced -> DNS -> Add DNS server -> 8.8.8.8
+  - Only necessary on AWS guests, and until https://go.dev/issue/36718 is
+    resolved on all tested releases.
 
 Install XCode:
 - Download Xcode from the Apple Developer site:
