@@ -6,12 +6,16 @@ package access
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/api/idtoken"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func TestIAPFromContextError(t *testing.T) {
@@ -37,7 +41,12 @@ func TestIAPAuthFunc(t *testing.T) {
 		if token != wantJWTToken || audience != wantAudience {
 			return nil, fmt.Errorf("testValidator(%q, %q); want %q, %q", token, audience, wantJWTToken, wantAudience)
 		}
-		return &idtoken.Payload{}, nil
+		return &idtoken.Payload{
+			Issuer:   "https://cloud.google.com/iap",
+			Audience: audience,
+			Expires:  time.Now().Add(time.Minute).Unix(),
+			IssuedAt: time.Now().Add(-time.Minute).Unix(),
+		}, nil
 	}
 	authFunc := iapAuthFunc(wantAudience, testValidator)
 	gotCtx, err := authFunc(ctx)
@@ -50,6 +59,109 @@ func TestIAPAuthFunc(t *testing.T) {
 	}
 	if diff := cmp.Diff(got, want); diff != "" {
 		t.Errorf("ctx.Value(%v) mismatch (-got, +want):\n%s", contextIAP, diff)
+	}
+}
+
+func TestIAPAuthFuncError(t *testing.T) {
+	testCases := []struct {
+		desc      string
+		validator validator
+		ctx       context.Context
+		audience  string
+		wantErr   codes.Code
+	}{
+		{
+			desc: "invalid context",
+			validator: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+				return &idtoken.Payload{
+					Issuer:   "https://cloud.google.com/iap",
+					Audience: audience,
+					Expires:  time.Now().Add(time.Minute).Unix(),
+					IssuedAt: time.Now().Add(-time.Minute).Unix(),
+				}, nil
+			},
+			ctx:      context.Background(),
+			audience: "foo/bar/zar",
+			wantErr:  codes.Internal,
+		},
+		{
+			desc: "invalid jwt header",
+			validator: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+				return &idtoken.Payload{
+					Issuer:   "https://cloud.google.com/iap",
+					Audience: audience,
+					Expires:  time.Now().Add(time.Minute).Unix(),
+					IssuedAt: time.Now().Add(-time.Minute).Unix(),
+				}, nil
+			},
+			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+				iapHeaderEmail: "mary@foo.com",
+				iapHeaderID:    "chaz.service.moo",
+			})),
+			audience: "foo/bar/zar",
+			wantErr:  codes.Unauthenticated,
+		},
+		{
+			desc: "failed validation",
+			validator: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+				return nil, errors.New("validation failed")
+			},
+			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+				iapHeaderJWT:   "xyz",
+				iapHeaderEmail: "mary@foo.com",
+				iapHeaderID:    "chaz.service.moo",
+			})),
+			audience: "foo/bar/zar",
+			wantErr:  codes.Unauthenticated,
+		},
+		{
+			desc: "wrong issuer",
+			validator: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+				return &idtoken.Payload{
+					Issuer:   "https://cloud.google.com/iap-wrong",
+					Audience: audience,
+					Expires:  time.Now().Add(time.Minute).Unix(),
+					IssuedAt: time.Now().Add(-time.Minute).Unix(),
+				}, nil
+			},
+			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+				iapHeaderJWT:   "xyz",
+				iapHeaderEmail: "mary@foo.com",
+				iapHeaderID:    "chaz.service.moo",
+			})),
+			audience: "foo/bar/zar",
+			wantErr:  codes.Unauthenticated,
+		},
+		{
+			desc: "jwt expired",
+			validator: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+				return &idtoken.Payload{
+					Issuer:   "https://cloud.google.com/iap",
+					Audience: audience,
+					Expires:  time.Now().Add(-time.Minute).Unix(),
+					IssuedAt: time.Now().Add(-10 * time.Minute).Unix(),
+				}, nil
+			},
+			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+				iapHeaderJWT:   "xyz",
+				iapHeaderEmail: "mary@foo.com",
+				iapHeaderID:    "chaz.service.moo",
+			})),
+			audience: "foo/bar/zar",
+			wantErr:  codes.Unauthenticated,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			authFunc := iapAuthFunc(tc.audience, tc.validator)
+			gotCtx, err := authFunc(tc.ctx)
+			if err == nil {
+				t.Fatalf("authFunc(ctx) = %s, nil; want error", gotCtx)
+			}
+			if status.Code(err) != tc.wantErr {
+				t.Fatalf("authFunc(ctx) = nil, %s; want %s", status.Code(err), tc.wantErr)
+			}
+		})
 	}
 }
 

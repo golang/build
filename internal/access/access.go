@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	grpcauth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"google.golang.org/api/idtoken"
@@ -74,10 +75,18 @@ func iapAuthFunc(audience string, validatorFn validator) grpcauth.AuthFunc {
 		if len(jwt) == 0 {
 			return ctx, status.Error(codes.Unauthenticated, "IAP JWT not found in request")
 		}
-		var err error
-		if _, err = validatorFn(ctx, jwt[0], audience); err != nil {
+		payload, err := validatorFn(ctx, jwt[0], audience)
+		if err != nil {
 			log.Printf("access: error validating JWT: %s", err)
 			return ctx, status.Error(codes.Unauthenticated, "unable to authenticate")
+		}
+		if payload.Issuer != "https://cloud.google.com/iap" {
+			log.Printf("access: incorrect issuer: %q", payload.Issuer)
+			return ctx, status.Error(codes.Unauthenticated, "incorrect issuer")
+		}
+		if payload.Expires+30 < time.Now().Unix() || payload.IssuedAt-30 > time.Now().Unix() {
+			log.Printf("Bad JWT times: expires %v, issued %v", time.Unix(payload.Expires, 0), time.Unix(payload.IssuedAt, 0))
+			return ctx, status.Error(codes.Unauthenticated, "JWT timestamp invalid")
 		}
 		if ctx, err = contextWithIAPMD(ctx, md); err != nil {
 			log.Printf("access: unable to set IAP fields in context: %s", err)
@@ -159,7 +168,14 @@ func FakeContextWithOutgoingIAPAuth(ctx context.Context, iap IAPFields) context.
 
 // FakeIAPAuthFunc provides a fake IAP authentication validation and should only be used for testing.
 func FakeIAPAuthFunc() grpcauth.AuthFunc {
-	return iapAuthFunc("TESTING", func(ctx context.Context, token, audiance string) (*idtoken.Payload, error) { return nil, nil })
+	return iapAuthFunc("TESTING", func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+		return &idtoken.Payload{
+			Issuer:   "https://cloud.google.com/iap",
+			Audience: audience,
+			Expires:  time.Now().Add(time.Minute).Unix(),
+			IssuedAt: time.Now().Add(-time.Minute).Unix(),
+		}, nil
+	})
 }
 
 // FakeIAPAuthInterceptorOptions provides the GRPC server options for fake IAP authentication
