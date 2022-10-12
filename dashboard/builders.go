@@ -2783,7 +2783,26 @@ func init() {
 		HostType: "host-linux-amd64-perf",
 		Notes:    "Performance testing for linux-amd64",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return repo == "benchmarks"
+			if repo == "benchmarks" {
+				// Benchmark the main Go repo.
+				return true
+			}
+			if repo == "tools" {
+				// Benchmark x/tools.
+				//
+				// When benchmarking subrepos, we ignore the Go
+				// commit and always use the most recent Go
+				// release, meaning we get identical duplicate
+				// runs for each Go commit that runs at the
+				// same subrepo commit.
+				//
+				// Limit to running on release branches since
+				// they have far fewer Go commits than tip,
+				// thus reducing the the number of duplicate
+				// runs.
+				return strings.HasPrefix(goBranch, "release-branch.")
+			}
+			return false
 		},
 		RunBench:     true,
 		SkipSnapshot: true,
