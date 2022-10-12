@@ -195,8 +195,12 @@ func main() {
 	}
 
 	tagTasks := &task.TagXReposTasks{
-		Gerrit:         gerritClient,
-		CreateBuildlet: coordinator.CreateBuildlet,
+		Gerrit:           gerritClient,
+		GerritURL:        "https://go-review.googlesource.com",
+		CreateBuildlet:   coordinator.CreateBuildlet,
+		LatestGoBinaries: task.LatestGoBinaries,
+		DashboardURL:     "https://build.golang.org",
+		ApproveAction:    relui.ApproveActionDep(dbPool),
 	}
 	dh.RegisterDefinition("Tag x/ repos", tagTasks.NewDefinition())
 

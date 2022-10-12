@@ -399,6 +399,9 @@ func TestTagXRepos(t *testing.T) {
 			return goServer.URL + "/dl/go1.19.linux-amd64.tar.gz", nil
 		},
 		DashboardURL: dashServer.URL,
+		ApproveAction: func(tc *workflow.TaskContext) error {
+			return nil
+		},
 	}
 	wd := tasks.NewDefinition()
 	w, err := workflow.Start(wd, nil)

@@ -31,6 +31,7 @@ type TagXReposTasks struct {
 	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
 	LatestGoBinaries func(context.Context) (string, error)
 	DashboardURL     string
+	ApproveAction    func(*wf.TaskContext) error
 }
 
 func (x *TagXReposTasks) NewDefinition() *wf.Definition {
@@ -73,6 +74,7 @@ func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
 	return repos, nil
 }
 
+// TODO(heschi): delete after first use
 var initialTags = map[string]bool{
 	"arch":   true,
 	"crypto": true,
@@ -531,6 +533,11 @@ func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit stri
 	repo.Version, err = nextMinor(highestRelease)
 	if err != nil {
 		return TagRepo{}, fmt.Errorf("couldn't pick next version for %v: %v", repo.Name, err)
+	}
+	// TODO(heschi): delete after first couple uses
+	ctx.Printf("Waiting for approval to tag %v at %v as %v", repo.Name, commit, repo.Version)
+	if err := x.ApproveAction(ctx); err != nil {
+		return TagRepo{}, err
 	}
 	return repo, x.Gerrit.Tag(ctx, repo.Name, repo.Version, commit)
 }
