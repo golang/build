@@ -40,6 +40,7 @@ import (
 	"golang.org/x/build/livelog"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/types"
+	"golang.org/x/mod/semver"
 	perfstorage "golang.org/x/perf/storage"
 )
 
@@ -804,8 +805,9 @@ func (st *buildStatus) writeSnapshot(bc buildlet.Client) (err error) {
 	return wr.Close()
 }
 
-// baselineCommit determines the baseline commit for this benchmark run.
-func (st *buildStatus) baselineCommit() (baseline string, err error) {
+// toolchainBaselineCommit determines the toolchain baseline commit for this
+// benchmark run.
+func (st *buildStatus) toolchainBaselineCommit() (baseline string, err error) {
 	sp := st.CreateSpan("list_go_releases")
 	defer func() { sp.Done(err) }()
 
@@ -834,6 +836,49 @@ func (st *buildStatus) baselineCommit() (baseline string, err error) {
 	}
 
 	return "", fmt.Errorf("cannot find latest release for %s", st.RevBranch)
+}
+
+// subrepoBaselineCommit determines the baseline commit for this subrepo benchmark run.
+func (st *buildStatus) subrepoBaselineCommit() (baseline string, err error) {
+	if st.SubName != "tools" {
+		return "", fmt.Errorf("unknown subrepo for benchmarking %q", st.SubName)
+	}
+
+	// Baseline is the latest gopls release tag (but not prerelease).
+	gerritClient := pool.NewGCEConfiguration().GerritClient()
+	tags, err := gerritClient.GetProjectTags(st.ctx, st.SubName)
+	if err != nil {
+		return "", fmt.Errorf("error fetching tags for %q: %w", st.SubName, err)
+	}
+
+	goplsVersions := make([]string, 0)
+	goplsRevisions := make(map[string]string)
+	for ref, ti := range tags {
+		// gopls tags are "gopls/vX.Y.Z". Ignore non-gopls tags.
+		const prefix =  "refs/tags/gopls/"
+		if !strings.HasPrefix(ref, prefix) {
+			continue
+		}
+		version := ref[len(prefix):]
+		goplsVersions = append(goplsVersions, version)
+		goplsRevisions[version] = ti.Revision
+	}
+
+	semver.Sort(goplsVersions)
+
+	// Return latest non-prerelease version.
+	for i := len(goplsVersions)-1; i >= 0; i-- {
+		ver := goplsVersions[i]
+		if !semver.IsValid(ver) {
+			continue
+		}
+		if semver.Prerelease(ver) != "" {
+			continue
+		}
+		return goplsRevisions[ver], nil
+	}
+
+	return "", fmt.Errorf("no valid versions found in %+v", goplsVersions)
 }
 
 // reportErr reports an error to Stackdriver.
@@ -1147,11 +1192,68 @@ func moduleProxy() string {
 
 // runBenchmarkTests runs benchmarks from x/benchmarks when RunBench is set.
 func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
-	if st.SubName != "benchmarks" {
-		return nil, fmt.Errorf("benchmark tests only supported in x/benchmarks")
+	if st.SubName == "" {
+		return nil, fmt.Errorf("benchmark tests must run on a subrepo")
 	}
 
-	const baselineDir = "gobaseline"
+	// Repository under test.
+	//
+	// When running benchmarks, there are numerous variables:
+	//
+	// * Go experiment version
+	// * Go baseline version
+	// * Subrepo experiment version (if benchmarking subrepo)
+	// * Subrepo baseline version (if benchmarking subrepo)
+	// * x/benchmarks version (which defines which benchmarks run and how
+	//   regardless of which repo is under test)
+	//
+	// For benchmarking of the main Go repo, the first three are used.
+	// Ideally, the coordinator scheduler would handle the combinatorics on
+	// testing these. Unfortunately, the coordinator doesn't handle
+	// three-way combinations. By running Go benchmarks as a "subrepo test"
+	// for x/benchmark, we can at least get the scheduler to handle the
+	// x/benchmarks version (st.SubRev) and Go experiment version (st.Rev).
+	// The Go baseline version is simply selected as the most recent
+	// previous release tag (e.g., 1.18.x on release-branch.go1.18) at the
+	// time this test runs (st.installBaselineToolchain below).
+	//
+	// When benchmarking a subrepo, we want to compare a subrepo experiment
+	// version vs subrepo baseline version (_not_ compare a single subrepo
+	// version vs baseline/experiment Go versions). We do need to build the
+	// subrepo with some version of Go, so we choose to use the latest
+	// released version at the time of testing (same as Go baseline above).
+	// We'd like the coordinator to handle the combination of x/benchmarks
+	// and x/<subrepo>, however the coordinator can't do multiple subrepo
+	// combinations.
+	//
+	// Thus, we run these as typical subrepo builders, which gives us the
+	// subrepo experiment version and a Go experiment version (which we
+	// will ignore). The Go baseline version is selected as above, and the
+	// subrepo baseline version is selected as the latest (non-pre-release)
+	// tag in the subrepo.
+	//
+	// This setup is suboptimal because the caller is installing an
+	// experiment Go version that we won't use when building the subrepo
+	// (we'll use the Go baseline version). We'll also end up with
+	// duplicate runs with identical subrepo experiment/baseline and
+	// x/benchmarks versions, as builds will trigger on every commit to the
+	// Go repo. Limiting subrepo builders to release branches can
+	// significantly reduce the number of Go commit triggers.
+	//
+	// TODO(prattmic): Cleaning this up is good future work, but these
+	// deficiencies are not particularly problematic and avoid the need for
+	// major changes in other parts of the coordinator.
+	repo := st.SubName
+	if repo == "benchmarks" {
+		repo = "go"
+	}
+
+	const (
+		baselineDir        = "go-baseline"
+		benchmarksDir      = "benchmarks"
+		subrepoDir         = "subrepo"
+		subrepoBaselineDir = "subrepo-baseline"
+	)
 
 	workDir, err := st.bc.WorkDir(st.ctx)
 	if err != nil {
@@ -1160,30 +1262,25 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	}
 	goroot := st.conf.FilePathJoin(workDir, "go")
 	baselineGoroot := st.conf.FilePathJoin(workDir, baselineDir)
-	gopath := st.conf.FilePathJoin(workDir, "gopath")
-	repoPath := importPathOfRepo(st.SubName)
 
 	// Install baseline toolchain in addition to the experiment toolchain.
-	baselineCommit, remoteErr, err := st.installBaselineToolchain(goroot, baselineDir)
+	toolchainBaselineCommit, remoteErr, err := st.installBaselineToolchain(goroot, baselineDir)
 	if remoteErr != nil || err != nil {
 		return remoteErr, err
 	}
 
-	st.LogEventTime("fetching_subrepo", st.SubName)
+	// Install x/benchmarks.
+	benchmarksCommit, remoteErr, err := st.fetchBenchmarksSource(benchmarksDir)
+	if remoteErr != nil || err != nil {
+		return remoteErr, err
+	}
 
-	// Check out the provided sub-repo to the buildlet's workspace so we
-	// can run scripts from the repo.
-	{
-		tgz, err := sourcecache.GetSourceTgz(st, st.SubName, st.SubRev)
-		if errors.As(err, new(sourcecache.TooBigError)) {
-			// Source being too big is a non-retryable error.
-			return err, nil
-		} else if err != nil {
-			return nil, err
-		}
-		err = st.bc.PutTar(st.ctx, tgz, "gopath/src/"+repoPath)
-		if err != nil {
-			return nil, err
+	// If testing a repo other than Go, install the subrepo and its baseline.
+	var subrepoBaselineCommit string
+	if repo != "go" {
+		subrepoBaselineCommit, remoteErr, err = st.fetchSubrepoAndBaseline(subrepoDir, subrepoBaselineDir)
+		if remoteErr != nil || err != nil {
+			return remoteErr, err
 		}
 	}
 
@@ -1194,32 +1291,35 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	env := append(st.conf.Env(),
 		"BENCH_BASELINE_GOROOT="+baselineGoroot,
 		"BENCH_BRANCH="+st.RevBranch,
-		"BENCH_REPOSITORY=go",
+		"BENCH_REPOSITORY="+repo,
 		"GOROOT="+goroot,
-		"GOPATH="+gopath,
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
 	)
-	env = append(env, st.conf.ModulesEnv(st.SubName)...)
+	env = append(env, st.conf.ModulesEnv("benchmarks")...)
+	if repo != "go" {
+		env = append(env, "BENCH_SUBREPO_PATH="+st.conf.FilePathJoin(workDir, subrepoDir))
+		env = append(env, "BENCH_SUBREPO_BASELINE_PATH="+st.conf.FilePathJoin(workDir, subrepoBaselineDir))
+	}
 	rErr, err := st.bc.Exec(st.ctx, "./go/bin/go", buildlet.ExecOpts{
 		Debug:    true, // make buildlet print extra debug in output for failures
 		Output:   st,
-		Dir:      "gopath/src/" + repoPath,
+		Dir:      benchmarksDir,
 		ExtraEnv: env,
 		Path:     []string{st.conf.FilePathJoin("$WORKDIR", "go", "bin"), "$PATH"},
-		Args:     []string{"run", repoPath + "/cmd/bench"},
+		Args:     []string{"run", "golang.org/x/benchmarks/cmd/bench"},
 	})
 	if err != nil || rErr != nil {
 		return rErr, err
 	}
 
 	// Upload benchmark results on success.
-	if err := st.uploadBenchResults(baselineCommit); err != nil {
+	if err := st.uploadBenchResults(toolchainBaselineCommit, subrepoBaselineCommit, benchmarksCommit); err != nil {
 		return nil, err
 	}
 	return nil, nil
 }
 
-func (st *buildStatus) uploadBenchResults(baselineCommit string) (err error) {
+func (st *buildStatus) uploadBenchResults(toolchainBaselineCommit, subrepoBaselineCommit, benchmarksCommit string) (err error) {
 	sp := st.CreateSpan("upload_bench_results")
 	defer func() { sp.Done(err) }()
 
@@ -1238,10 +1338,22 @@ func (st *buildStatus) uploadBenchResults(baselineCommit string) (err error) {
 
 	// Prepend some useful metadata.
 	var b strings.Builder
-	fmt.Fprintf(&b, "experiment-commit: %s\n", st.Rev)
-	fmt.Fprintf(&b, "experiment-commit-time: %s\n", st.RevCommitTime.In(time.UTC).Format(time.RFC3339Nano))
-	fmt.Fprintf(&b, "baseline-commit: %s\n", baselineCommit)
-	fmt.Fprintf(&b, "benchmarks-commit: %s\n", st.SubRev)
+	if subrepoBaselineCommit != "" {
+		// Subrepos compare two subrepo commits.
+		fmt.Fprintf(&b, "experiment-commit: %s\n", st.SubRev)
+		fmt.Fprintf(&b, "experiment-commit-time: %s\n", st.SubRevCommitTime.In(time.UTC).Format(time.RFC3339Nano))
+		fmt.Fprintf(&b, "baseline-commit: %s\n", subrepoBaselineCommit)
+		// Subrepo benchmarks typically don't care about the toolchain
+		// version, but we should still provide the data as toolchain
+		// version changes may cause a performance discontinuity.
+		fmt.Fprintf(&b, "toolchain-commit: %s\n", toolchainBaselineCommit)
+	} else {
+		// Go repo compares two main repo commits.
+		fmt.Fprintf(&b, "experiment-commit: %s\n", st.Rev)
+		fmt.Fprintf(&b, "experiment-commit-time: %s\n", st.RevCommitTime.In(time.UTC).Format(time.RFC3339Nano))
+		fmt.Fprintf(&b, "baseline-commit: %s\n", toolchainBaselineCommit)
+	}
+	fmt.Fprintf(&b, "benchmarks-commit: %s\n", benchmarksCommit)
 	fmt.Fprintf(&b, "post-submit: %t\n", st.trySet == nil)
 	if _, err := w.Write([]byte(b.String())); err != nil {
 		u.Abort()
@@ -1266,11 +1378,11 @@ func (st *buildStatus) installBaselineToolchain(goroot, baselineDir string) (bas
 	sp := st.CreateSpan("install_baseline")
 	defer func() { sp.Done(err) }()
 
-	commit, err := st.baselineCommit()
+	commit, err := st.toolchainBaselineCommit()
 	if err != nil {
 		return "", nil, fmt.Errorf("error finding baseline commit: %w", err)
 	}
-	fmt.Fprintf(st, "Baseline toolchain %v\n", commit)
+	fmt.Fprintf(st, "Baseline toolchain %s\n", commit)
 
 	if st.useSnapshotFor(commit) {
 		if err := st.writeGoSnapshotTo(commit, baselineDir); err != nil {
@@ -1304,6 +1416,74 @@ func (st *buildStatus) installBaselineToolchain(goroot, baselineDir string) (bas
 		return "", remoteErr, nil
 	}
 	return commit, nil, nil
+}
+
+func (st *buildStatus) fetchBenchmarksSource(benchmarksDir string) (rev string, remoteErr, err error) {
+	if st.SubName == "benchmarks" {
+		rev = st.SubRev
+	} else {
+		rev, err = getRepoHead("benchmarks")
+		if err != nil {
+			return "", nil, fmt.Errorf("error finding x/benchmarks HEAD: %w", err)
+		}
+	}
+
+	sp := st.CreateSpan("fetching_benchmarks")
+	defer func() { sp.Done(err) }()
+
+	tgz, err := sourcecache.GetSourceTgz(st, "benchmarks", rev)
+	if errors.As(err, new(sourcecache.TooBigError)) {
+		// Source being too big is a non-retryable error.
+		return "", err, nil
+	} else if err != nil {
+		return "", nil, err
+	}
+
+	err = st.bc.PutTar(st.ctx, tgz, benchmarksDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return rev, nil, nil
+}
+
+func (st *buildStatus) fetchSubrepoAndBaseline(repoDir, baselineDir string) (baselineRev string, remoteErr, err error) {
+	st.LogEventTime("fetching_subrepo", st.SubName)
+
+	tgz, err := sourcecache.GetSourceTgz(st, st.SubName, st.SubRev)
+	if errors.As(err, new(sourcecache.TooBigError)) {
+		// Source being too big is a non-retryable error.
+		return "", err, nil
+	} else if err != nil {
+		return "", nil, err
+	}
+
+	err = st.bc.PutTar(st.ctx, tgz, repoDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	baselineRev, err = st.subrepoBaselineCommit()
+	if err != nil {
+		return "", nil, err
+	}
+
+	fmt.Fprintf(st, "Baseline subrepo %s\n", baselineRev)
+
+	tgz, err = sourcecache.GetSourceTgz(st, st.SubName, baselineRev)
+	if errors.As(err, new(sourcecache.TooBigError)) {
+		// Source being too big is a non-retryable error.
+		return "", err, nil
+	} else if err != nil {
+		return "", nil, err
+	}
+
+	err = st.bc.PutTar(st.ctx, tgz, baselineDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return baselineRev, nil, nil
 }
 
 var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")
