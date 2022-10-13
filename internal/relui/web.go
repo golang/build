@@ -82,7 +82,6 @@ func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *
 		"prettySize":            prettySize,
 		"sidebarWorkflows":      s.sidebarWorkflows,
 		"unmarshalResultDetail": unmarshalResultDetail,
-		"workflowParams":        workflowParams,
 	}
 	s.templates = template.Must(template.New("").Funcs(helpers).ParseFS(templates, "templates/*.html"))
 	s.homeTmpl = s.mustLookup("home.html")
@@ -173,19 +172,6 @@ type homeResponse struct {
 	ActiveWorkflows   []db.Workflow
 	InactiveWorkflows []db.Workflow
 	Schedules         []ScheduleEntry
-}
-
-func workflowParams(wf db.Workflow) (map[string]string, error) {
-	rawParams := make(map[string]json.RawMessage)
-	err := json.Unmarshal([]byte(wf.Params.String), &rawParams)
-	if err != nil {
-		return nil, err
-	}
-	params := make(map[string]string, len(rawParams))
-	for p, v := range rawParams {
-		params[p] = string(v)
-	}
-	return params, nil
 }
 
 // homeHandler renders the homepage.
