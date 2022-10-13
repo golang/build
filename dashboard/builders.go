@@ -436,34 +436,40 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		SSHUsername: "root",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-netbsd-amd64-9_0": {
 		VMImage:     "netbsd-amd64-9-0-2019q4",
 		Notes:       "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		SSHUsername: "root",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-netbsd-arm-bsiegert": {
-		IsReverse: true,
-		ExpectNum: 1,
-		Owners:    []*gophers.Person{gh("bsiegert")},
+		IsReverse:   true,
+		ExpectNum:   1,
+		Owners:      []*gophers.Person{gh("bsiegert")},
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-netbsd-arm64-bsiegert": {
-		IsReverse: true,
-		ExpectNum: 1,
-		Owners:    []*gophers.Person{gh("bsiegert")},
+		IsReverse:   true,
+		ExpectNum:   1,
+		Owners:      []*gophers.Person{gh("bsiegert")},
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-386-68": {
 		VMImage:     "openbsd-386-68-v3", // v3 adds 009_exit syspatch; see go.dev/cl/278732.
 		machineType: "n2",                // force Intel; see go.dev/issue/49209
 		Notes:       "OpenBSD 6.8 (with 009_exit syspatch); GCE VM, built from build/env/openbsd-386",
 		SSHUsername: "gopher",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-386-70": {
 		VMImage:     "openbsd-386-70",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		Notes:       "OpenBSD 7.0; GCE VM, built from build/env/openbsd-386",
 		SSHUsername: "gopher",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-386-70-n2d": {
 		// This host config is only for the runtime team to use investigating golang/go#49209.
@@ -471,33 +477,39 @@ var Hosts = map[string]*HostConfig{
 		machineType: "n2d", // force AMD; see go.dev/issue/49209
 		Notes:       "OpenBSD 7.0; GCE VM, built from build/env/openbsd-386; AMD",
 		SSHUsername: "gopher",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-amd64-68": {
 		VMImage:     "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see go.dev/cl/278732.
 		machineType: "n2",                  // force Intel; see go.dev/issue/49209
 		Notes:       "OpenBSD 6.8 (with 009_exit syspatch); GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername: "gopher",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-amd64-70": {
 		VMImage:     "openbsd-amd64-70",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		Notes:       "OpenBSD 7.0; GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername: "gopher",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-arm-joelsing": {
-		IsReverse: true,
-		ExpectNum: 1,
-		Owners:    []*gophers.Person{gh("4a6f656c")},
+		IsReverse:   true,
+		ExpectNum:   1,
+		Owners:      []*gophers.Person{gh("4a6f656c")},
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-arm64-joelsing": {
-		IsReverse: true,
-		ExpectNum: 1,
-		Owners:    []*gophers.Person{gh("4a6f656c")},
+		IsReverse:   true,
+		ExpectNum:   1,
+		Owners:      []*gophers.Person{gh("4a6f656c")},
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-mips64-joelsing": {
-		IsReverse: true,
-		ExpectNum: 1,
-		Owners:    []*gophers.Person{gh("4a6f656c")},
+		IsReverse:   true,
+		ExpectNum:   1,
+		Owners:      []*gophers.Person{gh("4a6f656c")},
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-plan9-386-0intro": {
 		IsReverse: true,
