@@ -146,7 +146,7 @@ func TestIsGreenLive(t *testing.T) {
 		DashboardURL: "https://build.golang.org",
 	}
 	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
-	greenCommit, ok, err := tasks.findGreen(ctx, TagRepo{Name: repo, ModPath: "golang.org/x/" + repo}, rev)
+	greenCommit, ok, err := tasks.findGreen(ctx, TagRepo{Name: repo, ModPath: "golang.org/x/" + repo}, rev, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestIsGreen(t *testing.T) {
 			green, _, err := tasks.findGreen(ctx, TagRepo{
 				Name:    "tools",
 				ModPath: "golang.org/x/tools",
-			}, tt.rev)
+			}, tt.rev, false)
 			if err != nil {
 				t.Fatal(err)
 			}

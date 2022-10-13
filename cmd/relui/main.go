@@ -42,6 +42,7 @@ import (
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
+	"golang.org/x/build/repos"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/grpc"
@@ -194,9 +195,14 @@ func main() {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)
 	}
 
+	ignoreProjects := map[string]bool{}
+	for p, r := range repos.ByGerritProject {
+		ignoreProjects[p] = !r.ShowOnDashboard()
+	}
 	tagTasks := &task.TagXReposTasks{
+		IgnoreProjects:   ignoreProjects,
 		Gerrit:           gerritClient,
-		GerritURL:        "https://go-review.googlesource.com",
+		GerritURL:        "https://go.googlesource.com",
 		CreateBuildlet:   coordinator.CreateBuildlet,
 		LatestGoBinaries: task.LatestGoBinaries,
 		DashboardURL:     "https://build.golang.org",

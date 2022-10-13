@@ -26,6 +26,7 @@ import (
 )
 
 type TagXReposTasks struct {
+	IgnoreProjects   map[string]bool // project name -> ignore
 	Gerrit           GerritClient
 	GerritURL        string
 	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
@@ -58,6 +59,10 @@ func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
 	ctx.Printf("Examining repositories %v", projects)
 	var repos []TagRepo
 	for _, p := range projects {
+		if x.IgnoreProjects[p] {
+			ctx.Printf("Repository %v ignored", p)
+			continue
+		}
 		repo, err := x.readRepo(ctx, p)
 		if err != nil {
 			return nil, err
@@ -102,7 +107,7 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		return nil, err
 	}
 	if tag == "" && initialTags[project] {
-		tag = "v0.0.1"
+		tag = "PLACEHOLDER"
 	}
 	if tag == "" {
 		ctx.Printf("ignoring %v: no semver tag", project)
@@ -399,11 +404,11 @@ will be tagged with its next minor version.
 }
 func (x *TagXReposTasks) AwaitGreen(ctx *wf.TaskContext, repo TagRepo, commit string) (string, error) {
 	return AwaitCondition(ctx, time.Minute, func() (string, bool, error) {
-		return x.findGreen(ctx, repo, commit)
+		return x.findGreen(ctx, repo, commit, false)
 	})
 }
 
-func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit string) (string, bool, error) {
+func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit string, verbose bool) (string, bool, error) {
 	// Read the front status page to discover live Go release branches.
 	frontStatus, err := x.getBuildStatus("")
 	if err != nil {
@@ -426,12 +431,13 @@ func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit str
 		return "", false, fmt.Errorf("reading dashboard for %q: %v", repo.ModPath, err)
 	}
 	// Some slow-moving repos have years of Go history. Throw away old stuff.
+	firstRev := repoStatus.Revisions[0].Revision
 	for i, rev := range repoStatus.Revisions {
 		ts, err := time.Parse(time.RFC3339, rev.Date)
 		if err != nil {
 			return "", false, fmt.Errorf("parsing date of rev %#v: %v", rev, err)
 		}
-		if ts.Add(7 * 24 * time.Hour).Before(time.Now()) {
+		if i == 200 || (rev.Revision != firstRev && ts.Add(7*24*time.Hour).Before(time.Now())) {
 			repoStatus.Revisions = repoStatus.Revisions[:i]
 			break
 		}
@@ -455,7 +461,6 @@ func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit str
 		for i, b := range repoStatus.Builders {
 			cfg, ok := dashboard.Builders[b]
 			if !ok {
-				ctx.Printf("missing builder definition %q; if newly added, redeploy relui?", b)
 				continue
 			}
 			runs := cfg.BuildsRepoPostSubmit(repo.Name, "master", goBranch)
@@ -477,6 +482,9 @@ func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit str
 	for i := 0; i <= len(repoStatus.Revisions); i++ {
 		if currentRevision != "" && (i == len(repoStatus.Revisions) || repoStatus.Revisions[i].Revision != currentRevision) {
 			// Finished an x/ commit.
+			if verbose {
+				ctx.Printf("rev %v green = %v", currentRevision, len(greenOnBranches) == len(branchSet))
+			}
 			if len(greenOnBranches) == len(branchSet) {
 				// All the branches were green, so this is a candidate.
 				earliestGreen = currentRevision
@@ -497,11 +505,19 @@ func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit str
 		for _, ref := range commitsInRefs[rev.GoRevision] {
 			branch := strings.TrimPrefix(ref, "refs/heads/")
 			allOK := true
+			var missing []string
 			for i, result := range rev.Results {
-				allOK = allOK && (result == "ok" || !required[branch][i])
+				ok := result == "ok" || !required[branch][i]
+				if !ok {
+					missing = append(missing, repoStatus.Builders[i])
+				}
+				allOK = allOK && ok
 			}
 			if allOK {
 				greenOnBranches[branch] = true
+			}
+			if verbose {
+				ctx.Printf("branch %v at %v: green = %v (missing: %v)", branch, rev.GoRevision, allOK, missing)
 			}
 		}
 	}
@@ -528,23 +544,30 @@ func (x *TagXReposTasks) getBuildStatus(modPath string) (*types.BuildStatus, err
 // the latest tagged version. repo is returned with Version populated.
 func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit string) (TagRepo, error) {
 	highestRelease, err := x.latestReleaseTag(ctx, repo.Name)
+	if err != nil {
+		return TagRepo{}, err
+	}
+
 	if highestRelease == "" {
-		return TagRepo{}, fmt.Errorf("no semver tags found in %v", repo.Name)
+		if !initialTags[repo.Name] {
+			return TagRepo{}, fmt.Errorf("no semver tags found in %v", repo.Name)
+		}
+		repo.Version = "v0.1.0"
+	} else {
+		tagInfo, err := x.Gerrit.GetTag(ctx, repo.Name, highestRelease)
+		if err != nil && !initialTags[repo.Name] {
+			return TagRepo{}, fmt.Errorf("reading project %v tag %v: %v", repo.Name, highestRelease, err)
+		}
+		if tagInfo.Revision == commit {
+			repo.Version = highestRelease
+			return repo, nil
+		}
+		repo.Version, err = nextMinor(highestRelease)
+		if err != nil {
+			return TagRepo{}, fmt.Errorf("couldn't pick next version for %v: %v", repo.Name, err)
+		}
 	}
 
-	tagInfo, err := x.Gerrit.GetTag(ctx, repo.Name, highestRelease)
-	if err != nil {
-		return TagRepo{}, fmt.Errorf("reading project %v tag %v: %v", repo.Name, highestRelease, err)
-	}
-	if tagInfo.Revision == commit {
-		repo.Version = highestRelease
-		return repo, nil
-	}
-
-	repo.Version, err = nextMinor(highestRelease)
-	if err != nil {
-		return TagRepo{}, fmt.Errorf("couldn't pick next version for %v: %v", repo.Name, err)
-	}
 	// TODO(heschi): delete after first couple uses
 	ctx.Printf("Waiting for approval to tag %v at %v as %v", repo.Name, commit, repo.Version)
 	if err := x.ApproveAction(ctx); err != nil {
