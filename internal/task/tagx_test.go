@@ -227,6 +227,7 @@ func TestIsGreen(t *testing.T) {
 					Repo:       repo,
 					Revision:   fmt.Sprintf("tools-%v", line.toolsRev),
 					GoRevision: fmt.Sprintf("go-%v-%v", line.goBranch, line.goRev),
+					Date:       time.Now().Format(time.RFC3339),
 					Branch:     "master",
 					GoBranch:   line.goBranch,
 				}
@@ -380,6 +381,7 @@ func TestTagXRepos(t *testing.T) {
 					Repo:       r.name,
 					Revision:   commit,
 					GoRevision: go1,
+					Date:       time.Now().Format(time.RFC3339),
 					Branch:     "master",
 					GoBranch:   "master",
 					Results:    allOK,

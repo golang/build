@@ -425,6 +425,17 @@ func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit str
 	if err != nil {
 		return "", false, fmt.Errorf("reading dashboard for %q: %v", repo.ModPath, err)
 	}
+	// Some slow-moving repos have years of Go history. Throw away old stuff.
+	for i, rev := range repoStatus.Revisions {
+		ts, err := time.Parse(time.RFC3339, rev.Date)
+		if err != nil {
+			return "", false, fmt.Errorf("parsing date of rev %#v: %v", rev, err)
+		}
+		if ts.Add(7 * 24 * time.Hour).Before(time.Now()) {
+			repoStatus.Revisions = repoStatus.Revisions[:i]
+			break
+		}
+	}
 
 	// Associate Go revisions with branches.
 	var goCommits []string
