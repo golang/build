@@ -427,7 +427,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-s390x": {
 		Notes:     "run by IBM",
-		Owners:    []*gophers.Person{gh("jonathan-albrecht-ibm"), gophers.GetPerson("Cindy Lee")}, // See https://groups.google.com/g/golang-dev/c/obUDaYbaxXw/m/5sMgfDYVAAAJ.
+		Owners:    []*gophers.Person{gh("Vishwanatha-HD"), gh("srinivas-pokala")},
 		IsReverse: true,
 		ExpectNum: 2, // See https://github.com/golang/go/issues/49557#issuecomment-969148789.
 	},
