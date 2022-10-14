@@ -2715,20 +2715,42 @@ func fetchCodeOwners(ctx context.Context, oReq *owners.Request) (*owners.Respons
 // The resulting order of the entries is non-deterministic.
 func mergeOwnersEntries(entries []*owners.Entry, authorEmail string) *owners.Entry {
 	var result owners.Entry
-	pm := make(map[owners.Owner]bool)
+	pm := make(map[owners.Owner]int)
 	for _, e := range entries {
 		for _, o := range e.Primary {
-			pm[o] = true
+			pm[o]++
 		}
 	}
-	sm := make(map[owners.Owner]bool)
+	sm := make(map[owners.Owner]int)
 	for _, e := range entries {
 		for _, o := range e.Secondary {
-			if !pm[o] {
-				sm[o] = true
+			if pm[o] > 0 {
+				pm[o]++
+			} else {
+				sm[o]++
 			}
 		}
 	}
+
+	const maxReviewers = 3
+	if len(pm) > maxReviewers {
+		// Spamming many reviewers.
+		// Cut to three most common reviewers
+		// and drop all the secondaries.
+		var keep []owners.Owner
+		for o := range pm {
+			keep = append(keep, o)
+		}
+		sort.Slice(keep, func(i, j int) bool {
+			return pm[keep[i]] > pm[keep[j]]
+		})
+		keep = keep[:maxReviewers]
+		sort.Slice(keep, func(i, j int) bool {
+			return keep[i].GerritEmail < keep[j].GerritEmail
+		})
+		return &owners.Entry{Primary: keep}
+	}
+
 	for o := range pm {
 		if o.GerritEmail != authorEmail {
 			result.Primary = append(result.Primary, o)

@@ -431,6 +431,8 @@ func TestMergeOwnersEntries(t *testing.T) {
 		andybons = owners.Owner{GitHubUsername: "andybons", GerritEmail: "andybons@golang.org"}
 		bradfitz = owners.Owner{GitHubUsername: "bradfitz", GerritEmail: "bradfitz@golang.org"}
 		filippo  = owners.Owner{GitHubUsername: "filippo", GerritEmail: "filippo@golang.org"}
+		iant     = owners.Owner{GitHubUsername: "iant", GerritEmail: "iant@golang.org"}
+		rsc      = owners.Owner{GitHubUsername: "rsc", GerritEmail: "rsc@golang.org"}
 	)
 	testCases := []struct {
 		desc        string
@@ -495,6 +497,18 @@ func TestMergeOwnersEntries(t *testing.T) {
 			filippo.GerritEmail,
 			&owners.Entry{
 				Secondary: []owners.Owner{andybons},
+			},
+		},
+		{
+			"too many reviewers",
+			[]*owners.Entry{
+				{Primary: []owners.Owner{iant, bradfitz}, Secondary: []owners.Owner{andybons}},
+				{Primary: []owners.Owner{andybons}, Secondary: []owners.Owner{iant, bradfitz}},
+				{Primary: []owners.Owner{iant, filippo}, Secondary: []owners.Owner{bradfitz, andybons, rsc}},
+			},
+			"",
+			&owners.Entry{
+				Primary: []owners.Owner{andybons, bradfitz, iant},
 			},
 		},
 	}
