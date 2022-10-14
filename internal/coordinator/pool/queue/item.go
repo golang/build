@@ -33,7 +33,7 @@ type SchedItem struct {
 	IsTry              bool
 	IsHelper           bool
 	Repo               string
-	Branch             string
+	Branch             string // the Go repository branch
 
 	// CommitTime is the latest commit date of the relevant repos
 	// that make up the work being tested. (For example, x/foo
@@ -58,7 +58,7 @@ func (s *SchedItem) Priority() BuildletPriority {
 	}
 }
 
-func (s *SchedItem) sortTime() time.Time {
+func (s *SchedItem) SortTime() time.Time {
 	if s.IsGomote || s.IsTry || s.CommitTime.IsZero() {
 		return s.RequestTime
 	}
@@ -73,7 +73,7 @@ func (s *SchedItem) Less(other *SchedItem) bool {
 	}
 	if s.Priority() == PriorityBatch {
 		// Batch items are completed in LIFO.
-		return s.sortTime().After(other.sortTime())
+		return s.SortTime().After(other.SortTime())
 	}
-	return other.sortTime().After(s.sortTime())
+	return other.SortTime().After(s.SortTime())
 }

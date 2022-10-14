@@ -283,7 +283,7 @@ func (st *buildStatus) onceInitHelpersFunc() {
 		HostType:   st.conf.HostType,
 		IsTry:      st.isTry(),
 		CommitTime: st.commitTime(),
-		Branch:     st.branch(),
+		Branch:     st.RevBranch,
 		Repo:       st.RepoOrGo(),
 		User:       st.AuthorEmail,
 	}
@@ -368,7 +368,7 @@ func (st *buildStatus) getBuildlet() (buildlet.Client, error) {
 		BuilderRev: st.BuilderRev,
 		CommitTime: st.commitTime(),
 		Repo:       st.RepoOrGo(),
-		Branch:     st.branch(),
+		Branch:     st.RevBranch,
 		User:       st.AuthorEmail,
 	}
 	st.mu.Lock()

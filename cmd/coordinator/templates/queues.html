@@ -34,11 +34,12 @@
             <thead>
               <tr>
                 <th class="QueueStats-queueTableHeader">Name</th>
-                <th class="QueueStats-queueTableHeader">Branch</th>
+                <th class="QueueStats-queueTableHeader">Repository</th>
+                <th class="QueueStats-queueTableHeader">Go branch</th>
                 <th class="QueueStats-queueTableHeader">Cost</th>
                 <th class="QueueStats-queueTableHeader">Priority</th>
                 <th class="QueueStats-queueTableHeader">User</th>
-                <th class="QueueStats-queueTableHeader">Waiting</th>
+                <th class="QueueStats-queueTableHeader">Age (request or commit)</th>
               </tr>
             </thead>
             <tbody>
@@ -49,7 +50,10 @@
                     {{$item.Build.Name}}
                   </td>
                   <td class="QueueStats-queueTableColumn">
-                    {{printf "%s/%s" $item.Build.Repo $item.Build.Branch}}
+                    {{$item.Build.Repo}}
+                  </td>
+                  <td class="QueueStats-queueTableColumn">
+                    {{$item.Build.Branch}}
                   </td>
                   <td class="QueueStats-queueTableColumn">
                     {{$item.Cost}}
@@ -70,16 +74,10 @@
                     {{$build.User}}
                   </td>
                   <td class="QueueStats-queueTableColumn">
-                    {{humanDuration (timeSince $build.RequestTime)}}
+                    {{humanDuration (timeSince $build.SortTime)}}
                   </td>
                 </tr>
               {{else}}
-                <tr class="QueueStats-queueTableRow">
-                  <td class="QueueStats-queueTableColumn" colspan="6">Queue empty.</td>
-                </tr>
-                <tr class="QueueStats-queueTableRow">
-                  <td class="QueueStats-queueTableColumn" colspan="6">Queue empty.</td>
-                </tr>
                 <tr class="QueueStats-queueTableRow">
                   <td class="QueueStats-queueTableColumn" colspan="6">Queue empty.</td>
                 </tr>
