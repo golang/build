@@ -132,6 +132,14 @@ SELECT workflows.*
 FROM workflows
 WHERE workflows.finished = FALSE;
 
+-- name: FailUnfinishedTasks :exec
+UPDATE tasks
+    SET finished = TRUE,
+    started      = TRUE,
+    error        = 'task interrupted before completion',
+    updated_at   = $2
+WHERE workflow_id = $1 and started and not finished;
+
 -- name: WorkflowFinished :one
 UPDATE workflows
 SET finished   = $2,
@@ -139,27 +147,6 @@ SET finished   = $2,
     error      = $4,
     updated_at = $5
 WHERE workflows.id = $1
-RETURNING *;
-
--- name: ResetTask :one
-UPDATE tasks
-SET finished    = FALSE,
-    started     = FALSE,
-    approved_at = DEFAULT,
-    result      = DEFAULT,
-    error       = DEFAULT,
-    updated_at  = $3
-WHERE workflow_id = $1
-  AND name = $2
-RETURNING *;
-
--- name: ResetWorkflow :one
-UPDATE workflows
-SET finished   = FALSE,
-    output     = DEFAULT,
-    error      = DEFAULT,
-    updated_at = $2
-WHERE id = $1
 RETURNING *;
 
 -- name: ApproveTask :one

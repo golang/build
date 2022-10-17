@@ -250,74 +250,23 @@ func (q *Queries) DeleteSchedule(ctx context.Context, id int32) (Schedule, error
 	return i, err
 }
 
-const resetTask = `-- name: ResetTask :one
+const failUnfinishedTasks = `-- name: FailUnfinishedTasks :exec
 UPDATE tasks
-SET finished    = FALSE,
-    started     = FALSE,
-    approved_at = DEFAULT,
-    result      = DEFAULT,
-    error       = DEFAULT,
-    updated_at  = $3
-WHERE workflow_id = $1
-  AND name = $2
-RETURNING workflow_id, name, finished, result, error, created_at, updated_at, approved_at, ready_for_approval, started, retry_count
+    SET finished = TRUE,
+    started      = TRUE,
+    error        = 'task interrupted before completion',
+    updated_at   = $2
+WHERE workflow_id = $1 and started and not finished
 `
 
-type ResetTaskParams struct {
+type FailUnfinishedTasksParams struct {
 	WorkflowID uuid.UUID
-	Name       string
 	UpdatedAt  time.Time
 }
 
-func (q *Queries) ResetTask(ctx context.Context, arg ResetTaskParams) (Task, error) {
-	row := q.db.QueryRow(ctx, resetTask, arg.WorkflowID, arg.Name, arg.UpdatedAt)
-	var i Task
-	err := row.Scan(
-		&i.WorkflowID,
-		&i.Name,
-		&i.Finished,
-		&i.Result,
-		&i.Error,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ApprovedAt,
-		&i.ReadyForApproval,
-		&i.Started,
-		&i.RetryCount,
-	)
-	return i, err
-}
-
-const resetWorkflow = `-- name: ResetWorkflow :one
-UPDATE workflows
-SET finished   = FALSE,
-    output     = DEFAULT,
-    error      = DEFAULT,
-    updated_at = $2
-WHERE id = $1
-RETURNING id, params, name, created_at, updated_at, finished, output, error, schedule_id
-`
-
-type ResetWorkflowParams struct {
-	ID        uuid.UUID
-	UpdatedAt time.Time
-}
-
-func (q *Queries) ResetWorkflow(ctx context.Context, arg ResetWorkflowParams) (Workflow, error) {
-	row := q.db.QueryRow(ctx, resetWorkflow, arg.ID, arg.UpdatedAt)
-	var i Workflow
-	err := row.Scan(
-		&i.ID,
-		&i.Params,
-		&i.Name,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Finished,
-		&i.Output,
-		&i.Error,
-		&i.ScheduleID,
-	)
-	return i, err
+func (q *Queries) FailUnfinishedTasks(ctx context.Context, arg FailUnfinishedTasksParams) error {
+	_, err := q.db.Exec(ctx, failUnfinishedTasks, arg.WorkflowID, arg.UpdatedAt)
+	return err
 }
 
 const schedules = `-- name: Schedules :many

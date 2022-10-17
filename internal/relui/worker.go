@@ -12,6 +12,7 @@ import (
 	"log"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
@@ -176,6 +177,12 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 		if err != nil {
 			return fmt.Errorf("q.Workflow(_, %v) = %w", id, err)
 		}
+		// The worker may have crashed, or been re-deployed. Any
+		// started but unfinished tasks are in an unknown state.
+		// Mark them as such for human review.
+		if err := q.FailUnfinishedTasks(ctx, db.FailUnfinishedTasksParams{WorkflowID: id, UpdatedAt: time.Now()}); err != nil {
+			return fmt.Errorf("q.FailUnfinishedTasks(_, %v) = %w", id, err)
+		}
 		tasks, err = q.TasksForWorkflow(ctx, id)
 		if err != nil {
 			return fmt.Errorf("q.TasksForWorkflow(_, %v) = %w", id, err)
@@ -207,16 +214,6 @@ func (w *Worker) Resume(ctx context.Context, id uuid.UUID) error {
 			Finished:   t.Finished,
 			Error:      t.Error.String,
 			RetryCount: int(t.RetryCount),
-		}
-		// The worker may have crashed, or been re-deployed. Any
-		// started but unfinished tasks are in an unknown state.
-		// Mark them as such for human review.
-		if t.Started && !t.Finished {
-			ts.Finished = true
-			ts.Error = "task interrupted before completion"
-			if t.Error.Valid {
-				ts.Error = fmt.Sprintf("%s. Previous error: %s", ts.Error, t.Error.String)
-			}
 		}
 		if t.Result.Valid {
 			ts.SerializedResult = []byte(t.Result.String)
