@@ -61,7 +61,7 @@ func setupGomoteTest(t *testing.T, ctx context.Context) protos.GomoteServiceClie
 	copts := []grpc.DialOption{
 		grpc.WithInsecure(),
 		grpc.WithBlock(),
-		grpc.WithTimeout(time.Second),
+		grpc.WithTimeout(5 * time.Second),
 	}
 	conn, err := grpc.Dial(lis.Addr().String(), copts...)
 	if err != nil {
