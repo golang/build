@@ -471,6 +471,18 @@ func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit str
 		}
 	}
 
+	foundCommit := false
+	for _, rev := range repoStatus.Revisions {
+		if rev.Revision == commit {
+			foundCommit = true
+			break
+		}
+	}
+	if !foundCommit {
+		ctx.Printf("commit %v not found on first page of results; too old or too new?", commit)
+		return "", false, nil
+	}
+
 	// x/ repo statuses are:
 	// <x commit> <go commit>
 	//            <go commit>

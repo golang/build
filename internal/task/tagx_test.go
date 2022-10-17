@@ -199,6 +199,26 @@ func TestIsGreen(t *testing.T) {
 			},
 			wantGreenRev: "tools-1",
 		},
+		{
+			name: "not green yet",
+			rev:  "tools-1",
+			lines: []revLine{
+				{"master", 3, 1, true},
+				{"release-branch.go1.19", 1, 1, false},
+				{"release-branch.go1.18", 1, 1, true},
+			},
+			wantGreenRev: "",
+		},
+		{
+			name: "commit not registered on dashboard",
+			rev:  "tools-2",
+			lines: []revLine{
+				{"master", 1, 1, true},
+				{"release-branch.go1.19", 1, 1, true},
+				{"release-branch.go1.18", 1, 1, true},
+			},
+			wantGreenRev: "",
+		},
 	}
 	for _, tt := range tests {
 
