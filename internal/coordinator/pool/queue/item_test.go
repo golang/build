@@ -52,7 +52,7 @@ func TestSchedItemLess(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "try FIFO, less",
+			name: "try FIFO",
 			a: &SchedItem{
 				IsTry:       true,
 				RequestTime: t1,
@@ -62,18 +62,6 @@ func TestSchedItemLess(t *testing.T) {
 				RequestTime: t2,
 			},
 			want: true,
-		},
-		{
-			name: "try FIFO, greater",
-			a: &SchedItem{
-				IsTry:       true,
-				RequestTime: t2,
-			},
-			b: &SchedItem{
-				IsTry:       true,
-				RequestTime: t1,
-			},
-			want: false,
 		},
 		{
 			name: "reg LIFO, less",
@@ -88,16 +76,16 @@ func TestSchedItemLess(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "reg LIFO, greater",
+			name: "release branch less than master",
 			a: &SchedItem{
-				CommitTime:  t1,
-				RequestTime: t2, // shouldn't be used
+				CommitTime: t2,
+				Branch:     "release-branch.go1.19",
 			},
 			b: &SchedItem{
-				CommitTime:  t2,
-				RequestTime: t1, // shouldn't be used
+				CommitTime: t1,
+				Branch:     "master",
 			},
-			want: false,
+			want: true,
 		},
 	}
 	for _, tt := range tests {
@@ -105,6 +93,9 @@ func TestSchedItemLess(t *testing.T) {
 			got := tt.a.Less(tt.b)
 			if got != tt.want {
 				t.Errorf("got %v; want %v", got, tt.want)
+			}
+			if got == tt.b.Less(tt.a) {
+				t.Errorf("not reflexive")
 			}
 		})
 	}

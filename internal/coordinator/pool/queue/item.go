@@ -5,6 +5,7 @@
 package queue
 
 import (
+	"strings"
 	"time"
 
 	"golang.org/x/build/internal/buildgo"
@@ -70,6 +71,12 @@ func (s *SchedItem) SortTime() time.Time {
 func (s *SchedItem) Less(other *SchedItem) bool {
 	if s.Priority() != other.Priority() {
 		return s.Priority() < other.Priority()
+	}
+	// Release branch work tends to starve because the Go commits are old.
+	// Prioritize release branch work over other branches.
+	releaseBranch := func(i *SchedItem) bool { return strings.HasPrefix(s.Branch, "release-branch") }
+	if s.Priority() == PriorityAutomated && releaseBranch(s) != releaseBranch(other) {
+		return releaseBranch(s)
 	}
 	if s.Priority() == PriorityBatch {
 		// Batch items are completed in LIFO.
