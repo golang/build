@@ -16,6 +16,11 @@ func gh(githubUsername string) Owner {
 	return Owner{GitHubUsername: githubUsername, GerritEmail: p.Gerrit}
 }
 
+// archOsTeamn returns the *Entry for an architecture or OS team at github
+func archOsTeam(teamName string) *Entry {
+	return &Entry{Primary: []Owner{gh("golang/" + teamName)}}
+}
+
 var (
 	adonovan     = gh("adonovan")
 	agl          = gh("agl")
@@ -963,6 +968,37 @@ var entries = map[string]*Entry{
 	"index.golang.org": modProxyOwners,
 	"proxy.golang.org": modProxyOwners,
 	"sum.golang.org":   modProxyOwners,
+}
+
+// archOses is a map of <architecture> or <OS> to Owner entries,
+// used in the same way as entries above.
+// This map should not be modified at runtime.
+var archOses = map[string]*Entry{
+	// OSes and architectures have teams.
+	// OSes.  There is no team for "linux"
+	"aix":       archOsTeam("aix"),
+	"android":   archOsTeam("android"),
+	"darwin":    archOsTeam("darwin"),
+	"dragonfly": archOsTeam("dragonfly"),
+	"freebsd":   archOsTeam("freebsd"),
+	"illumos":   archOsTeam("illumos"),
+	"ios":       archOsTeam("ios"),
+	"netbsd":    archOsTeam("netbsd"),
+	"openbsd":   archOsTeam("openbsd"),
+	"plan9":     archOsTeam("plan9"),
+	"solaris":   archOsTeam("solaris"), // team is empty as of 2022-10
+	"wasm":      archOsTeam("wasm"),
+	"windows":   archOsTeam("windows"),
+
+	// Architectures.  There is no team for "x86" or "amd64".
+	"arm":     archOsTeam("arm"),
+	"arm64":   archOsTeam("arm"),
+	"mips":    archOsTeam("mips"),
+	"mips64":  archOsTeam("mips"),
+	"ppc64":   archOsTeam("ppc64"),
+	"riscv64": archOsTeam("riscv64"),
+	"loong64": archOsTeam("loong64"),
+	"s390x":   archOsTeam("s390x"),
 }
 
 var wasmOwners = []Owner{neelance, cherryyz}

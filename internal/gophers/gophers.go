@@ -123,6 +123,30 @@ func init() {
 	addPerson("Tools Team", "@golang/tools-team")
 	addPerson("Compiler Team", "@golang/compiler")
 
+	addPerson("AIX Team", "@golang/aix")
+	addPerson("Android Team", "@golang/android")
+	addPerson("Darwin Team", "@golang/darwin")
+	addPerson("Dragonfly Team", "@golang/dragonfly")
+	addPerson("FreeBSD Team", "@golang/freebsd")
+	addPerson("Illumos Team", "@golang/illumos")
+	addPerson("iOS Team", "@golang/ios")
+	addPerson("JS Team", "@golang/js")
+	// There is no golang/linux team as of 2022-10
+	addPerson("NetBSD Team", "@golang/netbsd")
+	addPerson("OpenBSD Team", "@golang/openbsd")
+	addPerson("Plan9 Team", "@golang/plan9")
+	addPerson("Solaris Team", "@golang/solaris") // no members as of 2022-10
+	addPerson("Wasm Team", "@golang/wasm")
+	addPerson("Windows Team", "@golang/windows")
+
+	// There is no golang/amd64 or golang/x86 team as of 2022-10
+	addPerson("Arm Team", "@golang/arm") // includes arm64
+	addPerson("Loong64 Team", "@golang/loong64")
+	addPerson("Mips Team", "@golang/mips") // includes mips64
+	addPerson("Ppc64 Team", "@golang/ppc64")
+	addPerson("Riscv64 Team", "@golang/riscv64")
+	addPerson("S390x Team", "@golang/s390x")
+
 	addPerson("212472270", "ggp493@gmail.com", "@ggriffiths")
 	addPerson("9.nashi", "9.nashi@gmail.com", "@80nashi")
 	addPerson("AJ Yoo", "ajarusan@arista.com")

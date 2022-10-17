@@ -199,7 +199,7 @@ func TranslatePathForIssues(path string) string {
 
 // translateOwnersPaths returns a copy of entries with all its keys
 // adjusted for better readability on https://dev.golang.org/owners.
-func translateOwnersPaths() (map[string]*Entry, error) {
+func translateOwnersPaths(entries map[string]*Entry) (map[string]*Entry, error) {
 	tm := make(map[string]*Entry)
 	for path, entry := range entries {
 		tPath := TranslatePathForIssues(path)
@@ -211,15 +211,30 @@ func translateOwnersPaths() (map[string]*Entry, error) {
 	return tm, nil
 }
 
+// ownerData is passed to the Template, which produces two tables.
+type ownerData struct {
+	Paths    map[string]*Entry
+	ArchOSes map[string]*Entry
+}
+
 func serveIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	indexCache.once.Do(func() {
-		displayEntries, err := translateOwnersPaths()
+		paths, err := translateOwnersPaths(entries)
 		if err != nil {
 			indexCache.err = err
 			return
 		}
+
+		archOses, err := translateOwnersPaths(archOses)
+		if err != nil {
+			indexCache.err = err
+			return
+		}
+
+		displayEntries := ownerData{paths, archOses}
+
 		var buf bytes.Buffer
 		indexCache.err = indexTmpl.Execute(&buf, displayEntries)
 		indexCache.html = buf.Bytes()
@@ -302,7 +317,27 @@ body {
 	<span class="primary">Primaries</span>
 	<span class="secondary">Secondaries</span>
 </div>
-{{range $path, $entry := .}}
+{{range $path, $entry := .Paths}}
+	<div class="entry">
+		<span class="path">{{$path}}</span>
+		<span class="primary">
+			{{range .Primary}}
+				<a href="{{githubURL .GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
+			{{end}}
+		</span>
+		<span class="secondary">
+			{{range .Secondary}}
+				<a href="{{githubURL .GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
+			{{end}}
+		</span>
+	</div>
+{{end}}
+<div class="table-header">
+	<span class="path">Arch/OS</span>
+	<span class="primary">Primaries</span>
+	<span class="secondary">Secondaries</span>
+</div>
+{{range $path, $entry := .ArchOSes}}
 	<div class="entry">
 		<span class="path">{{$path}}</span>
 		<span class="primary">
