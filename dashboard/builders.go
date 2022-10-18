@@ -2748,7 +2748,6 @@ func init() {
 		Name:           "freebsd-riscv64-unmatched",
 		HostType:       "host-freebsd-riscv64-unmatched",
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=4"},
-		KnownIssues:    []int{53466},
 		FlakyNet:       true,
 		distTestAdjust: riscvDistTestPolicy,
 		privateGoProxy: true, // this builder is behind firewall
