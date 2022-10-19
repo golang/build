@@ -1262,6 +1262,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 	}
 	goroot := st.conf.FilePathJoin(workDir, "go")
 	baselineGoroot := st.conf.FilePathJoin(workDir, baselineDir)
+	gopath := st.conf.FilePathJoin(workDir, "gopath")
 
 	// Install baseline toolchain in addition to the experiment toolchain.
 	toolchainBaselineCommit, remoteErr, err := st.installBaselineToolchain(goroot, baselineDir)
@@ -1293,6 +1294,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		"BENCH_BRANCH="+st.RevBranch,
 		"BENCH_REPOSITORY="+repo,
 		"GOROOT="+goroot,
+		"GOPATH="+gopath, // For module cache storage
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
 	)
 	env = append(env, st.conf.ModulesEnv("benchmarks")...)
