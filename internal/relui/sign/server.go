@@ -25,18 +25,23 @@ var _ Service = (*SigningServer)(nil)
 // signing status requests to a client.
 type SigningServer struct {
 	protos.UnimplementedReleaseServiceServer
-	callback *responseCallback
+
+	// requests is a channel of outgoing signing requests to be sent to
+	// any of the connected signing clients.
 	requests chan *protos.SigningRequest
+
+	// callback is a map of the message ID to callback association used to
+	// respond to previously created requests to a channel.
+	callbackMu sync.Mutex
+	callback   map[string]func(*signResponse) // Key is message ID.
 }
 
 // NewServer creates a GRPC signing server used to send signing requests and
 // signing status requests to a client.
 func NewServer() *SigningServer {
 	return &SigningServer{
-		requests: make(chan *protos.SigningRequest, 1),
-		callback: &responseCallback{
-			registry: make(map[string]func(*signResponse)),
-		},
+		requests: make(chan *protos.SigningRequest),
+		callback: make(map[string]func(*signResponse)),
 	}
 }
 
@@ -54,12 +59,10 @@ func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_Update
 			select {
 			case <-ctx.Done():
 				return nil
-			case request := <-rs.requests:
-				if err := stream.Send(request); err != nil {
-					rs.callback.callAndDeregister(&signResponse{
-						err:       err,
-						messageID: request.GetMessageId(),
-					})
+			case req := <-rs.requests:
+				err := stream.Send(req)
+				if err != nil {
+					rs.callAndDeregister(req.GetMessageId(), &signResponse{err: err})
 					return status.Errorf(codes.Internal, "sending request failed")
 				}
 			}
@@ -67,16 +70,13 @@ func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_Update
 	})
 	g.Go(func() error {
 		for {
-			in, err := stream.Recv()
+			resp, err := stream.Recv()
 			if err == io.EOF {
 				return nil
 			} else if err != nil {
 				return err
 			}
-			rs.callback.callAndDeregister(&signResponse{
-				messageID: in.GetMessageId(),
-				status:    in,
-			})
+			rs.callAndDeregister(resp.GetMessageId(), &signResponse{status: resp})
 		}
 	})
 	if err := g.Wait(); err == nil {
@@ -86,33 +86,35 @@ func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_Update
 	return nil
 }
 
-// send is called when sending a request to the client calling the server. This will return either the response or a
-// timeout error when the context has been canceled.
-func (rs *SigningServer) send(ctx context.Context, req *protos.SigningRequest) (*protos.SigningStatus, error) {
-	respCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+// do sends a signing request and returns the corresponding signing response.
+// It blocks until a response is received or the context times out or is canceled.
+func (rs *SigningServer) do(ctx context.Context, req *protos.SigningRequest) (*protos.SigningStatus, error) {
+	// Register where to send the response for this message ID.
+	respCh := make(chan *signResponse, 1) // Room for one response.
+	rs.register(req.GetMessageId(), func(r *signResponse) { respCh <- r })
 
-	var resp *signResponse
-	rs.callback.register(req.GetMessageId(), func(r *signResponse) {
-		resp = r
-		cancel()
-	})
-
-	// send message
+	// Send the request.
 	select {
 	case rs.requests <- req:
 		log.Printf("SigningServer: sent signing request with message=%q", req.GetMessageId())
 	case <-ctx.Done():
-		rs.callback.deregister(req.GetMessageId())
+		rs.deregister(req.GetMessageId())
 		return nil, ctx.Err()
 	}
-	<-respCtx.Done()
-	return resp.status, resp.err
+
+	// Wait for the response.
+	select {
+	case resp := <-respCh:
+		return resp.status, resp.err
+	case <-ctx.Done():
+		rs.deregister(req.GetMessageId())
+		return nil, ctx.Err()
+	}
 }
 
 // SignArtifact implements Service.
 func (rs *SigningServer) SignArtifact(ctx context.Context, bt BuildType, objectURI []string) (jobID string, _ error) {
-	resp, err := rs.send(ctx, &protos.SigningRequest{
+	resp, err := rs.do(ctx, &protos.SigningRequest{
 		MessageId: uuid.NewString(),
 		RequestOneof: &protos.SigningRequest_Sign{
 			Sign: &protos.SignArtifactRequest{
@@ -134,7 +136,7 @@ func (rs *SigningServer) SignArtifact(ctx context.Context, bt BuildType, objectU
 
 // ArtifactSigningStatus implements Service.
 func (rs *SigningServer) ArtifactSigningStatus(ctx context.Context, jobID string) (status Status, objectURI []string, err error) {
-	resp, err := rs.send(ctx, &protos.SigningRequest{
+	resp, err := rs.do(ctx, &protos.SigningRequest{
 		MessageId: uuid.NewString(),
 		RequestOneof: &protos.SigningRequest_Status{
 			Status: &protos.SignArtifactStatusRequest{JobId: jobID},
@@ -162,7 +164,7 @@ func (rs *SigningServer) ArtifactSigningStatus(ctx context.Context, jobID string
 
 // CancelSigning implements Service.
 func (rs *SigningServer) CancelSigning(ctx context.Context, jobID string) error {
-	_, err := rs.send(ctx, &protos.SigningRequest{
+	_, err := rs.do(ctx, &protos.SigningRequest{
 		MessageId: uuid.NewString(),
 		RequestOneof: &protos.SigningRequest_Cancel{
 			Cancel: &protos.SignArtifactCancelRequest{
@@ -175,50 +177,37 @@ func (rs *SigningServer) CancelSigning(ctx context.Context, jobID string) error 
 
 // signResponse contains the response and error from a signing request.
 type signResponse struct {
-	err       error
-	messageID string
-	status    *protos.SigningStatus
-}
-
-// responseCallback manages the message ID to callback association used to
-// respond to previously created requests to a channel.
-type responseCallback struct {
-	mu sync.Mutex
-	// registry is a map of message_id -> callback
-	registry map[string]func(*signResponse)
+	status *protos.SigningStatus
+	err    error
 }
 
 // register creates a message ID to channel association.
-func (c *responseCallback) register(messageID string, f func(*signResponse)) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.registry[messageID] = f
+func (s *SigningServer) register(messageID string, f func(*signResponse)) {
+	s.callbackMu.Lock()
+	s.callback[messageID] = f
+	s.callbackMu.Unlock()
 }
 
 // deregister removes the channel to message ID association.
-func (c *responseCallback) deregister(messageID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	delete(c.registry, messageID)
+func (s *SigningServer) deregister(messageID string) {
+	s.callbackMu.Lock()
+	delete(s.callback, messageID)
+	s.callbackMu.Unlock()
 }
 
-// callAndDeregister calls the callback associated with the message ID. If no
-// callback is registered for the message ID, the response is dropped. The callback
-// registration is always removed if it exists.
-func (c *responseCallback) callAndDeregister(resp *signResponse) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+// callAndDeregister calls the callback associated with the message ID.
+// If no callback is registered for the message ID, the response is dropped.
+// The callback registration is always removed if it exists.
+func (s *SigningServer) callAndDeregister(messageID string, resp *signResponse) {
+	s.callbackMu.Lock()
+	defer s.callbackMu.Unlock()
 
-	respFunc, ok := c.registry[resp.status.GetMessageId()]
-	if ok {
-		delete(c.registry, resp.status.GetMessageId())
-	}
+	respFunc, ok := s.callback[messageID]
 	if !ok {
 		// drop the message
-		log.Printf("SigningServer: caller not found for message=%q", resp.status.GetMessageId())
+		log.Printf("SigningServer: caller not found for message=%q", messageID)
 		return
 	}
+	delete(s.callback, messageID)
 	respFunc(resp)
 }

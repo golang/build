@@ -84,7 +84,7 @@ func signRequestSeries(t *testing.T, ctx context.Context, id string, server *Sig
 
 // fakeSigningServerClient is a simple implementation of how we expect the client side to perform.
 // A signing request initiates a signing job. The first status update should return return a status of
-// running. The second status request will return a status of Commpleted.
+// running. The second status request will return a status of Completed.
 func fakeSigningServerClient(t *testing.T, ctx context.Context, client protos.ReleaseServiceClient) {
 	stream, err := client.UpdateSigningStatus(ctx)
 	if err != nil {
