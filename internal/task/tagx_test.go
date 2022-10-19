@@ -313,7 +313,7 @@ func (g *isGreenGerrit) GetCommitsInRefs(ctx context.Context, project string, co
 	return g.commitsInRefs(commits, refs), nil
 }
 
-const fakeGo = `#!/bin/bash -eu
+const fakeGo = `#!/bin/bash -exu
 
 case "$1" in
 "get")
@@ -499,7 +499,7 @@ type testLogger struct {
 }
 
 func (l *testLogger) Printf(format string, v ...interface{}) {
-	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
+	l.t.Logf("%v\ttask %-10v: LOG: %s", time.Now(), l.task, fmt.Sprintf(format, v...))
 }
 
 type fakeDashboard func(string) *types.BuildStatus
