@@ -305,12 +305,11 @@ var entries = map[string]*Entry{
 		Primary: []Owner{neild, sameer},
 	},
 	"go/src/crypto": {
-		Primary:   []Owner{filippo, securityTeam},
-		Secondary: []Owner{agl},
+		Primary: []Owner{filippo, roland, securityTeam},
 	},
 	"go/src/crypto/tls": {
-		Primary:   []Owner{filippo, securityTeam},
-		Secondary: []Owner{agl, kevinburke},
+		Primary:   []Owner{filippo, roland, securityTeam},
+		Secondary: []Owner{kevinburke},
 	},
 	"go/src/database/sql": {
 		Primary:   []Owner{bradfitz, kardianos},
@@ -331,8 +330,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc},
 	},
 	"go/src/encoding/asn1": {
-		Primary:   []Owner{filippo, securityTeam},
-		Secondary: []Owner{agl},
+		Primary: []Owner{filippo, roland, securityTeam},
 	},
 	"go/src/encoding/binary": {
 		Primary: []Owner{gri},
@@ -520,7 +518,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/math/big": {
 		Primary:   []Owner{gri, securityTeam},
-		Secondary: []Owner{katie, filippo},
+		Secondary: []Owner{filippo, roland},
 	},
 	"go/src/math/bits": {
 		Primary:   []Owner{gri},
@@ -724,16 +722,15 @@ var entries = map[string]*Entry{
 		Primary: []Owner{dmitshur},
 	},
 	"crypto": {
-		Primary:   []Owner{filippo, securityTeam},
-		Secondary: []Owner{agl},
+		Primary: []Owner{filippo, roland, securityTeam},
 	},
 	"crypto/acme": {
 		Primary:   []Owner{roland, securityTeam},
 		Secondary: []Owner{filippo},
 	},
 	"crypto/acme/autocert": {
-		Primary:   []Owner{bradfitz, securityTeam},
-		Secondary: []Owner{roland, filippo},
+		Primary:   []Owner{bradfitz, roland, securityTeam},
+		Secondary: []Owner{filippo},
 	},
 	"debug": {
 		Primary:   []Owner{runtimeTeam},
