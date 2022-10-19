@@ -201,7 +201,7 @@ func doRelease(ctx *workflow.TaskContext, revision, version string, target *rele
 		}
 		group.Go(func() error {
 			if err := runWithBuildlet(target.Builder, func(step *task.BuildletStep) error {
-				return step.BuildMSI(ctx, binaryReader(), msi)
+				return step.BuildWindowsMSI(ctx, binaryReader(), msi)
 			}); err != nil {
 				return fmt.Errorf("Building Windows artifacts: %v", err)
 			}

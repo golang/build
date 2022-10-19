@@ -48,8 +48,9 @@ func (bs Status) String() string {
 		return "Completed"
 	case StatusNotFound:
 		return "NotFound"
+	default:
+		return "Unknown"
 	}
-	return "Unknown"
 }
 
 // BuildType is the type of build the signing request is for.
@@ -65,14 +66,13 @@ const (
 // proto is the corresponding protobuf definition for the signing request build type.
 func (bt BuildType) proto() protos.SignArtifactRequest_BuildType {
 	switch bt {
-	case BuildUnspecified:
-		return protos.SignArtifactRequest_BUILD_TYPE_UNSPECIFIED
 	case BuildMacOS:
 		return protos.SignArtifactRequest_BUILD_TYPE_MACOS
 	case BuildWindows:
 		return protos.SignArtifactRequest_BUILD_TYPE_WINDOWS
 	case BuildGPG:
 		return protos.SignArtifactRequest_BUILD_TYPE_GPG
+	default:
+		return protos.SignArtifactRequest_BUILD_TYPE_UNSPECIFIED
 	}
-	return protos.SignArtifactRequest_BUILD_TYPE_UNSPECIFIED
 }

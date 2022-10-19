@@ -443,7 +443,7 @@ func (b *BuildletStep) ConvertPKGToTGZ(ctx *workflow.TaskContext, in io.Reader, 
 //go:embed releaselet/releaselet.go
 var releaselet string
 
-func (b *BuildletStep) BuildMSI(ctx *workflow.TaskContext, binaryArchive io.Reader, msi io.Writer) error {
+func (b *BuildletStep) BuildWindowsMSI(ctx *workflow.TaskContext, binaryArchive io.Reader, msi io.Writer) error {
 	if err := b.Buildlet.PutTar(ctx, binaryArchive, ""); err != nil {
 		return err
 	}
