@@ -253,15 +253,15 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[s
 	wd = wd.Sub(repo.Name)
 	repoName, branch := wf.Const(repo.Name), wf.Const("master")
 
-	head := wf.Task2(wd, "read branch head", x.Gerrit.ReadBranchHead, repoName, branch)
-	tagCandidate := head
-	if len(deps) != 0 {
-		gomod := wf.Task3(wd, "generate updated go.mod", x.UpdateGoMod, wf.Const(repo), wf.Slice(deps...), head)
+	var tagCommit wf.Value[string]
+	if len(deps) == 0 {
+		tagCommit = wf.Task2(wd, "read branch head", x.Gerrit.ReadBranchHead, repoName, branch)
+	} else {
+		gomod := wf.Task3(wd, "generate updated go.mod", x.UpdateGoMod, wf.Const(repo), wf.Slice(deps...), branch)
 		cl := wf.Task2(wd, "mail updated go.mod", x.MailGoMod, repoName, gomod)
-		versionTasks := &VersionTasks{Gerrit: x.Gerrit}
-		tagCandidate = wf.Task2(wd, "wait for submit", versionTasks.AwaitCL, cl, wf.Const(""))
+		tagCommit = wf.Task3(wd, "wait for submit", x.AwaitGoMod, cl, repoName, branch)
 	}
-	greenCommit := wf.Task2(wd, "wait for green post-submit", x.AwaitGreen, wf.Const(repo), tagCandidate)
+	greenCommit := wf.Task2(wd, "wait for green post-submit", x.AwaitGreen, wf.Const(repo), tagCommit)
 	tagged := wf.Task2(wd, "tag if appropriate", x.MaybeTag, wf.Const(repo), greenCommit)
 	return tagged, true
 }
@@ -270,8 +270,8 @@ type UpdatedModSum struct {
 	Mod, Sum string
 }
 
-func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, _ string) (UpdatedModSum, error) {
-	commit, err := x.Gerrit.ReadBranchHead(ctx, repo.Name, "master")
+func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, branch string) (UpdatedModSum, error) {
+	commit, err := x.Gerrit.ReadBranchHead(ctx, repo.Name, branch)
 	if err != nil {
 		return UpdatedModSum{}, err
 	}
@@ -391,6 +391,19 @@ will be tagged with its next minor version.
 		"go.sum": gomod.Sum,
 	})
 }
+
+func (x *TagXReposTasks) AwaitGoMod(ctx *wf.TaskContext, changeID, repo, branch string) (string, error) {
+	if changeID == "" {
+		ctx.Printf("No CL was necessary")
+		return x.Gerrit.ReadBranchHead(ctx, repo, branch)
+	}
+
+	ctx.Printf("Awaiting review/submit of %v", ChangeLink(changeID))
+	return AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
+		return x.Gerrit.Submitted(ctx, changeID, "")
+	})
+}
+
 func (x *TagXReposTasks) AwaitGreen(ctx *wf.TaskContext, repo TagRepo, commit string) (string, error) {
 	return AwaitCondition(ctx, time.Minute, func() (string, bool, error) {
 		return x.findGreen(ctx, repo, commit, false)
