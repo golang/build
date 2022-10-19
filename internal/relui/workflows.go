@@ -815,7 +815,7 @@ func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType
 		return nil, err
 	}
 	outURLs, jobError := task.AwaitCondition(ctx, 30*time.Second, func() (out []string, done bool, _ error) {
-		status, out, err := b.SignService.ArtifactSigningStatus(ctx, jobID)
+		status, desc, out, err := b.SignService.ArtifactSigningStatus(ctx, jobID)
 		if err != nil {
 			ctx.Printf("ArtifactSigningStatus ran into a retryable communication error: %v\n", err)
 			return nil, false, nil
@@ -824,8 +824,14 @@ func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType
 		case sign.StatusCompleted:
 			return out, true, nil // All done.
 		case sign.StatusFailed:
+			if desc != "" {
+				return nil, true, fmt.Errorf("signing attempt failed: %s", desc)
+			}
 			return nil, true, fmt.Errorf("signing attempt failed")
 		default:
+			if desc != "" {
+				ctx.Printf("still waiting: %s\n", desc)
+			}
 			return nil, false, nil // Still waiting.
 		}
 	})

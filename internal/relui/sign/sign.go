@@ -18,9 +18,10 @@ type Service interface {
 	// SignArtifact creates a request to sign a release artifact.
 	// The object URI must be URIs for file(s) on the service private GCS.
 	SignArtifact(ctx context.Context, bt BuildType, objectURI []string) (jobID string, _ error)
-	// ArtifactSigningStatus requests the status of an existing signing request message.
-	// If the message is at the status of completed then the objectURI will be populated with the URIs for signed files in GCS.
-	ArtifactSigningStatus(ctx context.Context, jobID string) (status Status, objectURI []string, err error)
+	// ArtifactSigningStatus retrieves the status of an existing signing request,
+	// or an error indicating that the status couldn't be determined.
+	// If the status is completed, objectURI will be populated with the URIs for signed files in GCS.
+	ArtifactSigningStatus(ctx context.Context, jobID string) (_ Status, description string, objectURI []string, _ error)
 	// CancelSigning marks a previous signing request as no longer needed,
 	// possibly allowing resources to be freed sooner than otherwise.
 	CancelSigning(ctx context.Context, jobID string) error

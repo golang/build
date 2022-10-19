@@ -59,7 +59,7 @@ func TestUpdateSigningStatusError(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		go fakeSigningServerClient(t, ctx, client)
-		if _, _, err := server.ArtifactSigningStatus(ctx, "not-exist"); err == nil {
+		if _, _, _, err := server.ArtifactSigningStatus(ctx, "not-exist"); err == nil {
 			t.Fatalf("ArtifactSigningStatus(ctx, %q) = _, _, nil; want error", "not-exist")
 		}
 	})
@@ -72,11 +72,11 @@ func signRequestSeries(t *testing.T, ctx context.Context, id string, server *Sig
 	if err != nil {
 		t.Fatalf("SignArtifact(ctx, %q, %v, %q = %s; want no error", id, buildT, uri, err)
 	}
-	_, _, err = server.ArtifactSigningStatus(ctx, jobID)
+	_, _, _, err = server.ArtifactSigningStatus(ctx, jobID)
 	if err != nil {
 		t.Fatalf("ArtifactSigningStatus(%q) = %s; want no error", id, err)
 	}
-	_, _, err = server.ArtifactSigningStatus(ctx, jobID)
+	_, _, _, err = server.ArtifactSigningStatus(ctx, jobID)
 	if err != nil {
 		t.Fatalf("ArtifactSigningStatus(%q) = %s; want no error", id, err)
 	}

@@ -116,12 +116,10 @@ func (rs *SigningServer) do(ctx context.Context, req *protos.SigningRequest) (*p
 func (rs *SigningServer) SignArtifact(ctx context.Context, bt BuildType, objectURI []string) (jobID string, _ error) {
 	resp, err := rs.do(ctx, &protos.SigningRequest{
 		MessageId: uuid.NewString(),
-		RequestOneof: &protos.SigningRequest_Sign{
-			Sign: &protos.SignArtifactRequest{
-				BuildType: bt.proto(),
-				GcsUri:    objectURI,
-			},
-		},
+		RequestOneof: &protos.SigningRequest_Sign{Sign: &protos.SignArtifactRequest{
+			BuildType: bt.proto(),
+			GcsUri:    objectURI,
+		}},
 	})
 	if err != nil {
 		return "", err
@@ -135,42 +133,37 @@ func (rs *SigningServer) SignArtifact(ctx context.Context, bt BuildType, objectU
 }
 
 // ArtifactSigningStatus implements Service.
-func (rs *SigningServer) ArtifactSigningStatus(ctx context.Context, jobID string) (status Status, objectURI []string, err error) {
+func (rs *SigningServer) ArtifactSigningStatus(ctx context.Context, jobID string) (_ Status, desc string, objectURI []string, _ error) {
 	resp, err := rs.do(ctx, &protos.SigningRequest{
 		MessageId: uuid.NewString(),
-		RequestOneof: &protos.SigningRequest_Status{
-			Status: &protos.SignArtifactStatusRequest{JobId: jobID},
-		},
+		RequestOneof: &protos.SigningRequest_Status{Status: &protos.SignArtifactStatusRequest{
+			JobId: jobID,
+		}},
 	})
 	if err != nil {
-		return StatusUnknown, nil, err
+		return StatusUnknown, "", nil, err
 	}
 	switch t := resp.StatusOneof.(type) {
 	case *protos.SigningStatus_Completed:
-		status = StatusCompleted
-		objectURI = t.Completed.GetGcsUri()
+		return StatusCompleted, "", t.Completed.GetGcsUri(), nil
 	case *protos.SigningStatus_Failed:
-		status = StatusFailed
+		return StatusFailed, t.Failed.GetDescription(), nil, nil
 	case *protos.SigningStatus_NotFound:
-		status = StatusNotFound
-		err = fmt.Errorf("signing request not found for message=%q", resp.GetMessageId())
+		return StatusNotFound, fmt.Sprintf("signing job %q not found", jobID), nil, nil
 	case *protos.SigningStatus_Running:
-		status = StatusRunning
+		return StatusRunning, t.Running.GetDescription(), nil, nil
 	default:
-		return 0, nil, fmt.Errorf("unexpected response type %T for a status request", t)
+		return 0, "", nil, fmt.Errorf("unexpected response type %T for a status request", t)
 	}
-	return status, objectURI, err
 }
 
 // CancelSigning implements Service.
 func (rs *SigningServer) CancelSigning(ctx context.Context, jobID string) error {
 	_, err := rs.do(ctx, &protos.SigningRequest{
 		MessageId: uuid.NewString(),
-		RequestOneof: &protos.SigningRequest_Cancel{
-			Cancel: &protos.SignArtifactCancelRequest{
-				JobId: jobID,
-			},
-		},
+		RequestOneof: &protos.SigningRequest_Cancel{Cancel: &protos.SignArtifactCancelRequest{
+			JobId: jobID,
+		}},
 	})
 	return err
 }
