@@ -1,13 +1,16 @@
 package task
 
 import (
-	"bytes"
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -47,6 +50,7 @@ type TagRepo struct {
 	Name    string   // Gerrit project name, e.g. "tools".
 	ModPath string   // Module path, e.g. "golang.org/x/tools".
 	Deps    []string // Dependency module paths.
+	Compat  string   // The version to pass to go mod tidy -compat for this repository.
 	Version string   // After a tagging decision has been made, the version dependencies should upgrade to.
 }
 
@@ -127,6 +131,14 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		ModPath: mf.Module.Mod.Path,
 	}
 
+	compatRe := regexp.MustCompile(`tagx:compat\s+([\d.]+)`)
+	if mf.Go != nil {
+		for _, c := range mf.Go.Syntax.Comments.Suffix {
+			if matches := compatRe.FindStringSubmatch(c.Token); matches != nil {
+				result.Compat = matches[1]
+			}
+		}
+	}
 require:
 	for _, req := range mf.Require {
 		if !isX(req.Mod.Path) {
@@ -266,88 +278,126 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[s
 	return tagged, true
 }
 
-type UpdatedModSum struct {
-	Mod, Sum string
-}
-
-func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, branch string) (UpdatedModSum, error) {
+func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, branch string) (files map[string]string, _ error) {
 	commit, err := x.Gerrit.ReadBranchHead(ctx, repo.Name, branch)
 	if err != nil {
-		return UpdatedModSum{}, err
+		return nil, err
 	}
 
 	binaries, err := x.LatestGoBinaries(ctx)
 	if err != nil {
-		return UpdatedModSum{}, err
+		return nil, err
 	}
 	bc, err := x.CreateBuildlet(ctx, "linux-amd64-longtest") // longtest to allow network access. A little yucky.
 	if err != nil {
-		return UpdatedModSum{}, err
+		return nil, err
 	}
 	defer bc.Close()
 
 	if err := bc.PutTarFromURL(ctx, binaries, ""); err != nil {
-		return UpdatedModSum{}, err
+		return nil, err
 	}
 	tarURL := fmt.Sprintf("%s/%s/+archive/%s.tar.gz", x.GerritURL, repo.Name, commit)
 	if err := bc.PutTarFromURL(ctx, tarURL, "repo"); err != nil {
-		return UpdatedModSum{}, err
+		return nil, err
 	}
 
 	writer := &LogWriter{Logger: ctx}
 	go writer.Run(ctx)
 
-	args := []string{"get"}
+	// Update the root module to the selected versions.
+	getCmd := []string{"get"}
 	for _, dep := range deps {
-		args = append(args, dep.ModPath+"@"+dep.Version)
+		getCmd = append(getCmd, dep.ModPath+"@"+dep.Version)
 	}
 	remoteErr, execErr := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
 		Dir:    "repo",
-		Args:   args,
+		Args:   getCmd,
 		Output: writer,
 	})
 	if execErr != nil {
-		return UpdatedModSum{}, execErr
+		return nil, execErr
 	}
 	if remoteErr != nil {
-		return UpdatedModSum{}, fmt.Errorf("Command failed: %v", remoteErr)
+		return nil, fmt.Errorf("Command failed: %v", remoteErr)
 	}
 
-	remoteErr, execErr = bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
-		Dir:    "repo",
-		Args:   []string{"mod", "tidy"},
-		Output: writer,
-	})
-	if execErr != nil {
-		return UpdatedModSum{}, execErr
+	// Tidy the root module. For tools, also tidy gopls so that its replaced
+	// version still works.
+	dirs := []string{""}
+	if repo.Name == "tools" {
+		dirs = append(dirs, "gopls")
 	}
-	if remoteErr != nil {
-		return UpdatedModSum{}, fmt.Errorf("Command failed: %v", remoteErr)
+	var fetchCmd []string
+	for _, dir := range dirs {
+		var tidyFlags []string
+		if repo.Compat != "" {
+			tidyFlags = append(tidyFlags, "-compat", repo.Compat)
+		}
+		remoteErr, execErr = bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
+			Dir:    path.Join("repo", dir),
+			Args:   append([]string{"mod", "tidy"}, tidyFlags...),
+			Output: writer,
+		})
+		if execErr != nil {
+			return nil, execErr
+		}
+		if remoteErr != nil {
+			return nil, fmt.Errorf("Command failed: %v", remoteErr)
+		}
+
+		repoDir, fetchDir := path.Join("repo", dir), path.Join("fetch", dir)
+		fetchCmd = append(fetchCmd, fmt.Sprintf("mkdir -p %[2]v && cp %[1]v/go.mod %[2]v && touch %[1]v/go.sum && cp %[1]v/go.sum %[2]v", repoDir, fetchDir))
 	}
 
 	remoteErr, execErr = bc.Exec(ctx, "bash", buildlet.ExecOpts{
 		Dir:         ".",
-		Args:        []string{"-c", "mkdir fetchgomod && cp repo/go.mod fetchgomod && touch repo/go.sum && mkdir fetchgosum && cp repo/go.sum fetchgosum"},
+		Args:        []string{"-c", strings.Join(fetchCmd, " && ")},
 		Output:      writer,
 		SystemLevel: true,
 	})
 	if execErr != nil {
-		return UpdatedModSum{}, execErr
+		return nil, execErr
 	}
 	if remoteErr != nil {
-		return UpdatedModSum{}, fmt.Errorf("Command failed: %v", remoteErr)
+		return nil, fmt.Errorf("Command failed: %v", remoteErr)
 	}
 
-	mod := &bytes.Buffer{}
-	if err := fetchFile(ctx, bc, mod, "fetchgomod"); err != nil {
-		return UpdatedModSum{}, err
+	tgz, err := bc.GetTar(ctx, "fetch")
+	if err != nil {
+		return nil, err
 	}
-	sum := &bytes.Buffer{}
-	if err := fetchFile(ctx, bc, sum, "fetchgosum"); err != nil {
-		return UpdatedModSum{}, err
-	}
+	defer tgz.Close()
+	return tgzToMap(tgz)
+}
 
-	return UpdatedModSum{mod.String(), sum.String()}, nil
+func tgzToMap(r io.Reader) (map[string]string, error) {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return nil, err
+	}
+	defer gzr.Close()
+
+	result := map[string]string{}
+	tr := tar.NewReader(gzr)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if h.Typeflag != tar.TypeReg {
+			continue
+		}
+		b, err := io.ReadAll(tr)
+		if err != nil {
+			return nil, err
+		}
+		result[h.Name] = string(b)
+	}
+	return result, nil
 }
 
 func LatestGoBinaries(ctx context.Context) (string, error) {
@@ -374,7 +424,7 @@ func LatestGoBinaries(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("no linux-amd64??")
 }
 
-func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, gomod UpdatedModSum) (string, error) {
+func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, files map[string]string) (string, error) {
 	const subject = `go.mod: update golang.org/x dependencies
 
 Update golang.org/x dependencies to their latest tagged versions.
@@ -386,10 +436,7 @@ will be tagged with its next minor version.
 		Project: repo,
 		Branch:  "master",
 		Subject: subject,
-	}, nil, map[string]string{
-		"go.mod": gomod.Mod,
-		"go.sum": gomod.Sum,
-	})
+	}, nil, files)
 }
 
 func (x *TagXReposTasks) AwaitGoMod(ctx *wf.TaskContext, changeID, repo, branch string) (string, error) {

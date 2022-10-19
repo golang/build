@@ -325,7 +325,7 @@ case "$1" in
   ;;
 "mod")
   ls go.mod go.sum >/dev/null
-  echo "tidied!" >> go.mod
+  echo "tidied! $*" >> go.mod
   ;;
 *)
   echo unexpected command $@
@@ -369,8 +369,10 @@ func TestTagXRepos(t *testing.T) {
 	mod.Tag("v1.0.0", mod1)
 	tools := NewFakeRepo(t, "tools")
 	tools1 := tools.Commit(map[string]string{
-		"go.mod": "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\nrequire golang.org/x/sys v0.1.0\n",
-		"go.sum": "\n",
+		"go.mod":       "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18 // tagx:compat 1.16\nrequire golang.org/x/sys v0.1.0\n",
+		"go.sum":       "\n",
+		"gopls/go.mod": "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
+		"gopls/go.sum": "\n",
 	})
 	tools.Tag("v1.1.5", tools1)
 	fakeGerrit := NewFakeGerrit(t, goRepo, sys, mod, tools)
@@ -466,6 +468,13 @@ func TestTagXRepos(t *testing.T) {
 	}
 	if !strings.Contains(string(goMod), "tidied!") {
 		t.Error("tools go.mod should be tidied")
+	}
+	goplsMod, err := fakeGerrit.ReadFile(ctx, "tools", tag.Revision, "gopls/go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "1.16") || strings.Contains(string(goplsMod), "upgraded") {
+		t.Error("gopls go.mod should be tidied with -compat 1.16, but not upgraded")
 	}
 }
 
