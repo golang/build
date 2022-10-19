@@ -286,7 +286,12 @@ type UpdatedModSum struct {
 	Mod, Sum string
 }
 
-func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, commit string) (UpdatedModSum, error) {
+func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, _ string) (UpdatedModSum, error) {
+	commit, err := x.Gerrit.ReadBranchHead(ctx, repo.Name, "master")
+	if err != nil {
+		return UpdatedModSum{}, err
+	}
+
 	binaries, err := x.LatestGoBinaries(ctx)
 	if err != nil {
 		return UpdatedModSum{}, err
