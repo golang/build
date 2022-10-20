@@ -55,7 +55,7 @@ popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
 (cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_openbsd_amd64.syso go/src/runtime/race
+cp llvm-project/compiler-rt/lib/tsan/go/race_openbsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_openbsd.syso
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -72,14 +72,15 @@ popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
 (cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race
+cp llvm-project/compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_freebsd.syso
 (cd go/src && ./race.bash)
 			`,
 	},
 	&Platform{
-		OS:   "darwin",
-		Arch: "amd64",
-		Type: "darwin-amd64-12_0",
+		OS:      "darwin",
+		Arch:    "amd64",
+		SubArch: "v1",
+		Type:    "darwin-amd64-12_0",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -89,8 +90,26 @@ popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
 (cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race
+cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race/internal/amd64v1/race_darwin.syso
 (cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
+		OS:      "darwin",
+		Arch:    "amd64",
+		SubArch: "v3",
+		Type:    "darwin-amd64-12_0",
+		Script: `#!/usr/bin/env bash
+set -e
+git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang GOAMD64=v3 ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race/internal/amd64v3/race_darwin.syso
+(cd go/src && GOAMD64=v3 ./race.bash)
 			`,
 	},
 	&Platform{
@@ -111,9 +130,10 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_arm64.syso go/src/runtime/ra
 			`,
 	},
 	&Platform{
-		OS:   "linux",
-		Arch: "amd64",
-		Type: "linux-amd64-race",
+		OS:      "linux",
+		Arch:    "amd64",
+		SubArch: "v1",
+		Type:    "linux-amd64-race",
 		Script: `#!/usr/bin/env bash
 set -e
 apt-get update
@@ -125,8 +145,28 @@ popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
 (cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race
+cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race/internal/amd64v1/race_linux.syso
 (cd go/src && ./race.bash)
+			`,
+	},
+	&Platform{
+		OS:      "linux",
+		Arch:    "amd64",
+		SubArch: "v3",
+		Type:    "linux-amd64-race",
+		Script: `#!/usr/bin/env bash
+set -e
+apt-get update
+apt-get install -y git g++
+git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+popd
+git clone https://github.com/llvm/llvm-project
+(cd llvm-project && git checkout $REV)
+(cd llvm-project/compiler-rt/lib/tsan/go && GOAMD64=v3 ./buildgo.sh)
+cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race/internal/amd64v3/race_linux.syso
+(cd go/src && GOAMD64=v3 ./race.bash)
 			`,
 	},
 	&Platform{
@@ -184,7 +224,7 @@ popd
 git clone https://github.com/llvm/llvm-project
 (cd llvm-project && git checkout $REV)
 (cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race
+cp llvm-project/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_netbsd.syso
 # TODO(#24322): Uncomment to test the syso file before accepting it.
 # (cd go/src && ./race.bash)
 			`,
@@ -216,7 +256,7 @@ cd llvm-project/compiler-rt/lib/tsan/go
 call build.bat
 if %errorlevel% neq 0 exit /b %errorlevel%
 cd ../../../../..
-xcopy llvm-project\compiler-rt\lib\tsan\go\race_windows_amd64.syso go\src\runtime\race\race_windows_amd64.syso /Y
+xcopy llvm-project\compiler-rt\lib\tsan\go\race_windows_amd64.syso go\src\runtime\race\internal\amd64v1\race_windows.syso /Y
 if %errorlevel% neq 0 exit /b %errorlevel%
 cd go/src
 call race.bat
@@ -282,7 +322,7 @@ func parsePlatformsFlag() {
 		var msg bytes.Buffer
 		fmt.Fprintf(&msg, "Unrecognized platforms: %q. Supported platforms are:\n", invalid)
 		for _, p := range platforms {
-			fmt.Fprintf(&msg, "\t%s/%s\n", p.OS, p.Arch)
+			fmt.Fprintf(&msg, "\t%s\n", p.Name())
 		}
 		log.Fatal(&msg)
 	}
@@ -337,19 +377,26 @@ func main() {
 }
 
 type Platform struct {
-	OS     string
-	Arch   string
-	Type   string // gomote instance type
-	Inst   string // actual gomote instance name
-	Script string
+	OS      string
+	Arch    string
+	SubArch string
+	Type    string // gomote instance type
+	Inst    string // actual gomote instance name
+	Script  string
 }
 
 func (p *Platform) Name() string {
+	if p.SubArch != "" {
+		return fmt.Sprintf("%v/%v%v", p.OS, p.Arch, p.SubArch)
+	}
 	return fmt.Sprintf("%v/%v", p.OS, p.Arch)
 }
 
 // Basename returns the name of the output file relative to src/runtime/race.
 func (p *Platform) Basename() string {
+	if p.SubArch != "" {
+		return fmt.Sprintf("internal/%s%s/race_%s.syso", p.Arch, p.SubArch, p.OS)
+	}
 	return fmt.Sprintf("race_%v_%s.syso", p.OS, p.Arch)
 }
 
@@ -378,8 +425,8 @@ func (p *Platform) Build(ctx context.Context) error {
 	}
 	log.Printf("%s: using instance %v", p.Name(), p.Inst)
 
-	// put14
-	if _, err := p.Gomote(ctx, "put14", p.Inst); err != nil {
+	// putbootstrap
+	if _, err := p.Gomote(ctx, "putbootstrap", p.Inst); err != nil {
 		return err
 	}
 
