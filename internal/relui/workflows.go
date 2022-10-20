@@ -814,10 +814,13 @@ func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType
 	if err != nil {
 		return nil, err
 	}
-	outURLs, jobError := task.AwaitCondition(ctx, 30*time.Second, func() (out []string, done bool, _ error) {
-		status, desc, out, err := b.SignService.ArtifactSigningStatus(ctx, jobID)
+	outURLs, jobError := task.AwaitCondition(ctx, time.Minute, func() (out []string, done bool, _ error) {
+		statusContext, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		t := time.Now()
+		status, desc, out, err := b.SignService.ArtifactSigningStatus(statusContext, jobID)
 		if err != nil {
-			ctx.Printf("ArtifactSigningStatus ran into a retryable communication error: %v\n", err)
+			ctx.Printf("ArtifactSigningStatus ran into a retryable communication error after %v: %v\n", time.Since(t), err)
 			return nil, false, nil
 		}
 		switch status {
@@ -838,11 +841,12 @@ func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType
 	if jobError != nil {
 		// If ctx is canceled, also cancel the signing request.
 		if ctx.Err() != nil {
-			cancelContext, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			cancelContext, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
+			t := time.Now()
 			err := b.SignService.CancelSigning(cancelContext, jobID)
 			if err != nil {
-				ctx.Printf("CancelSigning error: %v", err)
+				ctx.Printf("CancelSigning error after %v: %v\n", time.Since(t), err)
 			}
 		}
 

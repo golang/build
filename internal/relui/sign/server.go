@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/build/internal/access"
@@ -49,10 +50,14 @@ func NewServer() *SigningServer {
 // and receive status updates on signing requests. There is no specific order which the requests or responses
 // need to occur in. The connection returns an error once the context is canceled or an error is encountered.
 func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_UpdateSigningStatusServer) error {
-	_, err := access.IAPFromContext(stream.Context())
+	iap, err := access.IAPFromContext(stream.Context())
 	if err != nil {
 		return status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
+
+	log.Printf("SigningServer: a client connected (iap = %+v)\n", iap)
+	defer log.Println("SigningServer: a client disconnected")
+
 	g, ctx := errgroup.WithContext(stream.Context())
 	g.Go(func() error {
 		for {
@@ -79,7 +84,7 @@ func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_Update
 			rs.callAndDeregister(resp.GetMessageId(), &signResponse{status: resp})
 		}
 	})
-	if err := g.Wait(); err == nil {
+	if err := g.Wait(); err != nil {
 		log.Printf("SigningServer: UpdateSigningStatus=%s", err)
 		return err
 	}
@@ -88,7 +93,16 @@ func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_Update
 
 // do sends a signing request and returns the corresponding signing response.
 // It blocks until a response is received or the context times out or is canceled.
-func (rs *SigningServer) do(ctx context.Context, req *protos.SigningRequest) (*protos.SigningStatus, error) {
+func (rs *SigningServer) do(ctx context.Context, req *protos.SigningRequest) (resp *protos.SigningStatus, err error) {
+	t := time.Now()
+	defer func() {
+		if err == nil {
+			log.Printf("SigningServer: successfully round-tripped message=%q in %v:\n  req = %v\n  resp = %v\n", req.GetMessageId(), time.Since(t), req, resp)
+		} else {
+			log.Printf("SigningServer: communication error %v for message=%q after %v:\n  req = %v\n", err, req.GetMessageId(), time.Since(t), req)
+		}
+	}()
+
 	// Register where to send the response for this message ID.
 	respCh := make(chan *signResponse, 1) // Room for one response.
 	rs.register(req.GetMessageId(), func(r *signResponse) { respCh <- r })
@@ -96,7 +110,6 @@ func (rs *SigningServer) do(ctx context.Context, req *protos.SigningRequest) (*p
 	// Send the request.
 	select {
 	case rs.requests <- req:
-		log.Printf("SigningServer: sent signing request with message=%q", req.GetMessageId())
 	case <-ctx.Done():
 		rs.deregister(req.GetMessageId())
 		return nil, ctx.Err()
