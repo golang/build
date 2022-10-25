@@ -147,7 +147,7 @@ spec:
     enabled: true
     oauthclientCredentials:
       secretName: iap-oauth
-  timeoutSec: 7200
+  timeoutSec: 86400  # For long-running gomote RPCs. See https://go.dev/issue/56423.
 ---
 apiVersion: cloud.google.com/v1
 kind: BackendConfig
