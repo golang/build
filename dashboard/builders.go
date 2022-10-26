@@ -281,15 +281,21 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-androidemu": {
-		Notes:          "Debian Buster w/ Android SDK + emulator (use nested virt)",
+		Notes:          "Debian Bullseye w/ Android SDK + emulator (use nested virt)",
 		ContainerImage: "android-amd64-emu:bff27c0c9263",
-		KonletVMImage:  "android-amd64-emu",
+		KonletVMImage:  "android-amd64-emu-bullseye",
 		NestedVirt:     true,
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-bullseye": {
 		Notes:          "Debian Bullseye",
 		ContainerImage: "linux-x86-bullseye:latest",
+		SSHUsername:    "root",
+	},
+	"host-linux-amd64-bullseye-vmx": {
+		Notes:          "Debian Bullseye w/ Nested Virtualization (VMX CPU bit) enabled",
+		ContainerImage: "linux-x86-bullseye:latest",
+		NestedVirt:     true,
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-buster": {
@@ -337,12 +343,6 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-amd64-stretch": {
 		Notes:          "Debian Stretch",
 		ContainerImage: "linux-x86-stretch:latest",
-		SSHUsername:    "root",
-	},
-	"host-linux-amd64-stretch-vmx": {
-		Notes:          "Debian Stretch w/ Nested Virtualization (VMX CPU bit) enabled, for testing",
-		ContainerImage: "linux-x86-stretch:latest",
-		NestedVirt:     true,
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-wsl": {
@@ -1332,7 +1332,7 @@ func (c *HostConfig) ContainerVMImage() string {
 		return c.KonletVMImage
 	}
 	if c.NestedVirt {
-		return "debian-stretch-vmx"
+		return "debian-bullseye-vmx"
 	}
 	if c.isEC2 && c.ContainerImage != "" {
 		return fmt.Sprintf("gcr.io/%s/%s", buildenv.Production.ProjectName, c.ContainerImage)
@@ -1532,7 +1532,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:       "linux-amd64-vmx",
-		HostType:   "host-linux-amd64-stretch-vmx",
+		HostType:   "host-linux-amd64-bullseye-vmx",
 		buildsRepo: disabledBuilder,
 	})
 	addBuilder(BuildConfig{

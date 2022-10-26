@@ -7,18 +7,19 @@ set -e
 set -x
 
 ZONE=us-central1-f
-TARGET_IMAGE=android-amd64-emu
+DEBIAN=bullseye
+TARGET_IMAGE=android-amd64-emu-$DEBIAN
 
 TMP_DISK=dev-android-amd64-emu-tmpdisk
 TMP_IMG=dev-android-amd64-emu-image
 TMP_VM=dev-android-amd64-emu
 
-# Create disk, forking debian-vmx-stretch
+# Create disk, forking our vmx-enabled image
 gcloud compute disks delete $TMP_DISK --zone=$ZONE --quiet || true
 gcloud compute disks create $TMP_DISK \
        --zone=$ZONE \
        --size=40GB \
-       --image=debian-stretch-vmx
+       --image=debian-$DEBIAN-vmx
 
 gcloud compute images delete $TMP_IMG --quiet || true
 gcloud compute images create \
@@ -35,20 +36,18 @@ gcloud compute instances create \
        $TMP_VM \
        --zone=$ZONE \
        --image=$TMP_IMG \
-       --min-cpu-platform "Intel Haswell"
+       --min-cpu-platform "Intel Haswell" \
+       --network default-vpc \
+       --no-service-account --no-scopes
 
-INTERNAL_IP=$(gcloud --format="value(networkInterfaces[0].networkIP)" compute instances list --filter="name=('$TMP_VM')")
 echo "Waiting for SSH port to be available..."
-while ! nc -w 2 -z $INTERNAL_IP 22; do
+while ! gcloud compute ssh $TMP_VM --zone=$ZONE --tunnel-through-iap -- echo hi; do
     sleep 1
 done
 
-VER=$(docker images "--format={{.ID}}" golang/android-amd64-emu:latest)
-CONTAINER=gcr.io/symbolic-datum-552/android-amd64-emu:$VER
-
 echo "SSH is up. Pulling docker container $CONTAINER on VM..."
 
-gcloud compute ssh $TMP_VM --zone=$ZONE --internal-ip -- sudo docker pull $CONTAINER
+gcloud compute ssh $TMP_VM --zone=$ZONE --tunnel-through-iap -- sudo docker pull gcr.io/symbolic-datum-552/android-amd64-emu:latest
 
 echo "Done pulling; shutting down"
 

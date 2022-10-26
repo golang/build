@@ -3,8 +3,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-# This creates the debian-stretch-vmx buildlet VM that's
-# like the Container-Optimized OS but using Debian Stretch
+# This creates the debian-bullseye-vmx buildlet VM that's
+# like the Container-Optimized OS but using Debian Bullseye
 # instead of the Chromium OS, and with nested virtualization
 # enabled.
 
@@ -12,7 +12,7 @@ set -e
 set -x
 
 ZONE=us-central1-f
-TARGET_IMAGE=debian-stretch-vmx
+TARGET_IMAGE=debian-bullseye-vmx
 
 TMP_DISK=dev-debian-vmx-tmpdisk
 TMP_IMG=dev-debian-vmx-image
@@ -24,7 +24,7 @@ gcloud compute disks create $TMP_DISK \
        --zone=$ZONE \
        --size=40GB \
        --image-project=debian-cloud \
-       --image-family debian-9
+       --image-family debian-11
 
 # Create image based on that disk, with the nested virtualization
 # opt-in flag ("license").
@@ -44,14 +44,12 @@ gcloud compute instances create \
        $TMP_VM \
        --zone=$ZONE \
        --image=$TMP_IMG \
-       --min-cpu-platform "Intel Haswell"
-
-INTERNAL_IP=$(gcloud --format="value(networkInterfaces[0].networkIP)" compute instances list --filter="name=('$TMP_VM')")
-EXTERNAL_IP=$(gcloud --format="value(networkInterfaces[0].accessConfigs[0].natIP)" compute instances list --filter="name=('$TMP_VM')")
-echo "external IP: $EXTERNAL_IP, internal IP: $INTERNAL_IP"
+       --min-cpu-platform "Intel Haswell" \
+       --network default-vpc \
+       --no-service-account --no-scopes
 
 echo "Waiting for SSH port to be available..."
-while ! nc -w 2 -z $INTERNAL_IP 22; do
+while ! gcloud compute ssh $TMP_VM --zone=$ZONE --tunnel-through-iap -- echo hi; do
     sleep 1
 done
 
@@ -59,10 +57,10 @@ echo "SSH is up. Copying prep-vm.sh script to VM..."
 
 # gcloud compute scp lacks an --internal-ip flag, even though gcloud
 # compute ssh has it. Annoying. Workaround:
-gcloud compute scp --dry-run --zone=$ZONE prep-vm.sh bradfitz@$TMP_VM: | perl -npe "s/$EXTERNAL_IP/$INTERNAL_IP/" | sh
+gcloud compute scp --zone=$ZONE --tunnel-through-iap prep-vm.sh $TMP_VM:
 
 # And prep the machine.
-gcloud compute ssh $TMP_VM --zone=$ZONE --internal-ip -- sudo bash ./prep-vm.sh
+gcloud compute ssh $TMP_VM --zone=$ZONE --tunnel-through-iap -- sudo bash ./prep-vm.sh
 
 echo "Done prepping machine; shutting down"
 

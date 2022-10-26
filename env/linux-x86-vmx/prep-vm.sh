@@ -29,7 +29,7 @@ systemctl start konlet-startup
 
 # Pre-pull some common images/layers to speed up future boots:
 gcloud auth configure-docker --quiet
-docker pull gcr.io/symbolic-datum-552/linux-x86-stretch:latest
+docker pull gcr.io/symbolic-datum-552/linux-x86-bullseye:latest
 docker pull gcr.io/gce-containers/konlet:v.0.9-latest
 
 apt-get dist-upgrade --yes
