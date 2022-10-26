@@ -1798,6 +1798,9 @@ func init() {
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atMostGo1(goBranch, 19) // Stretch was EOL at the start of the 1.20 cycle.
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-bullseye",
@@ -1823,6 +1826,9 @@ func init() {
 			"GOARCH=386",
 			"GOHOSTARCH=386",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atMostGo1(goBranch, 19) // Stretch was EOL at the start of the 1.20 cycle.
 		},
 	})
 	addBuilder(BuildConfig{
