@@ -9,6 +9,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -44,15 +45,22 @@ type tester struct {
 	gerrit      *gerrit.Client
 }
 
+type builderResult struct {
+	builderType string
+	logURL      string
+	passed      bool
+	err         error
+}
+
 // runTests creates a buildlet for the specified builderType, sends a copy of go1.4 and the change tarball to
 // the buildlet, and then executes the platform specific 'all' script, streaming the output to a GCS bucket.
 // The buildlet is destroyed on return. The bool returned indicates whether the tests passed or failed.
-func (t *tester) runTests(ctx context.Context, builderType string, rev string, archive []byte) (string, bool) {
+func (t *tester) runTests(ctx context.Context, builderType string, rev string, archive []byte) builderResult {
 	log.Printf("%s: creating buildlet", builderType)
 	c, err := t.coordinator.CreateBuildletWithStatus(ctx, builderType, func(status types.BuildletWaitStatus) {})
 	if err != nil {
 		log.Printf("%s: failed to create buildlet: %s", builderType, err)
-		return "", false
+		return builderResult{builderType: builderType, err: fmt.Errorf("failed to create buildlet: %s", err)}
 	}
 	buildletName := c.RemoteName()
 	log.Printf("%s: created buildlet (%s)", builderType, buildletName)
@@ -67,24 +75,24 @@ func (t *tester) runTests(ctx context.Context, builderType string, rev string, a
 	buildConfig, ok := dashboard.Builders[builderType]
 	if !ok {
 		log.Printf("%s: unknown builder type", builderType)
-		return "", false
+		return builderResult{builderType: builderType, err: errors.New("unknown builder type")}
 	}
 	bootstrapURL := buildConfig.GoBootstrapURL(buildenv.Production)
 	// Assume if bootstrapURL == "" the buildlet is already bootstrapped
 	if bootstrapURL != "" {
 		if err := c.PutTarFromURL(ctx, bootstrapURL, "go1.4"); err != nil {
 			log.Printf("%s: failed to bootstrap buildlet: %s", builderType, err)
-			return "", false
+			return builderResult{builderType: builderType, err: fmt.Errorf("failed to bootstrap buildlet: %s", err)}
 		}
 	}
 
 	if err := c.PutTar(ctx, bytes.NewReader(archive), "go"); err != nil {
 		log.Printf("%s: failed to upload change archive: %s", builderType, err)
-		return "", false
+		return builderResult{builderType: builderType, err: fmt.Errorf("failed to upload change: %s", err)}
 	}
 	if err := c.Put(ctx, strings.NewReader("devel "+rev), "go/VERSION", 0644); err != nil {
 		log.Printf("%s: failed to upload VERSION file: %s", builderType, err)
-		return "", false
+		return builderResult{builderType: builderType, err: fmt.Errorf("failed to upload VERSION file: %s", err)}
 	}
 
 	suffix := make([]byte, 4)
@@ -97,8 +105,8 @@ func (t *tester) runTests(ctx context.Context, builderType string, rev string, a
 		gcsBucket, gcsObject := *gcsBucket, fmt.Sprintf("%s-%x/%s", rev, suffix, builderType)
 		gcsWriter, err := newLiveWriter(ctx, t.gcs.Bucket(gcsBucket).Object(gcsObject))
 		if err != nil {
-			log.Printf("%s: failed to create live writer: %s", builderType, err)
-			return "", false
+			log.Printf("%s: failed to create log writer: %s", builderType, err)
+			return builderResult{builderType: builderType, err: fmt.Errorf("failed to create log writer: %s", err)}
 		}
 		defer func() {
 			if err := gcsWriter.Close(); err != nil {
@@ -114,7 +122,7 @@ func (t *tester) runTests(ctx context.Context, builderType string, rev string, a
 	work, err := c.WorkDir(ctx)
 	if err != nil {
 		log.Printf("%s: failed to retrieve work dir: %s", builderType, err)
-		return "", false
+		return builderResult{builderType: builderType, err: fmt.Errorf("failed to get work dir: %s", err)}
 	}
 
 	env := append(buildConfig.Env(), "GOPATH="+work+"/gopath", "GOROOT_FINAL="+buildConfig.GorootFinal())
@@ -130,14 +138,14 @@ func (t *tester) runTests(ctx context.Context, builderType string, rev string, a
 	remoteErr, execErr := c.Exec(ctx, cmd, opts)
 	if execErr != nil {
 		log.Printf("%s: failed to execute all.bash: %s", builderType, execErr)
-		return logURL, false
+		return builderResult{builderType: builderType, err: fmt.Errorf("failed to execute all.bash: %s", err)}
 	}
 	if remoteErr != nil {
 		log.Printf("%s: tests failed: %s", builderType, remoteErr)
-		return logURL, false
+		return builderResult{builderType: builderType, logURL: logURL, passed: false}
 	}
 	log.Printf("%s: tests succeeded", builderType)
-	return logURL, true
+	return builderResult{builderType: builderType, logURL: logURL, passed: true}
 }
 
 // gcsLiveWriter is an extremely hacky way of getting live(ish) updating logs while
@@ -243,32 +251,26 @@ func (t *tester) getTar(revision string) ([]byte, error) {
 	return archive, nil
 }
 
-type result struct {
-	builderType string
-	logURL      string
-	succeeded   bool
-}
-
 // run tests the specific revision on the builders specified.
-func (t *tester) run(ctx context.Context, revision string, builders []string) ([]result, error) {
+func (t *tester) run(ctx context.Context, revision string, builders []string) ([]builderResult, error) {
 	archive, err := t.getTar(revision)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve change archive: %s", err)
 	}
 
 	wg := new(sync.WaitGroup)
-	resultsCh := make(chan result, len(builders))
+	resultsCh := make(chan builderResult, len(builders))
 	for _, bt := range builders {
 		wg.Add(1)
 		go func(bt string) {
 			defer wg.Done()
-			log, succeeded := t.runTests(ctx, bt, revision, archive) // have a proper timeout
-			resultsCh <- result{bt, log, succeeded}
+			result := t.runTests(ctx, bt, revision, archive) // have a proper timeout
+			resultsCh <- result
 		}(bt)
 	}
 	wg.Wait()
 	close(resultsCh)
-	results := make([]result, 0, len(builders))
+	results := make([]builderResult, 0, len(builders))
 	for result := range resultsCh {
 		results = append(results, result)
 	}
@@ -290,19 +292,25 @@ func (t *tester) commentBeginning(ctx context.Context, change *gerrit.ChangeInfo
 
 // commentResults sends the review message containing the results for the change
 // and applies the TryBot-Result label.
-func (t *tester) commentResults(ctx context.Context, change *gerrit.ChangeInfo, results []result) error {
+func (t *tester) commentResults(ctx context.Context, change *gerrit.ChangeInfo, results []builderResult) error {
 	state := "succeeded"
 	label := 1
 	buf := new(bytes.Buffer)
 	w := tabwriter.NewWriter(buf, 0, 0, 1, ' ', 0)
 	for _, res := range results {
 		s := "pass"
-		if !res.succeeded {
+		context := res.logURL
+		if res.err != nil {
+			s = "error"
+			state = "failed"
+			label = -1
+			context = res.err.Error()
+		} else if !res.passed {
 			s = "failed"
 			state = "failed"
 			label = -1
 		}
-		fmt.Fprintf(w, "    %s\t[%s]\t%s\n", res.builderType, s, res.logURL)
+		fmt.Fprintf(w, "    %s\t[%s]\t%s\n", res.builderType, s, context)
 	}
 	w.Flush()
 
