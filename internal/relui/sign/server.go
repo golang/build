@@ -140,6 +140,8 @@ func (rs *SigningServer) SignArtifact(ctx context.Context, bt BuildType, objectU
 	switch t := resp.StatusOneof.(type) {
 	case *protos.SigningStatus_Started:
 		return t.Started.JobId, nil
+	case *protos.SigningStatus_Failed:
+		return "", fmt.Errorf("failed to start %v signing on %q: %s", bt, objectURI, t.Failed.GetDescription())
 	default:
 		return "", fmt.Errorf("unexpected response type %T for a sign request", t)
 	}

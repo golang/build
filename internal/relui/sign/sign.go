@@ -77,3 +77,16 @@ func (bt BuildType) proto() protos.SignArtifactRequest_BuildType {
 		return protos.SignArtifactRequest_BUILD_TYPE_UNSPECIFIED
 	}
 }
+
+func (bt BuildType) String() string {
+	switch bt {
+	case BuildMacOS:
+		return "macOS"
+	case BuildWindows:
+		return "Windows"
+	case BuildGPG:
+		return "GPG"
+	default:
+		return "unspecified"
+	}
+}
