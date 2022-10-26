@@ -600,16 +600,12 @@ func advisoryTryBots(major int) []*dashboard.BuildConfig {
 
 	var extras []*dashboard.BuildConfig
 	for name, bc := range dashboard.Builders {
-		if usedBuilders[name] {
-			continue
+		if !usedBuilders[name] &&
+			bc.BuildsRepoPostSubmit("go", fmt.Sprintf("release-branch.go1.%d", major), "") &&
+			bc.HostConfig().IsGoogle() &&
+			len(bc.KnownIssues) == 0 {
+			extras = append(extras, bc)
 		}
-		if !bc.BuildsRepoPostSubmit("go", fmt.Sprintf("release-branch.go1.%d", major), "") {
-			continue
-		}
-		if !bc.HostConfig().IsGoogle() {
-			continue
-		}
-		extras = append(extras, bc)
 	}
 	return extras
 }
