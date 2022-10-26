@@ -1842,6 +1842,16 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-386-bullseye",
+		HostType: "host-linux-amd64-bullseye",
+		Notes:    "Debian Bullseye, 32-bit builder.",
+		env: []string{
+			"GOARCH=386",
+			"GOHOSTARCH=386",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+	})
+	addBuilder(BuildConfig{
 		Name:     "linux-amd64-longtest",
 		HostType: "host-linux-amd64-bullseye",
 		Notes:    "Debian Bullseye with go test -short=false",

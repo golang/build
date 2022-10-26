@@ -118,6 +118,17 @@ var allReleases = map[int]ReleaseTargets{
 			Race:            true,
 		},
 	},
+	20: {
+		"linux-386": &Target{
+			Builder:         "linux-386-bullseye",
+			LongTestBuilder: "linux-386-longtest",
+		},
+		"linux-amd64": &Target{
+			Builder:         "linux-amd64-bullseye",
+			LongTestBuilder: "linux-amd64-longtest",
+			Race:            true,
+		},
+	},
 }
 
 func init() {
