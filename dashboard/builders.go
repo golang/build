@@ -1494,7 +1494,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" || repo == "crypto"
 		},
-		HostType: "host-linux-amd64-stretch",
+		HostType: "host-linux-amd64-bullseye",
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=softfloat"},
 	})
 	addBuilder(BuildConfig{
@@ -1562,7 +1562,7 @@ func init() {
 		}
 		addBuilder(BuildConfig{
 			Name:     "misc-compile" + suffix,
-			HostType: "host-linux-amd64-stretch",
+			HostType: "host-linux-amd64-bullseye",
 			tryBot:   defaultTrySet(),
 			env: []string{
 				"GO_DISABLE_OUTBOUND_NETWORK=1",
@@ -1661,7 +1661,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-staticlockranking",
-		HostType: "host-linux-amd64-stretch",
+		HostType: "host-linux-amd64-bullseye",
 		Notes:    "builder with GOEXPERIMENT=staticlockranking, see go.dev/issue/37937",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go"
