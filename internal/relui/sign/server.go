@@ -7,7 +7,6 @@ package sign
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"sync"
 	"time"
@@ -55,20 +54,19 @@ func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_Update
 		return status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
 
+	t := time.Now()
 	log.Printf("SigningServer: a client connected (iap = %+v)\n", iap)
-	defer log.Println("SigningServer: a client disconnected")
-
 	g, ctx := errgroup.WithContext(stream.Context())
 	g.Go(func() error {
 		for {
 			select {
 			case <-ctx.Done():
-				return nil
+				return ctx.Err()
 			case req := <-rs.requests:
 				err := stream.Send(req)
 				if err != nil {
 					rs.callAndDeregister(req.GetMessageId(), &signResponse{err: err})
-					return status.Errorf(codes.Internal, "sending request failed")
+					return err
 				}
 			}
 		}
@@ -76,19 +74,15 @@ func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_Update
 	g.Go(func() error {
 		for {
 			resp, err := stream.Recv()
-			if err == io.EOF {
-				return nil
-			} else if err != nil {
+			if err != nil {
 				return err
 			}
 			rs.callAndDeregister(resp.GetMessageId(), &signResponse{status: resp})
 		}
 	})
-	if err := g.Wait(); err != nil {
-		log.Printf("SigningServer: UpdateSigningStatus=%s", err)
-		return err
-	}
-	return nil
+	err = g.Wait()
+	log.Printf("SigningServer: a client disconnected after %v (err = %v)\n", time.Since(t), err)
+	return err
 }
 
 // do sends a signing request and returns the corresponding signing response.
