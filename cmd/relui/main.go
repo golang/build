@@ -215,6 +215,7 @@ func main() {
 		ApproveAction:    relui.ApproveActionDep(dbPool),
 	}
 	dh.RegisterDefinition("Tag x/ repos", tagTasks.NewDefinition())
+	dh.RegisterDefinition("Tag a single x/ repo", tagTasks.NewSingleDefinition())
 
 	var base *url.URL
 	if *baseURL != "" {

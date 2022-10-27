@@ -45,13 +45,22 @@ func (x *TagXReposTasks) NewDefinition() *wf.Definition {
 	return wd
 }
 
+func (x *TagXReposTasks) NewSingleDefinition() *wf.Definition {
+	wd := wf.New()
+	repos := wf.Task0(wd, "Load all repositories", x.SelectRepos)
+	name := wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "tools"})
+	wf.Expand2(wd, "Create single-repo plan", x.BuildSingleRepoPlan, repos, name)
+	return wd
+}
+
 // TagRepo contains information about a repo that can be tagged.
 type TagRepo struct {
-	Name    string   // Gerrit project name, e.g. "tools".
-	ModPath string   // Module path, e.g. "golang.org/x/tools".
-	Deps    []string // Dependency module paths.
-	Compat  string   // The version to pass to go mod tidy -compat for this repository.
-	Version string   // After a tagging decision has been made, the version dependencies should upgrade to.
+	Name         string   // Gerrit project name, e.g. "tools".
+	ModPath      string   // Module path, e.g. "golang.org/x/tools".
+	Deps         []string // Dependency module paths.
+	Compat       string   // The Go version to pass to go mod tidy -compat for this repository.
+	StartVersion string   // The version of the module when the workflow started.
+	Version      string   // After a tagging decision has been made, the version dependencies should upgrade to.
 }
 
 func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
@@ -127,8 +136,9 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 	}
 
 	result := &TagRepo{
-		Name:    project,
-		ModPath: mf.Module.Mod.Path,
+		Name:         project,
+		ModPath:      mf.Module.Mod.Path,
+		StartVersion: tag,
 	}
 
 	compatRe := regexp.MustCompile(`tagx:compat\s+([\d.]+)`)
@@ -251,8 +261,31 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo) error {
 	return nil
 }
 
-// planRepo returns a Value containing the tagged repository's information, or
-// nil, false if its dependencies haven't been planned yet.
+func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagRepo, name string) error {
+	repos := map[string]TagRepo{}
+	updatedRepos := map[string]wf.Value[TagRepo]{}
+	for _, r := range repoSlice {
+		repos[r.Name] = r
+
+		// Pretend that we've just tagged version that was live when we started.
+		r.Version = r.StartVersion
+		updatedRepos[r.ModPath] = wf.Const(r)
+	}
+	repo, ok := repos[name]
+	if !ok {
+		return fmt.Errorf("no repository %q", name)
+	}
+	tagged, ok := x.planRepo(wd, repo, updatedRepos)
+	if !ok {
+		return fmt.Errorf("%q doesn't have all of its dependencies (%q)", repo.Name, repo.Deps)
+	}
+	wf.Output(wd, "tagged repository", tagged)
+	return nil
+}
+
+// planRepo adds tasks to wf to update and tag repo. It returns a Value
+// containing the tagged repository's information, or nil, false if its
+// dependencies haven't been planned yet.
 func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[string]wf.Value[TagRepo]) (_ wf.Value[TagRepo], ready bool) {
 	var deps []wf.Value[TagRepo]
 	for _, repoDeps := range repo.Deps {

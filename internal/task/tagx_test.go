@@ -334,10 +334,19 @@ case "$1" in
 esac
 `
 
-func TestTagXRepos(t *testing.T) {
+type tagXTestDeps struct {
+	ctx       context.Context
+	gerrit    *FakeGerrit
+	tagXTasks *TagXReposTasks
+}
+
+func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 
 	goServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ServeTarball("dl/go1.19.linux-amd64.tar.gz", map[string]string{
@@ -346,36 +355,14 @@ func TestTagXRepos(t *testing.T) {
 	}))
 	t.Cleanup(goServer.Close)
 
-	fakeBuildlets := NewFakeBuildlets(t, "")
-
 	goRepo := NewFakeRepo(t, "go")
 	go1 := goRepo.Commit(map[string]string{
 		"main.go": "I'm the go command or something",
 	})
-	sys := NewFakeRepo(t, "sys")
-	sys1 := sys.Commit(map[string]string{
-		"go.mod": "module golang.org/x/sys\n",
-		"go.sum": "\n",
-	})
-	sys.Tag("v0.1.0", sys1)
-	sys2 := sys.Commit(map[string]string{
-		"main.go": "package main",
-	})
-	mod := NewFakeRepo(t, "mod")
-	mod1 := mod.Commit(map[string]string{
-		"go.mod": "module golang.org/x/mod\n",
-		"go.sum": "\n",
-	})
-	mod.Tag("v1.0.0", mod1)
-	tools := NewFakeRepo(t, "tools")
-	tools1 := tools.Commit(map[string]string{
-		"go.mod":       "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18 // tagx:compat 1.16\nrequire golang.org/x/sys v0.1.0\n",
-		"go.sum":       "\n",
-		"gopls/go.mod": "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
-		"gopls/go.sum": "\n",
-	})
-	tools.Tag("v1.1.5", tools1)
-	fakeGerrit := NewFakeGerrit(t, goRepo, sys, mod, tools)
+	repos = append(repos, goRepo)
+
+	fakeBuildlets := NewFakeBuildlets(t, "")
+	fakeGerrit := NewFakeGerrit(t, repos...)
 	var builders, allOK []string
 	for _, b := range dashboard.Builders {
 		builders = append(builders, b.Name)
@@ -391,7 +378,7 @@ func TestTagXRepos(t *testing.T) {
 				},
 			}
 		}
-		for _, r := range []*FakeRepo{sys, mod, tools} {
+		for _, r := range repos {
 			if repo != "golang.org/x/"+r.name {
 				continue
 			}
@@ -427,19 +414,53 @@ func TestTagXRepos(t *testing.T) {
 			return nil
 		},
 	}
-	wd := tasks.NewDefinition()
+	return &tagXTestDeps{
+		ctx:       ctx,
+		gerrit:    fakeGerrit,
+		tagXTasks: tasks,
+	}
+}
+
+func TestTagXRepos(t *testing.T) {
+	sys := NewFakeRepo(t, "sys")
+	sys1 := sys.Commit(map[string]string{
+		"go.mod": "module golang.org/x/sys\n",
+		"go.sum": "\n",
+	})
+	sys.Tag("v0.1.0", sys1)
+	sys2 := sys.Commit(map[string]string{
+		"main.go": "package main",
+	})
+	mod := NewFakeRepo(t, "mod")
+	mod1 := mod.Commit(map[string]string{
+		"go.mod": "module golang.org/x/mod\n",
+		"go.sum": "\n",
+	})
+	mod.Tag("v1.0.0", mod1)
+	tools := NewFakeRepo(t, "tools")
+	tools1 := tools.Commit(map[string]string{
+		"go.mod":       "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18 // tagx:compat 1.16\nrequire golang.org/x/sys v0.1.0\n",
+		"go.sum":       "\n",
+		"gopls/go.mod": "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
+		"gopls/go.sum": "\n",
+	})
+	tools.Tag("v1.1.5", tools1)
+
+	deps := newTagXTestDeps(t, sys, mod, tools)
+
+	wd := deps.tagXTasks.NewDefinition()
 	w, err := workflow.Start(wd, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(deps.ctx, time.Minute)
 	defer cancel()
 	_, err = w.Run(ctx, &verboseListener{t: t})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	tag, err := fakeGerrit.GetTag(ctx, "sys", "v0.2.0")
+	tag, err := deps.gerrit.GetTag(ctx, "sys", "v0.2.0")
 	if err != nil {
 		t.Fatalf("sys should have been tagged with v0.2.0: %v", err)
 	}
@@ -447,7 +468,7 @@ func TestTagXRepos(t *testing.T) {
 		t.Errorf("sys v0.2.0 = %v, want %v", tag.Revision, sys2)
 	}
 
-	tags, err := fakeGerrit.ListTags(ctx, "mod")
+	tags, err := deps.gerrit.ListTags(ctx, "mod")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,11 +476,11 @@ func TestTagXRepos(t *testing.T) {
 		t.Errorf("mod has tags %v, wanted only v1.0.0", tags)
 	}
 
-	tag, err = fakeGerrit.GetTag(ctx, "tools", "v1.2.0")
+	tag, err = deps.gerrit.GetTag(ctx, "tools", "v1.2.0")
 	if err != nil {
 		t.Fatalf("tools should have been tagged with v1.2.0: %v", err)
 	}
-	goMod, err := fakeGerrit.ReadFile(ctx, "tools", tag.Revision, "go.mod")
+	goMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "go.mod")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,12 +490,58 @@ func TestTagXRepos(t *testing.T) {
 	if !strings.Contains(string(goMod), "tidied!") {
 		t.Error("tools go.mod should be tidied")
 	}
-	goplsMod, err := fakeGerrit.ReadFile(ctx, "tools", tag.Revision, "gopls/go.mod")
+	goplsMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "gopls/go.mod")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "1.16") || strings.Contains(string(goplsMod), "upgraded") {
 		t.Error("gopls go.mod should be tidied with -compat 1.16, but not upgraded")
+	}
+}
+
+func TestTagSingleRepo(t *testing.T) {
+	mod := NewFakeRepo(t, "mod")
+	mod1 := mod.Commit(map[string]string{
+		"go.mod": "module golang.org/x/mod\n",
+		"go.sum": "\n",
+	})
+	mod.Tag("v1.1.0", mod1)
+	foo := NewFakeRepo(t, "foo")
+	foo1 := foo.Commit(map[string]string{
+		"go.mod": "module golang.org/x/foo\nrequire golang.org/x/mod v1.0.0\n",
+		"go.sum": "\n",
+	})
+	foo.Tag("v1.1.5", foo1)
+	foo.Commit(map[string]string{
+		"main.go": "package main",
+	})
+
+	deps := newTagXTestDeps(t, mod, foo)
+
+	wd := deps.tagXTasks.NewSingleDefinition()
+	ctx, cancel := context.WithTimeout(deps.ctx, time.Minute)
+	w, err := workflow.Start(wd, map[string]interface{}{
+		"Repository name": "foo",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	_, err = w.Run(ctx, &verboseListener{t: t})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tag, err := deps.gerrit.GetTag(ctx, "foo", "v1.2.0")
+	if err != nil {
+		t.Fatalf("foo should have been tagged with v1.2.0: %v", err)
+	}
+	goMod, err := deps.gerrit.ReadFile(ctx, "foo", tag.Revision, "go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(goMod), "mod@v1.1.0") {
+		t.Errorf("foo should use mod v1.1.0. go.mod: %v", string(goMod))
 	}
 }
 

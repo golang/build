@@ -83,6 +83,7 @@ func (d *Definition) name(name string) string {
 
 func (d *Definition) shallowClone() *Definition {
 	clone := New()
+	clone.parameters = append([]MetaParameter(nil), d.parameters...)
 	for k, v := range d.tasks {
 		clone.tasks[k] = v
 	}
