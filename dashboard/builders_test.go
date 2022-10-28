@@ -381,10 +381,9 @@ func TestBuilderConfig(t *testing.T) {
 
 		// Don't test all subrepos on all the builders.
 		{b("linux-amd64-ssacheck", "net"), none},
-		{b("linux-amd64-ssacheck@go1.18", "net"), none},
+		{b("linux-amd64-ssacheck@go1.99", "net"), none},
 		{b("linux-386-softfloat", "crypto"), onlyPost},
-		{b("linux-386-softfloat@go1.18", "crypto"), onlyPost},
-		{b("linux-386-softfloat@go1.17", "crypto"), onlyPost},
+		{b("linux-386-softfloat@go1.99", "crypto"), onlyPost},
 
 		{b("android-amd64-emu", "go"), onlyPost},
 		{b("android-amd64-emu", "mobile"), both},
@@ -402,13 +401,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-386-emu", "crypto"), onlyPost},
 
 		{b("linux-amd64", "net"), both},
-		{b("linux-amd64", "net@1.12"), both},
-		{b("linux-amd64@go1.12", "net@1.12"), both},
-		{b("linux-amd64", "net@1.11"), both},
-		{b("linux-amd64", "net@1.11"), both},
-		{b("linux-amd64", "net@1.10"), none},   // too old
-		{b("linux-amd64@go1.10", "net"), none}, // too old
-		{b("linux-amd64@go1.12", "net@1.12"), both},
 
 		{b("linux-loong64-3a5000", "go"), onlyPost},
 		{b("linux-loong64-3a5000", "sys"), onlyPost},
@@ -416,13 +408,11 @@ func TestBuilderConfig(t *testing.T) {
 
 		// OpenBSD 6.8.
 		{b("openbsd-amd64-68", "go"), onlyPost},
-		{b("openbsd-amd64-68@go1.16", "go"), onlyPost},
-		{b("openbsd-amd64-68@go1.15", "go"), onlyPost},
-		{b("openbsd-amd64-68@go1.14", "go"), onlyPost},
+		{b("openbsd-amd64-68@go1.99", "go"), onlyPost},
 
 		// OpenBSD 7.0.
 		{b("openbsd-amd64-70", "go"), both},
-		{b("openbsd-amd64-70@go1.17", "go"), both},
+		{b("openbsd-amd64-70@go1.99", "go"), both},
 
 		// FreeBSD 13.0
 		{b("freebsd-amd64-13_0", "go"), onlyPost},
@@ -440,14 +430,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_3", "net"), onlyPost},
 		{b("freebsd-386-12_3", "mobile"), none},
 
-		// FreeBSD 11.4
-		{b("freebsd-amd64-11_4@go1.17", "go"), onlyPost},
-		{b("freebsd-amd64-11_4@go1.17", "net"), none},
-		{b("freebsd-amd64-11_4@go1.17", "sys"), none},
-		{b("freebsd-386-11_4@go1.17", "go"), onlyPost},
-		{b("freebsd-386-11_4@go1.17", "net"), none},
-		{b("freebsd-386-11_4@go1.17", "sys"), none},
-
 		// NetBSD
 		{b("netbsd-amd64-9_0", "go"), onlyPost},
 		{b("netbsd-amd64-9_0", "net"), onlyPost},
@@ -455,18 +437,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("netbsd-386-9_0", "go"), onlyPost},
 		{b("netbsd-386-9_0", "net"), onlyPost},
 
-		// AIX starts at Go 1.12
+		// AIX
 		{b("aix-ppc64", "go"), onlyPost},
 		{b("aix-ppc64", "net"), onlyPost},
 		{b("aix-ppc64", "mobile"), none},
 		{b("aix-ppc64", "exp"), none},
 		{b("aix-ppc64", "term"), onlyPost},
-		{b("aix-ppc64@go1.15", "go"), onlyPost},
-		{b("aix-ppc64@go1.15", "net"), onlyPost},
-		{b("aix-ppc64@go1.15", "mobile"), none},
-		{b("aix-ppc64@go1.16", "net"), onlyPost},
-		{b("aix-ppc64@go1.16", "mobile"), none},
-		{b("aix-ppc64@dev.link", "go"), onlyPost},
 
 		{b("linux-amd64-nocgo", "mobile"), none},
 
@@ -493,7 +469,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("js-wasm", "crypto"), onlyPost},
 		{b("js-wasm", "sys"), onlyPost},
 		{b("js-wasm", "net"), onlyPost},
-		{b("js-wasm@go1.12", "net"), none},
 		{b("js-wasm", "benchmarks"), none},
 		{b("js-wasm", "debug"), none},
 		{b("js-wasm", "mobile"), none},
@@ -518,10 +493,10 @@ func TestBuilderConfig(t *testing.T) {
 		// Long test.
 		{b("linux-amd64-longtest", "go"), onlyPost},
 		{b("linux-amd64-longtest", "net"), onlyPost},
-		{b("linux-amd64-longtest@go1.14", "go"), both},
-		{b("linux-amd64-longtest@go1.14", "net"), none},
+		{b("linux-amd64-longtest@go1.99", "go"), both},
+		{b("linux-amd64-longtest@go1.99", "net"), none},
 		{b("windows-amd64-longtest", "go"), onlyPost},
-		{b("windows-amd64-longtest@go1.14", "go"), both},
+		{b("windows-amd64-longtest@go1.99", "go"), both},
 		{b("windows-amd64-longtest", "net"), onlyPost},
 		{b("windows-amd64-longtest", "exp"), onlyPost},
 		{b("windows-amd64-longtest", "mobile"), none},
@@ -539,15 +514,13 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_14", "exp"), onlyPost},
 		{b("darwin-amd64-10_15", "exp"), onlyPost},
 		// ... but not on most others:
-		{b("freebsd-386-11_4", "exp"), none},
 		{b("freebsd-386-12_3", "exp"), none},
-		{b("freebsd-amd64-11_4", "exp"), none},
 		{b("freebsd-amd64-12_3", "exp"), none},
 		{b("openbsd-amd64-68", "exp"), none},
 		{b("js-wasm", "exp"), none},
 
 		// exp is experimental; it doesn't test against release branches.
-		{b("linux-amd64@go1.12", "exp"), none},
+		{b("linux-amd64@go1.99", "exp"), none},
 
 		// the build repo is only really useful for linux-amd64 (where we run it),
 		// and darwin-amd64 and perhaps windows-amd64 (for stuff like gomote).
@@ -565,10 +538,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-nocgo", "build"), none},
 		{b("linux-386-longtest", "build"), none},
 
-		// x/vulndb isn't tested on Go 1.17 and older.
-		{b("linux-amd64@go1.17", "vulndb"), none},
-		{b("linux-amd64@go1.18", "vulndb"), both},
-		{b("linux-amd64-longtest@go1.17", "vulndb"), none},
+		{b("linux-amd64", "vulndb"), both},
 		{b("linux-amd64-longtest", "vulndb"), onlyPost},
 
 		{b("js-wasm", "build"), none},
@@ -587,27 +557,25 @@ func TestBuilderConfig(t *testing.T) {
 		{b("plan9-386", "net"), none}, // temporarily disabled
 		{b("plan9-386", "exp"), none},
 		{b("plan9-386", "mobile"), none},
-		{b("plan9-386@go1.12", "go"), none},
-		{b("plan9-386@go1.12", "net"), none},
+		{b("plan9-386@go1.99", "go"), none},
+		{b("plan9-386@go1.99", "net"), none},
 		{b("plan9-amd64-0intro", "go"), onlyPost},
 		{b("plan9-amd64-0intro", "exp"), none},
 		{b("plan9-amd64-0intro", "mobile"), none},
-		{b("plan9-amd64-0intro@go1.12", "go"), none},
+		{b("plan9-amd64-0intro@go1.99", "go"), none},
 		{b("plan9-amd64-0intro", "net"), onlyPost},
-		{b("plan9-amd64-0intro@go1.12", "net"), none},
+		{b("plan9-amd64-0intro@go1.99", "net"), none},
 		{b("plan9-arm", "go"), onlyPost},
 		{b("plan9-arm", "exp"), none},
 		{b("plan9-arm", "mobile"), none},
-		{b("plan9-arm@go1.12", "go"), none},
-		{b("plan9-arm", "net"), onlyPost},
-		{b("plan9-arm@go1.12", "net"), none},
-
+		{b("plan9-amd64-0intro@go1.99", "go"), none},
+		{b("plan9-amd64-0intro", "net"), onlyPost},
+		{b("plan9-amd64-0intro@go1.99", "net"), none},
 		{b("dragonfly-amd64-622", "go"), onlyPost},
 		{b("dragonfly-amd64-622", "net"), onlyPost},
 
 		{b("linux-amd64-staticlockranking", "go"), onlyPost},
-		{b("linux-amd64-staticlockranking@go1.18", "go"), onlyPost},
-		{b("linux-amd64-staticlockranking@go1.17", "go"), onlyPost},
+		{b("linux-amd64-staticlockranking@go1.19", "go"), onlyPost},
 		{b("linux-amd64-staticlockranking", "net"), none},
 
 		{b("linux-amd64-unified", "go"), both},

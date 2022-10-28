@@ -220,12 +220,6 @@ var Hosts = map[string]*HostConfig{
 		VMImage:     "dragonfly-amd64-622",
 		SSHUsername: "root",
 	},
-	"host-freebsd-amd64-11_4": {
-		VMImage:     "freebsd-amd64-114",
-		Notes:       "FreeBSD 11.4; GCE VM, built from build/env/freebsd-amd64",
-		machineType: "n2", // Intel only due to AMD memory corruption. See https://go.dev/cl/377474.
-		SSHUsername: "gopher",
-	},
 	"host-freebsd-amd64-12_3": {
 		VMImage:     "freebsd-amd64-123-stable-20211230",
 		Notes:       "FreeBSD 12.3; GCE VM, built from build/env/freebsd-amd64",
@@ -1419,17 +1413,6 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 
 func init() {
 	addBuilder(BuildConfig{
-		Name:              "freebsd-amd64-11_4",
-		HostType:          "host-freebsd-amd64-11_4",
-		distTestAdjust:    fasterTrybots,
-		numTryTestHelpers: 4,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is still used by Go 1.17,
-			// keep it around a bit longer. See go.dev/issue/49491.
-			return atMostGo1(goBranch, 17) && repo == "go"
-		},
-	})
-	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-12_3",
 		HostType: "host-freebsd-amd64-12_3",
 		tryBot:   defaultTrySet("sys"),
@@ -1464,17 +1447,6 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:           "freebsd-386-11_4",
-		HostType:       "host-freebsd-amd64-11_4",
-		distTestAdjust: noTestDirAndNoReboot,
-		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder is still used by Go 1.17 and 1.16,
-			// keep it around a bit longer. See go.dev/issue/49491.
-			return atMostGo1(goBranch, 17) && repo == "go"
-		},
-	})
-	addBuilder(BuildConfig{
 		Name:           "linux-386",
 		HostType:       "host-linux-amd64-bullseye",
 		distTestAdjust: fasterTrybots,
@@ -1498,17 +1470,10 @@ func init() {
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=softfloat"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64",
-		HostType: "host-linux-amd64-bullseye",
-		tryBot:   defaultTrySet(),
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "vulndb" && atMostGo1(goBranch, 17) {
-				// The vulndb repo is for use only by the Go team,
-				// so it doesn't need to work on older Go versions.
-				return false
-			}
-			return defaultPlusExpBuildVulnDB(repo, branch, goBranch)
-		},
+		Name:       "linux-amd64",
+		HostType:   "host-linux-amd64-bullseye",
+		tryBot:     defaultTrySet(),
+		buildsRepo: defaultPlusExpBuildVulnDB,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
@@ -1711,10 +1676,6 @@ func init() {
 		Name:     "linux-amd64-goamd64v3",
 		HostType: "host-linux-amd64-bullseye",
 		Notes:    "builder with GOAMD64=v3, see proposal 45453 and issue 48505",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// GOAMD64 is added in Go 1.18.
-			return atLeastGo1(goBranch, 18) && buildRepoByDefault(repo)
-		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 			"GOAMD64=v3",
@@ -1799,7 +1760,7 @@ func init() {
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atMostGo1(goBranch, 19) // Stretch was EOL at the start of the 1.20 cycle.
+			return atMostGo1(goBranch, 19) && buildRepoByDefault(repo) // Stretch was EOL at the start of the 1.20 cycle.
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1828,7 +1789,7 @@ func init() {
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atMostGo1(goBranch, 19) // Stretch was EOL at the start of the 1.20 cycle.
+			return atMostGo1(goBranch, 19) && buildRepoByDefault(repo) // Stretch was EOL at the start of the 1.20 cycle.
 		},
 	})
 	addBuilder(BuildConfig{
@@ -1953,15 +1914,10 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:           "openbsd-amd64-70",
-		HostType:       "host-openbsd-amd64-70",
-		tryBot:         defaultTrySet(),
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
-			// 1.16 seems to be incompatible with 7.0.
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
+		Name:              "openbsd-amd64-70",
+		HostType:          "host-openbsd-amd64-70",
+		tryBot:            defaultTrySet(),
+		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
@@ -1969,14 +1925,9 @@ func init() {
 		HostType: "host-openbsd-386-70",
 		tryBot:   explicitTrySet("sys"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "review" {
-				// https://go.dev/issue/49529: git seems to be too slow on this
-				// platform.
-				return false
-			}
-			// https://github.com/golang/go/issues/48977#issuecomment-971763553:
-			// 1.16 seems to be incompatible with 7.0.
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
+			// https://go.dev/issue/49529: git seems to be too slow on this
+			// platform.
+			return repo != "review" && buildRepoByDefault(repo)
 		},
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
@@ -2313,9 +2264,6 @@ func init() {
 		Name:              "windows-arm64-10",
 		HostType:          "host-windows-arm64-mini",
 		numTryTestHelpers: 1,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 17) && buildRepoByDefault(repo)
-		},
 		env: []string{
 			"GOARCH=arm64",
 		},
@@ -2324,9 +2272,6 @@ func init() {
 		Name:              "windows-arm64-11",
 		HostType:          "host-windows11-arm64-mini",
 		numTryTestHelpers: 1,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 18) && buildRepoByDefault(repo)
-		},
 		env: []string{
 			"GOARCH=arm64",
 			"GOMAXPROCS=4", // OOM problems, see go.dev/issue/51019
