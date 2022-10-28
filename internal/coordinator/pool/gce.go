@@ -55,8 +55,16 @@ func init() {
 // limit ourselves to less than that.
 var apiCallTicker = time.NewTicker(time.Second / 10)
 
+// Separate rate limit for deletions, which are more important than other
+// actions, especially at server startup.
+var deletionTicker = time.NewTicker(time.Second / 10)
+
 func gceAPIGate() {
 	<-apiCallTicker.C
+}
+
+func deletionAPIGate() {
+	<-deletionTicker.C
 }
 
 // Initialized by InitGCE:
@@ -490,9 +498,9 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 			Zone: zone,
 		})
 		if errors.Is(err, buildlet.ErrQuotaExceeded) && ctx.Err() == nil {
-			log.Printf("Failed to create VM because quota exceeded. Retrying after 1 second (attempt: %d).", attempts)
+			log.Printf("Failed to create VM because quota exceeded. Retrying after 10 second (attempt: %d).", attempts)
 			attempts++
-			time.Sleep(time.Second)
+			time.Sleep(10 * time.Second)
 			continue
 		} else if err != nil {
 			curSpan.Done(err)
@@ -652,7 +660,7 @@ func (p *GCEBuildlet) CleanUpOldVMs() {
 
 // cleanZoneVMs is part of cleanUpOldVMs, operating on a single zone.
 func (p *GCEBuildlet) cleanZoneVMs(zone string) error {
-	gceAPIGate()
+	deletionAPIGate()
 	err := computeService.Instances.List(buildEnv.ProjectName, zone).Pages(context.Background(), func(list *compute.InstanceList) error {
 		for _, inst := range list.Items {
 			if inst.Metadata == nil {
@@ -708,7 +716,7 @@ func (p *GCEBuildlet) cleanZoneVMs(zone string) error {
 		}
 		if list.NextPageToken != "" {
 			// Don't use all our quota flipping through pages.
-			gceAPIGate()
+			deletionAPIGate()
 		}
 		return nil
 	})
@@ -728,7 +736,7 @@ type token struct{}
 // empty string if the instance didn't exist.
 func deleteVM(zone, instName string) (operation string, err error) {
 	deletedVMCache.Add(instName, token{})
-	gceAPIGate()
+	deletionAPIGate()
 	op, err := computeService.Instances.Delete(buildEnv.ProjectName, zone, instName).Do()
 	apiErr, ok := err.(*googleapi.Error)
 	if ok {
