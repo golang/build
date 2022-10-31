@@ -119,6 +119,18 @@ var allReleases = map[int]ReleaseTargets{
 		},
 	},
 	20: {
+		// 1.20 drops Race .as from the distribution.
+		"darwin-amd64": &Target{
+			Builder:  "darwin-amd64-12_0",
+			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
+		},
+		"darwin-arm64": &Target{
+			Builder: "darwin-arm64-12",
+		},
+		"freebsd-amd64": &Target{
+			SecondClass: true,
+			Builder:     "freebsd-amd64-12_3",
+		},
 		"linux-386": &Target{
 			Builder:         "linux-386-bullseye",
 			LongTestBuilder: "linux-386-longtest",
@@ -126,7 +138,10 @@ var allReleases = map[int]ReleaseTargets{
 		"linux-amd64": &Target{
 			Builder:         "linux-amd64-bullseye",
 			LongTestBuilder: "linux-amd64-longtest",
-			Race:            true,
+		},
+		"windows-amd64": &Target{
+			Builder:         "windows-amd64-2008",
+			LongTestBuilder: "windows-amd64-longtest",
 		},
 	},
 }
