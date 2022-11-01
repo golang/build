@@ -330,6 +330,7 @@ var gcePool = &GCEBuildlet{
 	instQueue:   queue.NewQuota(),
 	n2cpuQueue:  queue.NewQuota(),
 	n2dcpuQueue: queue.NewQuota(),
+	t2acpuQueue: queue.NewQuota(),
 }
 
 var _ Buildlet = (*GCEBuildlet)(nil)
@@ -348,6 +349,7 @@ type GCEBuildlet struct {
 	instQueue   *queue.Quota
 	n2cpuQueue  *queue.Quota
 	n2dcpuQueue *queue.Quota
+	t2acpuQueue *queue.Quota
 	inst        map[string]time.Time // GCE VM instance name -> creationTime
 }
 
@@ -380,6 +382,8 @@ func (p *GCEBuildlet) pollQuota() {
 			p.n2cpuQueue.UpdateLimit(int(quota.Limit))
 		case "N2D_CPUS":
 			p.n2dcpuQueue.UpdateLimit(int(quota.Limit))
+		case "T2A_CPUS":
+			p.t2acpuQueue.UpdateLimit(int(quota.Limit))
 		case "INSTANCES":
 			p.instQueue.UpdateLimit(int(quota.Limit))
 		}
@@ -392,6 +396,7 @@ func (p *GCEBuildlet) QuotaStats() map[string]*queue.QuotaStats {
 		"gce-c2-cpu":    p.c2cpuQueue.ToExported(),
 		"gce-n2-cpu":    p.n2cpuQueue.ToExported(),
 		"gce-n2d-cpu":   p.n2dcpuQueue.ToExported(),
+		"gce-t2a-cpu":   p.t2acpuQueue.ToExported(),
 		"gce-instances": p.instQueue.ToExported(),
 	}
 }
@@ -545,12 +550,14 @@ func (p *GCEBuildlet) capacityString() string {
 	instUsage := p.instQueue.Quotas()
 	n2Usage := p.n2cpuQueue.Quotas()
 	n2dUsage := p.n2dcpuQueue.Quotas()
-	return fmt.Sprintf("%d/%d instances; %d/%d CPUs, %d/%d C2_CPUS, %d/%d N2_CPUS, %d/%d N2D_CPUS",
+	t2aUsage := p.t2acpuQueue.Quotas()
+	return fmt.Sprintf("%d/%d instances; %d/%d CPUs, %d/%d C2_CPUS, %d/%d N2_CPUS, %d/%d N2D_CPUS %d/%d T2A_CPUS",
 		instUsage.Used, instUsage.Limit,
 		cpuUsage.Used, cpuUsage.Limit,
 		c2Usage.Used, c2Usage.Limit,
 		n2Usage.Used, n2Usage.Limit,
-		n2dUsage.Used, n2dUsage.Limit)
+		n2dUsage.Used, n2dUsage.Limit,
+		t2aUsage.Used, t2aUsage.Limit)
 }
 
 func (p *GCEBuildlet) queueForMachineType(mt string) *queue.Quota {
@@ -560,6 +567,8 @@ func (p *GCEBuildlet) queueForMachineType(mt string) *queue.Quota {
 		return p.n2dcpuQueue
 	} else if strings.HasPrefix(mt, "c2-") {
 		return p.c2cpuQueue
+	} else if strings.HasPrefix(mt, "t2a-") {
+		return p.t2acpuQueue
 	} else {
 		// E2 and N1 instances are counted here. We do not use M1, M2,
 		// or A2 quotas. See
