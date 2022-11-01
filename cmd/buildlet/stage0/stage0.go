@@ -66,6 +66,7 @@ func main() {
 	log.SetPrefix("stage0: ")
 	flag.Parse()
 
+	onGCE := metadata.OnGCE()
 	if *untarFile != "" {
 		log.Printf("running in untar mode, untarring %q to %q", *untarFile, *untarDestDir)
 		untarMode()
@@ -77,6 +78,9 @@ func main() {
 	var isMacStadiumVM bool
 	switch osArch {
 	case "linux/arm":
+		if onGCE {
+			break
+		}
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
 		case "host-linux-arm-aws":
 			// No setup currently.
@@ -84,6 +88,9 @@ func main() {
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
 	case "linux/arm64":
+		if onGCE {
+			break
+		}
 		switch env := os.Getenv("GO_BUILDER_ENV"); env {
 		case "host-linux-arm64-aws":
 			// No special setup.
@@ -181,6 +188,9 @@ Download:
 		cmd.Args = append(cmd.Args, "--workdir=/data/golang/workdir")
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs("host-linux-s390x")...)
 	case "linux/arm64":
+		if onGCE {
+			break
+		}
 		switch buildEnv {
 		case "host-linux-arm64-aws":
 			// no special configuration

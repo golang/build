@@ -8,78 +8,92 @@
 # the images actually do download the stage0 binary on start-up.
 #
 
+GO=go1.19
+
+ALL=\
+	buildlet-stage0.illumos-amd64 \
+	buildlet-stage0.linux-arm \
+	buildlet-stage0.linux-arm64 \
+	buildlet-stage0.linux-loong64 \
+	buildlet-stage0.linux-mips \
+	buildlet-stage0.linux-mips64 \
+	buildlet-stage0.linux-mips64le \
+	buildlet-stage0.linux-mipsle \
+	buildlet-stage0.linux-ppc64 \
+	buildlet-stage0.linux-ppc64le \
+	buildlet-stage0.linux-s390x \
+	buildlet-stage0.solaris-amd64 \
+	buildlet-stage0.windows-amd64 \
+	buildlet-stage0.windows-arm64 \
+
 usage: FORCE
-	# See targets in Makefile
+	@sed -E '/^$$/q; s/^# ?//' Makefile
 	exit 1
 
 FORCE:
+
+# A convenience for people who are missing $(GO).
+install-go:
+	go install golang.org/dl/$(GO)@latest
+	$(GO) download
+
+clean:
+	rm -f buildlet-stage0.*-*
+
+# Compile everything without uploading.
+compile: $(ALL)
+
+GOFILES:=$(shell ls *.go)
+
+BUILD=CGO_ENABLED=0 $(GO) build -o
+
+buildlet-stage0.%-arm: $(GOFILES)
+	GOOS=$* GOARCH=arm GOARM=7 $(BUILD) $@
+
+buildlet-stage0.%-arm64: $(GOFILES)
+	GOOS=$* GOARCH=arm64 $(BUILD) $@
+
+buildlet-stage0.%-amd64: $(GOFILES)
+	GOOS=$* GOARCH=amd64 $(BUILD) $@
+
+buildlet-stage0.%-loong64: $(GOFILES)
+	GOOS=$* GOARCH=loong64 $(BUILD) $@
+
+buildlet-stage0.%-mips: $(GOFILES)
+	GOOS=$* GOARCH=mips $(BUILD) $@
+
+buildlet-stage0.%-mipsle: $(GOFILES)
+	GOOS=$* GOARCH=mipsle $(BUILD) $@
+
+buildlet-stage0.%-mips64: $(GOFILES)
+	GOOS=$* GOARCH=mips64 $(BUILD) $@
+
+buildlet-stage0.%-mips64le: $(GOFILES)
+	GOOS=$* GOARCH=mips64le $(BUILD) $@
+
+buildlet-stage0.%-ppc64: $(GOFILES)
+	GOOS=$* GOARCH=ppc64 $(BUILD) $@
+
+buildlet-stage0.%-ppc64le: $(GOFILES)
+	GOOS=$* GOARCH=ppc64le $(BUILD) $@
+
+buildlet-stage0.%-s390x: $(GOFILES)
+	GOOS=$* GOARCH=s390x $(BUILD) $@
 
 docker: Dockerfile
 	go install golang.org/x/build/cmd/xb
 	xb docker build --force-rm -f Dockerfile --tag=golang/buildlet-stage0 ../../..
 
-buildlet-stage0.windows-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
+# Upload everything.
+upload: $(ALL:buildlet-stage0.%=upload.%)
 
-buildlet-stage0.windows-arm64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
+UPLOAD=$(GO) run golang.org/x/build/cmd/upload -verbose -public -cacheable=false
 
-buildlet-stage0.linux-arm: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
+upload.%: buildlet-stage0.%
+	$(UPLOAD) -file=$< go-builder-data/$<
 
-buildlet-stage0.linux-arm64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
+# Upload everything to dev cluster.
+dev-upload: $(ALL:buildlet-stage0.%=upload.%)
 
-buildlet-stage0.linux-ppc64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.linux-ppc64le: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.solaris-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.illumos-amd64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.linux-s390x: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.linux-mipsle: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.linux-mips64le: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.linux-mips: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.linux-mips64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-buildlet-stage0.linux-loong64: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=$@ --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false go-builder-data/$@
-
-# macstadium uploads all the darwin-amd64 stage0 binary as
-# different filenames, which is used by different Mac VM images.
-# See the env/darwin/macstadium/** files for details.
-macstadium: run-builder-darwin-10_11.gz
-
-# run-builder-darwin-10_11.gz is used by both our macOS 10.11 and 10.12 VM images.
-run-builder-darwin-10_11.gz: FORCE
-	go install golang.org/x/build/cmd/upload
-	upload --verbose --osarch=darwin-amd64 --file=go:golang.org/x/build/cmd/buildlet/stage0 --public --cacheable=false --gzip go-builder-data/$@
+dev-upload.%: buildlet-stage0.%
+	$(UPLOAD) -file=$< dev-go-builder-data/$<
