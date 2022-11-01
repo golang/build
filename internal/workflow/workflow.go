@@ -705,10 +705,15 @@ func unmarshalNew(t reflect.Type, data []byte) (interface{}, error) {
 	return ptr.Elem().Interface(), nil
 }
 
-// Run runs a workflow to completion and returns its outputs.
-// listener.TaskStateChanged will be called immediately, when each task starts,
-// and when they finish. It should be used only for monitoring and persistence
-// purposes. Register Outputs to read task results.
+// Run runs a workflow and returns its outputs.
+// A workflow will either complete successfully,
+// reach a blocking state waiting on a task to be approved or retried,
+// or get stopped early via context cancellation.
+//
+// listener.TaskStateChanged can be used for monitoring and persistence purposes:
+// it will be called immediately, when each task starts, and when they finish.
+//
+// Register Outputs to read task results.
 func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]interface{}, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -923,6 +928,7 @@ type retryCommand struct {
 	reply chan error
 }
 
+// RetryTask retries the named task.
 func (w *Workflow) RetryTask(ctx context.Context, name string) error {
 	reply := make(chan error)
 	w.retryCommands <- retryCommand{name, reply}

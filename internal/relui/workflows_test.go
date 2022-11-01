@@ -74,7 +74,7 @@ func TestAwaitFunc(t *testing.T) {
 			}
 			go func() {
 				if c.wantErr {
-					runToFailure(t, ctx, w, "AwaitFunc", &verboseListener{t, nil})
+					runToFailure(t, ctx, w, "AwaitFunc", &verboseListener{t: t})
 				} else {
 					outputs, err := runWorkflow(t, ctx, w, nil)
 					if err != nil {
@@ -169,7 +169,7 @@ func runWorkflow(t *testing.T, ctx context.Context, w *workflow.Workflow, listen
 	defer cancel()
 	t.Helper()
 	if listener == nil {
-		listener = &verboseListener{t, nil}
+		listener = &verboseListener{t: t}
 	}
 	return w.Run(ctx, listener)
 }

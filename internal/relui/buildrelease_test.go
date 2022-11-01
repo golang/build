@@ -58,6 +58,7 @@ func TestSecurity(t *testing.T) {
 
 type releaseTestDeps struct {
 	ctx            context.Context
+	cancel         context.CancelFunc
 	buildlets      *task.FakeBuildlets
 	goRepo         *task.FakeRepo
 	gerrit         *reviewerCheckGerrit
@@ -158,6 +159,7 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	t.Cleanup(cancel)
 	return &releaseTestDeps{
 		ctx:            ctx,
+		cancel:         cancel,
 		buildlets:      fakeBuildlets,
 		goRepo:         goRepo,
 		gerrit:         gerrit,
@@ -184,7 +186,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.Run(deps.ctx, &verboseListener{t, deps.outputListener})
+	_, err = w.Run(deps.ctx, &verboseListener{t: t, outputListener: deps.outputListener, onStall: deps.cancel})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,12 +303,12 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	}
 
 	if mergeFixes {
-		_, err = w.Run(deps.ctx, &verboseListener{t, deps.outputListener})
+		_, err = w.Run(deps.ctx, &verboseListener{t: t, outputListener: deps.outputListener})
 		if err != nil {
 			t.Fatal(err)
 		}
 	} else {
-		runToFailure(t, deps.ctx, w, "Check branch state matches source archive", &verboseListener{t, deps.outputListener})
+		runToFailure(t, deps.ctx, w, "Check branch state matches source archive", &verboseListener{t: t, outputListener: deps.outputListener})
 		return
 	}
 	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", &task.WebsiteFile{
@@ -342,7 +344,7 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Run(deps.ctx, &verboseListener{t, deps.outputListener}); err != nil {
+	if _, err := w.Run(deps.ctx, &verboseListener{t: t, outputListener: deps.outputListener}); err != nil {
 		t.Fatal(err)
 	}
 	if !approvedTrybots {
@@ -542,10 +544,14 @@ func (g *fakeGitHub) EditMilestone(ctx context.Context, owner string, repo strin
 type verboseListener struct {
 	t              *testing.T
 	outputListener func(string, interface{})
+	onStall        func()
 }
 
 func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
 	l.t.Logf("workflow %q: stalled", workflowID.String())
+	if l.onStall != nil {
+		l.onStall()
+	}
 	return nil
 }
 
