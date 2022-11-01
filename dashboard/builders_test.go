@@ -1113,3 +1113,22 @@ func TestHostsSort(t *testing.T) {
 		last = key
 	}
 }
+
+func TestHostConfigCosArchitecture(t *testing.T) {
+	testCases := []struct {
+		desc       string
+		hostConfig HostConfig
+		want       CosArch
+	}{
+		{"default", HostConfig{}, CosArchAMD64},
+		{"amd64", HostConfig{cosArchitecture: CosArchAMD64}, CosArchAMD64},
+		{"arm64", HostConfig{cosArchitecture: CosArchARM64}, CosArchARM64},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			if got := tc.hostConfig.CosArchitecture(); got != tc.want {
+				t.Errorf("HostConfig.CosArchitecture() = %+v; want %+v", got, tc.want)
+			}
+		})
+	}
+}

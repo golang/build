@@ -121,7 +121,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 			srcImage = "https://www.googleapis.com/compute/v1/projects/" + projectID + "/global/images/" + vm
 		} else {
 			var err error
-			srcImage, err = cosImage(ctx, computeService)
+			srcImage, err = cosImage(ctx, computeService, hconf.CosArchitecture())
 			if err != nil {
 				return nil, fmt.Errorf("error find Container-Optimized OS image: %v", err)
 			}
@@ -417,41 +417,63 @@ func instanceIPs(inst *compute.Instance) (intIP, extIP string) {
 }
 
 var (
-	cosListMu      sync.Mutex
-	cosCachedTime  time.Time
-	cosCachedImage string
+	cosListMu     sync.Mutex
+	cosCachedTime time.Time
+	cosCache      = map[dashboard.CosArch]*cosCacheEntry{}
 )
+
+type cosCacheEntry struct {
+	cachedTime  time.Time
+	cachedImage string
+}
 
 // cosImage returns the GCP VM image name of the latest stable
 // Container-Optimized OS image. It caches results for 15 minutes.
-func cosImage(ctx context.Context, svc *compute.Service) (string, error) {
+func cosImage(ctx context.Context, svc *compute.Service, arch dashboard.CosArch) (string, error) {
 	const cacheDuration = 15 * time.Minute
 	cosListMu.Lock()
 	defer cosListMu.Unlock()
-	if cosCachedImage != "" && cosCachedTime.After(time.Now().Add(-cacheDuration)) {
-		return cosCachedImage, nil
-	}
 
-	imList, err := svc.Images.List("cos-cloud").Filter(`(family eq "cos-stable")`).Context(ctx).Do()
+	cosQuery := func(a dashboard.CosArch) (string, error) {
+		imList, err := svc.Images.List("cos-cloud").Filter(fmt.Sprintf("(family eq %q)", string(arch))).Context(ctx).Do()
+		if err != nil {
+			return "", err
+		}
+		if imList.NextPageToken != "" {
+			return "", fmt.Errorf("too many images; pagination not supported")
+		}
+		ims := imList.Items
+		if len(ims) == 0 {
+			return "", errors.New("no image found")
+		}
+		sort.Slice(ims, func(i, j int) bool {
+			if ims[i].Deprecated == nil && ims[j].Deprecated != nil {
+				return true
+			}
+			return ims[i].CreationTimestamp > ims[j].CreationTimestamp
+		})
+		return ims[0].SelfLink, nil
+	}
+	c, ok := cosCache[arch]
+	if !ok {
+		image, err := cosQuery(arch)
+		if err != nil {
+			return "", err
+		}
+		cosCache[arch] = &cosCacheEntry{
+			cachedTime:  time.Now(),
+			cachedImage: image,
+		}
+		return image, nil
+	}
+	if c.cachedImage != "" && c.cachedTime.After(time.Now().Add(-cacheDuration)) {
+		return c.cachedImage, nil
+	}
+	image, err := cosQuery(arch)
 	if err != nil {
 		return "", err
 	}
-	if imList.NextPageToken != "" {
-		return "", fmt.Errorf("too many images; pagination not supported")
-	}
-	ims := imList.Items
-	if len(ims) == 0 {
-		return "", errors.New("no image found")
-	}
-	sort.Slice(ims, func(i, j int) bool {
-		if ims[i].Deprecated == nil && ims[j].Deprecated != nil {
-			return true
-		}
-		return ims[i].CreationTimestamp > ims[j].CreationTimestamp
-	})
-
-	im := ims[0].SelfLink
-	cosCachedImage = im
-	cosCachedTime = time.Now()
-	return im, nil
+	c.cachedImage = image
+	c.cachedTime = time.Now()
+	return image, nil
 }

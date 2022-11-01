@@ -361,6 +361,13 @@ var Hosts = map[string]*HostConfig{
 		isEC2:          true,
 		SSHUsername:    "root",
 	},
+	"host-linux-arm64-bullseye": {
+		Notes:           "Debian Bullseye",
+		ContainerImage:  "linux-arm64-bullseye:latest",
+		machineType:     "t2a",
+		SSHUsername:     "root",
+		cosArchitecture: CosArchARM64,
+	},
 	"host-linux-loong64-3a5000": {
 		Notes:       "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
 		Owners:      []*gophers.Person{gh("XiaodongLoong")},
@@ -635,6 +642,14 @@ func init() {
 	}
 }
 
+// CosArch defines the diffrent COS images types used.
+type CosArch string
+
+const (
+	CosArchAMD64 CosArch = "cos-stable"       // COS image for AMD64 architecture
+	CosArchARM64         = "cos-arm64-stable" // COS image for ARM64 architecture
+)
+
 // A HostConfig describes the available ways to obtain buildlets of
 // different types. Some host configs can serve multiple
 // builders. For example, a host config of "host-linux-amd64-bullseye" can
@@ -678,9 +693,10 @@ type HostConfig struct {
 	IsReverse      bool   // if true, only use the reverse buildlet pool
 
 	// GCE options, if VMImage != "" || ContainerImage != ""
-	machineType    string // optional GCE instance type ("n2-standard-4") or instance class ("n2")
-	RegularDisk    bool   // if true, use spinning disk instead of SSD
-	MinCPUPlatform string // optional. e2 instances are not supported. see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform.
+	machineType     string  // optional GCE instance type ("n2-standard-4") or instance class ("n2")
+	RegularDisk     bool    // if true, use spinning disk instead of SSD
+	MinCPUPlatform  string  // optional. e2 instances are not supported. see https://cloud.google.com/compute/docs/instances/specify-min-cpu-platform.
+	cosArchitecture CosArch // optional. GCE instances which use COS need the architecture set. Default: CosArchAMD64
 
 	// EC2 options
 	isEC2 bool // if true, the instance is configured to run on EC2
@@ -708,6 +724,14 @@ type HostConfig struct {
 	Notes  string            // notes for humans
 
 	SSHUsername string // username to ssh as, empty means not supported
+}
+
+// CosArchitecture returns the COS architecture to use with the host. The default is CosArchAMD64.
+func (hc *HostConfig) CosArchitecture() CosArch {
+	if hc.cosArchitecture == CosArch("") {
+		return CosArchAMD64
+	}
+	return hc.cosArchitecture
 }
 
 // A BuildConfig describes how to run a builder.
@@ -2488,6 +2512,11 @@ func init() {
 		HostType:          "host-linux-arm64-aws",
 		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 1,
+	})
+	addBuilder(BuildConfig{
+		Name:        "linux-arm64",
+		HostType:    "host-linux-arm64-bullseye",
+		KnownIssues: []int{53851},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-boringcrypto",
