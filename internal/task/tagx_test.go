@@ -361,7 +361,7 @@ func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
 	})
 	repos = append(repos, goRepo)
 
-	fakeBuildlets := NewFakeBuildlets(t, "")
+	fakeBuildlets := NewFakeBuildlets(t, "", nil)
 	fakeGerrit := NewFakeGerrit(t, repos...)
 	var builders, allOK []string
 	for _, b := range dashboard.Builders {

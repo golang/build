@@ -80,7 +80,7 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	// Set up a server that will be used to serve inputs to the build.
 	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
 	t.Cleanup(bootstrapServer.Close)
-	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL)
+	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, nil)
 
 	// Set up the fake signing process.
 	scratchDir := t.TempDir()

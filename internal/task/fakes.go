@@ -56,10 +56,27 @@ func ServeTarball(pathMatch string, files map[string]string, w http.ResponseWrit
 	}
 }
 
-func NewFakeBuildlets(t *testing.T, httpServer string) *FakeBuildlets {
+// NewFakeBuildlets creates a set of fake buildlets.
+// httpServer is the base URL of form http://host with no trailing slash
+// where PutTarFromURL downloads remote URLs from.
+// sysCmds optionally allows overriding the named system commands
+// during testing with the given executable content.
+func NewFakeBuildlets(t *testing.T, httpServer string, sysCmds map[string]string) *FakeBuildlets {
+	var sys map[string]string
+	if len(sysCmds) != 0 {
+		sys = make(map[string]string)
+		sysDir := t.TempDir()
+		for name, content := range sysCmds {
+			if err := os.WriteFile(filepath.Join(sysDir, name), []byte(content), 0700); err != nil {
+				t.Fatal(err)
+			}
+			sys[name] = filepath.Join(sysDir, name)
+		}
+	}
 	return &FakeBuildlets{
 		t:       t,
 		dir:     t.TempDir(),
+		sys:     sys,
 		httpURL: httpServer,
 		logs:    map[string][]*[]string{},
 	}
@@ -68,6 +85,7 @@ func NewFakeBuildlets(t *testing.T, httpServer string) *FakeBuildlets {
 type FakeBuildlets struct {
 	t       *testing.T
 	dir     string
+	sys     map[string]string // System command name → absolute path.
 	httpURL string
 
 	mu     sync.Mutex
@@ -96,6 +114,7 @@ func (b *FakeBuildlets) CreateBuildlet(_ context.Context, kind string) (buildlet
 		t:       b.t,
 		kind:    kind,
 		dir:     buildletDir,
+		sys:     b.sys,
 		httpURL: b.httpURL,
 		logf:    logf,
 	}, nil
@@ -117,6 +136,7 @@ type fakeBuildlet struct {
 	t       *testing.T
 	kind    string
 	dir     string
+	sys     map[string]string // System command name → absolute path.
 	httpURL string
 	logf    func(string, ...interface{})
 	closed  bool
@@ -131,8 +151,15 @@ func (b *fakeBuildlet) Close() error {
 }
 
 func (b *fakeBuildlet) Exec(ctx context.Context, cmd string, opts buildlet.ExecOpts) (remoteErr error, execErr error) {
+	if opts.Path != nil {
+		return nil, fmt.Errorf("opts.Path option is set, but fakeBuildlet doesn't support it")
+	} else if opts.OnStartExec != nil {
+		return nil, fmt.Errorf("opts.OnStartExec option is set, but fakeBuildlet doesn't support it")
+	}
 	b.logf("exec %v %v\n\twd %q env %v", cmd, opts.Args, opts.Dir, opts.ExtraEnv)
-	if !strings.HasPrefix(cmd, "/") && !opts.SystemLevel {
+	if absPath, ok := b.sys[cmd]; ok && opts.SystemLevel {
+		cmd = absPath
+	} else if !strings.HasPrefix(cmd, "/") && !opts.SystemLevel {
 		cmd = filepath.Join(b.dir, cmd)
 	}
 retry:
@@ -145,7 +172,9 @@ retry:
 	}
 	c.Stdout = w
 	c.Stderr = w
-	if opts.Dir == "" {
+	if opts.Dir == "" && opts.SystemLevel {
+		c.Dir = b.dir
+	} else if opts.Dir == "" && !opts.SystemLevel {
 		c.Dir = filepath.Dir(cmd)
 	} else {
 		c.Dir = filepath.Join(b.dir, opts.Dir)
