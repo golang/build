@@ -8,6 +8,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"html"
@@ -21,6 +22,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"golang.org/x/build/internal/https"
 )
 
@@ -57,6 +59,11 @@ func main() {
 	if err := os.MkdirAll(*dir, 0777); err != nil {
 		log.Fatal(err)
 	}
+	cl, err := storage.NewClient(context.Background())
+	if err != nil {
+		log.Fatalln("storage.NewClient:", err)
+	}
+	bucket = cl.Bucket("vcs-test")
 
 	http.Handle("/go/", http.StripPrefix("/go/", http.FileServer(http.Dir(filepath.Join(*dir, "go")))))
 	http.Handle("/git/", gitHandler())
@@ -68,7 +75,7 @@ func main() {
 	http.Handle("/auth/", newAuthHandler(http.Dir(filepath.Join(*dir, "auth"))))
 
 	handler := logger(http.HandlerFunc(loadAndHandle))
-	log.Fatal(https.ListenAndServe(ctx, handler))
+	log.Fatal(https.ListenAndServe(context.Background(), handler))
 }
 
 var nameRE = regexp.MustCompile(`^[a-zA-Z0-9_\-]+$`)

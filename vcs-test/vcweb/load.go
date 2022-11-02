@@ -24,30 +24,18 @@ import (
 )
 
 var (
-	ctx    = context.Background()
-	client *storage.Client
 	bucket *storage.BucketHandle
 )
 
-var cache struct {
+var cache = struct {
 	sync.Mutex
 	entry map[string]*cacheEntry
-}
+}{entry: make(map[string]*cacheEntry)}
 
 type cacheEntry struct {
 	sync.Mutex
 	expire time.Time
 	md5    []byte
-}
-
-func init() {
-	var err error
-	client, err = storage.NewClient(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-	bucket = client.Bucket("vcs-test")
-	cache.entry = map[string]*cacheEntry{}
 }
 
 func loadFS(dir1, dir2 string, force bool) {
@@ -83,13 +71,13 @@ func loadFS(dir1, dir2 string, force bool) {
 	entry.expire = time.Now().Add(5 * time.Minute)
 
 	obj := bucket.Object(name + ".zip")
-	attrs, err := obj.Attrs(ctx)
+	attrs, err := obj.Attrs(context.Background())
 	check(err)
 	if bytes.Equal(attrs.MD5, entry.md5) {
 		return
 	}
 
-	r, err := obj.NewReader(ctx)
+	r, err := obj.NewReader(context.Background())
 	check(err)
 	defer r.Close()
 
