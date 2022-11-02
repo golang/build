@@ -683,8 +683,7 @@ func handleWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Make the directory if it doesn't exist.
-	// TODO(adg): support dirmode parameter?
+	// Make the parent directory, along with any necessary parents, if needed.
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

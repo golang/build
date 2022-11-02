@@ -434,6 +434,7 @@ func (c *client) PutTarFromURL(ctx context.Context, tarURL, dir string) error {
 }
 
 // Put writes the provided file to path (relative to workdir) and sets mode.
+// It creates any missing parent directories with 0755 permission.
 func (c *client) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
 	param := url.Values{
 		"path": {path},

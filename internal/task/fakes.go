@@ -78,6 +78,9 @@ type FakeBuildlets struct {
 func (b *FakeBuildlets) CreateBuildlet(_ context.Context, kind string) (buildlet.RemoteClient, error) {
 	b.mu.Lock()
 	buildletDir := filepath.Join(b.dir, kind, fmt.Sprint(b.nextID))
+	if err := os.MkdirAll(buildletDir, 0700); err != nil {
+		return nil, err
+	}
 	logs := &[]string{}
 	b.nextID++
 	b.logs[kind] = append(b.logs[kind], logs)
@@ -220,6 +223,9 @@ func (b *fakeBuildlet) ListDir(ctx context.Context, dir string, opts buildlet.Li
 
 func (b *fakeBuildlet) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
 	b.logf("write file %q with mode %0o", path, mode)
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(b.dir, path)), 0755); err != nil {
+		return err
+	}
 	f, err := os.OpenFile(filepath.Join(b.dir, path), os.O_CREATE|os.O_RDWR, mode)
 	if err != nil {
 		return err
