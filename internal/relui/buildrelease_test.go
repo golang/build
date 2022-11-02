@@ -302,7 +302,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "installer",
-	}, "I'm an MSI!\n")
+	}, "I'm an MSI!\n-signed <Windows>")
 	checkTGZ(t, dlURL, files, "linux-amd64.tar.gz", &task.WebsiteFile{
 		OS:   "linux",
 		Arch: "amd64",
@@ -332,7 +332,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		OS:   "darwin",
 		Arch: "amd64",
 		Kind: "installer",
-	}, "I'm a .pkg!\n")
+	}, "I'm a PKG!\n-signed <macOS>")
 
 	head, err := deps.gerrit.ReadBranchHead(deps.ctx, "dl", "master")
 	if err != nil {

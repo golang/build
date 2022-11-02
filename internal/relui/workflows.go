@@ -365,8 +365,8 @@ func addCommTasks(
 	wf.Output(wd, "Tweet URL", tweetURL)
 }
 
-// TODO(go.dev/issue/53632): Flip to true and later on delete.
-const useSignService = false
+// TODO(go.dev/issue/53632): Later on: delete the const and all the unused code. 🎉
+const useSignService = true
 
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
