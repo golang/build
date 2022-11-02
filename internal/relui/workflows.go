@@ -365,6 +365,9 @@ func addCommTasks(
 	wf.Output(wd, "Tweet URL", tweetURL)
 }
 
+// TODO(go.dev/issue/53632): Flip to true and later on delete.
+const useSignService = false
+
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
 	wd *wf.Definition, major int, kind task.ReleaseKind, coordinators wf.Value[[]string],
@@ -382,14 +385,21 @@ func addSingleReleaseWorkflow(
 	milestones := wf.Task2(wd, "Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
 
-	startSigner := wf.Task1(wd, "Start signing command", build.startSigningCommand, nextVersion)
-	wf.Output(wd, "Signing command", startSigner)
+	if !useSignService {
+		startSigner := wf.Task1(wd, "Start signing command", build.startSigningCommand, nextVersion)
+		wf.Output(wd, "Signing command", startSigner)
+	}
 
 	securityRef := wf.Param(wd, wf.ParamDef[string]{Name: "Ref from the private repository to build from (optional)"})
 	source := wf.Task3(wd, "Build source archive", build.buildSource, startingHead, securityRef, nextVersion, wf.After(checked))
 
 	// Build, test, and sign release.
-	signedAndTestedArtifacts := build.addBuildTasks(wd, major, nextVersion, source, false)
+	var signedAndTestedArtifacts wf.Value[[]artifact]
+	if useSignService {
+		signedAndTestedArtifacts = build.addBuildTasksUsingSignService(wd, major, nextVersion, source)
+	} else {
+		signedAndTestedArtifacts = build.addBuildTasks(wd, major, nextVersion, source, false)
+	}
 	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
 
 	dlcl := wf.Task3(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
@@ -491,12 +501,12 @@ func (tasks *BuildReleaseTasks) addBuildTasksUsingSignService(wd *wf.Definition,
 		switch target.GOOS {
 		case "darwin":
 			pkg := wf.Task3(wd, "Build PKG installer", tasks.buildDarwinPKG, targetVal, version, bin)
-			signedPKG := wf.Task1(wd, "Sign PKG installer", tasks.signDarwinPKG, pkg)
+			signedPKG := wf.Task2(wd, "Sign PKG installer", tasks.signArtifact, pkg, wf.Const(sign.BuildMacOS))
 			signedTGZ := wf.Task2(wd, "Convert to .tgz", tasks.convertPKGToTGZ, targetVal, signedPKG)
 			artifacts = append(artifacts, signedPKG, signedTGZ)
 		case "windows":
 			msi := wf.Task2(wd, "Build MSI installer", tasks.buildWindowsMSI, targetVal, bin)
-			signedMSI := wf.Task1(wd, "Sign MSI installer", tasks.signWindowsMSI, msi)
+			signedMSI := wf.Task2(wd, "Sign MSI installer", tasks.signArtifact, msi, wf.Const(sign.BuildWindows))
 			zip := wf.Task2(wd, "Convert to .zip", tasks.convertTGZToZip, targetVal, bin)
 			artifacts = append(artifacts, signedMSI, zip)
 		default:
@@ -514,6 +524,16 @@ func (tasks *BuildReleaseTasks) addBuildTasksUsingSignService(wd *wf.Definition,
 		}
 	}
 	signedArtifacts := wf.Task1(wd, "Compute GPG signature for artifacts", tasks.computeGPG, wf.Slice(artifacts...))
+	signedArtifacts = wf.Task1(wd, "Set the legacy SignedPath artifact field", func(ctx *wf.TaskContext, artifacts []artifact) ([]artifact, error) {
+		// TODO(go.dev/issue/53632): Also set the nearly-removed SignedPath field.
+		// It'll go away when we remove the old signing path, but it needs to be set
+		// for the uploadArtifacts step to do the right thing.
+		// (Doing this here allows us not to teach uploadArtifacts about old vs new signing.)
+		for i := range artifacts {
+			artifacts[i].SignedPath = artifacts[i].ScratchPath
+		}
+		return artifacts, nil
+	}, signedArtifacts)
 
 	// Run advisory trybots.
 	var advisoryResults []wf.Value[tryBotResult]
@@ -523,9 +543,18 @@ func (tasks *BuildReleaseTasks) addBuildTasksUsingSignService(wd *wf.Definition,
 	}
 	tryBotsApproved := wf.Action1(wd, "Approve any TryBot failures", tasks.checkAdvisoryTrybots, wf.Slice(advisoryResults...))
 
-	signedAndTested := wf.Task1(wd, "Wait for signing and tests", func(ctx *wf.TaskContext, artifacts []artifact) ([]artifact, error) {
+	signedAndTested := wf.Task2(wd, "Wait for signing and tests", func(ctx *wf.TaskContext, artifacts []artifact, version string) ([]artifact, error) {
+		// Note: Note this needs to happen somewhere, doesn't matter where. Maybe move it to a nicer place later.
+		for i, a := range artifacts {
+			if a.Target != nil {
+				artifacts[i].Filename = version + "." + a.Target.Name + "." + a.Suffix
+			} else {
+				artifacts[i].Filename = version + "." + a.Suffix
+			}
+		}
+
 		return artifacts, nil
-	}, signedArtifacts, wf.After(testsPassed...), wf.After(tryBotsApproved))
+	}, signedArtifacts, version, wf.After(testsPassed...), wf.After(tryBotsApproved))
 	return signedAndTested
 }
 
@@ -635,21 +664,6 @@ func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, target *releaset
 		return bs.BuildDarwinPKG(ctx, r, version, w)
 	})
 }
-func (b *BuildReleaseTasks) signDarwinPKG(ctx *wf.TaskContext, pkg artifact) (signedPKG artifact, _ error) {
-	signedURL, err := b.signArtifacts(ctx, sign.BuildMacOS, []string{b.ScratchURL + "/" + pkg.ScratchPath})
-	if err != nil {
-		return artifact{}, err
-	} else if len(signedURL) != 1 {
-		return artifact{}, fmt.Errorf("got %d outputs, want 1 signed .pkg installer", len(signedURL))
-	}
-	// All done, we have our signed PKG.
-	var ok bool
-	pkg.ScratchPath, ok = cutPrefix(signedURL[0], b.ScratchURL+"/")
-	if !ok {
-		return artifact{}, fmt.Errorf("got signed URL %q outside of scratch space %q, which is unsupported", signedURL[0], b.ScratchURL+"/")
-	}
-	return pkg, nil
-}
 func (b *BuildReleaseTasks) convertPKGToTGZ(ctx *wf.TaskContext, target *releasetargets.Target, pkg artifact) (tgz artifact, _ error) {
 	bc := dashboard.Builders[target.Builder]
 	return b.runBuildStep(ctx, target, bc, pkg, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
@@ -662,21 +676,6 @@ func (b *BuildReleaseTasks) buildWindowsMSI(ctx *wf.TaskContext, target *release
 	return b.runBuildStep(ctx, target, bc, binary, "msi", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildWindowsMSI(ctx, r, w)
 	})
-}
-func (b *BuildReleaseTasks) signWindowsMSI(ctx *wf.TaskContext, msi artifact) (signedMSI artifact, _ error) {
-	signedURL, err := b.signArtifacts(ctx, sign.BuildWindows, []string{b.ScratchURL + "/" + msi.ScratchPath})
-	if err != nil {
-		return artifact{}, err
-	} else if len(signedURL) != 1 {
-		return artifact{}, fmt.Errorf("got %d outputs, want 1 signed .msi installer", len(signedURL))
-	}
-	// All done, we have our signed MSI.
-	var ok bool
-	msi.ScratchPath, ok = cutPrefix(signedURL[0], b.ScratchURL+"/")
-	if !ok {
-		return artifact{}, fmt.Errorf("got signed URL %q outside of scratch space %q, which is unsupported", signedURL[0], b.ScratchURL+"/")
-	}
-	return msi, nil
 }
 func (b *BuildReleaseTasks) convertTGZToZip(ctx *wf.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
 	return b.runBuildStep(ctx, target, nil, binary, "zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
@@ -739,6 +738,47 @@ func (b *BuildReleaseTasks) computeGPG(ctx *wf.TaskContext, artifacts []artifact
 	}
 
 	return artifacts, nil
+}
+
+// signArtifact signs a single artifact of specified type.
+func (b *BuildReleaseTasks) signArtifact(ctx *wf.TaskContext, a artifact, bt sign.BuildType) (signed artifact, _ error) {
+	// Sign the unsigned artifact located at ScratchPath, and
+	// update ScratchPath to point to the new signed artifact.
+	signedURL, err := b.signArtifacts(ctx, bt, []string{b.ScratchURL + "/" + a.ScratchPath})
+	if err != nil {
+		return artifact{}, err
+	} else if len(signedURL) != 1 {
+		return artifact{}, fmt.Errorf("got %d outputs, want 1 signed artifact", len(signedURL))
+	}
+	var ok bool
+	a.ScratchPath, ok = cutPrefix(signedURL[0], b.ScratchURL+"/")
+	if !ok {
+		return artifact{}, fmt.Errorf("got signed URL %q outside of scratch space %q, which is unsupported", signedURL[0], b.ScratchURL+"/")
+	}
+	scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
+	if err != nil {
+		return artifact{}, err
+	}
+
+	// Update the Size and SHA256 fields.
+	f, err := scratchFS.Open(a.ScratchPath)
+	if err != nil {
+		return artifact{}, err
+	}
+	var hash = sha256.New()
+	n, err := io.Copy(hash, f)
+	if err != nil {
+		f.Close()
+		return artifact{}, err
+	}
+	err = f.Close()
+	if err != nil {
+		return artifact{}, err
+	}
+	a.Size = int(n)
+	a.SHA256 = fmt.Sprintf("%x", string(hash.Sum([]byte(nil))))
+
+	return a, nil
 }
 
 // signArtifacts starts signing on the artifacts provided via the gs:// URL inputs,

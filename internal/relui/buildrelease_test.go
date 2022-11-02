@@ -34,6 +34,8 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/gcsfs"
+	"golang.org/x/build/internal/releasetargets"
+	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
@@ -70,35 +72,84 @@ type releaseTestDeps struct {
 }
 
 func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
-	task.AwaitDivisor = 100
-	t.Cleanup(func() { task.AwaitDivisor = 1 })
-	ctx, cancel := context.WithCancel(context.Background())
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
+	}
+	task.AwaitDivisor, workflow.MaxRetries = 100, 1
+	t.Cleanup(func() { task.AwaitDivisor, workflow.MaxRetries = 1, 3 })
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Set up the fake signing process.
+	var (
+		signService    sign.Service
+		sysCmds        map[string]string
+		outputListener func(taskName string, output interface{})
+	)
+	if useSignService {
+		signService = &fakeSignService{t: t, completedJobs: make(map[string][]string)}
+		sysCmds = map[string]string{
+			"pkgbuild": `#!/bin/bash -eu
+case "$@" in
+"--identifier=org.golang.go --version ` + wantVersion + ` --scripts=pkg-scripts --root=pkg-root pkg-intermediate/org.golang.go.pkg")
+	# We're doing an intermediate step in building a PKG.
+	ls pkg-intermediate >/dev/null
+	echo "I'm a intermediate PKG!" > "$6"
+	;;
+*)
+	echo "unexpected command $@"
+	exit 1
+	;;
+esac
+`,
+			"productbuild": `#!/bin/bash -eu
+case "$@" in
+"--distribution=pkg-distribution --resources=pkg-resources --package-path=pkg-intermediate pkg-out/` + wantVersion + `.pkg")
+	# We're building a PKG.
+	ls pkg-distribution pkg-resources/bg-light.png pkg-resources/bg-dark.png >/dev/null
+	cat pkg-intermediate/* | sed "s/intermediate //" > "$4"
+	;;
+*)
+	echo "unexpected command $@"
+	exit 1
+	;;
+esac
+`,
+			"pkgutil": `#!/bin/bash -eu
+case "$@" in
+"--expand-full go.pkg pkg-expanded")
+	# We're expanding a PKG.
+	grep "I'm a PKG!" < "$2"
+	mkdir -p "$3/org.golang.go.pkg/Payload/usr/local/go"
+	;;
+*)
+	echo "unexpected command $@"
+	exit 1
+	;;
+esac
+`,
+		}
+	} else {
+		argRe := regexp.MustCompile(`--relui_staging="(.*?)"`)
+		outputListener = func(taskName string, output interface{}) {
+			if taskName != "Start signing command" {
+				return
+			}
+			matches := argRe.FindStringSubmatch(output.(string))
+			if matches == nil {
+				return
+			}
+			u, err := url.Parse(matches[1])
+			if err != nil {
+				t.Fatal(err)
+			}
+			go fakeSign(ctx, t, u.Path)
+		}
 	}
 
 	// Set up a server that will be used to serve inputs to the build.
 	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
 	t.Cleanup(bootstrapServer.Close)
-	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, nil)
-
-	// Set up the fake signing process.
-	scratchDir := t.TempDir()
-	argRe := regexp.MustCompile(`--relui_staging="(.*?)"`)
-	outputListener := func(taskName string, output interface{}) {
-		if taskName != "Start signing command" {
-			return
-		}
-		matches := argRe.FindStringSubmatch(output.(string))
-		if matches == nil {
-			return
-		}
-		u, err := url.Parse(matches[1])
-		if err != nil {
-			t.Fatal(err)
-		}
-		go fakeSign(ctx, t, u.Path)
-	}
+	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, sysCmds)
 
 	// Set up the fake CDN publishing process.
 	servingDir := t.TempDir()
@@ -142,9 +193,10 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 		GerritHTTPClient: http.DefaultClient,
 		GerritURL:        fakeGerrit.GerritURL() + "/go",
 		GCSClient:        nil,
-		ScratchURL:       "file://" + filepath.ToSlash(scratchDir),
+		ScratchURL:       "file://" + filepath.ToSlash(t.TempDir()),
 		ServingURL:       "file://" + filepath.ToSlash(servingDir),
 		CreateBuildlet:   fakeBuildlets.CreateBuildlet,
+		SignService:      signService,
 		DownloadURL:      dlServer.URL,
 		PublishFile:      publishFile,
 		ApproveAction: func(ctx *workflow.TaskContext) error {
@@ -190,13 +242,54 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range deps.publishedFiles {
-		if f.ChecksumSHA256 == "" || f.Size < 1 || f.Filename == "" || f.Kind == "" {
-			t.Errorf("release process produced an invalid artifact: %#v", f)
+
+	// Create a complete list of expected published files.
+	wantPublishedFiles := map[string]string{
+		wantVersion + ".src.tar.gz": "source",
+	}
+	for _, t := range releasetargets.TargetsForGo1Point(18) {
+		switch t.GOOS {
+		case "darwin":
+			wantPublishedFiles[wantVersion+"."+t.Name+".tar.gz"] = "archive"
+			wantPublishedFiles[wantVersion+"."+t.Name+".pkg"] = "installer"
+		case "windows":
+			wantPublishedFiles[wantVersion+"."+t.Name+".zip"] = "archive"
+			wantPublishedFiles[wantVersion+"."+t.Name+".msi"] = "installer"
+		default:
+			wantPublishedFiles[wantVersion+"."+t.Name+".tar.gz"] = "archive"
 		}
 	}
 
 	dlURL, files := deps.buildTasks.DownloadURL, deps.publishedFiles
+	for _, f := range deps.publishedFiles {
+		wantKind, ok := wantPublishedFiles[f.Filename]
+		if !ok {
+			t.Errorf("got unexpected published file %q", f.Filename)
+		} else if got, want := f.Kind, wantKind; got != want {
+			t.Errorf("file %s has unexpected kind: got %q, want %q", f.Filename, got, want)
+		}
+		delete(wantPublishedFiles, f.Filename)
+
+		checkFile(t, dlURL, files, strings.TrimPrefix(f.Filename, wantVersion+"."), f, func(t *testing.T, b []byte) {
+			if got, want := len(b), int(f.Size); got != want {
+				t.Errorf("%s size mismatch with metadata: %v != %v", f.Filename, got, want)
+			}
+			if got, want := fmt.Sprintf("%x", sha256.Sum256(b)), f.ChecksumSHA256; got != want {
+				t.Errorf("%s sha256 mismatch with metadata: %q != %q", f.Filename, got, want)
+			}
+			if got, want := fmt.Sprintf("%x", sha256.Sum256(b)), string(fetch(t, dlURL+"/"+f.Filename+".sha256")); got != want {
+				t.Errorf("%s sha256 mismatch with .sha256 file: %q != %q", f.Filename, got, want)
+			}
+			if useSignService && strings.HasSuffix(f.Filename, ".tar.gz") {
+				if got, want := string(fetch(t, dlURL+"/"+f.Filename+".asc")), fmt.Sprintf("I'm a GPG signature for %x!", sha256.Sum256(b)); got != want {
+					t.Errorf("%v doesn't have the expected GPG signature: got %s, want %s", f.Filename, got, want)
+				}
+			}
+		})
+	}
+	if len(wantPublishedFiles) != 0 {
+		t.Errorf("missing %d published files: %v", len(wantPublishedFiles), wantPublishedFiles)
+	}
 	checkTGZ(t, dlURL, files, "src.tar.gz", &task.WebsiteFile{
 		OS:   "",
 		Arch: "",
@@ -350,7 +443,6 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	if !approvedTrybots {
 		t.Errorf("advisory trybots didn't need approval")
 	}
-
 }
 
 // makeScript pretends to be make.bash. It creates a fake go command that
@@ -426,16 +518,24 @@ func checkFile(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, f
 		if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(task.WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
 			t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
 		}
-		resp, err := http.Get(dlURL + "/" + f.Filename)
-		if err != nil {
-			t.Fatalf("getting %v: %v", f.Filename, err)
-		}
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("reading %v: %v", f.Filename, err)
-		}
+		body := fetch(t, dlURL+"/"+f.Filename)
 		check(t, body)
 	})
+}
+func fetch(t *testing.T, url string) []byte {
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("getting %v: %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("getting %v: non-200 OK status code %v", url, resp.Status)
+	}
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("reading %v: %v", url, err)
+	}
+	return b
 }
 
 func checkContents(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, contents string) {
@@ -522,8 +622,7 @@ func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx context.Context, input 
 	return g.FakeGerrit.CreateAutoSubmitChange(ctx, input, reviewers, contents)
 }
 
-type fakeGitHub struct {
-}
+type fakeGitHub struct{}
 
 func (g *fakeGitHub) FetchMilestone(ctx context.Context, owner, repo, name string, create bool) (int, error) {
 	return 0, nil
@@ -617,6 +716,75 @@ func (l *errorListener) TaskStateChanged(id uuid.UUID, taskID string, st *workfl
 	return nil
 }
 
+type fakeSignService struct {
+	t             *testing.T
+	mu            sync.Mutex
+	completedJobs map[string][]string // Job ID → output objectURIs.
+}
+
+func (s *fakeSignService) SignArtifact(_ context.Context, bt sign.BuildType, in []string) (jobID string, _ error) {
+	s.t.Logf("fakeSignService: doing %s signing of %q", bt, in)
+	var out []string
+	switch bt {
+	case sign.BuildMacOS, sign.BuildWindows:
+		if len(in) != 1 {
+			return "", fmt.Errorf("got %d inputs, want 1", len(in))
+		}
+		out = []string{fakeSignFile(in[0], fmt.Sprintf("-signed <%s>", bt))}
+	case sign.BuildGPG:
+		if len(in) == 0 {
+			return "", fmt.Errorf("got 0 inputs, want 1 or more")
+		}
+		for _, f := range in {
+			out = append(out, fakeGPGFile(f))
+		}
+	default:
+		return "", fmt.Errorf("SignArtifact: not implemented for %v", bt)
+	}
+	jobID = uuid.NewString()
+	s.mu.Lock()
+	s.completedJobs[jobID] = out
+	s.mu.Unlock()
+	return jobID, nil
+}
+func (s *fakeSignService) ArtifactSigningStatus(_ context.Context, jobID string) (_ sign.Status, desc string, out []string, _ error) {
+	s.mu.Lock()
+	out, ok := s.completedJobs[jobID]
+	s.mu.Unlock()
+	if !ok {
+		return sign.StatusNotFound, fmt.Sprintf("job %q not found", jobID), nil, nil
+	}
+	return sign.StatusCompleted, "", out, nil
+}
+func (s *fakeSignService) CancelSigning(_ context.Context, jobID string) error {
+	s.t.Errorf("CancelSigning was called unexpectedly")
+	return fmt.Errorf("intentional fake error")
+}
+func fakeSignFile(f, msg string) string {
+	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
+	if err != nil {
+		panic(fmt.Errorf("fakeSignFile: os.ReadFile: %v", err))
+	}
+	b = append(b, []byte(msg)...)
+	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".signed", b, 0600)
+	if err != nil {
+		panic(fmt.Errorf("fakeSignFile: os.WriteFile: %v", err))
+	}
+	return f + ".signed"
+}
+func fakeGPGFile(f string) string {
+	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
+	if err != nil {
+		panic(fmt.Errorf("fakeGPGFile: os.ReadFile: %v", err))
+	}
+	gpg := fmt.Sprintf("I'm a GPG signature for %x!", sha256.Sum256(b))
+	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".asc", []byte(gpg), 0600)
+	if err != nil {
+		panic(fmt.Errorf("fakeGPGFile: os.WriteFile: %v", err))
+	}
+	return f + ".asc"
+}
+
 // fakeSign acts like a human running the signbinaries job periodically.
 func fakeSign(ctx context.Context, t *testing.T, dir string) {
 	seen := map[string]bool{}
@@ -690,8 +858,9 @@ func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) error {
 	return nil
 }
 
-// These are the files created by the Go 1.18 release.
-const inputs = `
+func TestFakeSign(t *testing.T) {
+	// These are the files created by the Go 1.18 release.
+	const inputs = `
 go1.18.darwin-amd64.tar.gz
 go1.18.darwin-arm64.tar.gz
 go1.18.freebsd-386.tar.gz
@@ -711,8 +880,8 @@ go1.18.windows-arm64.msi
 go1.18.windows-arm64.zip
 `
 
-// These are the files created in the "signed" folder by the signing run for Go 1.18.
-const outputs = `
+	// These are the files created in the "signed" folder by the signing run for Go 1.18.
+	const outputs = `
 go1.18.darwin-amd64.pkg
 go1.18.darwin-amd64.pkg.sha256
 go1.18.darwin-amd64.tar.gz
@@ -751,7 +920,6 @@ go1.18.windows-arm64.msi
 go1.18.windows-arm64.msi.sha256
 `
 
-func TestFakeSign(t *testing.T) {
 	dir := t.TempDir()
 	for _, f := range strings.Split(strings.TrimSpace(inputs), "\n") {
 		if err := ioutil.WriteFile(filepath.Join(dir, f), []byte("hi"), 0777); err != nil {
