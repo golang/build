@@ -17,10 +17,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -68,7 +66,6 @@ type releaseTestDeps struct {
 	buildTasks     *BuildReleaseTasks
 	milestoneTasks *task.MilestoneTasks
 	publishedFiles map[string]*task.WebsiteFile
-	outputListener func(taskName string, output interface{})
 }
 
 func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
@@ -79,16 +76,11 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	t.Cleanup(func() { task.AwaitDivisor, workflow.MaxRetries = 1, 3 })
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Set up the fake signing process.
-	var (
-		signService    sign.Service
-		sysCmds        map[string]string
-		outputListener func(taskName string, output interface{})
-	)
-	if useSignService {
-		signService = &fakeSignService{t: t, completedJobs: make(map[string][]string)}
-		sysCmds = map[string]string{
-			"pkgbuild": `#!/bin/bash -eu
+	// Set up a server that will be used to serve inputs to the build.
+	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
+	t.Cleanup(bootstrapServer.Close)
+	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, map[string]string{
+		"pkgbuild": `#!/bin/bash -eu
 case "$@" in
 "--identifier=org.golang.go --version ` + wantVersion + ` --scripts=pkg-scripts --root=pkg-root pkg-intermediate/org.golang.go.pkg")
 	# We're doing an intermediate step in building a PKG.
@@ -101,7 +93,7 @@ case "$@" in
 	;;
 esac
 `,
-			"productbuild": `#!/bin/bash -eu
+		"productbuild": `#!/bin/bash -eu
 case "$@" in
 "--distribution=pkg-distribution --resources=pkg-resources --package-path=pkg-intermediate pkg-out/` + wantVersion + `.pkg")
 	# We're building a PKG.
@@ -114,7 +106,7 @@ case "$@" in
 	;;
 esac
 `,
-			"pkgutil": `#!/bin/bash -eu
+		"pkgutil": `#!/bin/bash -eu
 case "$@" in
 "--expand-full go.pkg pkg-expanded")
 	# We're expanding a PKG.
@@ -127,29 +119,7 @@ case "$@" in
 	;;
 esac
 `,
-		}
-	} else {
-		argRe := regexp.MustCompile(`--relui_staging="(.*?)"`)
-		outputListener = func(taskName string, output interface{}) {
-			if taskName != "Start signing command" {
-				return
-			}
-			matches := argRe.FindStringSubmatch(output.(string))
-			if matches == nil {
-				return
-			}
-			u, err := url.Parse(matches[1])
-			if err != nil {
-				t.Fatal(err)
-			}
-			go fakeSign(ctx, t, u.Path)
-		}
-	}
-
-	// Set up a server that will be used to serve inputs to the build.
-	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
-	t.Cleanup(bootstrapServer.Close)
-	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, sysCmds)
+	})
 
 	// Set up the fake CDN publishing process.
 	servingDir := t.TempDir()
@@ -196,7 +166,7 @@ esac
 		ScratchURL:       "file://" + filepath.ToSlash(t.TempDir()),
 		ServingURL:       "file://" + filepath.ToSlash(servingDir),
 		CreateBuildlet:   fakeBuildlets.CreateBuildlet,
-		SignService:      signService,
+		SignService:      &fakeSignService{t: t, completedJobs: make(map[string][]string)},
 		DownloadURL:      dlServer.URL,
 		PublishFile:      publishFile,
 		ApproveAction: func(ctx *workflow.TaskContext) error {
@@ -219,7 +189,6 @@ esac
 		buildTasks:     buildTasks,
 		milestoneTasks: milestoneTasks,
 		publishedFiles: files,
-		outputListener: outputListener,
 	}
 }
 
@@ -238,7 +207,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.Run(deps.ctx, &verboseListener{t: t, outputListener: deps.outputListener, onStall: deps.cancel})
+	_, err = w.Run(deps.ctx, &verboseListener{t: t, onStall: deps.cancel})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +249,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 			if got, want := fmt.Sprintf("%x", sha256.Sum256(b)), string(fetch(t, dlURL+"/"+f.Filename+".sha256")); got != want {
 				t.Errorf("%s sha256 mismatch with .sha256 file: %q != %q", f.Filename, got, want)
 			}
-			if useSignService && strings.HasSuffix(f.Filename, ".tar.gz") {
+			if strings.HasSuffix(f.Filename, ".tar.gz") {
 				if got, want := string(fetch(t, dlURL+"/"+f.Filename+".asc")), fmt.Sprintf("I'm a GPG signature for %x!", sha256.Sum256(b)); got != want {
 					t.Errorf("%v doesn't have the expected GPG signature: got %s, want %s", f.Filename, got, want)
 				}
@@ -396,12 +365,12 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	}
 
 	if mergeFixes {
-		_, err = w.Run(deps.ctx, &verboseListener{t: t, outputListener: deps.outputListener})
+		_, err = w.Run(deps.ctx, &verboseListener{t: t})
 		if err != nil {
 			t.Fatal(err)
 		}
 	} else {
-		runToFailure(t, deps.ctx, w, "Check branch state matches source archive", &verboseListener{t: t, outputListener: deps.outputListener})
+		runToFailure(t, deps.ctx, w, "Check branch state matches source archive", &verboseListener{t: t})
 		return
 	}
 	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", &task.WebsiteFile{
@@ -437,7 +406,7 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Run(deps.ctx, &verboseListener{t: t, outputListener: deps.outputListener}); err != nil {
+	if _, err := w.Run(deps.ctx, &verboseListener{t: t}); err != nil {
 		t.Fatal(err)
 	}
 	if !approvedTrybots {
@@ -641,9 +610,8 @@ func (g *fakeGitHub) EditMilestone(ctx context.Context, owner string, repo strin
 }
 
 type verboseListener struct {
-	t              *testing.T
-	outputListener func(string, interface{})
-	onStall        func()
+	t       *testing.T
+	onStall func()
 }
 
 func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
@@ -662,9 +630,6 @@ func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.T
 		l.t.Logf("task %-10v: error: %v", st.Name, st.Error)
 	default:
 		l.t.Logf("task %-10v: done: %v", st.Name, st.Result)
-		if l.outputListener != nil {
-			l.outputListener(st.Name, st.Result)
-		}
 	}
 	return nil
 }
@@ -783,168 +748,6 @@ func fakeGPGFile(f string) string {
 		panic(fmt.Errorf("fakeGPGFile: os.WriteFile: %v", err))
 	}
 	return f + ".asc"
-}
-
-// fakeSign acts like a human running the signbinaries job periodically.
-func fakeSign(ctx context.Context, t *testing.T, dir string) {
-	seen := map[string]bool{}
-	periodicallyDo(ctx, t, 100*time.Millisecond, func() error {
-		return fakeSignOnce(t, dir, seen)
-	})
-}
-
-func fakeSignOnce(t *testing.T, dir string, seen map[string]bool) error {
-	dirFS := gcsfs.DirFS(dir)
-	_, err := fs.Stat(dirFS, "ready")
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	contents, err := fs.ReadDir(dirFS, ".")
-	if err != nil {
-		return err
-	}
-	for _, fi := range contents {
-		fn := fi.Name()
-		if fn == "signed" || seen[fn] {
-			continue
-		}
-		var copy, gpgSign, makePkg bool
-		hasSuffix := func(suffix string) bool { return strings.HasSuffix(fn, suffix) }
-		switch {
-		case strings.Contains(fn, "darwin") && hasSuffix(".tar.gz"):
-			copy = true
-			gpgSign = true
-			makePkg = true
-		case strings.Contains(fn, "darwin") && hasSuffix(".pkg"):
-			copy = true
-		case hasSuffix(".tar.gz"):
-			gpgSign = true
-		case hasSuffix("msi"):
-			copy = true
-		}
-
-		writeSignedWithHash := func(filename string, contents []byte) error {
-			if err := gcsfs.WriteFile(dirFS, "signed/"+filename, contents); err != nil {
-				return err
-			}
-			hash := fmt.Sprintf("%x", sha256.Sum256(contents))
-			return gcsfs.WriteFile(dirFS, "signed/"+filename+".sha256", []byte(hash))
-		}
-
-		if copy {
-			bytes, err := fs.ReadFile(dirFS, fn)
-			if err != nil {
-				return err
-			}
-			if err := writeSignedWithHash(fn, bytes); err != nil {
-				return err
-			}
-		}
-		if makePkg {
-			if err := writeSignedWithHash(strings.ReplaceAll(fn, ".tar.gz", ".pkg"), []byte("I'm a .pkg!\n")); err != nil {
-				return err
-			}
-		}
-		if gpgSign {
-			if err := writeSignedWithHash(fn+".asc", []byte("gpg signature")); err != nil {
-				return err
-			}
-		}
-		seen[fn] = true
-	}
-	return nil
-}
-
-func TestFakeSign(t *testing.T) {
-	// These are the files created by the Go 1.18 release.
-	const inputs = `
-go1.18.darwin-amd64.tar.gz
-go1.18.darwin-arm64.tar.gz
-go1.18.freebsd-386.tar.gz
-go1.18.freebsd-amd64.tar.gz
-go1.18.linux-386.tar.gz
-go1.18.linux-amd64.tar.gz
-go1.18.linux-arm64.tar.gz
-go1.18.linux-armv6l.tar.gz
-go1.18.linux-ppc64le.tar.gz
-go1.18.linux-s390x.tar.gz
-go1.18.src.tar.gz
-go1.18.windows-386.msi
-go1.18.windows-386.zip
-go1.18.windows-amd64.msi
-go1.18.windows-amd64.zip
-go1.18.windows-arm64.msi
-go1.18.windows-arm64.zip
-`
-
-	// These are the files created in the "signed" folder by the signing run for Go 1.18.
-	const outputs = `
-go1.18.darwin-amd64.pkg
-go1.18.darwin-amd64.pkg.sha256
-go1.18.darwin-amd64.tar.gz
-go1.18.darwin-amd64.tar.gz.asc
-go1.18.darwin-amd64.tar.gz.asc.sha256
-go1.18.darwin-amd64.tar.gz.sha256
-go1.18.darwin-arm64.pkg
-go1.18.darwin-arm64.pkg.sha256
-go1.18.darwin-arm64.tar.gz
-go1.18.darwin-arm64.tar.gz.asc
-go1.18.darwin-arm64.tar.gz.asc.sha256
-go1.18.darwin-arm64.tar.gz.sha256
-go1.18.freebsd-386.tar.gz.asc
-go1.18.freebsd-386.tar.gz.asc.sha256
-go1.18.freebsd-amd64.tar.gz.asc
-go1.18.freebsd-amd64.tar.gz.asc.sha256
-go1.18.linux-386.tar.gz.asc
-go1.18.linux-386.tar.gz.asc.sha256
-go1.18.linux-amd64.tar.gz.asc
-go1.18.linux-amd64.tar.gz.asc.sha256
-go1.18.linux-arm64.tar.gz.asc
-go1.18.linux-arm64.tar.gz.asc.sha256
-go1.18.linux-armv6l.tar.gz.asc
-go1.18.linux-armv6l.tar.gz.asc.sha256
-go1.18.linux-ppc64le.tar.gz.asc
-go1.18.linux-ppc64le.tar.gz.asc.sha256
-go1.18.linux-s390x.tar.gz.asc
-go1.18.linux-s390x.tar.gz.asc.sha256
-go1.18.src.tar.gz.asc
-go1.18.src.tar.gz.asc.sha256
-go1.18.windows-386.msi
-go1.18.windows-386.msi.sha256
-go1.18.windows-amd64.msi
-go1.18.windows-amd64.msi.sha256
-go1.18.windows-arm64.msi
-go1.18.windows-arm64.msi.sha256
-`
-
-	dir := t.TempDir()
-	for _, f := range strings.Split(strings.TrimSpace(inputs), "\n") {
-		if err := ioutil.WriteFile(filepath.Join(dir, f), []byte("hi"), 0777); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := ioutil.WriteFile(filepath.Join(dir, "ready"), nil, 0777); err != nil {
-		t.Fatal(err)
-	}
-	fakeSignOnce(t, dir, map[string]bool{})
-	want := map[string]bool{}
-	for _, f := range strings.Split(strings.TrimSpace(outputs), "\n") {
-		want[f] = true
-	}
-	got := map[string]bool{}
-	files, err := ioutil.ReadDir(filepath.Join(dir, "signed"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range files {
-		got[f.Name()] = true
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("signed outputs mismatch (-want +got):\n%v", diff)
-	}
 }
 
 func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {

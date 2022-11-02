@@ -170,14 +170,6 @@
       <dd class="TaskList-itemResultDefinition">
         {{.Artifact.ScratchPath}}
       </dd>
-      <dt class="TaskList-itemResultTerm">
-        <div class="TaskList-itemResultTermContent">
-          StagingPath
-        </div>
-      </dt>
-      <dd class="TaskList-itemResultDefinition">
-        {{.Artifact.StagingPath}}
-      </dd>
     </dl>
   {{else if eq .Kind "Outputs"}}
     {{range $key, $value := .Outputs}}
