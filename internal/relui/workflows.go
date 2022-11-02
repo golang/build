@@ -78,61 +78,6 @@ func (h *DefinitionHolder) Definitions() map[string]*wf.Definition {
 	return defs
 }
 
-// RegisterCommunicationDefinitions registers workflow definitions
-// involving mailing announcements and posting tweets onto h.
-//
-// This is superseded by RegisterReleaseWorkflows and will be removed
-// after some time, when we confirm there's no need for separate workflows.
-func RegisterCommunicationDefinitions(h *DefinitionHolder, tasks task.CommunicationTasks) {
-	{
-		wd := wf.New()
-		v1 := wf.Param(wd, wf.ParamDef[string]{
-			Name: "Version",
-			Doc: `Version is the Go version that has been released.
-
-	The version string must use the same format as Go tags.`,
-			Example: "go1.18.2",
-		})
-		v2 := wf.Param(wd, wf.ParamDef[string]{
-			Name:    "Secondary Version",
-			Doc:     `Secondary Version is an older Go version that was also released.`,
-			Example: "go1.17.10",
-		})
-		securitySummary := wf.Param(wd, securitySummaryParameter)
-		securityFixes := wf.Param(wd, securityFixesParameter)
-		coordinators := wf.Param(wd, releaseCoordinators)
-
-		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v1, v2), securityFixes, coordinators)
-		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
-		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v1, v2), securitySummary, announcementURL)
-
-		wf.Output(wd, "AnnouncementURL", announcementURL)
-		wf.Output(wd, "TweetURL", tweetURL)
-
-		h.RegisterDefinition("announce-and-tweet-double-minor", wd)
-	}
-	{
-		wd := wf.New()
-		v := wf.Param(wd, wf.ParamDef[string]{
-			Name: "Version",
-			Doc: `Version is the Go version that has been released.
-
-	The version string must use the same format as Go tags.`,
-			Example: "go1.19beta1",
-		})
-		coordinators := wf.Param(wd, releaseCoordinators)
-
-		sentMail := wf.Task3(wd, "mail-announcement", tasks.AnnounceRelease, wf.Slice(v), wf.Slice[string](), coordinators)
-		announcementURL := wf.Task1(wd, "await-announcement", tasks.AwaitAnnounceMail, sentMail)
-		tweetURL := wf.Task3(wd, "post-tweet", tasks.TweetRelease, wf.Slice(v), wf.Const(""), announcementURL)
-
-		wf.Output(wd, "AnnouncementURL", announcementURL)
-		wf.Output(wd, "TweetURL", tweetURL)
-
-		h.RegisterDefinition("announce-and-tweet-single", wd)
-	}
-}
-
 // Release parameter definitions.
 var (
 	targetDateParam = wf.ParamDef[task.Date]{
@@ -277,12 +222,8 @@ func ApproveActionDep(p db.PGDBTX) func(*wf.TaskContext) error {
 
 // RegisterReleaseWorkflows registers workflows for issuing Go releases.
 func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
-	// Register prod release workflows both with, and without comm tasks at the end.
-	// TODO(go.dev/issue/53537): Simplify after more experience.
-	if err := registerProdReleaseWorkflows(ctx, h, build, milestone, version, comm, true, ""); err != nil {
-		return err
-	}
-	if err := registerProdReleaseWorkflows(ctx, h, build, milestone, version, comm, false, "[without comms] "); err != nil {
+	// Register prod release workflows.
+	if err := registerProdReleaseWorkflows(ctx, h, build, milestone, version, comm); err != nil {
 		return err
 	}
 
@@ -320,7 +261,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 	return nil
 }
 
-func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, mergeCommTasks bool, definitionPrefix string) error {
+func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
 	currentMajor, err := version.GetCurrentMajor(ctx)
 	if err != nil {
 		return err
@@ -342,24 +283,23 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		coordinators := wf.Param(wd, releaseCoordinators)
 
 		versionPublished := addSingleReleaseWorkflow(build, milestone, version, wd, r.major, r.kind, coordinators)
-		if mergeCommTasks {
-			securitySummary := wf.Const("")
-			securityFixes := wf.Slice[string]()
-			if r.kind == task.KindCurrentMinor || r.kind == task.KindPrevMinor {
-				securitySummary = wf.Param(wd, securitySummaryParameter)
-				securityFixes = wf.Param(wd, securityFixesParameter)
-			}
-			addCommTasks(wd, build, comm, wf.Slice(versionPublished), securitySummary, securityFixes, coordinators)
-		}
 
-		h.RegisterDefinition(definitionPrefix+fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
+		securitySummary := wf.Const("")
+		securityFixes := wf.Slice[string]()
+		if r.kind == task.KindCurrentMinor || r.kind == task.KindPrevMinor {
+			securitySummary = wf.Param(wd, securitySummaryParameter)
+			securityFixes = wf.Param(wd, securityFixesParameter)
+		}
+		addCommTasks(wd, build, comm, wf.Slice(versionPublished), securitySummary, securityFixes, coordinators)
+
+		h.RegisterDefinition(fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
 	}
 
-	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, mergeCommTasks, currentMajor-1, currentMajor)
+	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, currentMajor-1, currentMajor)
 	if err != nil {
 		return err
 	}
-	h.RegisterDefinition(definitionPrefix+fmt.Sprintf("Minor releases for Go 1.%d and 1.%d", currentMajor-1, currentMajor), wd)
+	h.RegisterDefinition(fmt.Sprintf("Minor releases for Go 1.%d and 1.%d", currentMajor-1, currentMajor), wd)
 
 	return nil
 }
@@ -396,18 +336,16 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 	h.RegisterDefinition(fmt.Sprintf("dry-run (build, test, and sign only): Go 1.%d next beta", major), wd)
 }
 
-func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, mergeCommTasks bool, prevMajor, currentMajor int) (*wf.Definition, error) {
+func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int) (*wf.Definition, error) {
 	wd := wf.New()
 
 	coordinators := wf.Param(wd, releaseCoordinators)
 	v1Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor, coordinators)
 	v2Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor, coordinators)
 
-	if mergeCommTasks {
-		securitySummary := wf.Param(wd, securitySummaryParameter)
-		securityFixes := wf.Param(wd, securityFixesParameter)
-		addCommTasks(wd, build, comm, wf.Slice(v1Published, v2Published), securitySummary, securityFixes, coordinators)
-	}
+	securitySummary := wf.Param(wd, securitySummaryParameter)
+	securityFixes := wf.Param(wd, securityFixesParameter)
+	addCommTasks(wd, build, comm, wf.Slice(v1Published, v2Published), securitySummary, securityFixes, coordinators)
 
 	return wd, nil
 }

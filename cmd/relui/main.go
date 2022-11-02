@@ -127,7 +127,6 @@ func main() {
 		},
 	}
 	dh := relui.NewDefinitionHolder()
-	relui.RegisterCommunicationDefinitions(dh, commTasks)
 	userPassAuth := buildlet.UserPass{
 		Username: "user-relui",
 		Password: key(*masterKey, "user-relui"),
