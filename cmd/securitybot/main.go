@@ -28,6 +28,7 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/iapclient"
+	"golang.org/x/build/repos"
 	"golang.org/x/build/types"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -52,10 +53,22 @@ type builderResult struct {
 	err         error
 }
 
+type buildInfo struct {
+	revision      string
+	branch        string
+	changeArchive []byte
+	goArchive     []byte
+}
+
+func (bi *buildInfo) isSubrepo() bool {
+	repo, _, _ := strings.Cut(bi.branch, ".")
+	return repos.ByGerritProject[repo] != nil
+}
+
 // runTests creates a buildlet for the specified builderType, sends a copy of go1.4 and the change tarball to
 // the buildlet, and then executes the platform specific 'all' script, streaming the output to a GCS bucket.
-// The buildlet is destroyed on return. The bool returned indicates whether the tests passed or failed.
-func (t *tester) runTests(ctx context.Context, builderType string, rev string, archive []byte) builderResult {
+// The buildlet is destroyed on return.
+func (t *tester) runTests(ctx context.Context, builderType string, info *buildInfo) builderResult {
 	log.Printf("%s: creating buildlet", builderType)
 	c, err := t.coordinator.CreateBuildletWithStatus(ctx, builderType, func(status types.BuildletWaitStatus) {})
 	if err != nil {
@@ -86,15 +99,6 @@ func (t *tester) runTests(ctx context.Context, builderType string, rev string, a
 		}
 	}
 
-	if err := c.PutTar(ctx, bytes.NewReader(archive), "go"); err != nil {
-		log.Printf("%s: failed to upload change archive: %s", builderType, err)
-		return builderResult{builderType: builderType, err: fmt.Errorf("failed to upload change: %s", err)}
-	}
-	if err := c.Put(ctx, strings.NewReader("devel "+rev), "go/VERSION", 0644); err != nil {
-		log.Printf("%s: failed to upload VERSION file: %s", builderType, err)
-		return builderResult{builderType: builderType, err: fmt.Errorf("failed to upload VERSION file: %s", err)}
-	}
-
 	suffix := make([]byte, 4)
 	rand.Read(suffix)
 
@@ -102,7 +106,7 @@ func (t *tester) runTests(ctx context.Context, builderType string, rev string, a
 	var logURL string
 
 	if t.gcs != nil {
-		gcsBucket, gcsObject := *gcsBucket, fmt.Sprintf("%s-%x/%s", rev, suffix, builderType)
+		gcsBucket, gcsObject := *gcsBucket, fmt.Sprintf("%s-%x/%s", info.revision, suffix, builderType)
 		gcsWriter, err := newLiveWriter(ctx, t.gcs.Bucket(gcsBucket).Object(gcsObject))
 		if err != nil {
 			log.Printf("%s: failed to create log writer: %s", builderType, err)
@@ -125,19 +129,105 @@ func (t *tester) runTests(ctx context.Context, builderType string, rev string, a
 		return builderResult{builderType: builderType, err: fmt.Errorf("failed to get work dir: %s", err)}
 	}
 
-	env := append(buildConfig.Env(), "GOPATH="+work+"/gopath", "GOROOT_FINAL="+buildConfig.GorootFinal())
-	cmd, args := "go/"+buildConfig.AllScript(), buildConfig.AllScriptArgs()
+	env := append(buildConfig.Env(), "GOPATH="+work+"/gopath", "GOROOT_FINAL="+buildConfig.GorootFinal(), "GOROOT="+work+"/go")
+	// Because we are unable to determine the internal GCE hostname of the
+	// coordinator, we cannot use the same GOPROXY proxy that the public TryBots
+	// use to get around the disabled network. Instead of using that proxy
+	// proxy, we instead wait to disable the network until right before we
+	// actually execute the tests, and manually download module dependencies
+	// using "go mod download" if we are testing a subrepo branch.
+	for i, v := range env {
+		if v == "GO_DISABLE_OUTBOUND_NETWORK=1" {
+			env = append(env[:i], env[i+1:]...)
+			break
+		}
+	}
+	dirName := "go"
+
+	if info.isSubrepo() {
+		dirName = info.branch
+
+		// fetch and build go at master first
+		if err := c.PutTar(ctx, bytes.NewReader(info.goArchive), "go"); err != nil {
+			log.Printf("%s: failed to upload change archive: %s", builderType, err)
+			return builderResult{builderType: builderType, err: fmt.Errorf("failed to upload change archive: %s", err)}
+		}
+		if err := c.Put(ctx, strings.NewReader("devel "+info.revision), "go/VERSION", 0644); err != nil {
+			log.Printf("%s: failed to upload VERSION file: %s", builderType, err)
+			return builderResult{builderType: builderType, err: fmt.Errorf("failed to upload VERSION file: %s", err)}
+		}
+
+		cmd, args := "go/"+buildConfig.MakeScript(), buildConfig.MakeScriptArgs()
+		remoteErr, execErr := c.Exec(ctx, cmd, buildlet.ExecOpts{
+			Output:   output,
+			ExtraEnv: append(env, "GO_DISABLE_OUTBOUND_NETWORK=0"),
+			Args:     args,
+			OnStartExec: func() {
+				log.Printf("%s: starting make.bash %s", builderType, logURL)
+			},
+		})
+		if execErr != nil {
+			log.Printf("%s: failed to execute make.bash: %s", builderType, execErr)
+			return builderResult{builderType: builderType, err: fmt.Errorf("failed to execute make.bash: %s", err)}
+		}
+		if remoteErr != nil {
+			log.Printf("%s: make.bash failed: %s", builderType, remoteErr)
+			return builderResult{builderType: builderType, err: fmt.Errorf("make.bash failed: %s", remoteErr)}
+		}
+	}
+
+	if err := c.PutTar(ctx, bytes.NewReader(info.changeArchive), dirName); err != nil {
+		log.Printf("%s: failed to upload change archive: %s", builderType, err)
+		return builderResult{builderType: builderType, err: fmt.Errorf("failed to upload change archive: %s", err)}
+	}
+
+	if !info.isSubrepo() {
+		if err := c.Put(ctx, strings.NewReader("devel "+info.revision), "go/VERSION", 0644); err != nil {
+			log.Printf("%s: failed to upload VERSION file: %s", builderType, err)
+			return builderResult{builderType: builderType, err: fmt.Errorf("failed to upload VERSION file: %s", err)}
+		}
+	}
+
+	var cmd string
+	var args []string
+	if info.isSubrepo() {
+		cmd, args = "go/bin/go", []string{"test", "./..."}
+	} else {
+		cmd, args = "go/"+buildConfig.AllScript(), buildConfig.AllScriptArgs()
+	}
 	opts := buildlet.ExecOpts{
 		Output:   output,
 		ExtraEnv: env,
 		Args:     args,
 		OnStartExec: func() {
-			log.Printf("%s: starting all.bash %s", builderType, logURL)
+			log.Printf("%s: starting tests %s", builderType, logURL)
 		},
 	}
+	if info.isSubrepo() {
+		opts.Dir = dirName
+
+		remoteErr, execErr := c.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
+			Args:     []string{"mod", "download"},
+			ExtraEnv: append(env, "GO_DISABLE_OUTBOUND_NETWORK=0"),
+			Dir:      dirName,
+			Output:   output,
+			OnStartExec: func() {
+				log.Printf("%s: downloading modules %s", builderType, logURL)
+			},
+		})
+		if execErr != nil {
+			log.Printf("%s: failed to execute go mod download: %s", builderType, execErr)
+			return builderResult{builderType: builderType, err: fmt.Errorf("failed to execute go mod download: %s", err)}
+		}
+		if remoteErr != nil {
+			log.Printf("%s: go mod download failed: %s", builderType, remoteErr)
+			return builderResult{builderType: builderType, err: fmt.Errorf("go mod download failed: %s", remoteErr)}
+		}
+	}
+	opts.ExtraEnv = append(opts.ExtraEnv, "GO_DISABLE_OUTBOUND_NETWORK=1")
 	remoteErr, execErr := c.Exec(ctx, cmd, opts)
 	if execErr != nil {
-		log.Printf("%s: failed to execute all.bash: %s", builderType, execErr)
+		log.Printf("%s: failed to execute tests: %s", builderType, execErr)
 		return builderResult{builderType: builderType, err: fmt.Errorf("failed to execute all.bash: %s", err)}
 	}
 	if remoteErr != nil {
@@ -252,10 +342,24 @@ func (t *tester) getTar(revision string) ([]byte, error) {
 }
 
 // run tests the specific revision on the builders specified.
-func (t *tester) run(ctx context.Context, revision string, builders []string) ([]builderResult, error) {
-	archive, err := t.getTar(revision)
+func (t *tester) run(ctx context.Context, revision, branch string, builders []string) ([]builderResult, error) {
+	changeArchive, err := t.getTar(revision)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve change archive: %s", err)
+	}
+
+	info := &buildInfo{
+		revision:      revision,
+		branch:        branch,
+		changeArchive: changeArchive,
+	}
+
+	if branch != "master" {
+		goArchive, err := t.getTar("master")
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve go master archive: %s", err)
+		}
+		info.goArchive = goArchive
 	}
 
 	wg := new(sync.WaitGroup)
@@ -264,7 +368,7 @@ func (t *tester) run(ctx context.Context, revision string, builders []string) ([
 		wg.Add(1)
 		go func(bt string) {
 			defer wg.Done()
-			result := t.runTests(ctx, bt, revision, archive) // have a proper timeout
+			result := t.runTests(ctx, bt, info) // have a proper timeout
 			resultsCh <- result
 		}(bt)
 	}
@@ -434,7 +538,7 @@ func main() {
 	}
 
 	if *revision != "" {
-		if _, err := t.run(ctx, *revision, builders); err != nil {
+		if _, err := t.run(ctx, *revision, "", builders); err != nil {
 			log.Fatal(err)
 		}
 	} else {
@@ -451,7 +555,7 @@ func main() {
 				if err := t.commentBeginning(context.Background(), change); err != nil {
 					log.Fatalf("commentBeginning failed: %v", err)
 				}
-				results, err := t.run(ctx, change.CurrentRevision, builders)
+				results, err := t.run(ctx, change.CurrentRevision, change.Branch, builders)
 				if err != nil {
 					log.Fatalf("run failed: %v", err)
 				}
