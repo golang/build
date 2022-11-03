@@ -195,7 +195,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 		addMeta("tls-key", opts.TLS.KeyPEM)
 		addMeta("password", opts.TLS.Password())
 	}
-	if hconf.IsContainer() {
+	if hconf.IsContainer() && hconf.CosArchitecture() == dashboard.CosArchAMD64 {
 		addMeta("gce-container-declaration", fmt.Sprintf(`spec:
   containers:
     - name: buildlet
@@ -212,6 +212,32 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
     - name: tmpfs-0
       emptyDir:
         medium: Memory
+`, opts.ProjectID, hconf.ContainerImage))
+	} else if hconf.IsContainer() && hconf.CosArchitecture() == dashboard.CosArchARM64 {
+
+		addMeta("user-data", fmt.Sprintf(`#cloud-config
+
+write_files:
+- path: /etc/systemd/system/buildlet.service
+  permissions: 0644
+  owner: root:root
+  content: |
+    [Unit]
+    Description=Start buildlet container
+    Wants=gcr-online.target
+    After=gcr-online.target
+
+    [Service]
+    Environment="HOME=/home/buildlet"
+    ExecStart=/usr/bin/docker run --rm --name=buildlet --privileged -p 80:80 gcr.io/%s/%s
+    ExecStop=/usr/bin/docker stop buildlet
+    ExecStopPost=/usr/bin/docker rm buildlet
+    RemainAfterExit=true
+    Type=oneshot
+
+runcmd:
+- systemctl daemon-reload
+- systemctl start buildlet.service
 `, opts.ProjectID, hconf.ContainerImage))
 	}
 
