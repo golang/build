@@ -914,26 +914,30 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 		return err
 	}
 
-	todo := map[artifact]bool{}
+	todo := map[string]bool{} // URLs we're waiting on becoming available.
 	for _, a := range artifacts {
 		if err := uploadArtifact(scratchFS, servingFS, a); err != nil {
 			return err
 		}
-		todo[a] = true
+		todo[tasks.DownloadURL+"/"+a.Filename] = true
+		todo[tasks.DownloadURL+"/"+a.Filename+".sha256"] = true
+		if a.GPGSignature != "" {
+			todo[tasks.DownloadURL+"/"+a.Filename+".asc"] = true
+		}
 	}
 
 	check := func() (int, bool, error) {
-		for _, a := range artifacts {
+		for url := range todo {
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			resp, err := ctxhttp.Head(ctx, http.DefaultClient, tasks.DownloadURL+"/"+a.Filename)
+			resp, err := ctxhttp.Head(ctx, http.DefaultClient, url)
 			if err != nil && err != context.DeadlineExceeded {
 				return 0, false, err
 			}
 			resp.Body.Close()
 			cancel()
 			if resp.StatusCode == http.StatusOK {
-				delete(todo, a)
+				delete(todo, url)
 			}
 		}
 		return 0, len(todo) == 0, nil
@@ -942,6 +946,8 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 	return err
 }
 
+// uploadArtifact copies the artifact a and its metadata files
+// from scratchFS to servingFS.
 func uploadArtifact(scratchFS, servingFS fs.FS, a artifact) error {
 	in, err := scratchFS.Open(a.ScratchPath)
 	if err != nil {
@@ -964,12 +970,12 @@ func uploadArtifact(scratchFS, servingFS fs.FS, a artifact) error {
 	if err := gcsfs.WriteFile(servingFS, a.Filename+".sha256", []byte(a.SHA256)); err != nil {
 		return err
 	}
-
 	if a.GPGSignature != "" {
 		if err := gcsfs.WriteFile(servingFS, a.Filename+".asc", []byte(a.GPGSignature)); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
