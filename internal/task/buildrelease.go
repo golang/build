@@ -429,9 +429,7 @@ func (b *BuildletStep) ConvertPKGToTGZ(ctx *workflow.TaskContext, in io.Reader, 
 	reader := tar.NewReader(gzReader)
 	gzWriter := gzip.NewWriter(out)
 	writer := tar.NewWriter(gzWriter)
-	if err := adjustTar(reader, writer, "go/", []adjustFunc{
-		// TODO(go.dev/issue/53632): Use the data from a test run to confirm which adjustments (if any) are needed.
-	}); err != nil {
+	if err := adjustTar(reader, writer, "go/", nil); err != nil {
 		return err
 	}
 	if err := writer.Close(); err != nil {
