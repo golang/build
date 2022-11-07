@@ -41,6 +41,7 @@ Create `$HOME/stage0.sh`.
 ```
 #!/bin/bash
 while true; do (curl -v http://172.17.20.2:8713/stage0/$(sw_vers -productVersion) | sh); sleep 5; done
+```
 
 **For physical machines**
 ```
@@ -106,7 +107,7 @@ In System Preferences:
 - Energy Saver > never turn off display, don't automatically sleep, start up after power failure
 - Sharing > enable ssh (leave the default administrators setting)
 - Users & Groups > Gopher Gopherson > Login Items > add run-builder
-- Users & Groups > Login Options > auto-login Gopher Gopherson
+- General (before 13: Users & Groups) > Login Options > auto-login Gopher Gopherson
 - Network -> Ethernet -> Advanced -> DNS -> Add DNS server -> 8.8.8.8
   - Only necessary on AWS guests, and until https://go.dev/issue/36718 is
     resolved on all tested releases.
@@ -116,7 +117,7 @@ Install XCode:
 https://stackoverflow.com/questions/10335747/how-to-download-xcode-dmg-or-xip-file.
 https://developer.apple.com/support/xcode/ is a more authoritative list of versions.
 (You don't want to log in to your account on the machine, so don't use the App Store.)
-- Extract it and move the resulting Xcode folder to Applications
+- Extract it (`xip -x file.xip`) and move the resulting Xcode folder to Applications
 - run xcode-select: `sudo xcode-select --switch /Applications/Xcode.app`
 - run `xcodebuild -version` and wait for Xcode to be verified, which will take a long time.
 - accept the license: `sudo xcodebuild -license accept`

@@ -127,7 +127,7 @@ $ $HOME/start-mutable.sh macos-monterey.qcow2 $OSK_VALUE
 ```
 
 Now complete the remainder of the [machine setup](../setup-notes.md). For SSH
-access, the guest should be reachable at 192.168.1.2 or 192.168.1.3 from the
+access, the guest should be reachable at 192.168.64.2 or 192.168.64.3 from the
 host machine.
 
 Copy complete images to `s3://go-builder-data/darwin/` for use on other
