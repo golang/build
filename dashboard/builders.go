@@ -201,6 +201,14 @@ var Hosts = map[string]*HostConfig{
 		HermeticReverse: true, // we destroy the VM when done & let cmd/makemac recreate
 		GoogleReverse:   true,
 	},
+	"host-darwin-amd64-13-aws": {
+		IsReverse:       true,
+		ExpectNum:       2,
+		Notes:           "AWS macOS Ventura (13) VM under QEMU",
+		SSHUsername:     "gopher",
+		HermeticReverse: true, // we destroy the VM when done & recreate
+		GoogleReverse:   true,
+	},
 	"host-darwin-arm64-11": {
 		IsReverse:     true,
 		Notes:         "macOS Big Sur (11) ARM64 (M1) on Mac minis in a Google office",
@@ -2353,6 +2361,13 @@ func init() {
 		HostType:       "host-darwin-amd64-12_0",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     defaultPlusExpBuild,
+	})
+	addBuilder(BuildConfig{
+		Name:           "darwin-amd64-13-aws",
+		HostType:       "host-darwin-amd64-13-aws",
+		distTestAdjust: macTestPolicy,
+		buildsRepo:     defaultPlusExpBuild,
+		KnownIssues:    []int{48945},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-nocgo",
