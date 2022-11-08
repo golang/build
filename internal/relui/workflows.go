@@ -393,7 +393,8 @@ func addSingleReleaseWorkflow(
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
 	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, pushed))
 	if kind == task.KindMajor {
-		wf.Task3(wd, fmt.Sprintf("Mail update stdlib index CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, wf.Const("master"), coordinators, versionPublished)
+		updateStdlibIndexCL := wf.Task3(wd, fmt.Sprintf("Mail update stdlib index CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, wf.Const("master"), coordinators, versionPublished)
+		wf.Output(wd, "Stdlib regeneration CL", updateStdlibIndexCL)
 	}
 	wf.Output(wd, "Released version", versionPublished)
 	return versionPublished

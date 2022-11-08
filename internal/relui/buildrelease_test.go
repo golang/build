@@ -45,6 +45,9 @@ func TestRelease(t *testing.T) {
 	t.Run("rc", func(t *testing.T) {
 		testRelease(t, "go1.18rc1", task.KindRC)
 	})
+	t.Run("major", func(t *testing.T) {
+		testRelease(t, "go1.18", task.KindMajor)
+	})
 }
 
 func TestSecurity(t *testing.T) {
