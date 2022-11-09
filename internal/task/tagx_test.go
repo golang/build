@@ -410,9 +410,6 @@ func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
 			return goServer.URL + "/dl/go1.19.linux-amd64.tar.gz", nil
 		},
 		DashboardURL: dashServer.URL,
-		ApproveAction: func(tc *workflow.TaskContext) error {
-			return nil
-		},
 	}
 	return &tagXTestDeps{
 		ctx:       ctx,
@@ -449,7 +446,9 @@ func TestTagXRepos(t *testing.T) {
 	deps := newTagXTestDeps(t, sys, mod, tools)
 
 	wd := deps.tagXTasks.NewDefinition()
-	w, err := workflow.Start(wd, nil)
+	w, err := workflow.Start(wd, map[string]interface{}{
+		reviewersParam.Name: []string(nil),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,7 +520,8 @@ func TestTagSingleRepo(t *testing.T) {
 	wd := deps.tagXTasks.NewSingleDefinition()
 	ctx, cancel := context.WithTimeout(deps.ctx, time.Minute)
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Repository name": "foo",
+		"Repository name":   "foo",
+		reviewersParam.Name: []string(nil),
 	})
 	if err != nil {
 		t.Fatal(err)

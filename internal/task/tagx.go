@@ -35,22 +35,30 @@ type TagXReposTasks struct {
 	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
 	LatestGoBinaries func(context.Context) (string, error)
 	DashboardURL     string
-	ApproveAction    func(*wf.TaskContext) error
 }
 
 func (x *TagXReposTasks) NewDefinition() *wf.Definition {
 	wd := wf.New()
+	reviewers := wf.Param(wd, reviewersParam)
 	repos := wf.Task0(wd, "Select repositories", x.SelectRepos)
-	wf.Expand1(wd, "Create plan", x.BuildPlan, repos)
+	wf.Expand2(wd, "Create plan", x.BuildPlan, repos, reviewers)
 	return wd
 }
 
 func (x *TagXReposTasks) NewSingleDefinition() *wf.Definition {
 	wd := wf.New()
+	reviewers := wf.Param(wd, reviewersParam)
 	repos := wf.Task0(wd, "Load all repositories", x.SelectRepos)
 	name := wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "tools"})
-	wf.Expand2(wd, "Create single-repo plan", x.BuildSingleRepoPlan, repos, name)
+	wf.Expand3(wd, "Create single-repo plan", x.BuildSingleRepoPlan, repos, name, reviewers)
 	return wd
+}
+
+var reviewersParam = wf.ParamDef[[]string]{
+	Name:      "Reviewer usernames (optional)",
+	ParamType: wf.SliceShort,
+	Doc:       `Send code reviews to these users.`,
+	Example:   "heschi",
 }
 
 // TagRepo contains information about a repo that can be tagged.
@@ -222,7 +230,7 @@ func checkCycles1(reposByModule map[string]TagRepo, repo TagRepo, stack []string
 }
 
 // BuildPlan adds the tasks needed to update repos to wd.
-func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo) error {
+func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers []string) error {
 	// repo.ModPath to the wf.Value produced by updating it.
 	updated := map[string]wf.Value[TagRepo]{}
 
@@ -234,7 +242,7 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo) error {
 			if _, ok := updated[repo.ModPath]; ok {
 				continue
 			}
-			dep, ok := x.planRepo(wd, repo, updated)
+			dep, ok := x.planRepo(wd, repo, updated, reviewers)
 			if !ok {
 				continue
 			}
@@ -261,7 +269,7 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo) error {
 	return nil
 }
 
-func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagRepo, name string) error {
+func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagRepo, name string, reviewers []string) error {
 	repos := map[string]TagRepo{}
 	updatedRepos := map[string]wf.Value[TagRepo]{}
 	for _, r := range repoSlice {
@@ -275,7 +283,7 @@ func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagR
 	if !ok {
 		return fmt.Errorf("no repository %q", name)
 	}
-	tagged, ok := x.planRepo(wd, repo, updatedRepos)
+	tagged, ok := x.planRepo(wd, repo, updatedRepos, reviewers)
 	if !ok {
 		return fmt.Errorf("%q doesn't have all of its dependencies (%q)", repo.Name, repo.Deps)
 	}
@@ -286,7 +294,7 @@ func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagR
 // planRepo adds tasks to wf to update and tag repo. It returns a Value
 // containing the tagged repository's information, or nil, false if its
 // dependencies haven't been planned yet.
-func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[string]wf.Value[TagRepo]) (_ wf.Value[TagRepo], ready bool) {
+func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[string]wf.Value[TagRepo], reviewers []string) (_ wf.Value[TagRepo], ready bool) {
 	var deps []wf.Value[TagRepo]
 	for _, repoDeps := range repo.Deps {
 		if dep, ok := updated[repoDeps]; ok {
@@ -303,7 +311,7 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[s
 		tagCommit = wf.Task2(wd, "read branch head", x.Gerrit.ReadBranchHead, repoName, branch)
 	} else {
 		gomod := wf.Task3(wd, "generate updated go.mod", x.UpdateGoMod, wf.Const(repo), wf.Slice(deps...), branch)
-		cl := wf.Task2(wd, "mail updated go.mod", x.MailGoMod, repoName, gomod)
+		cl := wf.Task3(wd, "mail updated go.mod", x.MailGoMod, repoName, gomod, wf.Const(reviewers))
 		tagCommit = wf.Task3(wd, "wait for submit", x.AwaitGoMod, cl, repoName, branch)
 	}
 	greenCommit := wf.Task2(wd, "wait for green post-submit", x.AwaitGreen, wf.Const(repo), tagCommit)
@@ -457,7 +465,7 @@ func LatestGoBinaries(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("no linux-amd64??")
 }
 
-func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, files map[string]string) (string, error) {
+func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, files map[string]string, reviewers []string) (string, error) {
 	const subject = `go.mod: update golang.org/x dependencies
 
 Update golang.org/x dependencies to their latest tagged versions.
@@ -469,7 +477,7 @@ will be tagged with its next minor version.
 		Project: repo,
 		Branch:  "master",
 		Subject: subject,
-	}, nil, files)
+	}, reviewers, files)
 }
 
 func (x *TagXReposTasks) AwaitGoMod(ctx *wf.TaskContext, changeID, repo, branch string) (string, error) {
@@ -658,11 +666,7 @@ func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit stri
 		return TagRepo{}, fmt.Errorf("couldn't pick next version for %v: %v", repo.Name, err)
 	}
 
-	// TODO(heschi): delete after first couple uses
-	ctx.Printf("Waiting for approval to tag %v at %v as %v", repo.Name, commit, repo.Version)
-	if err := x.ApproveAction(ctx); err != nil {
-		return TagRepo{}, err
-	}
+	ctx.Printf("Tagging %v at %v as %v", repo.Name, commit, repo.Version)
 	return repo, x.Gerrit.Tag(ctx, repo.Name, repo.Version, commit)
 }
 

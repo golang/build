@@ -212,7 +212,6 @@ func main() {
 		CreateBuildlet:   coordinator.CreateBuildlet,
 		LatestGoBinaries: task.LatestGoBinaries,
 		DashboardURL:     "https://build.golang.org",
-		ApproveAction:    relui.ApproveActionDep(dbPool),
 	}
 	dh.RegisterDefinition("Tag x/ repos", tagTasks.NewDefinition())
 	dh.RegisterDefinition("Tag a single x/ repo", tagTasks.NewSingleDefinition())
