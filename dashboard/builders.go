@@ -2811,6 +2811,7 @@ func init() {
 		},
 		RunBench:     true,
 		SkipSnapshot: true,
+		KnownIssues:  []int{53538},
 	})
 }
 
