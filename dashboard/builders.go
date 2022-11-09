@@ -1032,17 +1032,34 @@ func (c *HostConfig) BuildletBinaryURL(e *buildenv.Environment) string {
 	return "https://storage.googleapis.com/" + e.BuildletBucket + "/buildlet." + c.HostArch
 }
 
+// IsRace reports whether this is a race builder.
+// A race builder runs tests without the -short flag.
+//
+// A builder is considered to be a race builder
+// if and only if it one of the components of the builder
+// name is "race" (components are delimited by "-").
 func (c *BuildConfig) IsRace() bool {
-	return strings.HasSuffix(c.Name, "-race")
+	for _, s := range strings.Split(c.Name, "-") {
+		if s == "race" {
+			return true
+		}
+	}
+	return false
 }
 
 // IsLongTest reports whether this is a longtest builder.
 // A longtest builder runs tests without the -short flag.
 //
 // A builder is considered to be a longtest builder
-// if and only if its name ends with "-longtest".
+// if and only if it one of the components of the builder
+// name is "longtest" (components are delimited by "-").
 func (c *BuildConfig) IsLongTest() bool {
-	return strings.HasSuffix(c.Name, "-longtest")
+	for _, s := range strings.Split(c.Name, "-") {
+		if s == "longtest" {
+			return true
+		}
+	}
+	return false
 }
 
 // OutboundNetworkAllowed reports whether this builder should be
@@ -1862,6 +1879,23 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-amd64-longtest-race",
+		HostType: "host-linux-amd64-bullseye",
+		Notes:    "Debian Bullseye with the race detector enabled and go test -short=false",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		needsGoProxy: true, // for cmd/go module tests
+		env: []string{
+			"GO_TEST_TIMEOUT_SCALE=5", // Inherited from the longtest builder.
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-longtest",

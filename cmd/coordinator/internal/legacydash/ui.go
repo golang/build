@@ -889,7 +889,15 @@ func builderSubheading(s string) string {
 // For race builders it returns the empty string.
 func builderSubheading2(s string) string {
 	if isRace(s) {
-		return ""
+		// Remove "race" and just take whatever the third component is after.
+		var split []string
+		for _, sc := range strings.Split(s, "-") {
+			if sc == "race" {
+				continue
+			}
+			split = append(split, sc)
+		}
+		s = strings.Join(split, "-")
 	}
 	_, secondThird := splitDash(s)
 	_, third := splitDash(secondThird)

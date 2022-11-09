@@ -894,24 +894,49 @@ func TestExpectedMacstadiumVMCount(t *testing.T) {
 	}
 }
 
-// Test that we have a longtest builder and
-// that its environment configuration is okay.
+// Test that we have longtest builders and
+// that their environment configurations are okay.
 func TestLongTestBuilder(t *testing.T) {
-	long, ok := Builders["linux-amd64-longtest"]
-	if !ok {
-		t.Fatal("we don't have a linux-amd64-longtest builder anymore, is that intentional?")
+	for _, name := range []string{"linux-amd64-longtest", "linux-amd64-longtest-race"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			long, ok := Builders[name]
+			if !ok {
+				t.Fatalf("we don't have a %s builder anymore, is that intentional?", name)
+			}
+			if !long.IsLongTest() {
+				t.Errorf("the %s builder isn't a longtest builder, is that intentional?", name)
+			}
+			var shortDisabled bool
+			for _, e := range long.Env() {
+				if e == "GO_TEST_SHORT=0" {
+					shortDisabled = true
+				}
+			}
+			if !shortDisabled {
+				t.Errorf("the %s builder doesn't set GO_TEST_SHORT=0, is that intentional?", name)
+			}
+		})
 	}
-	if !long.IsLongTest() {
-		t.Error("the linux-amd64-longtest builder isn't a longtest builder, is that intentional?")
-	}
-	var shortDisabled bool
-	for _, e := range long.Env() {
-		if e == "GO_TEST_SHORT=0" {
-			shortDisabled = true
-		}
-	}
-	if !shortDisabled {
-		t.Error("the linux-amd64-longtest builder doesn't set GO_TEST_SHORT=0, is that intentional?")
+}
+
+// Test that we have race builders and
+// that their environment configurations are okay.
+func TestRaceBuilder(t *testing.T) {
+	for _, name := range []string{"linux-amd64-race", "linux-amd64-longtest-race"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			race, ok := Builders[name]
+			if !ok {
+				t.Fatalf("we don't have a %s builder anymore, is that intentional?", name)
+			}
+			if !race.IsRace() {
+				t.Errorf("the %s builder isn't a race builder, is that intentional?", name)
+			}
+			if script := race.AllScript(); !strings.Contains(script, "race") {
+				t.Errorf("the %s builder doesn't use race.bash or race.bat, it uses %s instead, is that intentional?", name, script)
+			}
+		})
 	}
 }
 
