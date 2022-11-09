@@ -17,16 +17,19 @@ To bring up a new host:
 
 1. In the EC2 console, go to "Dedicated Hosts" -> "Allocate Dedicated Host".
 2. Configure host type, zone. Instance family `mac1` is amd64; `mac2` is arm64.
-3. Once allocated and available, select the host and click "Actions" -> "Launch
-   Instance(s) onto host".
-4. Select a macOS AMI. If starting fresh, select the latest macOS version from
+3. Enable "Instance auto-placement", which allows any instance to run on this
+   host.
+4. Once the host is allocated and available, go to the "Instances" page and
+   click "Launch an instance".
+5. Select a macOS AMI. If starting fresh, select the latest macOS version from
    "Quick Start". If simply adding more instances, a fully set-up AMI is saved
    in "My AMIs".
-5. Select a "Key pair" for SSH access. `ec2-go-builders` for official builders,
+6. Select a "Key pair" for SSH access. `ec2-go-builders` for official builders,
    a custom key for testing. You will need the private key to login.
-6. Configure a 200GB disk.
-7. If creating from a fully set-up AMI, uncheck "Allow SSH Traffic".
-7. Other settings can remain at default. Launch instance.
+7. Configure a 200GB disk.
+8. If creating from a fully set-up AMI, uncheck "Allow SSH Traffic".
+9. Under "Advanced", select "Tenancy" -> "Dedicated host".
+10. Other settings can remain at default. Launch instance.
 
 If creating from a fully set-up AMI, you are done!
 
