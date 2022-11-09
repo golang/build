@@ -1,0 +1,11 @@
+# Copyright 2022 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'build', '-t', 'golang/buildlet-stage0:latest', '-f', 'cmd/buildlet/stage0/Dockerfile', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [ 'build', '-t', 'gcr.io/symbolic-datum-552/linux-x86-sid:cloudbuild', '-f', 'env/linux-x86-sid/Dockerfile', '.']
+images:
+  - 'gcr.io/symbolic-datum-552/linux-x86-sid:cloudbuild'

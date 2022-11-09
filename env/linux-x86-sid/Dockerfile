@@ -4,7 +4,7 @@
 
 FROM golang/buildlet-stage0 AS stage0
 
-FROM debian:sid-20191014
+FROM debian:sid
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
@@ -20,6 +20,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # qemu-user: QEMU (machine emulator and virtualizer) user-space emulation
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
+	libcrypt1 \
 	ca-certificates \
 	curl \
 	gdb \
