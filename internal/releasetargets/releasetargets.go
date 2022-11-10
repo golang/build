@@ -77,7 +77,7 @@ var allReleases = map[int]ReleaseTargets{
 			Builder: "linux-arm-aws",
 		},
 		"linux-arm64": &Target{
-			Builder: "linux-arm64-aws",
+			Builder: "linux-arm64",
 		},
 		"linux-amd64": &Target{
 			Builder:         "linux-amd64-stretch",

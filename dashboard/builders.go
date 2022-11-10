@@ -37,7 +37,7 @@ var slowBotAliases = map[string]string{
 	"android-arm":          "android-arm-corellium",
 	"android-arm64":        "android-arm64-corellium",
 	"arm":                  "linux-arm-aws",
-	"arm64":                "linux-arm64-aws",
+	"arm64":                "linux-arm64",
 	"darwin":               "darwin-amd64-12_0",
 	"darwin-amd64":         "darwin-amd64-12_0",
 	"darwin-arm64":         "darwin-arm64-12",
@@ -55,7 +55,6 @@ var slowBotAliases = map[string]string{
 	"js":                   "js-wasm",
 	"linux":                "linux-amd64",
 	"linux-arm":            "linux-arm-aws",
-	"linux-arm64":          "linux-arm64-aws",
 	"linux-loong64":        "linux-loong64-3a5000",
 	"linux-mips":           "linux-mips-rtrk",
 	"linux-mips64":         "linux-mips64-rtrk",
@@ -2583,15 +2582,14 @@ func init() {
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
 	})
 	addBuilder(BuildConfig{
-		Name:              "linux-arm64-aws",
-		HostType:          "host-linux-arm64-aws",
-		tryBot:            defaultTrySet(),
-		numTryTestHelpers: 1,
+		Name:     "linux-arm64-aws",
+		HostType: "host-linux-arm64-aws",
 	})
 	addBuilder(BuildConfig{
-		Name:        "linux-arm64",
-		HostType:    "host-linux-arm64-bullseye",
-		KnownIssues: []int{53851},
+		Name:              "linux-arm64",
+		HostType:          "host-linux-arm64-bullseye",
+		tryBot:            defaultTrySet(),
+		numTryTestHelpers: 1,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-boringcrypto",

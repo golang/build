@@ -24,8 +24,8 @@ linux-amd64     linux      amd64      linux-amd64-stretch
 	Race enabled, Long tests on linux-amd64-longtest
 	Running on GCP
 
-linux-arm64     linux      arm64      linux-arm64-aws
-	Running on AWS
+linux-arm64     linux      arm64      linux-arm64
+	Running on GCP
 
 linux-armv6l    linux      arm        linux-arm-aws
 	Running on AWS
@@ -76,8 +76,8 @@ linux-amd64     linux      amd64      linux-amd64-buster
 	Race enabled, Long tests on linux-amd64-longtest
 	Running on GCP
 
-linux-arm64     linux      arm64      linux-arm64-aws
-	Running on AWS
+linux-arm64     linux      arm64      linux-arm64
+	Running on GCP
 
 linux-armv6l    linux      arm        linux-arm-aws
 	Running on AWS
@@ -125,8 +125,8 @@ linux-amd64     linux      amd64      linux-amd64-bullseye
 	Long tests on linux-amd64-longtest
 	Running on GCP
 
-linux-arm64     linux      arm64      linux-arm64-aws
-	Running on AWS
+linux-arm64     linux      arm64      linux-arm64
+	Running on GCP
 
 linux-armv6l    linux      arm        linux-arm-aws
 	Running on AWS

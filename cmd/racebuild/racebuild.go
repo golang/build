@@ -195,7 +195,7 @@ popd
 	&Platform{
 		OS:   "linux",
 		Arch: "arm64",
-		Type: "linux-arm64-aws",
+		Type: "linux-arm64",
 		Script: `#!/usr/bin/env bash
 set -e
 apt-get update
