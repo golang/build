@@ -144,8 +144,8 @@ builders.
    1. Available as `Sysroot-macos-x86_64` in
       https://github.com/utmapp/UTM/actions?query=event%3Arelease builds.
 3. Copy `bootptab` to `/etc/bootptab`.
-4. Restart the system DHCP server to pick up the new `bootptab`: `sudo /bin/launchctl unload -w /System/Library/LaunchDaemons/bootps.plist && sudo /bin/launchctl load -w /System/Library/LaunchDaemons/bootps.plist`.
-4. Copy `qemu.sh` and `start-snapshot.sh` to `$HOME`.
+4. Restart the system DHCP server to pick up the new `bootptab`: `sudo /bin/launchctl unload -w /System/Library/LaunchDaemons/bootps.plist; sudo /bin/launchctl load -w /System/Library/LaunchDaemons/bootps.plist`.
+4. Build `golang.org/x/build/cmd/runqemubuildlet` and copy it to `$HOME`.
 5. Create `$HOME/loop1.sh`:
 
 ```sh
@@ -153,7 +153,7 @@ builders.
 
 while true; do
   echo "Running QEMU..."
-  $HOME/start-snapshot.sh $HOME/macos.qcow2 ${OSK_VALUE?} 1
+  $HOME/runqemubuildlet -guest-os=darwin -macos-version=${MACOS_VERSION?} -osk=${OSK_VALUE?} -guest-index=1 -buildlet-healthz-url="http://192.168.64.101:8080/healthz"
 done
 ```
 
@@ -164,7 +164,7 @@ done
 
 while true; do
   echo "Running QEMU..."
-  $HOME/start-snapshot.sh $HOME/macos.qcow2 ${OSK_VALUE?} 2
+  $HOME/runqemubuildlet -guest-os=darwin -macos-version=${MACOS_VERSION?} -osk=${OSK_VALUE?} -guest-index=2 -buildlet-healthz-url="http://192.168.64.102:8080/healthz"
 done
 ```
 

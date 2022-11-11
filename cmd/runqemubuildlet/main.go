@@ -23,11 +23,19 @@ import (
 
 var (
 	// Common flags
-	guestOS    = flag.String("guest-os", "windows", "Guest OS to run (one of: windows)")
+	guestOS    = flag.String("guest-os", "windows", "Guest OS to run (one of: windows or darwin)")
 	healthzURL = flag.String("buildlet-healthz-url", "http://localhost:8080/healthz", "URL to buildlet /healthz endpoint.")
 
 	// -guest-os=windows flags
 	windows10Path = flag.String("windows-10-path", defaultWindowsDir(), "Path to Windows image and QEMU dependencies.")
+
+	// -guest-os=darwin flags
+	darwinPath = flag.String("darwin-path", defaultDarwinDir(), "Path to darwin image and QEMU dependencies.")
+	// Using an int for this isn't great, but the only thing we need to do
+	// is check if the version is >= 11.
+	macosVersion = flag.Int("macos-version", 0, "macOS major version of guest image (e.g., 10, 11, 12, or 13)")
+	guestIndex   = flag.Int("guest-index", 1, "Index indicating which of the two instances on this host that this is (one of: 1 or 2)")
+	osk          = flag.String("osk", "", "Apple OSK key value")
 )
 
 func main() {
@@ -39,6 +47,8 @@ func main() {
 	for ctx.Err() == nil {
 		var cmd *exec.Cmd
 		switch *guestOS {
+		case "darwin":
+			cmd = darwinCmd(*darwinPath)
 		case "windows":
 			cmd = windows10Cmd(*windows10Path)
 		default:
