@@ -35,7 +35,9 @@ args=(
   -device ich9-ahci,id=sata
   -drive id=MacHDD,if=none,format=qcow2,file="$DISK"
   -device ide-hd,bus=sata.2,drive=MacHDD
-  -netdev vmnet-shared,id=net0
+  # DHCP range is a dummy range. The actual guest IP is assigned statically
+  # based on the MAC address matching an entry in /etc/bootptab.
+  -netdev vmnet-shared,id=net0,start-address=192.168.64.1,end-address=192.168.64.100,subnet-mask=255.255.255.0
   -device virtio-net-pci,netdev=net0,id=net0,mac=52:54:00:c9:18:0$PORT # for macOS >= 11
   # -device vmxnet3,netdev=net0,id=net0,mac=52:54:00:c9:18:0$PORT # for macOS < 11
   -monitor stdio

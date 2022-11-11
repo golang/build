@@ -1,0 +1,7 @@
+# Copyright 2022 Go Authors All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+%%
+# hostname      hwtype  hwaddr              ipaddr          bootfile
+builder-guest-1 1       52:54:00:c9:18:01   192.168.64.101
+builder-guest-2 1       52:54:00:c9:18:02   192.168.64.102

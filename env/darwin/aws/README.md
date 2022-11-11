@@ -143,8 +143,10 @@ builders.
 2. Download the UTM QEMU fork and extract to `~/sysroot-macos-x86_64`.
    1. Available as `Sysroot-macos-x86_64` in
       https://github.com/utmapp/UTM/actions?query=event%3Arelease builds.
-3. Copy `qemu.sh` and `start-snapshot.sh` to `$HOME`.
-4. Create `$HOME/loop1.sh`:
+3. Copy `bootptab` to `/etc/bootptab`.
+4. Restart the system DHCP server to pick up the new `bootptab`: `sudo /bin/launchctl unload -w /System/Library/LaunchDaemons/bootps.plist && sudo /bin/launchctl load -w /System/Library/LaunchDaemons/bootps.plist`.
+4. Copy `qemu.sh` and `start-snapshot.sh` to `$HOME`.
+5. Create `$HOME/loop1.sh`:
 
 ```sh
 #!/bin/bash
