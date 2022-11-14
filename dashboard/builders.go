@@ -447,9 +447,23 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername: "root",
 		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
+	"host-netbsd-386-9_3": {
+		VMImage:     "netbsd-i386-9-3-202211120320",
+		Notes:       "NetBSD 9.3; GCE VM is built from script in build/env/netbsd-386",
+		machineType: "n2", // force Intel; see go.dev/issue/49209
+		SSHUsername: "root",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
+	},
 	"host-netbsd-amd64-9_0": {
 		VMImage:     "netbsd-amd64-9-0-2019q4",
 		Notes:       "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64",
+		machineType: "n2", // force Intel; see go.dev/issue/49209
+		SSHUsername: "root",
+		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
+	},
+	"host-netbsd-amd64-9_3": {
+		VMImage:     "netbsd-amd64-9-3-202211120320v2",
+		Notes:       "NetBSD 9.3; GCE VM is built from script in build/env/netbsd-amd64",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		SSHUsername: "root",
 		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
@@ -2066,6 +2080,18 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:           "netbsd-386-9_0",
+		HostType:       "host-netbsd-386-9_0",
+		distTestAdjust: noTestDirAndNoReboot,
+		KnownIssues:    []int{50138},
+	})
+	addBuilder(BuildConfig{
+		Name:           "netbsd-386-9_3",
+		HostType:       "host-netbsd-386-9_3",
+		distTestAdjust: noTestDirAndNoReboot,
+		KnownIssues:    []int{54773},
+	})
+	addBuilder(BuildConfig{
 		Name:           "netbsd-amd64-9_0",
 		HostType:       "host-netbsd-amd64-9_0",
 		distTestAdjust: noTestDirAndNoReboot,
@@ -2073,10 +2099,10 @@ func init() {
 		KnownIssues:    []int{50138},
 	})
 	addBuilder(BuildConfig{
-		Name:           "netbsd-386-9_0",
-		HostType:       "host-netbsd-386-9_0",
+		Name:           "netbsd-amd64-9_3",
+		HostType:       "host-netbsd-amd64-9_3",
 		distTestAdjust: noTestDirAndNoReboot,
-		KnownIssues:    []int{50138},
+		KnownIssues:    []int{54773},
 	})
 	addBuilder(BuildConfig{
 		Name:     "netbsd-arm-bsiegert",
