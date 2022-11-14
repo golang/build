@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/gregjones/httpcache"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/https"
@@ -723,10 +723,16 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	}
 
 	var pushOpts string
+	if pr.GetDraft() {
+		pushOpts = "%wip"
+	} else {
+		pushOpts = "%ready"
+	}
+
 	if cl == nil {
 		// Add this informational message only on CL creation.
 		msg := fmt.Sprintf("This Gerrit CL corresponds to GitHub PR %s.\n\nAuthor: %s", prShortLink(pr), author)
-		pushOpts = "%m=" + url.QueryEscape(msg)
+		pushOpts += ",m=" + url.QueryEscape(msg)
 	}
 
 	// nokeycheck is specified to avoid failing silently when a review is created
@@ -877,7 +883,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	// See if there is a dup comment from when GerritBot last got
 	// its data from maintner.
 	ics, resp, err := b.githubClient.Issues.ListComments(ctx, org, repo, issueNum, &github.IssueListCommentsOptions{
-		Since:       since,
+		Since:       &since,
 		ListOptions: github.ListOptions{PerPage: 1000},
 	})
 	if err != nil {
