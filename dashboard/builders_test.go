@@ -220,7 +220,7 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64-aws",
-				"netbsd-amd64-9_0",
+				"netbsd-amd64-9_3",
 				"openbsd-386-70",
 				"openbsd-amd64-70",
 				"windows-386-2008",
@@ -431,11 +431,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_3", "mobile"), none},
 
 		// NetBSD
-		{b("netbsd-amd64-9_0", "go"), onlyPost},
-		{b("netbsd-amd64-9_0", "net"), onlyPost},
-		{b("netbsd-amd64-9_0", "sys"), both},
-		{b("netbsd-386-9_0", "go"), onlyPost},
-		{b("netbsd-386-9_0", "net"), onlyPost},
+		{b("netbsd-amd64-9_3", "go"), onlyPost},
+		{b("netbsd-amd64-9_3", "net"), onlyPost},
+		{b("netbsd-amd64-9_3", "sys"), both},
+		{b("netbsd-386-9_3", "go"), onlyPost},
+		{b("netbsd-386-9_3", "net"), onlyPost},
 
 		// AIX
 		{b("aix-ppc64", "go"), onlyPost},

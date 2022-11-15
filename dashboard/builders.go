@@ -72,9 +72,9 @@ var slowBotAliases = map[string]string{
 	"mips64":               "linux-mips64-rtrk",
 	"mips64le":             "linux-mips64le-rtrk",
 	"mipsle":               "linux-mipsle-rtrk",
-	"netbsd":               "netbsd-amd64-9_0",
-	"netbsd-386":           "netbsd-386-9_0",
-	"netbsd-amd64":         "netbsd-amd64-9_0",
+	"netbsd":               "netbsd-amd64-9_3",
+	"netbsd-386":           "netbsd-386-9_3",
+	"netbsd-amd64":         "netbsd-amd64-9_3",
 	"netbsd-arm":           "netbsd-arm-bsiegert",
 	"netbsd-arm64":         "netbsd-arm64-bsiegert",
 	"nocgo":                "linux-amd64-nocgo",
@@ -2089,20 +2089,18 @@ func init() {
 		Name:           "netbsd-386-9_3",
 		HostType:       "host-netbsd-386-9_3",
 		distTestAdjust: noTestDirAndNoReboot,
-		KnownIssues:    []int{54773},
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-amd64-9_0",
 		HostType:       "host-netbsd-amd64-9_0",
 		distTestAdjust: noTestDirAndNoReboot,
-		tryBot:         explicitTrySet("sys"),
 		KnownIssues:    []int{50138},
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-amd64-9_3",
 		HostType:       "host-netbsd-amd64-9_3",
 		distTestAdjust: noTestDirAndNoReboot,
-		KnownIssues:    []int{54773},
+		tryBot:         explicitTrySet("sys"),
 	})
 	addBuilder(BuildConfig{
 		Name:     "netbsd-arm-bsiegert",

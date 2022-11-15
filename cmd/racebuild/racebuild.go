@@ -214,7 +214,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_linux_arm64.syso go/src/runtime/rac
 	&Platform{
 		OS:   "netbsd",
 		Arch: "amd64",
-		Type: "netbsd-amd64-9_0",
+		Type: "netbsd-amd64-9_3",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
