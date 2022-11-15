@@ -23,8 +23,9 @@ require (
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3
 	github.com/golang/protobuf v1.5.2
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.5.9
 	github.com/google/go-github v17.0.0+incompatible
+	github.com/google/go-github/v48 v48.1.0
 	github.com/google/safehtml v0.0.3-0.20220430015336-00016cfeca15
 	github.com/google/uuid v1.2.0
 	github.com/googleapis/gax-go/v2 v2.1.1
@@ -86,7 +87,7 @@ require (
 	github.com/go-pdf/fpdf v0.5.0 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
-	github.com/google/go-querystring v1.0.0 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/repos"
 )
