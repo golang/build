@@ -27,6 +27,15 @@ To run the analysis frontend:
 Browse to https://localhost:8080 (note that the instance uses a self-signed
 certificate).
 
+To run the analysis frontend connected to a local InfluxDB instance, first
+follow [the instructions to set one up](../influx/README.md).
+Then, run the above command but with the `-influx-host` and `-influx-token`
+flags set to their appropriate values (as specified by the InfluxDB setup
+instructions).
+
+Send an HTTP request to https://localhost:8080/cron/sync-influx to sync the
+local instances together.
+
 ## Google Cloud
 
 One-time setup:
