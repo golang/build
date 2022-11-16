@@ -443,7 +443,7 @@ func (b *bot) processPullRequest(ctx context.Context, pr *github.PullRequest) er
 		return fmt.Errorf("syncGerritCommentsToGitHub: %v", err)
 	}
 
-	if cmsg == cl.Commit.Msg {
+	if cmsg == cl.Commit.Msg && pr.GetDraft() == cl.WorkInProgress() {
 		log.Printf("Change https://go-review.googlesource.com/q/%s is up to date; nothing to do.",
 			cl.ChangeID())
 		return nil
