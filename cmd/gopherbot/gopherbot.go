@@ -2411,10 +2411,12 @@ func hasServiceUserTag(a gerrit.AccountInfo) bool {
 	return false
 }
 
-// autoSubmitCLs submits CLs which are labelled "Auto-Submit", are submittable according to Gerrit,
-// have a positive TryBot-Result label, and have no unresolved comments.
+// autoSubmitCLs submits CLs which are labelled "Auto-Submit",
+// have all submit requirements satisfied according to Gerrit, and
+// aren't waiting for a parent CL in the stack to be handled
+// or the wait-release hashtag to be removed.
 //
-// See golang.org/issue/48021.
+// See go.dev/issue/48021.
 func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
 		if gp.Server() != "go.googlesource.com" {
@@ -2439,7 +2441,7 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 				return nil
 			}
 
-			// Skip this CL if there aren't Auto-Submit+1 and TryBot-Result+1 labels.
+			// Skip this CL if Auto-Submit+1 isn't actively set on it.
 			changeInfo, err := b.gerrit.GetChange(ctx, fmt.Sprint(cl.Number), gerrit.QueryChangesOpt{Fields: []string{"LABELS", "SUBMITTABLE"}})
 			if err != nil {
 				if httpErr, ok := err.(*gerrit.HTTPError); ok && httpErr.Res.StatusCode == http.StatusNotFound {
@@ -2448,7 +2450,7 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 				log.Printf("Could not retrieve change %q: %v", gc.ID(), err)
 				return nil
 			}
-			if !(changeInfo.Labels["Auto-Submit"].Approved != nil && changeInfo.Labels["TryBot-Result"].Approved != nil) {
+			if autosubmitActive := changeInfo.Labels["Auto-Submit"].Approved != nil; !autosubmitActive {
 				return nil
 			}
 			// NOTE: we might be able to skip this as well, since the revision action
@@ -2461,43 +2463,6 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 			for _, ht := range changeInfo.Hashtags {
 				if ht == "wait-release" {
 					return nil
-				}
-			}
-
-			// Skip this CL if there are any unresolved comment threads.
-			comments, err := b.gerrit.ListChangeComments(ctx, fmt.Sprint(cl.Number))
-			if err != nil {
-				return err
-			}
-			for _, commentSet := range comments {
-				// The API doesn't sort comments chronologically, but "the state of
-				// resolution of a comment thread is stored in the last comment in that
-				// thread chronologically", so first of all sort them by time.
-				sort.Slice(commentSet, func(i, j int) bool {
-					return commentSet[i].Updated.Time().Before(commentSet[j].Updated.Time())
-				})
-
-				// roots is a map of message IDs to their thread root.
-				roots := make(map[string]string)
-				threads := make(map[string]bool)
-				for _, c := range commentSet {
-					if c.InReplyTo == "" {
-						roots[c.ID] = c.ID
-						threads[c.ID] = *c.Unresolved
-						continue
-					}
-
-					root, ok := roots[c.InReplyTo]
-					if !ok {
-						return fmt.Errorf("failed to determine unresolved state in CL %d: comment %q (parent of comment %q) is not found", cl.Number, c.InReplyTo, c.ID)
-					}
-					roots[c.ID] = root
-					threads[root] = *c.Unresolved
-				}
-				for _, unresolved := range threads {
-					if unresolved {
-						return nil
-					}
 				}
 			}
 
