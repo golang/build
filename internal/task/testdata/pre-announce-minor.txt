@@ -1,6 +1,6 @@
 Hello gophers,
 
-We plan to issue Go 1.18.4 and Go 1.17.12 on Tuesday, July 12.
+We plan to issue Go 1.18.4 and Go 1.17.12 during US business hours on Tuesday, July 12.
 
 These minor releases include PRIVATE security fixes to the standard library.
 

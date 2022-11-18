@@ -2,7 +2,7 @@ Subject: [security] Go {{short .Version}}{{with .SecondaryVersion}} and Go {{. |
 
 Hello gophers,
 
-We plan to issue Go {{short .Version}}{{with .SecondaryVersion}} and Go {{. | short}}{{end}} on {{.Target.Format "Monday, January 2"}}.
+We plan to issue Go {{short .Version}}{{with .SecondaryVersion}} and Go {{. | short}}{{end}} during US business hours on {{.Target.Format "Monday, January 2"}}.
 
 {{if .SecondaryVersion -}}
 These minor releases include

@@ -1,6 +1,6 @@
 Hello gophers,
 
-We plan to issue Go 1.18.4 on Tuesday, July 12.
+We plan to issue Go 1.18.4 during US business hours on Tuesday, July 12.
 
 This minor release includes PRIVATE security fixes to the toolchain.
 

@@ -292,7 +292,7 @@ func TestPreAnnounceRelease(t *testing.T) {
 
 pre-announcement body HTML:
 <p>Hello gophers,</p>
-<p>We plan to issue Go 1.18.4 and Go 1.17.11 on Tuesday, July 12.</p>
+<p>We plan to issue Go 1.18.4 and Go 1.17.11 during US business hours on Tuesday, July 12.</p>
 <p>These minor releases include PRIVATE security fixes to the standard library.</p>
 <p>Following our security policy, this is the pre-announcement of those releases.</p>
 <p>Thanks,<br>
@@ -301,7 +301,7 @@ Tatiana for the Go team</p>
 pre-announcement body text:
 Hello gophers,
 
-We plan to issue Go 1.18.4 and Go 1.17.11 on Tuesday, July 12.
+We plan to issue Go 1.18.4 and Go 1.17.11 during US business hours on Tuesday, July 12.
 
 These minor releases include PRIVATE security fixes to the standard library.
 
