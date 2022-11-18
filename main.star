@@ -28,7 +28,7 @@ luci.project(
                 "role/swarming.poolUser",
                 "role/swarming.taskTriggerer",
             ],
-            groups = "golang-luci-admin",
+            groups = "mdb/golang-luci-admin",
         ),
 
         # Allow any googler to see all bots and tasks there.
