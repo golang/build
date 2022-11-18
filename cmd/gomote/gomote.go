@@ -82,7 +82,7 @@ directly (for example, when working on the buildlet code), you can
 skip the "gomote create" step and use the special builder name
 "<build-config-name>@ip[:port>", such as "windows-amd64-2008@10.1.5.3".
 
-## Groups
+# Groups
 
 Instances may be managed in named groups, and commands are broadcast to all
 instances in the group.
@@ -114,7 +114,7 @@ As this example demonstrates, groups are useful even if the group
 contains only a single instance: it can dramatically shorten most gomote
 commands.
 
-## Tips and tricks
+# Tips and tricks
 
 - The create command accepts the -setup flag which also pushes a GOROOT
   and runs the appropriate equivalent of "make.bash" for the instance.
@@ -139,14 +139,6 @@ to reproduce a rare failure, like so:
 	$ export GOMOTE_GROUP=debug
 	$ GOROOT=/path/to/goroot gomote create -setup -count=10 linux-amd64
 	$ gomote run -until='unexpected return pc' -collect go/bin/go run -run="MyFlakyTest" -count=100 runtime
-
-# Recent breaking CLI changes
-
-- gettar writes to <instance name>.tar.gz by default, not to stdout.
-- puttar has a new CLI that accepts a wider range of sources as an
-  argument, removing a few mutually exclusive flags.
-- More output is now emitted, but those = lines always start with "#"
-  so they're fairly easy to filter out.
 
 */
 package main
