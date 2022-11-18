@@ -43,6 +43,12 @@ luci.project(
             groups = "googlers",
         )
     ],
+    acls = [
+        acl.entry(
+            roles = acl.PROJECT_CONFIGS_READER,
+            groups = "googlers",
+        ),
+    ],
 )
 
 # Per-service tweaks.
