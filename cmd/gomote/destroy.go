@@ -69,7 +69,7 @@ func destroy(args []string) error {
 			client := gomoteServerClient(context.Background())
 			resp, err := client.ListInstances(context.Background(), &protos.ListInstancesRequest{})
 			if err != nil {
-				log.Fatalf("unable to list possible instances to destroy: %s", statusFromError(err))
+				log.Fatalf("unable to list possible instances to destroy: %v", err)
 			}
 			if len(resp.GetInstances()) > 0 {
 				fmt.Printf("possible instances:\n")
@@ -102,7 +102,7 @@ func destroy(args []string) error {
 		if _, err := client.DestroyInstance(ctx, &protos.DestroyInstanceRequest{
 			GomoteId: name,
 		}); err != nil {
-			return fmt.Errorf("unable to destroy instance: %s", statusFromError(err))
+			return fmt.Errorf("unable to destroy instance: %w", err)
 		}
 	}
 	if activeGroup != nil {

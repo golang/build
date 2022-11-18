@@ -86,7 +86,7 @@ func doPing(ctx context.Context, name string) error {
 		GomoteId: name,
 	})
 	if err != nil {
-		return fmt.Errorf("unable to ping instance: %s", statusFromError(err))
+		return fmt.Errorf("unable to ping instance: %w", err)
 	}
 	return nil
 }

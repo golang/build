@@ -59,7 +59,7 @@ func rm(args []string) error {
 	if err := doPing(ctx, fs.Arg(0)); instanceDoesNotExist(err) {
 		// When there's no active group, this is just an error.
 		if activeGroup == nil {
-			return fmt.Errorf("instance %q: %s", fs.Arg(0), statusFromError(err))
+			return fmt.Errorf("instance %q: %w", fs.Arg(0), err)
 		}
 		// When there is an active group, this just means that we're going
 		// to use the group instead and assume the rest is a command.
@@ -79,7 +79,7 @@ func rm(args []string) error {
 		}
 		paths = fs.Args()[1:]
 	} else {
-		return fmt.Errorf("checking instance %q: %v", fs.Arg(0), err)
+		return fmt.Errorf("checking instance %q: %w", fs.Arg(0), err)
 	}
 
 	eg, ctx := errgroup.WithContext(context.Background())
@@ -98,7 +98,7 @@ func doRm(ctx context.Context, inst string, paths []string) error {
 		GomoteId: inst,
 		Paths:    paths,
 	}); err != nil {
-		return fmt.Errorf("unable to remove files: %s", statusFromError(err))
+		return fmt.Errorf("unable to remove files: %w", err)
 	}
 	return nil
 }

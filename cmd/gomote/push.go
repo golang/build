@@ -85,7 +85,7 @@ func legacyPush(args []string) error {
 		}
 
 	}); err != nil {
-		return fmt.Errorf("error listing buildlet's existing files: %v", err)
+		return fmt.Errorf("error listing buildlet's existing files: %w", err)
 	}
 
 	if !haveGo14 {
@@ -182,7 +182,7 @@ func legacyPush(args []string) error {
 		local[rel] = inf
 		return nil
 	}); err != nil {
-		return fmt.Errorf("error enumerating local GOROOT files: %v", err)
+		return fmt.Errorf("error enumerating local GOROOT files: %w", err)
 	}
 
 	var toDel []string
@@ -231,7 +231,7 @@ func legacyPush(args []string) error {
 		} else {
 			log.Printf("Deleting remote files: %q", withGo)
 			if err := bc.RemoveAll(ctx, withGo...); err != nil {
-				return fmt.Errorf("Deleting remote unwanted files: %v", err)
+				return fmt.Errorf("Deleting remote unwanted files: %w", err)
 			}
 		}
 	}
@@ -284,7 +284,7 @@ func legacyPush(args []string) error {
 			return nil
 		}
 		if err := bc.PutTar(ctx, tgz, "go"); err != nil {
-			return fmt.Errorf("writing tarball to buildlet: %v", err)
+			return fmt.Errorf("writing tarball to buildlet: %w", err)
 		}
 	}
 	return nil
@@ -356,7 +356,7 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		Digest: true,
 	})
 	if err != nil {
-		return fmt.Errorf("error listing buildlet's existing files: %s", statusFromError(err))
+		return fmt.Errorf("error listing buildlet's existing files: %w", err)
 	}
 	for _, entry := range resp.GetEntries() {
 		de := buildlet.DirEntry{Line: entry}
@@ -378,7 +378,7 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 				GomoteId: name,
 			})
 			if err != nil {
-				return fmt.Errorf("unable to add bootstrap version of Go to instance: %s", statusFromError(err))
+				return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
 			}
 		}
 	}
@@ -464,7 +464,7 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		local[rel] = inf
 		return nil
 	}); err != nil {
-		return fmt.Errorf("error enumerating local GOROOT files: %v", err)
+		return fmt.Errorf("error enumerating local GOROOT files: %w", err)
 	}
 
 	var toDel []string
@@ -516,7 +516,7 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 				GomoteId: name,
 				Paths:    withGo,
 			}); err != nil {
-				return fmt.Errorf("failed to delete remote unwanted files: %s", statusFromError(err))
+				return fmt.Errorf("failed to delete remote unwanted files: %w", err)
 			}
 		}
 	}
@@ -566,17 +566,17 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		}
 		resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
 		if err != nil {
-			return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
+			return fmt.Errorf("unable to request credentials for a file upload: %w", err)
 		}
 		if err := uploadToGCS(ctx, resp.GetFields(), tgz, resp.GetObjectName(), resp.GetUrl()); err != nil {
-			return fmt.Errorf("unable to upload file to GCS: %s", err)
+			return fmt.Errorf("unable to upload file to GCS: %w", err)
 		}
 		if _, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
 			GomoteId:  name,
 			Url:       fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
 			Directory: "go",
 		}); err != nil {
-			return fmt.Errorf("failed writing tarball to buildlet: %s", statusFromError(err))
+			return fmt.Errorf("failed writing tarball to buildlet: %w", err)
 		}
 	}
 	return nil
@@ -655,7 +655,7 @@ func generateDeltaTgz(goroot string, files []string) (*bytes.Buffer, error) {
 		}
 		if _, err := io.CopyN(tw, f, header.Size); err != nil {
 			f.Close()
-			return nil, fmt.Errorf("error copying contents of %s: %v", file, err)
+			return nil, fmt.Errorf("error copying contents of %s: %w", file, err)
 		}
 		f.Close()
 	}
@@ -687,7 +687,7 @@ func getGOROOT() (string, error) {
 	if goroot == "" {
 		slurp, err := exec.Command("go", "env", "GOROOT").Output()
 		if err != nil {
-			return "", fmt.Errorf("failed to get GOROOT from go env: %v", err)
+			return "", fmt.Errorf("failed to get GOROOT from go env: %w", err)
 		}
 		goroot = strings.TrimSpace(string(slurp))
 		if goroot == "" {

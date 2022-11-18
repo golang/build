@@ -121,7 +121,7 @@ func legacyCreate(args []string) error {
 	t := time.Now()
 	cc, err := buildlet.NewCoordinatorClientFromFlags()
 	if err != nil {
-		return fmt.Errorf("failed to create coordinator client: %v", err)
+		return fmt.Errorf("failed to create coordinator client: %w", err)
 	}
 	client, err := cc.CreateBuildletWithStatus(builderType, func(st types.BuildletWaitStatus) {
 		if status {
@@ -133,7 +133,7 @@ func legacyCreate(args []string) error {
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create buildlet: %v", err)
+		return fmt.Errorf("failed to create buildlet: %w", err)
 	}
 	fmt.Println(client.RemoteName())
 	return nil
@@ -206,7 +206,7 @@ func create(args []string) error {
 			start := time.Now()
 			stream, err := client.CreateInstance(ctx, &protos.CreateInstanceRequest{BuilderType: builderType})
 			if err != nil {
-				return fmt.Errorf("failed to create buildlet: %v", statusFromError(err))
+				return fmt.Errorf("failed to create buildlet: %w", err)
 			}
 			var inst string
 		updateLoop:
@@ -216,7 +216,7 @@ func create(args []string) error {
 				case err == io.EOF:
 					break updateLoop
 				case err != nil:
-					return fmt.Errorf("failed to create buildlet (%d): %v", i+1, statusFromError(err))
+					return fmt.Errorf("failed to create buildlet (%d): %w", i+1, err)
 				case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && status:
 					fmt.Fprintf(os.Stderr, "# still creating %s (%d) after %v; %d requests ahead of you\n", builderType, i+1, time.Since(start).Round(time.Second), update.GetWaitersAhead())
 				case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
@@ -239,7 +239,7 @@ func create(args []string) error {
 				tmpOutDir, err = os.MkdirTemp("", "gomote")
 			})
 			if err != nil {
-				return fmt.Errorf("failed to create a temporary directory for setup output: %v", err)
+				return fmt.Errorf("failed to create a temporary directory for setup output: %w", err)
 			}
 
 			// Push GOROOT.

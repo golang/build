@@ -98,7 +98,7 @@ func ls(args []string) error {
 			// It's an instance.
 			lsSet = []string{fs.Arg(0)}
 		} else {
-			return fmt.Errorf("failed to ping %q: %v", fs.Arg(0), err)
+			return fmt.Errorf("failed to ping %q: %w", fs.Arg(0), err)
 		}
 	case 2:
 		// Instance and directory is specified.
@@ -118,7 +118,7 @@ func ls(args []string) error {
 			Digest:    digest,
 		})
 		if err != nil {
-			return fmt.Errorf("unable to ls: %s", statusFromError(err))
+			return fmt.Errorf("unable to ls: %w", err)
 		}
 		if len(lsSet) > 1 {
 			fmt.Fprintf(os.Stdout, "# %s\n", inst)

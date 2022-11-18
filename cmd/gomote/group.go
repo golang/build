@@ -106,7 +106,7 @@ func addToGroup(args []string) error {
 	ctx := context.Background()
 	for _, inst := range args {
 		if err := doPing(ctx, inst); err != nil {
-			return fmt.Errorf("instance %q: %s", inst, statusFromError(err))
+			return fmt.Errorf("instance %q: %w", inst, err)
 		}
 		activeGroup.Instances = append(activeGroup.Instances, inst)
 	}

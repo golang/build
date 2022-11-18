@@ -76,14 +76,14 @@ func handleRDPConn(bc buildlet.RemoteClient, c net.Conn) {
 		if err == nil {
 			return errors.New("local client closed")
 		}
-		return fmt.Errorf("error copying from local to remote: %v", err)
+		return fmt.Errorf("error copying from local to remote: %w", err)
 	})
 	grp.Go(func() error {
 		_, err := io.Copy(c, rwc)
 		if err == nil {
 			return errors.New("remote server closed")
 		}
-		return fmt.Errorf("error copying from remote to local: %v", err)
+		return fmt.Errorf("error copying from remote to local: %w", err)
 	})
 	<-ctx.Done()
 	rwc.Close()

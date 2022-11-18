@@ -105,7 +105,7 @@ func doGetTar(ctx context.Context, name, dir string, out io.Writer) error {
 		Directory: dir,
 	})
 	if err != nil {
-		return fmt.Errorf("unable to retrieve tgz URL: %s", statusFromError(err))
+		return fmt.Errorf("unable to retrieve tgz URL: %w", err)
 	}
 	httpClient := &http.Client{
 		Timeout: 10 * time.Second,
@@ -115,16 +115,16 @@ func doGetTar(ctx context.Context, name, dir string, out io.Writer) error {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, resp.GetUrl(), nil)
 	if err != nil {
-		return fmt.Errorf("unable to create HTTP Request: %s", err)
+		return fmt.Errorf("unable to create HTTP Request: %w", err)
 	}
 	r, err := httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("unable to download tgz: %s", err)
+		return fmt.Errorf("unable to download tgz: %w", err)
 	}
 	defer r.Body.Close()
 	_, err = io.Copy(out, r.Body)
 	if err != nil {
-		return fmt.Errorf("unable to copy tgz to stdout: %s", err)
+		return fmt.Errorf("unable to copy tgz to stdout: %w", err)
 	}
 	return nil
 }

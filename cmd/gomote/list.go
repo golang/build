@@ -139,13 +139,13 @@ func list(args []string) error {
 	}
 	groups, err := loadAllGroups()
 	if err != nil {
-		return fmt.Errorf("loading groups: %v", err)
+		return fmt.Errorf("loading groups: %w", err)
 	}
 	ctx := context.Background()
 	client := gomoteServerClient(ctx)
 	resp, err := client.ListInstances(ctx, &protos.ListInstancesRequest{})
 	if err != nil {
-		return fmt.Errorf("unable to list instance: %s", statusFromError(err))
+		return fmt.Errorf("unable to list instance: %w", err)
 	}
 	for _, inst := range resp.GetInstances() {
 		var groupList strings.Builder

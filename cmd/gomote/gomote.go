@@ -145,6 +145,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -317,11 +318,12 @@ func logAndExitf(format string, v ...interface{}) {
 	os.Exit(1)
 }
 
-// statusFromError returns the message portion of a GRPC error.
-func statusFromError(err error) string {
-	return status.Convert(err).Message()
-}
-
 func instanceDoesNotExist(err error) bool {
-	return status.Code(err) == codes.NotFound
+	for err != nil {
+		if status.Code(err) == codes.NotFound {
+			return true
+		}
+		err = errors.Unwrap(err)
+	}
+	return false
 }

@@ -99,7 +99,7 @@ func ssh(args []string) error {
 		PublicSshKey: []byte(pubKeyBytes),
 	})
 	if err != nil {
-		return fmt.Errorf("unable to retrieve SSH certificate: %s", statusFromError(err))
+		return fmt.Errorf("unable to retrieve SSH certificate: %w", err)
 	}
 	certPath, err := writeCertificateToDisk(resp.GetSignedPublicSshKey())
 	if err != nil {
@@ -111,12 +111,12 @@ func ssh(args []string) error {
 func sshConfigDirectory() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("unable to retrieve user configuration directory: %s", err)
+		return "", fmt.Errorf("unable to retrieve user configuration directory: %w", err)
 	}
 	sshConfigDir := filepath.Join(configDir, "gomote", ".ssh")
 	err = os.MkdirAll(sshConfigDir, 0700)
 	if err != nil {
-		return "", fmt.Errorf("unable to create user SSH configuration directory: %s", err)
+		return "", fmt.Errorf("unable to create user SSH configuration directory: %w", err)
 	}
 	return sshConfigDir, nil
 }
@@ -127,7 +127,7 @@ func localKeyPair(sshDir string) (string, string, error) {
 	if !fileExists(priKey) || !fileExists(pubKey) {
 		log.Printf("local ssh keys do not exist, attempting to create them")
 		if err := createLocalKeyPair(pubKey, priKey); err != nil {
-			return "", "", fmt.Errorf("unable to create local SSH key pair: %s", err)
+			return "", "", fmt.Errorf("unable to create local SSH key pair: %w", err)
 		}
 	}
 	return pubKey, priKey, nil
@@ -144,7 +144,7 @@ func createLocalKeyPair(pubKey, priKey string) error {
 func writeCertificateToDisk(b []byte) (string, error) {
 	tmpDir := filepath.Join(os.TempDir(), ".gomote")
 	if err := os.MkdirAll(tmpDir, 0700); err != nil {
-		return "", fmt.Errorf("unable to create temp directory for certficates: %s", err)
+		return "", fmt.Errorf("unable to create temp directory for certficates: %w", err)
 	}
 	tf, err := ioutil.TempFile(tmpDir, "id_ed25519-*-cert.pub")
 	if err != nil {
@@ -162,7 +162,7 @@ func writeCertificateToDisk(b []byte) (string, error) {
 func sshConnect(name string, priKey, certPath string) error {
 	ssh, err := exec.LookPath("ssh")
 	if err != nil {
-		return fmt.Errorf("path to ssh not found: %s", err)
+		return fmt.Errorf("path to ssh not found: %w", err)
 	}
 	cli := []string{"-o", fmt.Sprintf("CertificateFile=%s", certPath), "-i", priKey, "-p", "2222", name + "@farmer.golang.org"}
 	fmt.Printf("$ %s %s\n", ssh, strings.Join(cli, " "))
@@ -171,7 +171,7 @@ func sshConnect(name string, priKey, certPath string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("unable to ssh into instance: %s", err)
+		return fmt.Errorf("unable to ssh into instance: %w", err)
 	}
 	return nil
 }

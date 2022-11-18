@@ -96,7 +96,7 @@ func legacyRun(args []string) error {
 		Path:        pathOpt,
 	})
 	if execErr != nil {
-		return fmt.Errorf("Error trying to execute %s: %v", cmd, execErr)
+		return fmt.Errorf("Error trying to execute %s: %w", cmd, execErr)
 	}
 	return remoteErr
 }
@@ -156,7 +156,7 @@ func run(args []string) error {
 	if untilPattern != "" {
 		until, err = regexp.Compile(untilPattern)
 		if err != nil {
-			return fmt.Errorf("bad regexp %q for 'until': %v", untilPattern, err)
+			return fmt.Errorf("bad regexp %q for 'until': %w", untilPattern, err)
 		}
 	}
 
@@ -169,7 +169,7 @@ func run(args []string) error {
 	if err := doPing(ctx, fs.Arg(0)); instanceDoesNotExist(err) {
 		// When there's no active group, this is just an error.
 		if activeGroup == nil {
-			return fmt.Errorf("instance %q: %s", fs.Arg(0), statusFromError(err))
+			return fmt.Errorf("instance %q: %w", fs.Arg(0), err)
 		}
 		// When there is an active group, this just means that we're going
 		// to use the group instead and assume the rest is a command.
@@ -187,7 +187,7 @@ func run(args []string) error {
 		cmd = fs.Arg(1)
 		cmdArgs = fs.Args()[2:]
 	} else {
-		return fmt.Errorf("checking instance %q: %v", fs.Arg(0), err)
+		return fmt.Errorf("checking instance %q: %w", fs.Arg(0), err)
 	}
 
 	var pathOpt []string
@@ -277,7 +277,7 @@ func run(args []string) error {
 				// Reset the output file and our buffer for the next run.
 				outBuf.Reset()
 				if err := outf.Truncate(0); err != nil {
-					return fmt.Errorf("failed to truncate output file %q: %v", outf.Name(), err)
+					return fmt.Errorf("failed to truncate output file %q: %w", outf.Name(), err)
 				}
 
 				fmt.Fprintf(os.Stderr, "# No match found on %q, running again...\n", inst)
@@ -348,7 +348,7 @@ func doRun(ctx context.Context, inst, cmd string, cmdArgs []string, opts ...runO
 	client := gomoteServerClient(ctx)
 	stream, err := client.ExecuteCommand(ctx, &cfg.req)
 	if err != nil {
-		return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
+		return fmt.Errorf("unable to execute %s: %w", cmd, err)
 	}
 	for {
 		update, err := stream.Recv()
@@ -361,7 +361,7 @@ func doRun(ctx context.Context, inst, cmd string, cmdArgs []string, opts ...runO
 				return &cmdFailedError{inst: inst, cmd: cmd, err: err}
 			}
 			// remote error
-			return fmt.Errorf("unable to execute %s: %s", cmd, statusFromError(err))
+			return fmt.Errorf("unable to execute %s: %w", cmd, err)
 		}
 		fmt.Fprintf(outWriter, string(update.GetOutput()))
 	}
@@ -373,7 +373,11 @@ type cmdFailedError struct {
 }
 
 func (e *cmdFailedError) Error() string {
-	return fmt.Sprintf("Error trying to execute %s: %v", e.cmd, statusFromError(e.err))
+	return fmt.Sprintf("Error trying to execute %s: %v", e.cmd, e.err)
+}
+
+func (e *cmdFailedError) Unwrap() error {
+	return e.err
 }
 
 type runCfg struct {

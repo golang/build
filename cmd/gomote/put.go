@@ -155,7 +155,7 @@ func putTar(args []string) error {
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, os.Stdin)
 		if err != nil {
-			return fmt.Errorf("reading stdin: %v", err)
+			return fmt.Errorf("reading stdin: %w", err)
 		}
 		sharedTarBuf := buf.Bytes()
 		putTarFn = func(ctx context.Context, inst string) error {
@@ -185,13 +185,13 @@ func putTar(args []string) error {
 					return doPutTarGoRev(ctx, inst, dir, src)
 				}
 			} else if err != nil {
-				return fmt.Errorf("failed to stat %q: %v", src, err)
+				return fmt.Errorf("failed to stat %q: %w", src, err)
 			} else {
 				// It's a path.
 				putTarFn = func(ctx context.Context, inst string) error {
 					f, err := os.Open(src)
 					if err != nil {
-						return fmt.Errorf("opening %q: %v", src, err)
+						return fmt.Errorf("opening %q: %w", src, err)
 					}
 					defer f.Close()
 					return doPutTar(ctx, inst, dir, f)
@@ -217,7 +217,7 @@ func doPutTarURL(ctx context.Context, name, dir, tarURL string) error {
 		Url:       tarURL,
 	})
 	if err != nil {
-		return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+		return fmt.Errorf("unable to write tar to instance: %w", err)
 	}
 	return nil
 }
@@ -242,17 +242,17 @@ func doPutTarGoRev(ctx context.Context, name, dir, rev string) error {
 	client := gomoteServerClient(ctx)
 	resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
 	if err != nil {
-		return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
+		return fmt.Errorf("unable to request credentials for a file upload: %w", err)
 	}
 	if err := uploadToGCS(ctx, resp.GetFields(), tgz, resp.GetObjectName(), resp.GetUrl()); err != nil {
-		return fmt.Errorf("unable to upload version file to GCS: %s", err)
+		return fmt.Errorf("unable to upload version file to GCS: %w", err)
 	}
 	if _, err = client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
 		GomoteId:  name,
 		Directory: dir,
 		Url:       fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
 	}); err != nil {
-		return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+		return fmt.Errorf("unable to write tar to instance: %w", err)
 	}
 	return nil
 }
@@ -261,17 +261,17 @@ func doPutTar(ctx context.Context, name, dir string, tgz io.Reader) error {
 	client := gomoteServerClient(ctx)
 	resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
 	if err != nil {
-		return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
+		return fmt.Errorf("unable to request credentials for a file upload: %w", err)
 	}
 	if err := uploadToGCS(ctx, resp.GetFields(), tgz, resp.GetObjectName(), resp.GetUrl()); err != nil {
-		return fmt.Errorf("unable to upload file to GCS: %s", err)
+		return fmt.Errorf("unable to upload file to GCS: %w", err)
 	}
 	if _, err := client.WriteTGZFromURL(ctx, &protos.WriteTGZFromURLRequest{
 		GomoteId:  name,
 		Directory: dir,
 		Url:       fmt.Sprintf("%s%s", resp.GetUrl(), resp.GetObjectName()),
 	}); err != nil {
-		return fmt.Errorf("unable to write tar to instance: %s", statusFromError(err))
+		return fmt.Errorf("unable to write tar to instance: %w", err)
 	}
 	return nil
 }
@@ -344,7 +344,7 @@ func putBootstrap(args []string) error {
 				GomoteId: inst,
 			})
 			if err != nil {
-				return fmt.Errorf("unable to add bootstrap version of Go to instance: %s", statusFromError(err))
+				return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
 			}
 			if resp.GetBootstrapGoUrl() == "" {
 				fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", inst)
@@ -444,7 +444,7 @@ func put(args []string) error {
 	if err := doPing(ctx, fs.Arg(0)); instanceDoesNotExist(err) {
 		// When there's no active group, this is just an error.
 		if activeGroup == nil {
-			return fmt.Errorf("instance %q: %s", fs.Arg(0), statusFromError(err))
+			return fmt.Errorf("instance %q: %w", fs.Arg(0), err)
 		}
 		// When there is an active group, this just means that we're going
 		// to use the group instead and assume the rest is a command.
@@ -472,7 +472,7 @@ func put(args []string) error {
 			fs.Usage()
 		}
 	} else {
-		return fmt.Errorf("checking instance %q: %v", fs.Arg(0), err)
+		return fmt.Errorf("checking instance %q: %w", fs.Arg(0), err)
 	}
 	if dst == "" {
 		if src == "-" {
@@ -498,7 +498,7 @@ func put(args []string) error {
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, os.Stdin)
 		if err != nil {
-			return fmt.Errorf("reading from stdin: %v", err)
+			return fmt.Errorf("reading from stdin: %w", err)
 		}
 		sharedFileBuf := buf.Bytes()
 		putFileFn = func(ctx context.Context, inst string) error {
@@ -537,11 +537,11 @@ func doPutFile(ctx context.Context, inst string, r io.Reader, dst string, mode o
 	client := gomoteServerClient(ctx)
 	resp, err := client.UploadFile(ctx, &protos.UploadFileRequest{})
 	if err != nil {
-		return fmt.Errorf("unable to request credentials for a file upload: %s", statusFromError(err))
+		return fmt.Errorf("unable to request credentials for a file upload: %w", err)
 	}
 	err = uploadToGCS(ctx, resp.GetFields(), r, dst, resp.GetUrl())
 	if err != nil {
-		return fmt.Errorf("unable to upload file to GCS: %s", err)
+		return fmt.Errorf("unable to upload file to GCS: %w", err)
 	}
 	_, err = client.WriteFileFromURL(ctx, &protos.WriteFileFromURLRequest{
 		GomoteId: inst,
@@ -550,7 +550,7 @@ func doPutFile(ctx context.Context, inst string, r io.Reader, dst string, mode o
 		Mode:     uint32(mode),
 	})
 	if err != nil {
-		return fmt.Errorf("unable to write the file from URL: %s", statusFromError(err))
+		return fmt.Errorf("unable to write the file from URL: %w", err)
 	}
 	return nil
 }
@@ -561,23 +561,23 @@ func uploadToGCS(ctx context.Context, fields map[string]string, file io.Reader, 
 
 	for k, v := range fields {
 		if err := mw.WriteField(k, v); err != nil {
-			return fmt.Errorf("unable to write field: %s", err)
+			return fmt.Errorf("unable to write field: %w", err)
 		}
 	}
 	_, err := mw.CreateFormFile("file", filename)
 	if err != nil {
-		return fmt.Errorf("unable to create form file: %s", err)
+		return fmt.Errorf("unable to create form file: %w", err)
 	}
 	// Write our own boundary to avoid buffering entire file into the multipart Writer
 	bound := fmt.Sprintf("\r\n--%s--\r\n", mw.Boundary())
 	req, err := http.NewRequestWithContext(ctx, "POST", url, io.NopCloser(io.MultiReader(buf, file, strings.NewReader(bound))))
 	if err != nil {
-		return fmt.Errorf("unable to create request: %s", err)
+		return fmt.Errorf("unable to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("http request failed: %s", err)
+		return fmt.Errorf("http request failed: %w", err)
 	}
 	if res.StatusCode != http.StatusNoContent {
 		return fmt.Errorf("http post failed: status code=%d", res.StatusCode)
