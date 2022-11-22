@@ -11,6 +11,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"debug/buildinfo"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -60,6 +61,10 @@ func main() {
 	bundlePath, err := exec.LookPath("bundle")
 	if err != nil {
 		log.Fatalln("can't find bundle in PATH; did you run 'go install golang.org/x/tools/cmd/bundle@latest' and add it to PATH?")
+	}
+	if bi, err := buildinfo.ReadFile(bundlePath); err != nil || bi.Path != "golang.org/x/tools/cmd/bundle" {
+		// Not the bundle command we want.
+		log.Fatalln("unexpected bundle command in PATH; did you run 'go install golang.org/x/tools/cmd/bundle@latest' and add it to PATH?")
 	}
 
 	// Fetch latest hashes of Go projects from Gerrit,
