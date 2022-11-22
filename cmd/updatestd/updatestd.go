@@ -30,6 +30,8 @@ import (
 	"golang.org/x/build/internal/envutil"
 )
 
+var goCmd string // the go command
+
 func main() {
 	log.SetFlags(0)
 
@@ -50,6 +52,8 @@ func main() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	goCmd = filepath.Join(*goroot, "bin", "go")
 
 	// Confirm that bundle is in PATH.
 	// It's needed for a go generate step later.
@@ -92,9 +96,9 @@ func main() {
 
 	// Print environment information.
 	r := runner{filepath.Join(*goroot, "src")}
-	r.run("go", "version")
-	r.run("go", "env", "GOROOT")
-	r.run("go", "version", "-m", bundlePath)
+	r.run(goCmd, "version")
+	r.run(goCmd, "env", "GOROOT")
+	r.run(goCmd, "version", "-m", bundlePath)
 	log.Println()
 
 	// Walk the standard library source tree (GOROOT/src),
@@ -128,7 +132,7 @@ func main() {
 	// and add it to PATH to eliminate variance in bundle tool version. Can be considered later.
 	//
 	log.Println("updating bundles in", r.dir)
-	r.run("go", "generate", "-run=bundle", "std", "cmd")
+	r.run(goCmd, "generate", "-run=bundle", "std", "cmd")
 }
 
 type Work struct {
@@ -153,7 +157,7 @@ func (w Work) UpdateModule(dir string) error {
 	main, deps := buildList(dir)
 
 	// Determine module versions to get.
-	goGet := []string{"go", "get", "-d"}
+	goGet := []string{goCmd, "get", "-d"}
 	for _, m := range deps {
 		if !strings.HasPrefix(m.Path, "golang.org/x/") {
 			log.Printf("skipping %s (out of scope, it's not a golang.org/x dependency)\n", m.Path)
@@ -174,14 +178,14 @@ func (w Work) UpdateModule(dir string) error {
 	// Run all the commands.
 	log.Println("updating module", main.Path, "in", dir)
 	r := runner{dir}
-	gowork := strings.TrimSpace(string(r.runOut("go", "env", "GOWORK")))
+	gowork := strings.TrimSpace(string(r.runOut(goCmd, "env", "GOWORK")))
 	if gowork != "" && gowork != "off" {
 		log.Printf("warning: GOWORK=%q, things may go wrong?", gowork)
 	}
-	r.run("go", "mod", "edit", "-go="+w.GoVersion)
+	r.run(goCmd, "mod", "edit", "-go="+w.GoVersion)
 	r.run(goGet...)
-	r.run("go", "mod", "tidy")
-	r.run("go", "mod", "vendor")
+	r.run(goCmd, "mod", "tidy")
+	r.run(goCmd, "mod", "vendor")
 	log.Println()
 	return nil
 }
@@ -194,7 +198,7 @@ func (w Work) UpdateModule(dir string) error {
 // See https://golang.org/cmd/go/#hdr-The_main_module_and_the_build_list
 // and https://golang.org/ref/mod#glos-build-list.
 func buildList(dir string) (main module, deps []module) {
-	out := runner{dir}.runOut("go", "list", "-mod=readonly", "-m", "-json", "all")
+	out := runner{dir}.runOut(goCmd, "list", "-mod=readonly", "-m", "-json", "all")
 	for dec := json.NewDecoder(bytes.NewReader(out)); ; {
 		var m module
 		err := dec.Decode(&m)

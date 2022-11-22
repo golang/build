@@ -11,6 +11,7 @@ import (
 )
 
 func TestBuildList(t *testing.T) {
+	goCmd = "go" // for testing, using the go command in PATH
 	gowork := strings.TrimSpace(string(runner{"."}.runOut("go", "env", "GOWORK")))
 	if gowork != "" && gowork != "off" {
 		t.Skipf("must be run outside a workspace. GOWORK=%q", gowork)
