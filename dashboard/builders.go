@@ -1910,6 +1910,7 @@ func init() {
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // Inherited from the longtest builder.
 		},
+		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/56907.
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-386-longtest",
@@ -2314,7 +2315,8 @@ func init() {
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
-		KnownIssues: []int{35006},
+		KnownIssues:       []int{35006},
+		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
