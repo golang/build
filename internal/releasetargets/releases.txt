@@ -7,7 +7,7 @@ darwin-amd64    darwin     amd64      darwin-amd64-12_0
 
 darwin-arm64    darwin     arm64      darwin-arm64-12
 	Race enabled
-	Running on reverse builder: macOS Big Sur (12) ARM64 (M1) on Mac minis in a Google office
+	Running on reverse builder: macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office
 
 freebsd-386     freebsd    386        freebsd-386-12_3
 	Running on GCP
@@ -59,7 +59,7 @@ darwin-amd64    darwin     amd64      darwin-amd64-12_0
 
 darwin-arm64    darwin     arm64      darwin-arm64-12
 	Race enabled
-	Running on reverse builder: macOS Big Sur (12) ARM64 (M1) on Mac minis in a Google office
+	Running on reverse builder: macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office
 
 freebsd-386     freebsd    386        freebsd-386-12_3
 	Running on GCP
@@ -109,7 +109,7 @@ darwin-amd64    darwin     amd64      darwin-amd64-12_0
 	Running on reverse builder: MacStadium macOS Monterey (12) VM under VMWare ESXi
 
 darwin-arm64    darwin     arm64      darwin-arm64-12
-	Running on reverse builder: macOS Big Sur (12) ARM64 (M1) on Mac minis in a Google office
+	Running on reverse builder: macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office
 
 freebsd-386     freebsd    386        freebsd-386-12_3
 	Running on GCP

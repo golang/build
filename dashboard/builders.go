@@ -219,7 +219,7 @@ var Hosts = map[string]*HostConfig{
 	"host-darwin-arm64-12": {
 		IsReverse:     true,
 		ExpectNum:     3,
-		Notes:         "macOS Big Sur (12) ARM64 (M1) on Mac minis in a Google office",
+		Notes:         "macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office",
 		SSHUsername:   "gopher",
 		GoogleReverse: true,
 	},
