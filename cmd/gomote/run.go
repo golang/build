@@ -363,7 +363,7 @@ func doRun(ctx context.Context, inst, cmd string, cmdArgs []string, opts ...runO
 			// remote error
 			return fmt.Errorf("unable to execute %s: %w", cmd, err)
 		}
-		fmt.Fprintf(outWriter, string(update.GetOutput()))
+		fmt.Fprint(outWriter, string(update.GetOutput()))
 	}
 }
 
