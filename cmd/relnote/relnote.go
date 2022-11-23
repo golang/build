@@ -12,10 +12,12 @@ import (
 	"flag"
 	"fmt"
 	"html"
-	"io/ioutil"
 	"log"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,11 +29,7 @@ import (
 	"golang.org/x/build/repos"
 )
 
-var (
-	verbose  = flag.Bool("v", false, "print verbose logging")
-	htmlMode = flag.Bool("html", false, "write HTML output")
-	exclFile = flag.String("exclude-from", "", "optional path to release notes HTML file. If specified, any 'CL NNNN' occurrence in the content will cause that CL to be excluded from this tool's output.")
-)
+var verbose = flag.Bool("v", false, "print verbose logging")
 
 // change is a change that was noted via a RELNOTE= comment.
 type change struct {
@@ -95,6 +93,22 @@ func main() {
 	log.SetFlags(0)
 	flag.Parse()
 
+	goroot := runtime.GOROOT()
+	if goroot == "" {
+		log.Fatalf("missing GOROOT")
+	}
+
+	// Read internal/goversion to find the next release.
+	data, err := os.ReadFile(filepath.Join(goroot, "src/internal/goversion/goversion.go"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	m := regexp.MustCompile(`Version = (\d+)`).FindStringSubmatch(string(data))
+	if m == nil {
+		log.Fatalf("cannot find Version in src/internal/goversion/goversion.go")
+	}
+	version := m[1]
+
 	// Releases are every 6 months. Walk forward by 6 month increments to next release.
 	cutoff := time.Date(2016, time.August, 1, 00, 00, 00, 0, time.UTC)
 	now := time.Now()
@@ -114,13 +128,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var existingHTML []byte
-	if *exclFile != "" {
-		var err error
-		existingHTML, err = ioutil.ReadFile(*exclFile)
-		if err != nil {
-			log.Fatal(err)
-		}
+	existingHTML, err := os.ReadFile(filepath.Join(goroot, "doc/go1."+version+".html"))
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	corpus, err := godata.Get(context.Background())
@@ -213,34 +223,30 @@ func main() {
 	}
 	sort.Strings(pkgs)
 
-	if *htmlMode {
-		for _, pkg := range pkgs {
-			if !strings.HasPrefix(pkg, "cmd/") {
-				continue
-			}
-			for _, change := range changes[pkg] {
-				fmt.Printf("<!-- %s: %s -->\n", change.ID(), change.TextLine())
-			}
+	// TODO(rsc): Instead of making people do the mechanical work of
+	// copy and pasting this TODO HTML into the release notes,
+	// relnote should edit the release notes directly to insert the TODOs.
+	// Then it should print to standard output only a summary of the
+	// changes it made.
+	for _, pkg := range pkgs {
+		if !strings.HasPrefix(pkg, "cmd/") {
+			continue
 		}
-		for _, pkg := range pkgs {
-			if strings.HasPrefix(pkg, "cmd/") {
-				continue
-			}
-			fmt.Printf("\n<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>",
-				pkg, "/pkg/"+pkg+"/", pkg)
-			for _, change := range changes[pkg] {
-				fmt.Printf("\n    <p><!-- %s -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
-					change.ID(), change.URL(), change.URL(), html.EscapeString(change.TextLine()))
-			}
-			fmt.Printf("  </dd>\n</dl><!-- %s -->\n", pkg)
+		for _, change := range changes[pkg] {
+			fmt.Printf("<!-- %s -->\n<p>\n  <!-- %s -->\n</p>\n", change.ID(), change.TextLine())
 		}
-	} else {
-		for _, pkg := range pkgs {
-			fmt.Printf("%s\n", pkg)
-			for _, change := range changes[pkg] {
-				fmt.Printf("  %s: %s\n", change.URL(), change.TextLine())
-			}
+	}
+	for _, pkg := range pkgs {
+		if strings.HasPrefix(pkg, "cmd/") {
+			continue
 		}
+		fmt.Printf("\n<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>",
+			pkg, "/pkg/"+pkg+"/", pkg)
+		for _, change := range changes[pkg] {
+			fmt.Printf("\n    <p><!-- %s -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
+				change.ID(), change.URL(), change.URL(), html.EscapeString(change.TextLine()))
+		}
+		fmt.Printf("  </dd>\n</dl><!-- %s -->\n", pkg)
 	}
 }
 
@@ -354,7 +360,7 @@ func hasLabel(issue *maintner.GitHubIssue, label string) bool {
 	return false
 }
 
-var numbersRE = regexp.MustCompile(`(?m)(?:^|\s)#([0-9]{3,})`)
+var numbersRE = regexp.MustCompile(`(?m)(?:^|\s|golang/go)#([0-9]{3,})`)
 var golangGoNumbersRE = regexp.MustCompile(`(?m)golang/go#([0-9]{3,})`)
 
 // issueNumbers returns the golang/go issue numbers referred to by the CL.
