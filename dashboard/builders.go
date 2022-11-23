@@ -564,37 +564,37 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum: 1,
 	},
 	"host-windows-amd64-2008": {
-		VMImage:     "windows-amd64-server-2008r2-v7",
-		SSHUsername: "gopher",
-	},
-	"host-windows-amd64-2008-newcc": {
 		VMImage:     "windows-amd64-server-2008r2-v8",
 		SSHUsername: "gopher",
 	},
-	"host-windows-amd64-2012": {
-		VMImage:     "windows-amd64-server-2012r2-v7",
+	"host-windows-amd64-2008-oldcc": {
+		VMImage:     "windows-amd64-server-2008r2-v7",
 		SSHUsername: "gopher",
 	},
-	"host-windows-amd64-2012-newcc": {
+	"host-windows-amd64-2012": {
 		VMImage:     "windows-amd64-server-2012r2-v8",
 		SSHUsername: "gopher",
 	},
+	"host-windows-amd64-2012-oldcc": {
+		VMImage:     "windows-amd64-server-2012r2-v7",
+		SSHUsername: "gopher",
+	},
 	"host-windows-amd64-2016": {
-		VMImage:     "windows-amd64-server-2016-v7",
+		VMImage:     "windows-amd64-server-2016-v8",
 		SSHUsername: "gopher",
 	},
 	"host-windows-amd64-2016-big": {
+		VMImage:     "windows-amd64-server-2016-v8",
+		machineType: "e2-standard-16",
+		SSHUsername: "gopher",
+	},
+	"host-windows-amd64-2016-big-oldcc": {
 		VMImage:     "windows-amd64-server-2016-v7",
 		machineType: "e2-standard-16",
 		SSHUsername: "gopher",
 	},
-	"host-windows-amd64-2016-big-newcc": {
-		VMImage:     "windows-amd64-server-2016-v8",
-		machineType: "e2-standard-16",
-		SSHUsername: "gopher",
-	},
-	"host-windows-amd64-2016-newcc": {
-		VMImage:     "windows-amd64-server-2016-v8",
+	"host-windows-amd64-2016-oldcc": {
+		VMImage:     "windows-amd64-server-2016-v7",
 		SSHUsername: "gopher",
 	},
 	"host-windows-arm64-mini": { // host name known to cmd/buildlet/stage0, cannot change
@@ -1234,7 +1234,7 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 
 	// Build dev.boringcrypto branches only on linux/amd64 and windows/386 (see go.dev/issue/26791).
 	if repo == "go" && (branch == "dev.boringcrypto" || strings.HasPrefix(branch, "dev.boringcrypto.")) {
-		if c.Name != "linux-amd64" && c.Name != "windows-386-2008" {
+		if c.Name != "linux-amd64" && !strings.HasPrefix(c.Name, "windows-386") {
 			return false
 		}
 	}
@@ -2154,7 +2154,15 @@ func init() {
 		Name:           "windows-amd64-2008",
 		HostType:       "host-windows-amd64-2008",
 		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo:     onlyGo,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has modern/recent C compilers installed,
+			// meaning that we only want to use it with 1.20+ versions
+			// of Go, hence the atLeastGo1 call below; versions of Go
+			// prior to 1.20 will use the *-oldcc variant instead. See
+			// issue 35006 for more details.
+			return onlyGo(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
+		},
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -2166,10 +2174,18 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:           "windows-amd64-2008-newcc",
-		HostType:       "host-windows-amd64-2008-newcc",
+		Name:           "windows-amd64-2008-oldcc",
+		HostType:       "host-windows-amd64-2008-oldcc",
 		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo:     onlyGo,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has legacy C compilers installed, suitable
+			// for versions of Go prior to 1.20, hence the atMostGo1
+			// call below. Newer (1.20 and later) will use the
+			// non-oldcc variant instead. See issue 35006 for more
+			// details.
+			return onlyGo(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -2179,45 +2195,130 @@ func init() {
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2",
 		},
-		KnownIssues: []int{35006},
 	})
 	addBuilder(BuildConfig{
-		Name:              "windows-386-2008",
-		HostType:          "host-windows-amd64-2008",
-		buildsRepo:        defaultPlusExpBuild,
-		distTestAdjust:    fasterTrybots,
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot:            defaultTrySet(),
+		Name:     "windows-386-2008",
+		HostType: "host-windows-amd64-2008",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has modern/recent C compilers installed,
+			// meaning that we only want to use it with 1.20+ versions
+			// of Go, hence the atLeastGo1 call below; versions of Go
+			// prior to 1.20 will use the *-oldcc variant instead. See
+			// issue 35006 for more details.
+			return defaultPlusExpBuild(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
+		},
+		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot: func(repo, branch, goBranch string) bool {
+			// See comment above about the atLeastGo1 call below.
+			dft := defaultTrySet()
+			return dft(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
+		},
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:        "windows-386-2008-newcc",
-		HostType:    "host-windows-amd64-2008-newcc",
-		buildsRepo:  defaultPlusExpBuild,
-		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
-		KnownIssues: []int{35006},
-	})
-	addBuilder(BuildConfig{
-		Name:              "windows-386-2012",
-		HostType:          "host-windows-amd64-2012",
-		distTestAdjust:    fasterTrybots,
-		buildsRepo:        onlyGo,
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot:            defaultTrySet(),
+		Name:     "windows-386-2008-oldcc",
+		HostType: "host-windows-amd64-2008-oldcc",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has legacy C compilers installed, suitable
+			// for versions of Go prior to 1.20, hence the atMostGo1
+			// call below. Newer (1.20 and later) will use the
+			// non-oldcc variant instead. See issue 35006 for more
+			// details.
+			return defaultPlusExpBuild(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
+		distTestAdjust: fasterTrybots,
+		env:            []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot: func(repo, branch, goBranch string) bool {
+			// See comment above about the atMostGo1 call below.
+			dft := defaultTrySet()
+			return dft(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:        "windows-386-2012-newcc",
-		HostType:    "host-windows-amd64-2012-newcc",
-		buildsRepo:  onlyGo,
-		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
-		KnownIssues: []int{35006},
+		Name:           "windows-386-2012",
+		HostType:       "host-windows-amd64-2012",
+		distTestAdjust: fasterTrybots,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has modern/recent C compilers installed,
+			// meaning that we only want to use it with 1.20+ versions
+			// of Go, hence the atLeastGo1 call below; versions of Go
+			// prior to 1.20 will use the *-oldcc variant instead. See
+			// issue 35006 for more details.
+			return onlyGo(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
+		},
+		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot: func(repo, branch, goBranch string) bool {
+			// See comment above about the atLeastGo1 call below.
+			dft := defaultTrySet()
+			return dft(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
+		},
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:           "windows-386-2012-oldcc",
+		HostType:       "host-windows-amd64-2012-oldcc",
+		distTestAdjust: fasterTrybots,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has legacy C compilers installed, suitable
+			// for versions of Go prior to 1.20, hence the atMostGo1
+			// call below. Newer (1.20 and later) will use the
+			// non-oldcc variant instead. See issue 35006 for more
+			// details.
+			return onlyGo(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
+		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot: func(repo, branch, goBranch string) bool {
+			// See comment above about the atMostGo1 call below.
+			dft := defaultTrySet()
+			return dft(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:           "windows-amd64-2012-oldcc",
+		HostType:       "host-windows-amd64-2012-oldcc",
+		distTestAdjust: noTestDirAndNoReboot,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has legacy C compilers installed, suitable
+			// for versions of Go prior to 1.20, hence the atMostGo1
+			// call below. Newer (1.20 and later) will use the
+			// non-oldcc variant instead. See issue 35006 for more
+			// details.
+			return onlyGo(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
+		env: []string{
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "windows-amd64-2012",
 		HostType:       "host-windows-amd64-2012",
 		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo:     onlyGo,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has modern/recent C compilers installed,
+			// meaning that we only want to use it with 1.20+ versions
+			// of Go, hence the atLeastGo1 call below; versions of Go
+			// prior to 1.20 will use the *-oldcc variant instead. See
+			// issue 35006 for more details.
+			return onlyGo(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
+		},
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -2229,25 +2330,17 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:           "windows-amd64-2012-newcc",
-		HostType:       "host-windows-amd64-2012-newcc",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo:     onlyGo,
-		env: []string{
-			"GOARCH=amd64",
-			"GOHOSTARCH=amd64",
-			// cmd/go takes ~188 seconds on windows-amd64
-			// now, which is over the 180 second default
-			// dist test timeout. So, bump this builder
-			// up:
-			"GO_TEST_TIMEOUT_SCALE=2",
+		Name:     "windows-amd64-2016",
+		HostType: "host-windows-amd64-2016",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has modern/recent C compilers installed,
+			// meaning that we only want to use it with 1.20+ versions
+			// of Go, hence the atLeastGo1 call below; versions of Go
+			// prior to 1.20 will use the *-oldcc variant instead. See
+			// issue 35006 for more details.
+			return defaultPlusExpBuild(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
 		},
-		KnownIssues: []int{35006},
-	})
-	addBuilder(BuildConfig{
-		Name:           "windows-amd64-2016",
-		HostType:       "host-windows-amd64-2016",
-		buildsRepo:     defaultPlusExpBuild,
 		distTestAdjust: fasterTrybots,
 		env: []string{
 			"GOARCH=amd64",
@@ -2258,13 +2351,27 @@ func init() {
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2",
 		},
-		tryBot:            defaultTrySet(),
+		tryBot: func(repo, branch, goBranch string) bool {
+			// See comment above about the atLeastGo1 call below.
+			dft := defaultTrySet()
+			return dft(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
+		},
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
-		Name:       "windows-amd64-2016-newcc",
-		HostType:   "host-windows-amd64-2016-newcc",
-		buildsRepo: defaultPlusExpBuild,
+		Name:     "windows-amd64-2016-oldcc",
+		HostType: "host-windows-amd64-2016-oldcc",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has legacy C compilers installed, suitable
+			// for versions of Go prior to 1.20, hence the atMostGo1
+			// call below. Newer (1.20 and later) will use the
+			// non-oldcc variant instead. See issue 35006 for more
+			// details.
+			return defaultPlusExpBuild(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
+		distTestAdjust: fasterTrybots,
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -2274,7 +2381,43 @@ func init() {
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2",
 		},
-		KnownIssues: []int{35006},
+		tryBot: func(repo, branch, goBranch string) bool {
+			// See comment above about the atMostGo1 call below.
+			dft := defaultTrySet()
+			return dft(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
+		numTryTestHelpers: 5,
+	})
+	addBuilder(BuildConfig{
+		Name:     "windows-amd64-longtest-oldcc",
+		HostType: "host-windows-amd64-2016-big-oldcc",
+		Notes:    "Windows Server 2016 with go test -short=false",
+		tryBot: func(repo, branch, goBranch string) bool {
+			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
+			// This builder has legacy C compilers installed, suitable
+			// for versions of Go prior to 1.20, hence the atMostGo1
+			// call below. Newer (1.20 and later) will use the
+			// non-oldcc variant instead. See issue 35006 for more
+			// details.
+			return atMostGo1(goBranch, 19) &&
+				repo == "go" && onReleaseBranch // See issue 37827.
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// See comment above about the atMostGo1 call below.
+			b := defaultPlusExpBuild(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		needsGoProxy: true, // for cmd/go module tests
+		env: []string{
+			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
+		},
+		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-longtest",
@@ -2282,10 +2425,18 @@ func init() {
 		Notes:    "Windows Server 2016 with go test -short=false",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
-			return repo == "go" && onReleaseBranch // See issue 37827.
+			// This builder has modern/recent C compilers installed,
+			// meaning that we only want to use it with 1.20+ versions
+			// of Go, hence the atLeastGo1 call below; versions of Go
+			// prior to 1.20 will use the *-oldcc variant instead. See
+			// issue 35006 for more details.
+			return atLeastGo1(goBranch, 20) &&
+				repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := defaultPlusExpBuild(repo, branch, goBranch)
+			// See comment above about the atMostGo1 call below.
+			b := atLeastGo1(goBranch, 20) &&
+				defaultPlusExpBuild(repo, branch, goBranch)
 			if repo != "go" && !(branch == "master" && goBranch == "master") {
 				// For golang.org/x repos, don't test non-latest versions.
 				b = false
@@ -2299,28 +2450,40 @@ func init() {
 		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-amd64-longtest-newcc",
-		HostType: "host-windows-amd64-2016-big-newcc",
-		Notes:    "Windows Server 2016 with go test -short=false",
+		Name:     "windows-amd64-oldcc-race",
+		HostType: "host-windows-amd64-2016-oldcc",
+		Notes:    "Only runs -race tests (./race.bat)",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := defaultPlusExpBuild(repo, branch, goBranch)
-			if repo != "go" && !(branch == "master" && goBranch == "master") {
-				// For golang.org/x repos, don't test non-latest versions.
-				b = false
-			}
-			return b
+			// This builder has legacy C compilers installed, suitable
+			// for versions of Go prior to 1.20, hence the atMostGo1
+			// call below. Newer (1.20 and later) will use the
+			// non-oldcc variant instead. See issue 35006 for more
+			// details.
+			return atMostGo1(goBranch, 19) &&
+				buildRepoByDefault(repo)
 		},
-		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
-			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
-		},
-		KnownIssues:       []int{35006},
-		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
+			"GOARCH=amd64",
+			"GOHOSTARCH=amd64",
+			// cmd/go takes ~188 seconds on windows-amd64
+			// now, which is over the 180 second default
+			// dist test timeout. So, bump this builder
+			// up:
+			"GO_TEST_TIMEOUT_SCALE=2"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-amd64-race",
 		HostType: "host-windows-amd64-2016",
 		Notes:    "Only runs -race tests (./race.bat)",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has modern/recent C compilers installed,
+			// meaning that we only want to use it with 1.20+ versions
+			// of Go, hence the atLeastGo1 call below; versions of Go
+			// prior to 1.20 will use the *-oldcc variant instead. See
+			// issue 35006 for more details.
+			return atLeastGo1(goBranch, 20) &&
+				buildRepoByDefault(repo)
+		},
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -2329,20 +2492,6 @@ func init() {
 			// dist test timeout. So, bump this builder
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2"},
-	})
-	addBuilder(BuildConfig{
-		Name:     "windows-amd64-newcc-race",
-		HostType: "host-windows-amd64-2016-newcc",
-		Notes:    "Only runs -race tests (./race.bat)",
-		env: []string{
-			"GOARCH=amd64",
-			"GOHOSTARCH=amd64",
-			// cmd/go takes ~188 seconds on windows-amd64
-			// now, which is over the 180 second default
-			// dist test timeout. So, bump this builder
-			// up:
-			"GO_TEST_TIMEOUT_SCALE=2"},
-		KnownIssues: []int{35006},
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-arm-zx2c4",
