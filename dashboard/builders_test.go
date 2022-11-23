@@ -159,6 +159,7 @@ func TestTrybots(t *testing.T) {
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
 				"linux-amd64-longtest",
+				//"linux-arm64-longtest",
 				"windows-amd64-longtest",
 			},
 		},
@@ -196,6 +197,7 @@ func TestTrybots(t *testing.T) {
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
 				"linux-amd64-longtest",
+				//"linux-arm64-longtest",
 				"windows-amd64-longtest",
 			},
 		},

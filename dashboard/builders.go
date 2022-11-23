@@ -2605,6 +2605,30 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-arm64-longtest",
+		HostType: "host-linux-arm64-bullseye",
+		Notes:    "Debian Bullseye with go test -short=false",
+		// TODO: make it trybot on release branch once we know it works.
+		//tryBot: func(repo, branch, goBranch string) bool {
+		//	onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
+		//	return repo == "go" && onReleaseBranch // See issue 37827.
+		//},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		needsGoProxy: true, // for cmd/go module tests
+		env: []string{
+			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
+		},
+		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
+		KnownIssues:       []int{53851, 49649},
+	})
+	addBuilder(BuildConfig{
 		Name:              "linux-arm-aws",
 		HostType:          "host-linux-arm-aws",
 		tryBot:            defaultTrySet(),
