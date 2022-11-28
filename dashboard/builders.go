@@ -353,12 +353,12 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-loong64-3a5000": {
 		Notes:       "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
-		Owners:      []*gophers.Person{gh("XiaodongLoong")},
+		Owners:      []*gophers.Person{gh("XiaodongLoong"), gh("abner-chenc")},
 		IsReverse:   true,
-		ExpectNum:   3,
-		GoBootstrap: "none", // image has Go 1.18; cannot access storage.googleapis.com
+		ExpectNum:   5,
+		GoBootstrap: "none",
 		env: []string{
-			"GOROOT_BOOTSTRAP=/usr/lib/go-1.18",
+			"GOROOT_BOOTSTRAP=/usr/lib/go-linux-loong64-bootstrap",
 		},
 	},
 	"host-linux-mips64-rtrk": {

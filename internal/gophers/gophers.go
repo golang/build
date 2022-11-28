@@ -2957,6 +2957,7 @@ func init() {
 	addPerson("Zvonimir Pavlinovic", "zpavlinovic@google.com", "@zpavlinovic")
 	addPerson("a.lukinykh", "a.lukinykh@xsolla.com")
 	addPerson("abdul.mannan", "abdul.mannan@thirdbridge.com")
+	addPerson("abner chenc", "@abner-chenc")
 	addPerson("acoshift", "acoshift@gmail.com")
 	addPerson("adrienpetel", "peteladrien@gmail.com", "@feliixx")
 	addPerson("aecdanjun", "aeciodantasjunior@gmail.com", "@aecdanjun")
