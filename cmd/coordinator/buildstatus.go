@@ -855,7 +855,7 @@ func (st *buildStatus) subrepoBaselineCommit() (baseline string, err error) {
 	goplsRevisions := make(map[string]string)
 	for ref, ti := range tags {
 		// gopls tags are "gopls/vX.Y.Z". Ignore non-gopls tags.
-		const prefix =  "refs/tags/gopls/"
+		const prefix = "refs/tags/gopls/"
 		if !strings.HasPrefix(ref, prefix) {
 			continue
 		}
@@ -867,7 +867,7 @@ func (st *buildStatus) subrepoBaselineCommit() (baseline string, err error) {
 	semver.Sort(goplsVersions)
 
 	// Return latest non-prerelease version.
-	for i := len(goplsVersions)-1; i >= 0; i-- {
+	for i := len(goplsVersions) - 1; i >= 0; i-- {
 		ver := goplsVersions[i]
 		if !semver.IsValid(ver) {
 			continue
@@ -1294,7 +1294,7 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		"BENCH_BRANCH="+st.RevBranch,
 		"BENCH_REPOSITORY="+repo,
 		"GOROOT="+goroot,
-		"GOPATH="+gopath, // For module cache storage
+		"GOPATH="+gopath,         // For module cache storage
 		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
 	)
 	env = append(env, st.conf.ModulesEnv("benchmarks")...)

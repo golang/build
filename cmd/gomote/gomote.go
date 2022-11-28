@@ -71,7 +71,6 @@ The "gomote run" command has many of its own flags:
 	  -system
 	        run inside the system, and not inside the workdir; this is implicit if cmd starts with '/'
 
-
 # Debugging buildlets directly
 
 Using "gomote create" contacts the build coordinator
@@ -95,12 +94,12 @@ Instances may be part of more than one group.
 Groups may be explicitly managed with the "group" subcommand, but there
 are several short-cuts that make this unnecessary in most cases:
 
-- The create command can create a new group for instances with the
-  -new-group flag.
-- The create command will automatically create the group in GOMOTE_GROUP
-  if it does not exist and no other group is explicitly specified.
-- The destroy command can destroy a group in addition to its instances
-  with the -destroy-group flag.
+  - The create command can create a new group for instances with the
+    -new-group flag.
+  - The create command will automatically create the group in GOMOTE_GROUP
+    if it does not exist and no other group is explicitly specified.
+  - The destroy command can destroy a group in addition to its instances
+    with the -destroy-group flag.
 
 As a result, the easiest way to use groups is to just set the
 GOMOTE_GROUP environment variable:
@@ -116,22 +115,22 @@ commands.
 
 # Tips and tricks
 
-- The create command accepts the -setup flag which also pushes a GOROOT
-  and runs the appropriate equivalent of "make.bash" for the instance.
-- The create command accepts the -count flag for creating several
-  instances at once.
-- The run command accepts the -collect flag for automatically writing
-  the output from the command to a file in $PWD, as well as a copy of
-  the full file tree from the instance. This command is useful for
-  capturing the output of long-running commands in a set-and-forget
-  manner.
-- The run command accepts the -until flag for continuously executing
-  a command until the output of the command matches some pattern. Useful
-  for reproducing rare issues, and especially useful when used in tandem
-  with -collect.
-- The run command always streams output to a temporary file regardless
-  of any additional flags to avoid losing output due to terminal
-  scrollback. It always prints the location of the file.
+  - The create command accepts the -setup flag which also pushes a GOROOT
+    and runs the appropriate equivalent of "make.bash" for the instance.
+  - The create command accepts the -count flag for creating several
+    instances at once.
+  - The run command accepts the -collect flag for automatically writing
+    the output from the command to a file in $PWD, as well as a copy of
+    the full file tree from the instance. This command is useful for
+    capturing the output of long-running commands in a set-and-forget
+    manner.
+  - The run command accepts the -until flag for continuously executing
+    a command until the output of the command matches some pattern. Useful
+    for reproducing rare issues, and especially useful when used in tandem
+    with -collect.
+  - The run command always streams output to a temporary file regardless
+    of any additional flags to avoid losing output due to terminal
+    scrollback. It always prints the location of the file.
 
 Using some of these tricks, it's straightforward to hammer at some test
 to reproduce a rare failure, like so:
@@ -139,7 +138,6 @@ to reproduce a rare failure, like so:
 	$ export GOMOTE_GROUP=debug
 	$ GOROOT=/path/to/goroot gomote create -setup -count=10 linux-amd64
 	$ gomote run -until='unexpected return pc' -collect go/bin/go run -run="MyFlakyTest" -count=100 runtime
-
 */
 package main
 
