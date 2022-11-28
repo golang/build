@@ -271,7 +271,7 @@ var Production = &Environment{
 	GoProjectName: "golang-org",
 	IsProd:        true,
 	VMRegion:      "us-central1",
-	VMZones:       []string{"us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"},
+	VMZones:       []string{"us-central1-a", "us-central1-b", "us-central1-f"},
 	StaticIP:      "107.178.219.46",
 	KubeServices: KubeConfig{
 		Region:    "us-central1",
