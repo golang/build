@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y \
 	gfortran-multilib \
 	git \
 	gpg \
+	gpg-agent \
 	iptables \
 	libc6-dev \
 	libc6-dev-i386 \

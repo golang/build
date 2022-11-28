@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y \
 	gfortran \
 	git \
 	gpg \
+	gpg-agent \
 	iptables \
 	libc6-dev \
 	libgles2-mesa-dev \
