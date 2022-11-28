@@ -963,12 +963,12 @@ func (c *BuildConfig) DistTestsExecTimeout(distTests []string) time.Duration {
 	// up into separate dist tests or shards, like the test/ dir
 	// was)
 	d := 20 * time.Minute
-	d *= time.Duration(c.timeoutScale())
+	d *= time.Duration(c.GoTestTimeoutScale())
 	return d
 }
 
-// timeoutScale returns this builder's GO_TEST_TIMEOUT_SCALE value, or 1.
-func (c *BuildConfig) timeoutScale() int {
+// GoTestTimeoutScale returns this builder's GO_TEST_TIMEOUT_SCALE value, or 1.
+func (c *BuildConfig) GoTestTimeoutScale() int {
 	const pfx = "GO_TEST_TIMEOUT_SCALE="
 	for _, env := range [][]string{c.env, c.HostConfig().env} {
 		for _, kv := range env {

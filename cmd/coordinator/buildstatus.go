@@ -1084,6 +1084,10 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	if st.conf.IsRace() {
 		args = append(args, "-race")
 	}
+	if scale := st.conf.GoTestTimeoutScale(); scale != 1 {
+		const goTestDefaultTimeout = 10 * time.Minute // Default value taken from Go 1.20.
+		args = append(args, "-timeout="+(goTestDefaultTimeout*time.Duration(scale)).String())
+	}
 
 	var remoteErrors []error
 	for _, tr := range testRuns {
