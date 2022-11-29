@@ -78,6 +78,11 @@ type VMOpts struct {
 
 	// UseIAPTunnel uses an IAP tunnel to connect to buildlets on GCP.
 	UseIAPTunnel bool
+
+	// DiskSizeGB specifies the size of the boot disk in base-2 GB. The default
+	// disk size is used if unset.
+	// Only valid for GCE resources.
+	DiskSizeGB int64
 }
 
 // buildletClient returns a buildlet client configured to speak to a VM via the buildlet

@@ -500,7 +500,8 @@ func (p *GCEBuildlet) GetBuildlet(ctx context.Context, hostType string, lg Logge
 			OnGotInstanceInfo: func(*compute.Instance) {
 				lg.LogEventTime("got_instance_info", "waiting_for_buildlet...")
 			},
-			Zone: zone,
+			Zone:       zone,
+			DiskSizeGB: hconf.RootDriveSizeGB,
 		})
 		if errors.Is(err, buildlet.ErrQuotaExceeded) && ctx.Err() == nil {
 			log.Printf("Failed to create VM because quota exceeded. Retrying after 10 second (attempt: %d).", attempts)

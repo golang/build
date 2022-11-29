@@ -343,6 +343,14 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:     "root",
 		cosArchitecture: CosArchARM64,
 	},
+	"host-linux-arm64-bullseye-high-disk": {
+		Notes:           "Debian Bullseye, larger boot disk size",
+		ContainerImage:  "linux-arm64-bullseye:latest",
+		machineType:     "t2a",
+		SSHUsername:     "root",
+		cosArchitecture: CosArchARM64,
+		RootDriveSizeGB: 20,
+	},
 	"host-linux-loong64-3a5000": {
 		Notes:       "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
 		Owners:      []*gophers.Person{gh("XiaodongLoong")},
@@ -713,6 +721,8 @@ type HostConfig struct {
 	Notes  string            // notes for humans
 
 	SSHUsername string // username to ssh as, empty means not supported
+
+	RootDriveSizeGB int64 // optional, GCE instance root size in base-2 GB. Default: default size for instance type.
 }
 
 // CosArchitecture returns the COS architecture to use with the host. The default is CosArchAMD64.
@@ -2678,7 +2688,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-longtest",
-		HostType: "host-linux-arm64-bullseye",
+		HostType: "host-linux-arm64-bullseye-high-disk",
 		Notes:    "Debian Bullseye with go test -short=false",
 		// TODO: make it trybot on release branch once we know it works.
 		//tryBot: func(repo, branch, goBranch string) bool {

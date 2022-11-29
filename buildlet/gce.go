@@ -142,6 +142,7 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
 					DiskName:    instName,
 					SourceImage: srcImage,
 					DiskType:    diskType,
+					DiskSizeGb:  opts.DiskSizeGB,
 				},
 			},
 		},
