@@ -885,6 +885,7 @@ func TestMiscCompileLinuxGOARM5(t *testing.T) {
 //
 // TODO(go.dev/issue/35698): remove once the scheduler allocates VMs based on demand.
 func TestExpectedMacstadiumVMCount(t *testing.T) {
+	t.Skip("MacStadium turndown")
 	got := 0
 	for host, config := range Hosts {
 		if strings.HasPrefix(host, "host-darwin-amd64-") && !strings.HasSuffix(host, "-aws") {

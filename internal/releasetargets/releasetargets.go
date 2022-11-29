@@ -121,7 +121,7 @@ var allReleases = map[int]ReleaseTargets{
 	20: {
 		// 1.20 drops Race .as from the distribution.
 		"darwin-amd64": &Target{
-			Builder:  "darwin-amd64-12_0",
+			Builder:  "darwin-amd64-13",
 			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
 		},
 		"darwin-arm64": &Target{
