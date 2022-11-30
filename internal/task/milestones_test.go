@@ -39,7 +39,7 @@ func TestCheckBlockers(t *testing.T) {
 			name:            "beta 2 with one hard blocker and meaningless okay-after-beta1 label",
 			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true, "okay-after-beta1": true}},
 			version:         "go1.20beta2", kind: KindBeta,
-			want: nil, // TODO(go.dev/cl/453981): Should be a release-blocker that requires manual approval.
+			want: errManualApproval,
 		},
 		{
 			name:            "RC 1 with one hard blocker",

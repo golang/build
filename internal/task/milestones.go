@@ -97,7 +97,7 @@ func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMi
 	var blockers []string
 	for number, labels := range issues {
 		releaseBlocker := labels["release-blocker"]
-		if kind == KindBeta && (labels["okay-after-beta1"] || !strings.HasSuffix(version, "beta1")) {
+		if kind == KindBeta && strings.HasSuffix(version, "beta1") && labels["okay-after-beta1"] {
 			releaseBlocker = false
 		}
 		if releaseBlocker {
