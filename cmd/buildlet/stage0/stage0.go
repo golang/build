@@ -171,6 +171,8 @@ Download:
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--hostname=${GO_BUILDER_ENV}"))
+	case "host-linux-ppc64le-power10-osu":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-ppc64le-power9-osu":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-ppc64le-osu": // power8

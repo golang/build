@@ -1,0 +1,16 @@
+diff --git a/src/internal/buildcfg/cfg.go b/src/internal/buildcfg/cfg.go
+index 1cc3d3d..e8553e8 100644
+--- a/src/internal/buildcfg/cfg.go
++++ b/src/internal/buildcfg/cfg.go
+@@ -110,8 +110,10 @@
+ 		return 8
+ 	case "power9":
+ 		return 9
++	case "power10":
++		return 10
+ 	}
+-	Error = fmt.Errorf("invalid GOPPC64: must be power8, power9")
++	Error = fmt.Errorf("invalid GOPPC64: must be power8, power9, power10")
+ 	return int(defaultGOPPC64[len("power")] - '0')
+ }
+ 

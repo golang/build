@@ -8,6 +8,11 @@ Filing tickets: https://support.osuosl.org/
     Ticket password: go/pw-osuosl-ppc64
 
 Machines:
+* go-le-p10-1: (30 GB RAM, 50 GB disk, 20 cores, POWER10)
+  Linux go-le-p10-1 5.15.0-53-generic #59-Ubuntu SMP Mon Oct 17 18:55:27 UTC 2022 ppc64le ppc64le ppc64le GNU/Linux
+
+  ssh -i ~/.ssh/id_ed25519_golang1 ubuntu@go-le-p10-1.osuosl.org
+  (key from go/go-builders-ssh)
 
 * go-le-bionic-1: (30 GB RAM, 50 GB disk, 20 cores, POWER9)
   Linux go-le-bionic-2 5.4.0-125-generic #141-Ubuntu SMP Wed Aug 10 13:41:48 UTC 2022 ppc64le ppc64le ppc64le GNU/Linux
