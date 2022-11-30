@@ -84,12 +84,6 @@ func uppercaseVersion(version string) string {
 // CheckBlockers returns an error if there are open release blockers in
 // the current milestone.
 func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
-	if kind == KindRC {
-		// We don't check blockers for release candidates; they're expected to
-		// at least have recurring blockers, and we don't have an okay-after
-		// label to suppress them.
-		return nil
-	}
 	issues, err := m.Client.FetchMilestoneIssues(ctx, m.RepoOwner, m.RepoName, milestones.Current)
 	if err != nil {
 		return err
@@ -97,7 +91,9 @@ func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMi
 	var blockers []string
 	for number, labels := range issues {
 		releaseBlocker := labels["release-blocker"]
-		if kind == KindBeta && strings.HasSuffix(version, "beta1") && labels["okay-after-beta1"] {
+		switch {
+		case kind == KindBeta && strings.HasSuffix(version, "beta1") && labels["okay-after-beta1"],
+			kind == KindRC && strings.HasSuffix(version, "rc1") && labels["okay-after-rc1"]:
 			releaseBlocker = false
 		}
 		if releaseBlocker {
@@ -113,15 +109,10 @@ func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMi
 	return m.ApproveAction(ctx)
 }
 
-// PushIssues updates issues to reflect a finished release. For beta1 releases,
-// it removes the okay-after-beta1 label. For major and minor releases,
-// it moves them to the next milestone and closes the current one.
+// PushIssues updates issues to reflect a finished release.
+// For major and minor releases, it moves issues to the next milestone and closes the current milestone.
+// For pre-releases, it cleans up any "okay-after-..." labels in the current milestone that are done serving their purpose.
 func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMilestones, version string, kind ReleaseKind) error {
-	// For RCs we don't change issues at all.
-	if kind == KindRC {
-		return nil
-	}
-
 	issues, err := m.Client.FetchMilestoneIssues(ctx, m.RepoOwner, m.RepoName, milestones.Current)
 	if err != nil {
 		return err
@@ -129,16 +120,22 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 	for issueNumber, labels := range issues {
 		var newLabels *[]string
 		var newMilestone *int
-		if kind == KindBeta && strings.HasSuffix(version, "beta1") {
-			if labels["okay-after-beta1"] {
-				newLabels = &[]string{}
-				for label := range labels {
-					if label == "okay-after-beta1" {
-						continue
-					}
-					*newLabels = append(*newLabels, label)
-				}
+		removeLabel := func(name string) {
+			if !labels[name] {
+				return
 			}
+			newLabels = new([]string)
+			for label := range labels {
+				if label == name {
+					continue
+				}
+				*newLabels = append(*newLabels, label)
+			}
+		}
+		if kind == KindBeta && strings.HasSuffix(version, "beta1") {
+			removeLabel("okay-after-beta1")
+		} else if kind == KindRC && strings.HasSuffix(version, "rc1") {
+			removeLabel("okay-after-rc1")
 		} else if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
 			newMilestone = &milestones.Next
 		}

@@ -45,7 +45,7 @@ func TestCheckBlockers(t *testing.T) {
 			name:            "RC 1 with one hard blocker",
 			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true}},
 			version:         "go1.20rc1", kind: KindRC,
-			want: nil, // TODO(go.dev/cl/453982): Should be a release-blocker that requires manual approval.
+			want: errManualApproval,
 		},
 		{
 			name:            "RC 1 with one blocker marked okay-after-rc1",
@@ -57,7 +57,7 @@ func TestCheckBlockers(t *testing.T) {
 			name:            "RC 2 with one hard blocker and meaningless okay-after-rc1 label",
 			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true, "okay-after-rc1": true}},
 			version:         "go1.20rc2", kind: KindRC,
-			want: nil, // TODO(go.dev/cl/453982): Should be a release-blocker that requires manual approval.
+			want: errManualApproval,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
