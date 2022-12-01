@@ -94,12 +94,13 @@ var allReleases = map[int]ReleaseTargets{
 			Builder:     "linux-ppc64le-buildlet",
 			BuildOnly:   true,
 		},
+		// *-oldcc amd64/386 builders needed for 1.18, 1.19
 		"windows-386": &Target{
-			Builder: "windows-386-2008",
+			Builder: "windows-386-2008-oldcc",
 		},
 		"windows-amd64": &Target{
-			Builder:         "windows-amd64-2008",
-			LongTestBuilder: "windows-amd64-longtest",
+			Builder:         "windows-amd64-2008-oldcc",
+			LongTestBuilder: "windows-amd64-longtest-oldcc",
 			Race:            true,
 		},
 		"windows-arm64": &Target{
@@ -138,6 +139,9 @@ var allReleases = map[int]ReleaseTargets{
 		"linux-amd64": &Target{
 			Builder:         "linux-amd64-bullseye",
 			LongTestBuilder: "linux-amd64-longtest",
+		},
+		"windows-386": &Target{
+			Builder: "windows-386-2008",
 		},
 		"windows-amd64": &Target{
 			Builder:         "windows-amd64-2008",

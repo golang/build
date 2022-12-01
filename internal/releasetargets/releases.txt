@@ -38,11 +38,11 @@ linux-s390x     linux      s390x      linux-s390x-crosscompile
 	Build only
 	Running on GCP
 
-windows-386     windows    386        windows-386-2008
+windows-386     windows    386        windows-386-2008-oldcc
 	Running on GCP
 
-windows-amd64   windows    amd64      windows-amd64-2008
-	Race enabled, Long tests on windows-amd64-longtest
+windows-amd64   windows    amd64      windows-amd64-2008-oldcc
+	Race enabled, Long tests on windows-amd64-longtest-oldcc
 	Running on GCP
 
 windows-arm64   windows    arm64      windows-arm64-11
@@ -90,11 +90,11 @@ linux-s390x     linux      s390x      linux-s390x-crosscompile
 	Build only
 	Running on GCP
 
-windows-386     windows    386        windows-386-2008
+windows-386     windows    386        windows-386-2008-oldcc
 	Running on GCP
 
-windows-amd64   windows    amd64      windows-amd64-2008
-	Race enabled, Long tests on windows-amd64-longtest
+windows-amd64   windows    amd64      windows-amd64-2008-oldcc
+	Race enabled, Long tests on windows-amd64-longtest-oldcc
 	Running on GCP
 
 windows-arm64   windows    arm64      windows-arm64-11
