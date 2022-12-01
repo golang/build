@@ -424,7 +424,8 @@ type gopherbot struct {
 	releases struct {
 		sync.Mutex
 		lastUpdate time.Time
-		major      []string // last two releases and the next upcoming release, like: "1.9", "1.10", "1.11"
+		major      []string          // Last two releases and the next upcoming release, like: "1.9", "1.10", "1.11".
+		nextMinor  map[string]string // Key is a major release like "1.9", value is its next minor release like "1.9.7".
 	}
 }
 
@@ -918,7 +919,7 @@ func (b *gopherbot) pingEarlyIssues(ctx context.Context) error {
 
 	// Compute nextMajor, a value like "1.17" representing that Go 1.17
 	// is the next major version (the version whose development just started).
-	majorReleases, err := b.getMajorReleases(ctx)
+	majorReleases, _, err := b.fetchReleases(ctx)
 	if err != nil {
 		return err
 	}
@@ -1669,43 +1670,48 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 	return nil
 }
 
-// getMajorReleases returns the two most recent major Go 1.x releases, and
+// fetchReleases returns the two most recent major Go 1.x releases, and
 // the next upcoming release, sorted and formatted like []string{"1.9", "1.10", "1.11"}.
+// It also returns the next minor release for each major release,
+// like map[string]string{"1.9": "1.9.7", "1.10": "1.10.4", "1.11": "1.11.1"}.
 //
 // The data returned is fetched from Maintner Service occasionally
 // and cached for some time.
-func (b *gopherbot) getMajorReleases(ctx context.Context) ([]string, error) {
+func (b *gopherbot) fetchReleases(ctx context.Context) (major []string, nextMinor map[string]string, _ error) {
 	b.releases.Lock()
 	defer b.releases.Unlock()
 
-	if expiry := b.releases.lastUpdate.Add(time.Hour); time.Now().Before(expiry) {
-		return b.releases.major, nil
+	if expiry := b.releases.lastUpdate.Add(10 * time.Minute); time.Now().Before(expiry) {
+		return b.releases.major, b.releases.nextMinor, nil
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	resp, err := b.mc.ListGoReleases(ctx, &apipb.ListGoReleasesRequest{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rs := resp.Releases // Supported Go releases, sorted with latest first.
 
-	var majorReleases []string
+	nextMinor = make(map[string]string)
 	for i := len(rs) - 1; i >= 0; i-- {
-		x, y := rs[i].Major, rs[i].Minor
-		majorReleases = append(majorReleases, fmt.Sprintf("%d.%d", x, y))
+		x, y, z := rs[i].Major, rs[i].Minor, rs[i].Patch
+		major = append(major, fmt.Sprintf("%d.%d", x, y))
+		nextMinor[fmt.Sprintf("%d.%d", x, y)] = fmt.Sprintf("%d.%d.%d", x, y, z+1)
 	}
 	// Include the next release in the list of major releases.
 	if len(rs) > 0 {
-		// Assume the next release will bump the minor version.
+		// Assume the next major release after Go X.Y is Go X.(Y+1). This is true more often than not.
 		nextX, nextY := rs[0].Major, rs[0].Minor+1
-		majorReleases = append(majorReleases, fmt.Sprintf("%d.%d", nextX, nextY))
+		major = append(major, fmt.Sprintf("%d.%d", nextX, nextY))
+		nextMinor[fmt.Sprintf("%d.%d", nextX, nextY)] = fmt.Sprintf("%d.%d.1", nextX, nextY)
 	}
 
-	b.releases.major = majorReleases
+	b.releases.major = major
+	b.releases.nextMinor = nextMinor
 	b.releases.lastUpdate = time.Now()
 
-	return majorReleases, nil
+	return major, nextMinor, nil
 }
 
 // openCherryPickIssues opens CherryPickCandidate issues for backport when
@@ -1739,7 +1745,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 		if backportComment == nil {
 			return nil
 		}
-		majorReleases, err := b.getMajorReleases(ctx)
+		majorReleases, _, err := b.fetchReleases(ctx)
 		if err != nil {
 			return err
 		}
@@ -1771,10 +1777,10 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 	})
 }
 
-// setMinorMilestones applies the latest minor release milestone to issue
-// with [1.X backport] in the title.
+// setMinorMilestones applies the next minor release milestone
+// to issues with [1.X backport] in the title.
 func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
-	majorReleases, err := b.getMajorReleases(ctx)
+	majorReleases, nextMinor, err := b.fetchReleases(ctx)
 	if err != nil {
 		return err
 	}
@@ -1791,48 +1797,27 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 		if majorRel == "" {
 			return nil
 		}
-		m, err := b.getMinorMilestoneForMajor(majorRel)
-		if err != nil {
-			// Fail silently, the milestone might not exist yet.
-			log.Printf("Failed to apply minor release milestone to issue %d: %v", gi.Number, err)
-			return nil
+		if _, ok := nextMinor[majorRel]; !ok {
+			return fmt.Errorf("internal error: fetchReleases returned majorReleases=%q nextMinor=%q, and nextMinor doesn't have %q", majorReleases, nextMinor, majorRel)
 		}
-		return b.setMilestone(ctx, b.gorepo.ID(), gi, m)
-	})
-}
-
-// getMinorMilestoneForMajor returns the latest open minor release milestone
-// for a given major release series.
-func (b *gopherbot) getMinorMilestoneForMajor(majorRel string) (milestone, error) {
-	var res milestone
-	var minorVers int
-	titlePrefix := "Go" + majorRel + "."
-	if err := b.gorepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
-		if m.Closed {
-			return nil
-		}
-		if !strings.HasPrefix(m.Title, titlePrefix) {
-			return nil
-		}
-		n, err := strconv.Atoi(strings.TrimPrefix(m.Title, titlePrefix))
-		if err != nil {
-			return nil
-		}
-		if n > minorVers {
-			res = milestone{
+		lowerTitle := "go" + nextMinor[majorRel]
+		var nextMinorMilestone milestone
+		if b.gorepo.ForeachMilestone(func(m *maintner.GitHubMilestone) error {
+			if m.Closed || strings.ToLower(m.Title) != lowerTitle {
+				return nil
+			}
+			nextMinorMilestone = milestone{
 				Number: int(m.Number),
 				Name:   m.Title,
 			}
-			minorVers = n
+			return errStopIteration
+		}); nextMinorMilestone == (milestone{}) {
+			// Fail silently, the milestone might not exist yet.
+			log.Printf("Failed to apply minor release milestone to issue %d", gi.Number)
+			return nil
 		}
-		return nil
-	}); err != nil {
-		return milestone{}, err
-	}
-	if minorVers == 0 {
-		return milestone{}, errors.New("no minor milestone found for release series " + majorRel)
-	}
-	return res, nil
+		return b.setMilestone(ctx, b.gorepo.ID(), gi, nextMinorMilestone)
+	})
 }
 
 // closeCherryPickIssues closes cherry-pick issues when CLs are merged to
