@@ -234,8 +234,11 @@ func main() {
 	if err := w.ResumeAll(ctx); err != nil {
 		log.Printf("w.ResumeAll() = %v", err)
 	}
-	s := relui.NewServer(dbPool, w, base, siteHeader, ms)
-	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: GRPCHandler(grpcServer, s)}))
+	var h http.Handler = relui.NewServer(dbPool, w, base, siteHeader, ms)
+	if metadata.OnGCE() {
+		h = access.RequireIAPAuthHandler(h, access.IAPSkipAudienceValidation)
+	}
+	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: GRPCHandler(grpcServer, h)}))
 }
 
 // GRPCHandler creates handler which intercepts requests intended for a GRPC server and directs the calls to the server.

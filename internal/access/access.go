@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"time"
 
 	grpcauth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
@@ -60,6 +61,23 @@ func IAPFromContext(ctx context.Context) (*IAPFields, error) {
 	return &iap, nil
 }
 
+func RequireIAPAuthHandler(h http.Handler, audience string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		jwt := r.Header.Get("x-goog-iap-jwt-assertion")
+		if jwt == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprintf(w, "must run under IAP\n")
+			return
+		}
+		if err := validateIAPJWT(r.Context(), jwt, audience, idtoken.Validate); err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			log.Printf("JWT validation error: %v", err)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
 // iapAuthFunc creates an authentication function used to create a GRPC interceptor.
 // It ensures that the caller has successfully authenticated via IAP. If the caller
 // has authenticated, the headers created by IAP will be added to the request scope
@@ -71,29 +89,37 @@ func iapAuthFunc(audience string, validatorFn validator) grpcauth.AuthFunc {
 		if !ok {
 			return ctx, status.Error(codes.Internal, codes.Internal.String())
 		}
-		jwt := md.Get(iapHeaderJWT)
-		if len(jwt) == 0 {
+		jwtHeaders := md.Get(iapHeaderJWT)
+		if len(jwtHeaders) == 0 {
 			return ctx, status.Error(codes.Unauthenticated, "IAP JWT not found in request")
 		}
-		payload, err := validatorFn(ctx, jwt[0], audience)
+		if err := validateIAPJWT(ctx, jwtHeaders[0], audience, validatorFn); err != nil {
+			return nil, err
+		}
+		ctx, err := contextWithIAPMD(ctx, md)
 		if err != nil {
-			log.Printf("access: error validating JWT: %s", err)
-			return ctx, status.Error(codes.Unauthenticated, "unable to authenticate")
-		}
-		if payload.Issuer != "https://cloud.google.com/iap" {
-			log.Printf("access: incorrect issuer: %q", payload.Issuer)
-			return ctx, status.Error(codes.Unauthenticated, "incorrect issuer")
-		}
-		if payload.Expires+30 < time.Now().Unix() || payload.IssuedAt-30 > time.Now().Unix() {
-			log.Printf("Bad JWT times: expires %v, issued %v", time.Unix(payload.Expires, 0), time.Unix(payload.IssuedAt, 0))
-			return ctx, status.Error(codes.Unauthenticated, "JWT timestamp invalid")
-		}
-		if ctx, err = contextWithIAPMD(ctx, md); err != nil {
 			log.Printf("access: unable to set IAP fields in context: %s", err)
 			return ctx, status.Error(codes.Unauthenticated, "unable to authenticate")
 		}
 		return ctx, nil
 	}
+}
+
+func validateIAPJWT(ctx context.Context, jwt, audience string, validatorFn validator) error {
+	payload, err := validatorFn(ctx, jwt, audience)
+	if err != nil {
+		log.Printf("access: error validating JWT: %s", err)
+		return status.Error(codes.Unauthenticated, "unable to authenticate")
+	}
+	if payload.Issuer != "https://cloud.google.com/iap" {
+		log.Printf("access: incorrect issuer: %q", payload.Issuer)
+		return status.Error(codes.Unauthenticated, "incorrect issuer")
+	}
+	if payload.Expires+30 < time.Now().Unix() || payload.IssuedAt-30 > time.Now().Unix() {
+		log.Printf("Bad JWT times: expires %v, issued %v", time.Unix(payload.Expires, 0), time.Unix(payload.IssuedAt, 0))
+		return status.Error(codes.Unauthenticated, "JWT timestamp invalid")
+	}
+	return nil
 }
 
 // contextWithIAPMD copies the headers set by IAP into the context.
