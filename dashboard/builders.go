@@ -415,23 +415,9 @@ var Hosts = map[string]*HostConfig{
 		IsReverse: true,
 		ExpectNum: 2, // See https://github.com/golang/go/issues/49557#issuecomment-969148789.
 	},
-	"host-netbsd-386-9_0": {
-		VMImage:     "netbsd-i386-9-0-2019q4",
-		Notes:       "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-386",
-		machineType: "n2", // force Intel; see go.dev/issue/49209
-		SSHUsername: "root",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
 	"host-netbsd-386-9_3": {
 		VMImage:     "netbsd-i386-9-3-202211120320",
 		Notes:       "NetBSD 9.3; GCE VM is built from script in build/env/netbsd-386",
-		machineType: "n2", // force Intel; see go.dev/issue/49209
-		SSHUsername: "root",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
-	"host-netbsd-amd64-9_0": {
-		VMImage:     "netbsd-amd64-9-0-2019q4",
-		Notes:       "NetBSD 9.0; GCE VM is built from script in build/env/netbsd-amd64",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		SSHUsername: "root",
 		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
@@ -2058,21 +2044,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:           "netbsd-386-9_0",
-		HostType:       "host-netbsd-386-9_0",
-		distTestAdjust: noTestDirAndNoReboot,
-		KnownIssues:    []int{50138},
-	})
-	addBuilder(BuildConfig{
 		Name:           "netbsd-386-9_3",
 		HostType:       "host-netbsd-386-9_3",
 		distTestAdjust: noTestDirAndNoReboot,
-	})
-	addBuilder(BuildConfig{
-		Name:           "netbsd-amd64-9_0",
-		HostType:       "host-netbsd-amd64-9_0",
-		distTestAdjust: noTestDirAndNoReboot,
-		KnownIssues:    []int{50138},
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-amd64-9_3",
@@ -2097,8 +2071,7 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=10",
 		},
-		FlakyNet:    true,
-		KnownIssues: []int{50138},
+		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-arm64-bsiegert",
@@ -2109,8 +2082,7 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=10",
 		},
-		FlakyNet:    true,
-		KnownIssues: []int{50138},
+		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-386",
