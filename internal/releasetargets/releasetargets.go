@@ -128,9 +128,13 @@ var allReleases = map[int]ReleaseTargets{
 		"darwin-arm64": &Target{
 			Builder: "darwin-arm64-12",
 		},
+		"freebsd-386": &Target{
+			SecondClass: true,
+			Builder:     "freebsd-386-13_0",
+		},
 		"freebsd-amd64": &Target{
 			SecondClass: true,
-			Builder:     "freebsd-amd64-12_3",
+			Builder:     "freebsd-amd64-13_0",
 		},
 		"linux-386": &Target{
 			Builder:         "linux-386-bullseye",

@@ -111,10 +111,10 @@ darwin-amd64    darwin     amd64      darwin-amd64-13
 darwin-arm64    darwin     arm64      darwin-arm64-12
 	Running on reverse builder: macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office
 
-freebsd-386     freebsd    386        freebsd-386-12_3
+freebsd-386     freebsd    386        freebsd-386-13_0
 	Running on GCP
 
-freebsd-amd64   freebsd    amd64      freebsd-amd64-12_3
+freebsd-amd64   freebsd    amd64      freebsd-amd64-13_0
 	Running on GCP
 
 linux-386       linux      386        linux-386-bullseye
