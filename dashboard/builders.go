@@ -2548,6 +2548,7 @@ func init() {
 		env: []string{
 			"CGO_ENABLED=1",
 			"GOARCH=arm",
+			"GO_TEST_TIMEOUT_SCALE=2", // inherited from cmd/dist's default for GOARCH=arm
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2693,6 +2694,7 @@ func init() {
 			"GOHOSTARCH=arm",
 			"CGO_CFLAGS=-march=armv6",
 			"CGO_LDFLAGS=-march=armv6",
+			"GO_TEST_TIMEOUT_SCALE=2", // inherited from cmd/dist's default for GOARCH=arm
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2719,6 +2721,7 @@ func init() {
 		env: []string{
 			"GOARCH=mips64le",
 			"GOHOSTARCH=mips64le",
+			"GO_TEST_TIMEOUT_SCALE=4", // inherited from cmd/dist's default for GOARCH=mips{,le,64,64le}
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2731,6 +2734,7 @@ func init() {
 		env: []string{
 			"GOARCH=mipsle",
 			"GOHOSTARCH=mipsle",
+			"GO_TEST_TIMEOUT_SCALE=4", // inherited from cmd/dist's default for GOARCH=mips{,le,64,64le}
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2743,6 +2747,7 @@ func init() {
 		env: []string{
 			"GOARCH=mips64",
 			"GOHOSTARCH=mips64",
+			"GO_TEST_TIMEOUT_SCALE=4", // inherited from cmd/dist's default for GOARCH=mips{,le,64,64le}
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2755,6 +2760,7 @@ func init() {
 		env: []string{
 			"GOARCH=mips",
 			"GOHOSTARCH=mips",
+			"GO_TEST_TIMEOUT_SCALE=4", // inherited from cmd/dist's default for GOARCH=mips{,le,64,64le}
 		},
 	})
 	addBuilder(BuildConfig{
