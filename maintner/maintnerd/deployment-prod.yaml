@@ -74,3 +74,11 @@ spec:
   selector:
     app: maintnerd
   type: NodePort
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  namespace: prod
+  name: build-ingress-maintnerd-backend
+spec:
+  timeoutSec: 60  # For long-poll support on the /logs endpoint. See go.dev/issue/53569.

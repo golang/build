@@ -67,7 +67,7 @@ metadata:
   namespace: prod
   name: coordinator-internal-iap
   annotations:
-    cloud.google.com/backend-config: '{"default": "build-ingress-iap-backend"}'
+    cloud.google.com/backend-config: '{"default": "coordinator-iap-backend"}'
     cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
@@ -95,3 +95,15 @@ spec:
   selector:
     app: coordinator
   type: NodePort
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  namespace: prod
+  name: coordinator-iap-backend
+spec:
+  iap:
+    enabled: true
+    oauthclientCredentials:
+      secretName: iap-oauth
+  timeoutSec: 86400  # For long-running gomote RPCs. See https://go.dev/issue/56423.

@@ -18,13 +18,6 @@ spec:
     http:
       paths:
       - pathType: ImplementationSpecific
-        path: /owners
-        backend:
-          service:
-            name: devapp-internal-iap
-            port:
-              number: 444
-      - pathType: ImplementationSpecific
         path: /*
         backend:
           service:
@@ -136,26 +129,6 @@ spec:
   redirectToHttps:
     enabled: true
     responseCodeName: FOUND
----
-apiVersion: cloud.google.com/v1
-kind: BackendConfig
-metadata:
-  namespace: prod
-  name: build-ingress-iap-backend
-spec:
-  iap:
-    enabled: true
-    oauthclientCredentials:
-      secretName: iap-oauth
-  timeoutSec: 86400  # For long-running gomote RPCs. See https://go.dev/issue/56423.
----
-apiVersion: cloud.google.com/v1
-kind: BackendConfig
-metadata:
-  namespace: prod
-  name: build-ingress-maintnerd-backend
-spec:
-  timeoutSec: 60  # For long-poll support on the /logs endpoint. See go.dev/issue/53569.
 ---
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate

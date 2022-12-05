@@ -43,6 +43,11 @@ spec:
             - "--serving-files-base=gs://golang"
             - "--edge-cache-url=https://dl.google.com/go"
             - "--website-upload-url=https://go.dev/dl/upload"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 444
+              scheme: HTTPS
           ports:
             - containerPort: 444
           env:
@@ -100,7 +105,7 @@ metadata:
   namespace: prod
   name: relui-internal
   annotations:
-    cloud.google.com/backend-config: '{"default": "build-ingress-iap-backend"}'
+    cloud.google.com/backend-config: '{"default": "relui-iap-backend"}'
     cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
@@ -111,3 +116,19 @@ spec:
   selector:
     app: relui
   type: NodePort
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  namespace: prod
+  name: relui-iap-backend
+spec:
+  iap:
+    enabled: true
+    oauthclientCredentials:
+      secretName: iap-oauth
+  healthCheck:
+    timeoutSec: 10
+    checkIntervalSec: 15
+    type: HTTPS
+    requestPath: /healthz

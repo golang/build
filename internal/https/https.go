@@ -34,6 +34,8 @@ type Options struct {
 	SelfSignedAddr string
 	// If non-empty, listen on this address and serve HTTP.
 	HTTPAddr string
+	// If non-empty, respond unconditionally with 200 OK to requests on this path.
+	HealthPath string
 }
 
 var DefaultOptions = &Options{}
@@ -47,6 +49,7 @@ func RegisterFlags(set *flag.FlagSet) {
 	set.StringVar(&DefaultOptions.AutocertAddr, "listen-https-autocert", "", "if non-empty, listen on this address and serve HTTPS using a Let's Encrypt cert stored in autocert-bucket")
 	set.StringVar(&DefaultOptions.SelfSignedAddr, "listen-https-selfsigned", "", "if non-empty, listen on this address and serve HTTPS using a self-signed cert")
 	set.StringVar(&DefaultOptions.HTTPAddr, "listen-http", "", "if non-empty, listen on this address and serve HTTP")
+	set.StringVar(&DefaultOptions.HealthPath, "health-path", "/healthz", "if non-empty, respond unconditionally with 200 OK to requests on this path")
 }
 
 // ListenAndServe runs the servers configured by DefaultOptions. It always
@@ -59,6 +62,18 @@ func ListenAndServe(ctx context.Context, handler http.Handler) error {
 // returns a non-nil error.
 func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options) error {
 	errc := make(chan error, 3)
+
+	if opts.HealthPath != "" {
+		wrapped := handler
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == opts.HealthPath {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("ok"))
+			} else {
+				wrapped.ServeHTTP(w, r)
+			}
+		})
+	}
 
 	if opts.HTTPAddr != "" {
 		server := &http.Server{Addr: opts.HTTPAddr, Handler: handler}
