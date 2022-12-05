@@ -90,7 +90,7 @@ func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMi
 		// label to suppress them.
 		return nil
 	}
-	issues, err := m.loadMilestoneIssues(ctx, milestones.Current, kind)
+	issues, err := m.Client.FetchMilestoneIssues(ctx, m.RepoOwner, m.RepoName, milestones.Current)
 	if err != nil {
 		return err
 	}
@@ -113,61 +113,6 @@ func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMi
 	return m.ApproveAction(ctx)
 }
 
-// loadMilestoneIssues returns all the open issues in the specified milestone
-// and their labels.
-func (m *MilestoneTasks) loadMilestoneIssues(ctx *wf.TaskContext, milestoneID int, kind ReleaseKind) (map[int]map[string]bool, error) {
-	issues := map[int]map[string]bool{}
-	var query struct {
-		Repository struct {
-			Issues struct {
-				PageInfo struct {
-					EndCursor   githubv4.String
-					HasNextPage bool
-				}
-
-				Nodes []struct {
-					Number int
-					ID     githubv4.ID
-					Title  string
-					Labels struct {
-						PageInfo struct {
-							HasNextPage bool
-						}
-						Nodes []struct {
-							Name string
-						}
-					} `graphql:"labels(first:10)"`
-				}
-			} `graphql:"issues(first:100, after:$afterToken, filterBy:{states:OPEN, milestoneNumber:$milestoneNumber})"`
-		} `graphql:"repository(owner: $repoOwner, name: $repoName)"`
-	}
-	var afterToken *githubv4.String
-more:
-	if err := m.Client.Query(ctx, &query, map[string]interface{}{
-		"repoOwner":       githubv4.String(m.RepoOwner),
-		"repoName":        githubv4.String(m.RepoName),
-		"milestoneNumber": githubv4.String(fmt.Sprint(milestoneID)),
-		"afterToken":      afterToken,
-	}); err != nil {
-		return nil, err
-	}
-	for _, issue := range query.Repository.Issues.Nodes {
-		if issue.Labels.PageInfo.HasNextPage {
-			return nil, fmt.Errorf("issue %v (#%v) has more than 10 labels", issue.Title, issue.Number)
-		}
-		labels := map[string]bool{}
-		for _, label := range issue.Labels.Nodes {
-			labels[label.Name] = true
-		}
-		issues[issue.Number] = labels
-	}
-	if query.Repository.Issues.PageInfo.HasNextPage {
-		afterToken = &query.Repository.Issues.PageInfo.EndCursor
-		goto more
-	}
-	return issues, nil
-}
-
 // PushIssues updates issues to reflect a finished release. For beta1 releases,
 // it removes the okay-after-beta1 label. For major and minor releases,
 // it moves them to the next milestone and closes the current one.
@@ -177,7 +122,7 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 		return nil
 	}
 
-	issues, err := m.loadMilestoneIssues(ctx, milestones.Current, KindUnknown)
+	issues, err := m.Client.FetchMilestoneIssues(ctx, m.RepoOwner, m.RepoName, milestones.Current)
 	if err != nil {
 		return err
 	}
@@ -223,8 +168,9 @@ type GitHubClientInterface interface {
 	// and the milestone doesn't exist, it will be created.
 	FetchMilestone(ctx context.Context, owner, repo, name string, create bool) (int, error)
 
-	// See githubv4.Client.Query.
-	Query(ctx context.Context, q interface{}, variables map[string]interface{}) error
+	// FetchMilestoneIssues returns all the open issues in the specified milestone
+	// and their labels.
+	FetchMilestoneIssues(ctx context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error)
 
 	// See github.Client.Issues.Edit.
 	EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
@@ -236,10 +182,6 @@ type GitHubClientInterface interface {
 type GitHubClient struct {
 	V3 *github.Client
 	V4 *githubv4.Client
-}
-
-func (c *GitHubClient) Query(ctx context.Context, q interface{}, variables map[string]interface{}) error {
-	return c.V4.Query(ctx, q, variables)
 }
 
 func (c *GitHubClient) FetchMilestone(ctx context.Context, owner, repo, name string, create bool) (int, error) {
@@ -311,6 +253,59 @@ func findMilestone(ctx context.Context, client *githubv4.Client, owner, repo, na
 	}
 	// The switch above is exhaustive.
 	panic(fmt.Errorf("unhandled case: open: %q closed: %q", open, closed))
+}
+
+func (c *GitHubClient) FetchMilestoneIssues(ctx context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error) {
+	issues := map[int]map[string]bool{}
+	var query struct {
+		Repository struct {
+			Issues struct {
+				PageInfo struct {
+					EndCursor   githubv4.String
+					HasNextPage bool
+				}
+
+				Nodes []struct {
+					Number int
+					ID     githubv4.ID
+					Title  string
+					Labels struct {
+						PageInfo struct {
+							HasNextPage bool
+						}
+						Nodes []struct {
+							Name string
+						}
+					} `graphql:"labels(first:10)"`
+				}
+			} `graphql:"issues(first:100, after:$afterToken, filterBy:{states:OPEN, milestoneNumber:$milestoneNumber})"`
+		} `graphql:"repository(owner: $repoOwner, name: $repoName)"`
+	}
+	var afterToken *githubv4.String
+more:
+	if err := c.V4.Query(ctx, &query, map[string]interface{}{
+		"repoOwner":       githubv4.String(owner),
+		"repoName":        githubv4.String(repo),
+		"milestoneNumber": githubv4.String(fmt.Sprint(milestoneID)),
+		"afterToken":      afterToken,
+	}); err != nil {
+		return nil, err
+	}
+	for _, issue := range query.Repository.Issues.Nodes {
+		if issue.Labels.PageInfo.HasNextPage {
+			return nil, fmt.Errorf("issue %v (#%v) has more than 10 labels", issue.Title, issue.Number)
+		}
+		labels := map[string]bool{}
+		for _, label := range issue.Labels.Nodes {
+			labels[label.Name] = true
+		}
+		issues[issue.Number] = labels
+	}
+	if query.Repository.Issues.PageInfo.HasNextPage {
+		afterToken = &query.Repository.Issues.PageInfo.EndCursor
+		goto more
+	}
+	return issues, nil
 }
 
 func (c *GitHubClient) EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {

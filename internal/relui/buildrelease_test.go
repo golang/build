@@ -196,7 +196,7 @@ esac
 		},
 	}
 	milestoneTasks := &task.MilestoneTasks{
-		Client:    &fakeGitHub{},
+		Client:    fakeGitHub{},
 		RepoOwner: "golang",
 		RepoName:  "go",
 		ApproveAction: func(ctx *workflow.TaskContext) error {
@@ -639,19 +639,19 @@ func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx context.Context, input 
 
 type fakeGitHub struct{}
 
-func (g *fakeGitHub) FetchMilestone(ctx context.Context, owner, repo, name string, create bool) (int, error) {
+func (fakeGitHub) FetchMilestone(_ context.Context, owner, repo, name string, create bool) (int, error) {
 	return 0, nil
 }
 
-func (g *fakeGitHub) Query(ctx context.Context, q interface{}, variables map[string]interface{}) error {
-	return nil
+func (fakeGitHub) FetchMilestoneIssues(_ context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error) {
+	return nil, nil
 }
 
-func (g *fakeGitHub) EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+func (fakeGitHub) EditIssue(_ context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
 	return nil, nil, nil
 }
 
-func (g *fakeGitHub) EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
+func (fakeGitHub) EditMilestone(_ context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
 	return nil, nil, nil
 }
 
