@@ -2841,6 +2841,7 @@ func init() {
 		env: []string{
 			"GOARM=7",
 			"CGO_ENABLED=1",
+			"GO_TEST_TIMEOUT_SCALE=8", // from builder's local environment as of 2022-12-06
 		},
 		KnownIssues: []int{52679},
 	})
@@ -2863,6 +2864,9 @@ func init() {
 		distTestAdjust: noTestDirAndNoReboot,
 		buildsRepo:     plan9Default,
 		KnownIssues:    []int{49338},
+		env: []string{
+			"GO_TEST_TIMEOUT_SCALE=3", // from builder's local environment as of 2022-12-06
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "plan9-amd64-0intro",
