@@ -72,3 +72,30 @@ luci.bucket(name = "ci")
 # The prod bucket will include builders which work on post-commit code and
 # generate executable artifacts used by other users or machines.
 luci.bucket(name = "prod")
+
+# This is the cipd package where the recipe bundler will put the built recipes.
+# This line makes it the default value for all `luci.recipe` invocations in
+# this configuration.
+luci.recipe.defaults.cipd_package.set("infra/recipe_bundles/go-review.googlesource.com/build")
+
+# This sets the default CIPD ref to use in builds to get the right version of
+# recipes for the build.
+#
+# The recipe bundler sets CIPD refs equal in name to the git refs that it
+# processed the recipe code from.
+#
+# Note: This will cause all recipe commits to automatically deploy as soon
+# as the recipe bundler compiles them from your refs/heads/luci-config branch.
+cipd_version = "refs/heads/luci-config"
+
+luci.builder(
+  name = "Example Builder",
+  bucket = "ci",
+
+  executable = luci.recipe(
+    # The name of the recipe we just added.
+    name = "hello_world",
+  ),
+
+  schedule = "with 1m interval",
+)
