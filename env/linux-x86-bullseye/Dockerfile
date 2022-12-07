@@ -17,7 +17,6 @@ ENV DEBIAN_FRONTEND noninteractive
 # gdb: optionally used by runtime tests for gdb
 # gfortran: for compiling cgo with fortran support (multilib for 386)
 # git: git VCS supported by cmd/go
-# gpg: the presence of a gpg binary can influence git behavior for cmd/go tests
 # libc6-dev-i386: for 32-bit builds
 # libc6-dev: for building Go's bootstrap 'dist' prog
 # libgles2-mesa-dev: required by x/mobile repo
@@ -44,8 +43,6 @@ RUN apt-get update && apt-get install -y \
 	gfortran \
 	gfortran-multilib \
 	git \
-	gpg \
-	gpg-agent \
 	iptables \
 	libc6-dev \
 	libc6-dev-i386 \
