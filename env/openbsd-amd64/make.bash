@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Copyright 2014 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
@@ -6,7 +6,8 @@
 set -e
 set -u
 
-readonly VERSION="7.0"
+# Update to the version listed on https://openbsd.org
+readonly VERSION="${VERSION:-7.2}"
 readonly RELNO="${VERSION/./}"
 readonly SNAPSHOT=false
 
@@ -61,6 +62,9 @@ https://${MIRROR}/pub/OpenBSD
 EOF
 cat >etc/rc.local <<EOF
 if [[ -f /firstboot ]]; then
+  syspatch
+  # Run syspatch twice in case syspatch itself needs patching (this is the case with OpenBSD
+  # 7.1: https://www.openbsd.org/errata71.html )
   syspatch
   pkg_add -iv ${PKG_ADD_OPTIONS} bash curl git
   rm -f /firstboot
@@ -170,6 +174,6 @@ EOF
 
 # Create Compute Engine disk image.
 echo "Archiving disk.raw... (this may take a while)"
-tar -Szcf "openbsd-${ARCH}-gce.tar.gz" disk.raw
+tar -Szcf "openbsd-${VERSION}-${ARCH}-gce.tar.gz" disk.raw
 
-echo "Done. GCE image is openbsd-${ARCH}-gce.tar.gz."
+echo "Done. GCE image is openbsd-${VERSION}-${ARCH}-gce.tar.gz."
