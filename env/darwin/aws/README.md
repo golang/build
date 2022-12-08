@@ -153,7 +153,7 @@ builders.
 
 while true; do
   echo "Running QEMU..."
-  $HOME/runqemubuildlet -guest-os=darwin -macos-version=${MACOS_VERSION?} -osk=${OSK_VALUE?} -guest-index=1 -buildlet-healthz-url="http://192.168.64.101:8080/healthz"
+  sudo $HOME/runqemubuildlet -guest-os=darwin -macos-version=${MACOS_VERSION?} -osk=${OSK_VALUE?} -guest-index=1 -buildlet-healthz-url="http://192.168.64.101:8080/healthz"
 done
 ```
 
@@ -164,7 +164,7 @@ done
 
 while true; do
   echo "Running QEMU..."
-  $HOME/runqemubuildlet -guest-os=darwin -macos-version=${MACOS_VERSION?} -osk=${OSK_VALUE?} -guest-index=2 -buildlet-healthz-url="http://192.168.64.102:8080/healthz"
+  sudo $HOME/runqemubuildlet -guest-os=darwin -macos-version=${MACOS_VERSION?} -osk=${OSK_VALUE?} -guest-index=2 -buildlet-healthz-url="http://192.168.64.102:8080/healthz"
 done
 ```
 

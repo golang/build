@@ -56,7 +56,7 @@ func main() {
 		}
 
 		if err := runGuest(ctx, cmd); err != nil {
-			log.Printf("runWindows10() = %v. Retrying in 10 seconds.", err)
+			log.Printf("runGuest() = %v. Retrying in 10 seconds.", err)
 			time.Sleep(10 * time.Second)
 			continue
 		}

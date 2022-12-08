@@ -43,13 +43,11 @@ func darwinCmd(base string) *exec.Cmd {
 
 	disk := filepath.Join(base, "macos.qcow2")
 
-	// vmnet-shared requires that we run QEMU as root.
+	// Note that vmnet-shared requires that we run QEMU as root, so
+	// runqemubuildlet must run as root.
 	//
 	// These arguments should be kept in sync with env/darwin/aws/qemu.sh.
 	args := []string{
-		"env",
-		fmt.Sprintf("DYLD_LIBRARY_PATH=%s", filepath.Join(sysroot, "lib")),
-		filepath.Join(sysroot, "bin/qemu-system-x86_64"),
 		// Discard disk changes on exit.
 		"-snapshot",
 		"-m", "4096",
@@ -86,6 +84,9 @@ func darwinCmd(base string) *exec.Cmd {
 		args = append(args, "-device", fmt.Sprintf("vmxnet3,netdev=net0,id=net0,mac=52:54:00:c9:18:0%d", *guestIndex))
 	}
 
-	cmd := exec.Command("sudo", args...)
+	cmd := exec.Command(filepath.Join(sysroot, "bin/qemu-system-x86_64"), args...)
+	cmd.Env = append(os.Environ(),
+		fmt.Sprintf("DYLD_LIBRARY_PATH=%s", filepath.Join(sysroot, "lib")),
+	)
 	return cmd
 }
