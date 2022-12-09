@@ -2881,6 +2881,13 @@ func init() {
 		distTestAdjust: riscvDistTestPolicy,
 		privateGoProxy: true, // this builder is behind firewall
 		SkipSnapshot:   true, // The builder has a slow uplink bandwidth.
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// see https://go.dev/issue/53745
+			if repo == "perf" {
+				return false
+			}
+			return onlyMasterDefault(repo, branch, goBranch)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "plan9-arm",
