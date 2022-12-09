@@ -2886,6 +2886,17 @@ func init() {
 			if repo == "perf" {
 				return false
 			}
+			if repo == "website" {
+				// x/website is stuck on an old x/sys because it's stuck on an old Go
+				// runtime because it's stuck on AppEngine (#51800).
+				// The old x/sys doesn't support freebsd/riscv64 (#57217).
+				// The new one doesn't support Go 1.16.
+				// So we have to skip x/website until that whole mess is resolved.
+				//
+				// TODO(#51800, #57217): update the x/sys dependency in x/website and
+				// re-enable this repo.
+				return false
+			}
 			return onlyMasterDefault(repo, branch, goBranch)
 		},
 	})
