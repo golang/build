@@ -2657,6 +2657,9 @@ func init() {
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-aws",
