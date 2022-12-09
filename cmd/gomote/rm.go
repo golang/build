@@ -14,33 +14,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func legacyRm(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not support groups")
-	}
-
-	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "rm usage: gomote rm <instance> <file-or-dir>+")
-		fmt.Fprintln(os.Stderr, "          gomote rm <instance> .  (to delete everything)")
-		fs.PrintDefaults()
-		os.Exit(1)
-	}
-	fs.Parse(args)
-
-	if fs.NArg() < 2 {
-		fs.Usage()
-	}
-	name := fs.Arg(0)
-	args = fs.Args()[1:]
-	bc, err := remoteClient(name)
-	if err != nil {
-		return err
-	}
-	ctx := context.Background()
-	return bc.RemoveAll(ctx, args...)
-}
-
 func rm(args []string) error {
 	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
 	fs.Usage = func() {

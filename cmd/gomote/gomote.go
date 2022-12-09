@@ -148,7 +148,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strconv"
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
@@ -204,40 +203,22 @@ func registerCommand(name, des string, run func([]string) error) {
 	}
 }
 
-func registerCommands(version int) {
-	if version == 2 {
-		registerCommand("create", "create a buildlet; with no args, list types of buildlets", create)
-		registerCommand("destroy", "destroy a buildlet", destroy)
-		registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
-		registerCommand("group", "manage groups of instances", group)
-		registerCommand("ls", "list the contents of a directory on a buildlet", ls)
-		registerCommand("list", "list active buildlets", list)
-		registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
-		registerCommand("push", "sync your GOROOT directory to the buildlet", push)
-		registerCommand("put", "put files on a buildlet", put)
-		registerCommand("putbootstrap", "put bootstrap toolchain in place", putBootstrap)
-		registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
-		registerCommand("rdp", "RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
-		registerCommand("rm", "delete files or directories", rm)
-		registerCommand("run", "run a command on a buildlet", run)
-		registerCommand("ssh", "ssh to a buildlet", ssh)
-		return
-	}
-	registerCommand("create", "create a buildlet; with no args, list types of buildlets", legacyCreate)
-	registerCommand("destroy", "destroy a buildlet", legacyDestroy)
-	registerCommand("gettar", "extract a tar.gz from a buildlet", legacyGetTar)
-	registerCommand("ls", "list the contents of a directory on a buildlet", legacyLs)
-	registerCommand("list", "list active buildlets", legacyList)
-	registerCommand("ping", "test whether a buildlet is alive and reachable ", legacyPing)
-	registerCommand("push", "sync your GOROOT directory to the buildlet", legacyPush)
-	registerCommand("put", "put files on a buildlet", legacyPut)
-	registerCommand("put14", "put Go 1.4 in place", put14)
-	registerCommand("puttar", "extract a tar.gz to a buildlet", legacyPutTar)
-	registerCommand("rdp", "RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
-	registerCommand("rm", "delete files or directories", legacyRm)
-	registerCommand("run", "run a command on a buildlet", legacyRun)
-	registerCommand("group", "manage gomote groups (v2 only)", group)
-	registerCommand("ssh", "ssh to a buildlet", legacySSH)
+func registerCommands() {
+	registerCommand("create", "create a buildlet; with no args, list types of buildlets", create)
+	registerCommand("destroy", "destroy a buildlet", destroy)
+	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
+	registerCommand("group", "manage groups of instances", group)
+	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
+	registerCommand("list", "list active buildlets", list)
+	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
+	registerCommand("push", "sync your GOROOT directory to the buildlet", push)
+	registerCommand("put", "put files on a buildlet", put)
+	registerCommand("putbootstrap", "put bootstrap toolchain in place", putBootstrap)
+	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
+	registerCommand("rdp", "Unimplimented: RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
+	registerCommand("rm", "delete files or directories", rm)
+	registerCommand("run", "run a command on a buildlet", run)
+	registerCommand("ssh", "ssh to a buildlet", ssh)
 }
 
 var (
@@ -248,17 +229,7 @@ func main() {
 	// Set up and parse global flags.
 	groupName := flag.String("group", os.Getenv("GOMOTE_GROUP"), "name of the gomote group to apply commands to (default is $GOMOTE_GROUP)")
 	buildlet.RegisterFlags()
-	version := 2
-	if vs := os.Getenv("GOMOTE_VERSION"); vs != "" {
-		v, err := strconv.Atoi(vs)
-		if err == nil {
-			version = v
-		}
-	}
-	if version < 1 || version > 2 {
-		fmt.Fprintf(os.Stderr, "unsupported version %d", version)
-	}
-	registerCommands(version)
+	registerCommands()
 	flag.Usage = usage
 	flag.Parse()
 	args := flag.Args()
