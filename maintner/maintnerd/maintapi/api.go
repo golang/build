@@ -210,14 +210,6 @@ func tryWorkItem(
 				w.GoBranch = append(w.GoBranch, r.BranchName)
 				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{Major: r.Major, Minor: r.Minor})
 			}
-
-			// Test x/website with Go 1.16.15 in addition to the supportedReleases above.
-			// TODO(go.dev/issue/51800): Remove this once x/website deployment is updated.
-			if w.Project == "website" {
-				w.GoCommit = append(w.GoCommit, "7de0c90a1771146bcba5663fb257c52acffe6161") // go1.16.15 tag.
-				w.GoBranch = append(w.GoBranch, "release-branch.go1.16")
-				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{Major: 1, Minor: 16})
-			}
 		} else {
 			// A branch that is neither internal-branch.goX.Y-suffix nor "master":
 			// maybe some custom branch like "dev.go2go".
