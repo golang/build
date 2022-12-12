@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.17 AS build
+FROM golang:1.19 AS build
 LABEL maintainer="golang-dev@googlegroups.com"
 
 RUN mkdir /gocache
@@ -27,7 +27,7 @@ COPY . /go/src/golang.org/x/build/
 RUN go install golang.org/x/build/maintner/maintnerd
 
 
-FROM debian:buster
+FROM debian:bullseye
 LABEL maintainer="golang-dev@googlegroups.com"
 
 # For interacting with the Go source & subrepos
