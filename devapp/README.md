@@ -3,10 +3,10 @@
 ## Local development
 
 ```sh
-$ go run . -listen-http localhost:6343
+$ go run . -listen-http=localhost:8080
 ```
 
-Then visit http://localhost:6343 in your browser.
+Then visit http://localhost:8080/ in your browser.
 
 ## Deployment
 
