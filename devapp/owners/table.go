@@ -30,10 +30,8 @@ var (
 	austin       = gh("aclements")
 	bcmills      = gh("bcmills")
 	bradfitz     = gh("bradfitz")
-	carmen       = gh("Lyoness")
 	cbro         = gh("broady")
 	cherryyz     = gh("cherrymui")
-	cnoellekb    = gh("cnoellekb")
 	codyoss      = gh("codyoss")
 	dmitshur     = gh("dmitshur")
 	danderson    = gh("danderson")
@@ -43,13 +41,11 @@ var (
 	filippo      = gh("FiloSottile")
 	findleyr     = gh("findleyr")
 	gri          = gh("griesemer")
-	hanwen       = gh("hanwen")
 	heschi       = gh("heschi")
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
 	iancottrell  = gh("ianthehat")
 	jamalc       = gh("jamalc")
-	jayconrod    = gh("jayconrod")
 	jba          = gh("jba")
 	jbd          = gh("rakyll")
 	joetsai      = gh("dsnet")
@@ -63,8 +59,6 @@ var (
 	matloob      = gh("matloob")
 	mdempsky     = gh("mdempsky")
 	mdlayher     = gh("mdlayher")
-	mikesamuel   = gh("mikesamuel")
-	mikioh       = gh("mikioh")
 	minux        = gh("minux")
 	mknyszek     = gh("mknyszek")
 	mpvl         = gh("mpvl")
@@ -73,7 +67,6 @@ var (
 	neelance     = gh("neelance")
 	neild        = gh("neild")
 	nigeltao     = gh("nigeltao")
-	pearring     = gh("pearring")
 	prattmic     = gh("prattmic")
 	r            = gh("robpike")
 	rakoczy      = gh("toothrot")
@@ -91,6 +84,7 @@ var (
 	compilerTeam = gh("golang/compiler")
 	fuzzingTeam  = gh("golang/fuzzing")
 	pkgsiteTeam  = gh("golang/pkgsite")
+	releaseTeam  = gh("golang/release")
 	runtimeTeam  = gh("golang/runtime")
 	securityTeam = gh("golang/security")
 	toolsTeam    = gh("golang/tools-team")
@@ -326,6 +320,9 @@ var entries = map[string]*Entry{
 	"go/src/debug/pe": {
 		Primary: []Owner{alexbrainman},
 	},
+	"go/src/embed": {
+		Primary: []Owner{toolsTeam},
+	},
 	"go/src/encoding": {
 		Primary: []Owner{rsc},
 	},
@@ -407,8 +404,14 @@ var entries = map[string]*Entry{
 	"go/src/go/types": {
 		Primary: []Owner{gri, findleyr},
 	},
+	"go/src/hash": {
+		Primary: []Owner{securityTeam},
+	},
 	"go/src/hash/maphash": {
 		Primary: []Owner{khr},
+	},
+	"go/src/html": {
+		Primary: []Owner{securityTeam},
 	},
 	"go/src/html/template": {
 		Primary:   []Owner{empijei},
@@ -440,7 +443,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{compilerTeam},
 	},
 	"go/src/internal/fuzz": {
-		Primary: []Owner{katie, roland},
+		Primary:   []Owner{fuzzingTeam},
+		Secondary: []Owner{katie, roland},
 	},
 	"go/src/internal/goarch": {
 		Primary:   []Owner{runtimeTeam},
@@ -693,7 +697,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc},
 	},
 	"go/src/unicode": {
-		Primary:   []Owner{r},
+		Primary:   []Owner{securityTeam, r},
 		Secondary: []Owner{mpvl},
 	},
 	"go/src/unicode/utf16": {
@@ -715,8 +719,12 @@ var entries = map[string]*Entry{
 	"arch": {
 		Primary: []Owner{cherryyz},
 	},
+	"benchmarks": {
+		Primary: []Owner{runtimeTeam, releaseTeam},
+	},
 	"build": {
-		Primary: []Owner{dmitshur, amedee, heschi},
+		Primary:   []Owner{releaseTeam},
+		Secondary: []Owner{dmitshur, amedee, heschi},
 	},
 	"build/maintner/cmd/maintserve": {
 		Primary: []Owner{dmitshur},
@@ -771,6 +779,9 @@ var entries = map[string]*Entry{
 	"oauth2": {
 		Primary:   []Owner{bradfitz},
 		Secondary: []Owner{jbd, cbro, shinfan, codyoss},
+	},
+	"perf": {
+		Primary: []Owner{runtimeTeam, releaseTeam},
 	},
 	"review": {
 		Secondary: []Owner{kevinburke},
@@ -915,6 +926,9 @@ var entries = map[string]*Entry{
 	"vulndb": {
 		Primary: []Owner{vulndbTeam},
 	},
+	"website": {
+		Primary: []Owner{toolsTeam},
+	},
 	"website/cmd/admingolangorg": {
 		Secondary: []Owner{dmitshur},
 	},
@@ -926,11 +940,6 @@ var entries = map[string]*Entry{
 	},
 	"website/internal/history": {
 		Primary: []Owner{dmitshur},
-	},
-
-	// Branches in the Go repository.
-	"dev.fuzz": {
-		Primary: []Owner{fuzzingTeam},
 	},
 
 	// Misc. other Go repositories.
@@ -951,12 +960,6 @@ var entries = map[string]*Entry{
 	},
 
 	// These components are domains, not Go packages.
-	"learn.go.dev": {
-		Primary: []Owner{carmen, pearring},
-	},
-	"go.dev": {
-		Primary: []Owner{pearring},
-	},
 	"index.golang.org": modProxyOwners,
 	"proxy.golang.org": modProxyOwners,
 	"sum.golang.org":   modProxyOwners,
