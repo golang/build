@@ -802,7 +802,6 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{matloob},
 	},
 	"tools/cmd/godoc": {
-		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
 	},
 	"tools/cmd/goimports": {
@@ -853,11 +852,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{findleyr},
 	},
 	"tools/go/vcs": {
-		Primary:   []Owner{dmitshur},
 		Secondary: []Owner{bcmills, matloob},
-	},
-	"tools/godoc": {
-		Primary: []Owner{dmitshur},
 	},
 	"tools/imports": {
 		Primary: []Owner{heschi},
@@ -921,10 +916,10 @@ var entries = map[string]*Entry{
 		Primary: []Owner{vulndbTeam},
 	},
 	"website/cmd/admingolangorg": {
-		Primary: []Owner{dmitshur},
+		Secondary: []Owner{dmitshur},
 	},
 	"website/cmd/golangorg": {
-		Primary: []Owner{dmitshur},
+		Secondary: []Owner{dmitshur},
 	},
 	"website/internal/dl": {
 		Primary: []Owner{dmitshur},
