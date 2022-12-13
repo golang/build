@@ -716,7 +716,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{cherryyz},
 	},
 	"build": {
-		Primary: []Owner{dmitshur, bradfitz, amedee, heschi},
+		Primary: []Owner{dmitshur, amedee, heschi},
 	},
 	"build/maintner/cmd/maintserve": {
 		Primary: []Owner{dmitshur},
