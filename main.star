@@ -41,6 +41,12 @@ luci.project(
         luci.binding(
             roles = "role/configs.developer",
             groups = "googlers",
+        ),
+
+        # Allow any googler to see bulders.
+        luci.binding(
+            roles = "role/buildbucket.reader",
+            groups = "googlers",
         )
     ],
     acls = [
