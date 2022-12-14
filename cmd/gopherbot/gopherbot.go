@@ -2413,8 +2413,7 @@ func hasServiceUserTag(a gerrit.AccountInfo) bool {
 
 // autoSubmitCLs submits CLs which are labelled "Auto-Submit",
 // have all submit requirements satisfied according to Gerrit, and
-// aren't waiting for a parent CL in the stack to be handled
-// or the wait-release hashtag to be removed.
+// aren't waiting for a parent CL in the stack to be handled.
 //
 // See go.dev/issue/48021.
 func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
@@ -2457,13 +2456,6 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 			// check will also cover this...
 			if !changeInfo.Submittable {
 				return nil
-			}
-
-			// Skip this CL if it has the "wait-release" hashtag set.
-			for _, ht := range changeInfo.Hashtags {
-				if ht == "wait-release" {
-					return nil
-				}
 			}
 
 			// We need to check the mergeability, as well as the submitability,
