@@ -128,7 +128,7 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 	if !ok {
 		return status.Errorf(codes.InvalidArgument, "unknown builder type")
 	}
-	if bconf.IsRestricted() && !isPrivilegedUser(creds.Email) {
+	if ((!bconf.HostConfig().IsHermetic() && bconf.HostConfig().IsGoogle()) || bconf.IsRestricted()) && !isPrivilegedUser(creds.Email) {
 		return status.Errorf(codes.PermissionDenied, "user is unable to create gomote of that builder type")
 	}
 	userName, err := emailToUser(creds.Email)
