@@ -102,6 +102,6 @@ luci.builder(
     # The name of the recipe we just added.
     name = "hello_world",
   ),
-
+ service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
   schedule = "with 1m interval",
 )
