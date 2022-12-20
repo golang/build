@@ -854,8 +854,9 @@ type BuildConfig struct {
 	numTestHelpers    int
 	numTryTestHelpers int // For TryBots/SlowBots. If 0, numTestHelpers is used.
 
-	env           []string // extra environment ("key=value") pairs
-	allScriptArgs []string
+	env            []string // extra environment ("key=value") pairs
+	makeScriptArgs []string // extra args to pass to the make.bash-equivalent script
+	allScriptArgs  []string // extra args to pass to the all.bash-equivalent script
 
 	testHostConf *HostConfig // override HostConfig for testing, at least for now
 
@@ -1276,7 +1277,7 @@ func (c *BuildConfig) MakeScript() string {
 // MakeScriptArgs returns the set of arguments that should be passed to the
 // make.bash-equivalent script. Usually empty.
 func (c *BuildConfig) MakeScriptArgs() []string {
-	return c.AllScriptArgs()
+	return append([]string(nil), c.makeScriptArgs...)
 }
 
 // GorootFinal returns the default install location for
