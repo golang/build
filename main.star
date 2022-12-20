@@ -72,7 +72,7 @@ luci.realm(name = "pools/prod")
 #
 # Note: This will cause all recipe commits to automatically deploy as soon
 # as the recipe bundler compiles them from your refs/heads/luci-config branch.
-luci.recipe.defaults.cipd_package.set("infra/recipe_bundles/go.googlesource.com/build")
+luci.recipe.defaults.cipd_package.set("golang/recipe_bundles/go.googlesource.com/build")
 luci.recipe.defaults.cipd_version.set("refs/heads/luci-config")
 luci.recipe.defaults.use_python3.set(True)
 
@@ -87,6 +87,12 @@ luci.bucket(name = "ci")
 # generate executable artifacts used by other users or machines.
 luci.bucket(name = "prod")
 
+# A list with builders in "prod" bucket.
+luci.list_view(
+    name = "prod-builders",
+    title = "Production builders",
+)
+
 luci.builder(
     name = "Example Builder",
     bucket = "ci",
@@ -97,3 +103,5 @@ luci.builder(
     service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
     schedule = "with 1m interval",
 )
+
+exec("./recipes.star")
