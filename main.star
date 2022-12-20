@@ -19,12 +19,17 @@ luci.project(
     swarming = "chromium-swarm.appspot.com",
     tricium = "tricium-prod.appspot.com",
     bindings = [
-        # Allow owners to submit any task in any pool.
+        # Admin permissions.
         luci.binding(
             roles = [
+                # Allow owners to submit any task in any pool.
                 "role/swarming.poolOwner",
                 "role/swarming.poolUser",
                 "role/swarming.taskTriggerer",
+                # Allow owners to trigger and cancel LUCI Scheduler jobs.
+                "role/scheduler.owner",
+                # Allow owners to trigger and cancel any build.
+                "role/buildbucket.owner",
             ],
             groups = "mdb/golang-luci-admin",
         ),
