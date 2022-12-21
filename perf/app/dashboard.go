@@ -92,16 +92,20 @@ func fluxRecordToValue(rec *query.FluxRecord) (ValueJSON, error) {
 	}, nil
 }
 
-// validateRe is an allowlist of characters for a Flux string literal for
-// benchmark names. The string will be quoted, so we must not allow ending the
-// quote sequence.
-var validateRe = regexp.MustCompile(`[a-zA-Z/_:-]+`)
+// validateRe is an allowlist of characters for a Flux string literal. The
+// string will be quoted, so we must not allow ending the quote sequence.
+var validateRe = regexp.MustCompile(`^[a-zA-Z0-9(),=/_:;-]+$`)
 
 func validateFluxString(s string) error {
 	if !validateRe.MatchString(s) {
 		return fmt.Errorf("malformed value %q", s)
 	}
 	return nil
+}
+
+func influxQuery(ctx context.Context, qc api.QueryAPI, query string) (*api.QueryTableResult, error) {
+	log.Printf("InfluxDB query: %s", query)
+	return qc.Query(ctx, query)
 }
 
 var errBenchmarkNotFound = errors.New("benchmark not found")
@@ -112,7 +116,7 @@ func fetchNamedUnitBenchmark(ctx context.Context, qc api.QueryAPI, start, end ti
 		return nil, fmt.Errorf("invalid benchmark name: %w", err)
 	}
 	if err := validateFluxString(unit); err != nil {
-		return nil, fmt.Errorf("invalid benchmark name: %w", err)
+		return nil, fmt.Errorf("invalid unit name: %w", err)
 	}
 
 	query := fmt.Sprintf(`
@@ -128,9 +132,9 @@ from(bucket: "perf")
   |> yield(name: "last")
 `, start.Format(time.RFC3339), end.Format(time.RFC3339), name, unit)
 
-	res, err := qc.Query(ctx, query)
+	res, err := influxQuery(ctx, qc, query)
 	if err != nil {
-		return nil, fmt.Errorf("error performing query: %W", err)
+		return nil, fmt.Errorf("error performing query: %w", err)
 	}
 
 	b, err := groupBenchmarkResults(res, false)
@@ -236,9 +240,9 @@ from(bucket: "perf")
   |> yield(name: "last")
 `, start.Format(time.RFC3339), end.Format(time.RFC3339), name)
 
-	res, err := qc.Query(ctx, query)
+	res, err := influxQuery(ctx, qc, query)
 	if err != nil {
-		return nil, fmt.Errorf("error performing query: %W", err)
+		return nil, fmt.Errorf("error performing query: %w", err)
 	}
 
 	b, err := groupBenchmarkResults(res, false)
@@ -264,9 +268,9 @@ from(bucket: "perf")
   |> yield(name: "last")
 `, start.Format(time.RFC3339), end.Format(time.RFC3339))
 
-	res, err := qc.Query(ctx, query)
+	res, err := influxQuery(ctx, qc, query)
 	if err != nil {
-		return nil, fmt.Errorf("error performing query: %W", err)
+		return nil, fmt.Errorf("error performing query: %w", err)
 	}
 
 	return groupBenchmarkResults(res, regressions)

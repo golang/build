@@ -191,7 +191,7 @@ func latestInfluxTimestamp(ctx context.Context, ifxc influxdb2.Client) (time.Tim
 		|> group()
 		|> sort(columns: ["_value"], desc: true)
 		|> limit(n: 1)`, influx.Bucket, backfillWindow/time.Hour)
-	result, err := qc.Query(ctx, q)
+	result, err := influxQuery(ctx, qc, q)
 	if err != nil {
 		return time.Time{}, err
 	}
