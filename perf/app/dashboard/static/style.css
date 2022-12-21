@@ -107,7 +107,7 @@ nav .left-separator {
   display: inline-block;
   width: 300px;
 }
-input {
+input, select {
   border: 1px solid transparent;
   background-color: #f4f4f4;
   padding: 10px;

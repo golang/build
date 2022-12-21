@@ -38,9 +38,14 @@ license that can be found in the LICENSE file.
 				<input type="submit" />
 			</li>
 			<li><a href="?benchmark=all">All benchmarks</a></li>
-		    <li><a href="?benchmark=regressions">Regressions first</a></li>
+			<li><a href="?benchmark=regressions">Regressions first</a></li>
 			<span class="left-separator"></span>
 			<li>
+				Repository:
+				<select id="repository-select" name="repository">
+					<option>go</option>
+					<option>tools</option>
+				</select>
 				Duration (days):
 				<div class="Dashboard-duration">
 					<input id="days-input" type="number" name="days" value="30" />
@@ -141,6 +146,12 @@ function prefillSearch() {
 	if (benchmark) {
 		let input = document.getElementById('benchmark-input');
 		input.value = benchmark;
+	}
+
+	let repository = params.get('repository');
+	if (repository) {
+		let select = document.getElementById('repository-select');
+		select.value = repository;
 	}
 
 	let days = params.get('days');

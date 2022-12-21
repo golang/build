@@ -111,7 +111,10 @@ func influxQuery(ctx context.Context, qc api.QueryAPI, query string) (*api.Query
 var errBenchmarkNotFound = errors.New("benchmark not found")
 
 // fetchNamedUnitBenchmark queries Influx for a specific name + unit benchmark.
-func fetchNamedUnitBenchmark(ctx context.Context, qc api.QueryAPI, start, end time.Time, name, unit string) (*BenchmarkJSON, error) {
+func fetchNamedUnitBenchmark(ctx context.Context, qc api.QueryAPI, start, end time.Time, repository string, name, unit string) (*BenchmarkJSON, error) {
+	if err := validateFluxString(repository); err != nil {
+		return nil, fmt.Errorf("invalid repository name: %w", err)
+	}
 	if err := validateFluxString(name); err != nil {
 		return nil, fmt.Errorf("invalid benchmark name: %w", err)
 	}
@@ -119,6 +122,9 @@ func fetchNamedUnitBenchmark(ctx context.Context, qc api.QueryAPI, start, end ti
 		return nil, fmt.Errorf("invalid unit name: %w", err)
 	}
 
+	// Note that very old points are missing the "repository" field. fill()
+	// sets repository=go on all points missing that field, as they were
+	// all runs of the go repo.
 	query := fmt.Sprintf(`
 from(bucket: "perf")
   |> range(start: %s, stop: %s)
@@ -128,9 +134,11 @@ from(bucket: "perf")
   |> filter(fn: (r) => r["branch"] == "master")
   |> filter(fn: (r) => r["goos"] == "linux")
   |> filter(fn: (r) => r["goarch"] == "amd64")
+  |> fill(column: "repository", value: "go")
+  |> filter(fn: (r) => r["repository"] == "%s")
   |> pivot(columnKey: ["_field"], rowKey: ["_time"], valueColumn: "_value")
   |> yield(name: "last")
-`, start.Format(time.RFC3339), end.Format(time.RFC3339), name, unit)
+`, start.Format(time.RFC3339), end.Format(time.RFC3339), name, unit, repository)
 
 	res, err := influxQuery(ctx, qc, query)
 	if err != nil {
@@ -151,7 +159,13 @@ from(bucket: "perf")
 }
 
 // fetchDefaultBenchmarks queries Influx for the default benchmark set.
-func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end time.Time) ([]*BenchmarkJSON, error) {
+func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end time.Time, repository string) ([]*BenchmarkJSON, error) {
+	if repository != "go" {
+		// No defaults defined for other subrepos yet, just return an
+		// empty set.
+		return nil, nil
+	}
+
 	// Keep benchmarks with the same name grouped together, which is
 	// assumed by the JS.
 	benchmarks := []struct{ name, unit string }{
@@ -211,7 +225,7 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end tim
 
 	ret := make([]*BenchmarkJSON, 0, len(benchmarks))
 	for _, bench := range benchmarks {
-		b, err := fetchNamedUnitBenchmark(ctx, qc, start, end, bench.name, bench.unit)
+		b, err := fetchNamedUnitBenchmark(ctx, qc, start, end, repository, bench.name, bench.unit)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching benchmark %s/%s: %w", bench.name, bench.unit, err)
 		}
@@ -223,11 +237,17 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end tim
 
 // fetchNamedBenchmark queries Influx for all benchmark results with the passed
 // name (for all units).
-func fetchNamedBenchmark(ctx context.Context, qc api.QueryAPI, start, end time.Time, name string) ([]*BenchmarkJSON, error) {
+func fetchNamedBenchmark(ctx context.Context, qc api.QueryAPI, start, end time.Time, repository string, name string) ([]*BenchmarkJSON, error) {
+	if err := validateFluxString(repository); err != nil {
+		return nil, fmt.Errorf("invalid repository name: %w", err)
+	}
 	if err := validateFluxString(name); err != nil {
 		return nil, fmt.Errorf("invalid benchmark name: %w", err)
 	}
 
+	// Note that very old points are missing the "repository" field. fill()
+	// sets repository=go on all points missing that field, as they were
+	// all runs of the go repo.
 	query := fmt.Sprintf(`
 from(bucket: "perf")
   |> range(start: %s, stop: %s)
@@ -236,9 +256,11 @@ from(bucket: "perf")
   |> filter(fn: (r) => r["branch"] == "master")
   |> filter(fn: (r) => r["goos"] == "linux")
   |> filter(fn: (r) => r["goarch"] == "amd64")
+  |> fill(column: "repository", value: "go")
+  |> filter(fn: (r) => r["repository"] == "%s")
   |> pivot(columnKey: ["_field"], rowKey: ["_time"], valueColumn: "_value")
   |> yield(name: "last")
-`, start.Format(time.RFC3339), end.Format(time.RFC3339), name)
+`, start.Format(time.RFC3339), end.Format(time.RFC3339), name, repository)
 
 	res, err := influxQuery(ctx, qc, query)
 	if err != nil {
@@ -256,7 +278,14 @@ from(bucket: "perf")
 }
 
 // fetchAllBenchmarks queries Influx for all benchmark results.
-func fetchAllBenchmarks(ctx context.Context, qc api.QueryAPI, regressions bool, start, end time.Time) ([]*BenchmarkJSON, error) {
+func fetchAllBenchmarks(ctx context.Context, qc api.QueryAPI, regressions bool, start, end time.Time, repository string) ([]*BenchmarkJSON, error) {
+	if err := validateFluxString(repository); err != nil {
+		return nil, fmt.Errorf("invalid repository name: %w", err)
+	}
+
+	// Note that very old points are missing the "repository" field. fill()
+	// sets repository=go on all points missing that field, as they were
+	// all runs of the go repo.
 	query := fmt.Sprintf(`
 from(bucket: "perf")
   |> range(start: %s, stop: %s)
@@ -264,9 +293,11 @@ from(bucket: "perf")
   |> filter(fn: (r) => r["branch"] == "master")
   |> filter(fn: (r) => r["goos"] == "linux")
   |> filter(fn: (r) => r["goarch"] == "amd64")
+  |> fill(column: "repository", value: "go")
+  |> filter(fn: (r) => r["repository"] == "%s")
   |> pivot(columnKey: ["_field"], rowKey: ["_time"], valueColumn: "_value")
   |> yield(name: "last")
-`, start.Format(time.RFC3339), end.Format(time.RFC3339))
+`, start.Format(time.RFC3339), end.Format(time.RFC3339), repository)
 
 	res, err := influxQuery(ctx, qc, query)
 	if err != nil {
@@ -605,16 +636,21 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 
 	qc := ifxc.QueryAPI(influx.Org)
 
+	repository := r.FormValue("repository")
+	if repository == "" {
+		repository = "go"
+	}
+
 	benchmark := r.FormValue("benchmark")
 	var benchmarks []*BenchmarkJSON
 	if benchmark == "" {
-		benchmarks, err = fetchDefaultBenchmarks(ctx, qc, start, end)
+		benchmarks, err = fetchDefaultBenchmarks(ctx, qc, start, end, repository)
 	} else if benchmark == "all" {
-		benchmarks, err = fetchAllBenchmarks(ctx, qc, false, start, end)
+		benchmarks, err = fetchAllBenchmarks(ctx, qc, false, start, end, repository)
 	} else if benchmark == "regressions" {
-		benchmarks, err = fetchAllBenchmarks(ctx, qc, true, start, end)
+		benchmarks, err = fetchAllBenchmarks(ctx, qc, true, start, end, repository)
 	} else {
-		benchmarks, err = fetchNamedBenchmark(ctx, qc, start, end, benchmark)
+		benchmarks, err = fetchNamedBenchmark(ctx, qc, start, end, repository, benchmark)
 	}
 	if err == errBenchmarkNotFound {
 		log.Printf("Benchmark not found: %q", benchmark)
