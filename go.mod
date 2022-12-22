@@ -52,7 +52,7 @@ require (
 	golang.org/x/mod v0.6.0
 	golang.org/x/net v0.1.0
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
-	golang.org/x/perf v0.0.0-20220913151710-7c6e287988f3
+	golang.org/x/perf v0.0.0-20221222170352-3fd27c239283
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/sys v0.1.0
 	golang.org/x/term v0.1.0

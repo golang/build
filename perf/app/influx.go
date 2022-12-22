@@ -268,7 +268,10 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 
 	// Run the comparison. We don't have any existing results so our
 	// duplicate policy doesn't matter here. Just pick replacement.
-	comparisons := builder.AllComparisonSeries(nil, benchseries.DUPE_REPLACE)
+	comparisons, err := builder.AllComparisonSeries(nil, benchseries.DUPE_REPLACE)
+	if err != nil {
+		return fmt.Errorf("failed to creation comparison series: %w", err)
+	}
 
 	const (
 		confidence = 0.95
