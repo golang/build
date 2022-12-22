@@ -214,9 +214,6 @@ func (a *App) uploadsSince(ctx context.Context, since time.Time) ([]perfdata.Upl
 		"by:coordinator@symbolic-datum-552.iam.gserviceaccount.com",
 		// Only take results that were generated from post-submit runs, not trybots.
 		"post-submit:true",
-		// Limit to just the master branch for now.
-		// TODO(mknyszek): Support other branches.
-		"branch:master",
 	}, " ")
 	uploadList := a.StorageClient.ListUploads(
 		ctx,

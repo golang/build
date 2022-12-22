@@ -46,6 +46,14 @@ license that can be found in the LICENSE file.
 					<option>go</option>
 					<option>tools</option>
 				</select>
+				Branch:
+				<select id="branch-select" name="branch">
+					<option>master</option>
+					<option>release-branch.go1.17</option>
+					<option>release-branch.go1.18</option>
+					<option>release-branch.go1.19</option>
+					<option>release-branch.go1.20</option>
+				</select>
 				Duration (days):
 				<div class="Dashboard-duration">
 					<input id="days-input" type="number" name="days" value="30" />
@@ -71,6 +79,11 @@ license that can be found in the LICENSE file.
 		See the <code>linux-amd64-perf</code> column on the
 		<a href="https://build.golang.org/?repo=golang.org%2fx%2fbenchmarks">x/benchmarks build dashboard</a>
 		for tested ("ok") / untested (empty) commits.
+	</p>
+	<p>
+		Also note that the 'branch' selection above is the Go branch
+		that benchmarking ran against on https://build.golang.org, not
+		the subrepo branch.
 	</p>
 </div>
 
@@ -152,6 +165,12 @@ function prefillSearch() {
 	if (repository) {
 		let select = document.getElementById('repository-select');
 		select.value = repository;
+	}
+
+	let branch = params.get('branch');
+	if (branch) {
+		let select = document.getElementById('branch-select');
+		select.value = branch;
 	}
 
 	let days = params.get('days');
