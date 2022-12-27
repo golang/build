@@ -84,6 +84,12 @@ nav .left-separator {
   padding-bottom: 10px;
 }
 
+#dashboard {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: left;
+}
 .Dashboard {
   margin: 0;
   padding: 0;
@@ -93,8 +99,8 @@ nav .left-separator {
   padding: 0.625rem 0.625rem;
 }
 .Dashboard-title {
+  text-align: center;
   background: #e0ebf5;
-  padding: 0.125rem 0.3125rem;
 }
 .Dashboard-controls {
   padding: 0.5rem;
@@ -137,12 +143,16 @@ input[type=number] {
   width: 100%;
 }
 
+.Dashboard-section {
+  display: column;
+  flex-direction: row;
+  margin: 8px;
+}
 .Dashboard-grid {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  justify-content: flex-start;
+  justify-content: left;
 }
 .Dashboard-grid-item {
-  padding: 8px;
 }

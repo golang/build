@@ -4,10 +4,10 @@
 
 function BandChart(data, {
 	defined,
-	marginTop = 50, // top margin, in pixels
+	marginTop = 30, // top margin, in pixels
 	marginRight = 15, // right margin, in pixels
-	marginBottom = 50, // bottom margin, in pixels
-	marginLeft = 50, // left margin, in pixels
+	marginBottom = 30, // bottom margin, in pixels
+	marginLeft = 40, // left margin, in pixels
 	width = 480, // outer width, in pixels
 	height = 240, // outer height, in pixels
 	unit,
@@ -82,6 +82,15 @@ function BandChart(data, {
 		.attr("viewBox", [0, 0, width, height])
 		.attr("style", "max-width: 100%; height: auto; height: intrinsic;");
 
+	// Chart area background color.
+	svg.append("rect")
+		.attr("fill", "white")
+		.attr("x", xRange[0])
+		.attr("y", yRange[1])
+		.attr("width", xRange[1] - xRange[0])
+		.attr("height", yRange[0] - yRange[1]);
+
+	// Title (unit).
 	svg.append("g")
 		.attr("transform", `translate(${marginLeft},0)`)
 		.call(yAxis)
@@ -90,12 +99,11 @@ function BandChart(data, {
 			.attr("x2", width - marginLeft - marginRight)
 			.attr("stroke-opacity", 0.1))
 		.call(g => g.append("text")
-			.attr("x", (xRange[1]-xRange[0])/2)
-			.attr("y", 40)
+			.attr("x", xRange[0]-40)
+			.attr("y", 24)
 			.attr("fill", "currentColor")
-			.attr("text-anchor", "middle")
-			.attr("font-size", "20px")
-			.attr("font-weight", "bold")
+			.attr("text-anchor", "start")
+			.attr("font-size", "16px")
 			.text(unit));
 
 	const defs = svg.append("defs")
@@ -213,7 +221,7 @@ function BandChart(data, {
 	// Add X axis label.
 	svg.append("text")
 		.attr("x", xRange[0] + (xRange[1]-xRange[0])/2)
-		.attr("y", yRange[0] + (yRange[0]-yRange[1])*0.12)
+		.attr("y", yRange[0] + (yRange[0]-yRange[1])*0.10)
 		.attr("fill", "currentColor")
 		.attr("text-anchor", "middle")
 		.attr("font-size", "12px")
@@ -273,12 +281,12 @@ function BandChart(data, {
 						)
 						.call(g => g.append('text')
 							// Point metadata (commit hash and date).
-							// Below the x-axis "Commits" label.
-							.attr("x", xRange[0] + (xRange[1]-xRange[0])/2)
-							.attr("y", yRange[0] + (yRange[0]-yRange[1])*0.12*2)
+							// Above graph, top-right.
+							.attr("x", xRange[1])
+							.attr("y", yRange[1] - 6)
 							.attr("pointer-events", "none")
 							.attr("fill", "currentColor")
-							.attr("text-anchor", "middle")
+							.attr("text-anchor", "end")
 							.attr("font-family", "sans-serif")
 							.attr("font-size", 12)
 							.text(C[i].slice(0, 7) + " ("
@@ -292,7 +300,7 @@ function BandChart(data, {
 							// Point center, low, high values.
 							// Bottom-right corner, next to "Commits".
 							.attr("x", xRange[1])
-							.attr("y", yRange[0] + (yRange[0]-yRange[1])*0.12)
+							.attr("y", yRange[0] + (yRange[0]-yRange[1])*0.10)
 							.attr("pointer-events", "none")
 							.attr("fill", "currentColor")
 							.attr("text-anchor", "end")

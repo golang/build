@@ -87,9 +87,9 @@ license that can be found in the LICENSE file.
 	</p>
 </div>
 
-<div id="dashboard">
+<grid id="dashboard">
 	<h2 class="Dashboard-title" id="loading">Loading...</h2>
-</div>
+</grid>
 
 <script>
 function removeLoadingMessage() {
@@ -110,6 +110,10 @@ function addContent(benchmarks) {
 		if (bench.Name != prevName) {
 			prevName = bench.Name;
 
+			let section = document.createElement("grid");
+			section.classList.add("Dashboard-section");
+			dashboard.appendChild(section);
+
 			let link = document.createElement("a");
 			link.href = "?benchmark=" + bench.Name;
 			link.textContent = bench.Name;
@@ -117,11 +121,11 @@ function addContent(benchmarks) {
 			let title = document.createElement("h2");
 			title.classList.add("Dashboard-title");
 			title.appendChild(link);
-			dashboard.appendChild(title);
+			section.appendChild(title);
 
 			grid = document.createElement("grid");
 			grid.classList.add("Dashboard-grid");
-			dashboard.appendChild(grid);
+			section.appendChild(grid);
 		}
 
 		let item = document.createElement("div");
