@@ -12,6 +12,7 @@ license that can be found in the LICENSE file.
 	<link rel="stylesheet" href="./static/style.css"/>
 	<script src="https://ajax.googleapis.com/ajax/libs/d3js/7.4.2/d3.min.js"></script>
 	<script src="./third_party/bandchart/bandchart.js"></script>
+	<script src="./static/range.js"></script>
 </head>
 
 <body class="Dashboard">
@@ -32,8 +33,11 @@ license that can be found in the LICENSE file.
 	<form autocomplete="off" action="./">
 		<ul>
 			<li>
-				<div class="Dashboard-search">
+				<div class="Dashboard-search-benchmark">
 					<input id="benchmark-input" type="text" name="benchmark" placeholder="Type benchmark name..." />
+				</div>
+				<div class="Dashboard-search-unit">
+					<input id="unit-input" type="text" name="unit" placeholder="Unit (optional)" />
 				</div>
 				<input type="submit" />
 			</li>
@@ -81,23 +85,44 @@ license that can be found in the LICENSE file.
 		for tested ("ok") / untested (empty) commits.
 	</p>
 	<p>
-		Also note that the 'branch' selection above is the Go branch
-		that benchmarking ran against on https://build.golang.org, not
-		the subrepo branch.
+		The 'branch' selection above is the Go branch that benchmarking
+		ran against on <a href=https://build.golang.org>the build dashboard</a>,
+		not the subrepo branch.
+	</p>
+	<p>
+		Using the 'unit' search box above leads to a page that shows much
+		more detail about each individual point in the selected time range.
+		Another way of reaching this page is to click the unit name that acts
+		as each graph's title, i.e. "sec/op".
 	</p>
 </div>
 
 <grid id="dashboard">
-	<h2 class="Dashboard-title" id="loading">Loading...</h2>
+	<grid id="loading" class="Dashboard-section Dashboard-section-expand">
+		<h2 class="Dashboard-title" id="loading">Loading...</h2>
+	</grid>
 </grid>
 
 <script>
+// minViewPercentDelta represents the minimum range we're willing to
+// let the Y axis have for charts and X axis for ranges in the per-unit
+// view. In both cases the unit of this value is a delta percent, hence
+// the name.
+//
+// This constant exists because allowing the axis' range to be arbitrarily
+// small produces results that are really noisy visually, even though they
+// represent virtually no change. For instance, a relatively low-noise
+// series of benchmark results, with a min delta of -0.05% and and +0.05%
+// might appear really noisy if we "zoom" in too far, when in actuality
+// the amount of noise is incredibly low.
+const minViewDeltaPercent = 0.025;
+
 function removeLoadingMessage() {
 	let loading = document.getElementById("loading");
 	loading.parentNode.removeChild(loading);
 }
 
-function addContent(benchmarks) {
+function addCharts(benchmarks) {
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
@@ -131,9 +156,108 @@ function addContent(benchmarks) {
 		let item = document.createElement("div");
 		item.classList.add("Dashboard-grid-item");
 		item.appendChild(BandChart(bench.Values, {
+			benchmark: bench.Name,
 			unit: bench.Unit,
+			minViewDeltaPercent: minViewDeltaPercent,
 		}));
 		grid.appendChild(item);
+	}
+}
+
+function addTable(bench, unit) {
+	let dashboard = document.getElementById("dashboard");
+
+	removeLoadingMessage();
+
+	let section = document.createElement("grid");
+	section.classList.add("Dashboard-section");
+	section.classList.add("Dashboard-section-expand");
+	dashboard.appendChild(section);
+
+	let link = document.createElement("a");
+	link.href = "?benchmark=" + bench.Name + "&unit=" + unit;
+	link.textContent = bench.Name + " (" + unit + ")";
+
+	let title = document.createElement("h2");
+	title.classList.add("Dashboard-title");
+	title.appendChild(link);
+	section.appendChild(title);
+
+	const table = document.createElement("table");
+	table.classList.add("Dashboard-table");
+	section.appendChild(table);
+
+	const createCell = function(text, header) {
+		let elemType = "td";
+		if (header) {
+			elemType = "th";
+		}
+		const elem = document.createElement(elemType);
+		elem.textContent = text;
+		return elem;
+	}
+
+	// Create the header.
+	const header = document.createElement("tr");
+	header.appendChild(createCell("Date", true));
+	header.appendChild(createCell("Commit", true));
+	header.appendChild(createCell("Delta", true));
+	table.appendChild(header);
+
+	// Find the min and max.
+	let min = bench.Values[0].Low;
+	let max = bench.Values[0].High;
+	for (let i = 1; i < bench.Values.length; i++) {
+		if (bench.Values[i].Low < min) {
+			min = bench.Values[i].Low;
+		}
+		if (bench.Values[i].High > max) {
+			max = bench.Values[i].High;
+		}
+	}
+
+	// Clamp for presentation.
+	if (min < 0 && min > -minViewDeltaPercent) {
+		min = -minViewDeltaPercent
+	}
+	if (max > 0 && max < minViewDeltaPercent) {
+		max = minViewDeltaPercent
+	}
+	if (max-min < 2*minViewDeltaPercent) {
+		const amt = (2*minViewDeltaPercent-(max-min))/2;
+		max += amt;
+		min -= amt;
+	}
+
+	// Iterate backwards, showing the most recent first.
+	for (let i = bench.Values.length-1; i >= 0; i--) {
+		const v = bench.Values[i];
+
+		// Create a row per value.
+		const row = document.createElement("tr");
+
+		// Commit date.
+		row.appendChild(createCell(Intl.DateTimeFormat([], {
+			dateStyle: "long",
+			timeStyle: "short",
+		}).format(v.CommitDate), false));
+
+		// Commit hash.
+		const commitHash = createCell("", false);
+		const commitLink = document.createElement("a");
+		commitLink.href = "https://go.googlesource.com/go/+show/" + v.CommitHash;
+		commitLink.textContent = v.CommitHash.slice(0, 7);
+		commitHash.appendChild(commitLink);
+		commitHash.classList.add("Dashboard-table-commit")
+		row.appendChild(commitHash);
+
+		// Range visualization.
+		const range = createCell("", false);
+		range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 32, bench.Unit));
+		range.classList.add("Dashboard-table-range")
+		row.appendChild(range);
+
+		table.appendChild(row);
 	}
 }
 
@@ -163,6 +287,12 @@ function prefillSearch() {
 	if (benchmark) {
 		let input = document.getElementById('benchmark-input');
 		input.value = benchmark;
+	}
+
+	let unit = params.get('unit');
+	if (unit) {
+		let input = document.getElementById('unit-input');
+		input.value = unit;
 	}
 
 	let repository = params.get('repository');
@@ -203,6 +333,7 @@ prefillSearch()
 
 // Fetch content.
 let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
+let unit = (new URLSearchParams(window.location.search)).get('unit');
 let dataURL = './data.json' + window.location.search;  // Pass through all URL params.
 fetch(dataURL)
 	.then(response => {
@@ -220,7 +351,16 @@ fetch(dataURL)
 			});
 		});
 
-		addContent(benchmarks);
+		// If we have an explicit unit, then there should be just one result.
+		if (unit) {
+			if (benchmarks.length !== 1) {
+				failure(benchmark, "got more that one benchmark when a unit was specified");
+				throw new Error("Data fetch failed");
+			}
+			addTable(benchmarks[0], unit);
+		} else {
+			addCharts(benchmarks);
+		}
 	});
 </script>
 

@@ -10,7 +10,9 @@ function BandChart(data, {
 	marginLeft = 40, // left margin, in pixels
 	width = 480, // outer width, in pixels
 	height = 240, // outer height, in pixels
+	benchmark,
 	unit,
+	minViewDeltaPercent,
 } = {}) {
 	// Compute values.
 	const C = d3.map(data, d => d.CommitHash);
@@ -39,9 +41,9 @@ function BandChart(data, {
 	// For (2) set it at the top.
 	// For (3) make sure the Y=0 line is in the middle.
 	//
-	// Finally, make sure we don't get closer than 0.025,
+	// Finally, make sure we don't get closer than minViewDeltaPercent,
 	// because otherwise it just looks really noisy.
-	const minYDomain = [-0.025, 0.025];
+	const minYDomain = [-minViewDeltaPercent, minViewDeltaPercent];
 	if (yDomain[0] > 0) {
 		// (1)
 		yDomain[0] = 0;
@@ -98,13 +100,15 @@ function BandChart(data, {
 		.call(g => g.selectAll(".tick line").clone()
 			.attr("x2", width - marginLeft - marginRight)
 			.attr("stroke-opacity", 0.1))
-		.call(g => g.append("text")
-			.attr("x", xRange[0]-40)
-			.attr("y", 24)
-			.attr("fill", "currentColor")
-			.attr("text-anchor", "start")
-			.attr("font-size", "16px")
-			.text(unit));
+		.call(g => g.append("a")
+			.attr("xlink:href", "?benchmark=" + benchmark + "&unit=" + unit)
+			.append("text")
+				.attr("x", xRange[0]-40)
+				.attr("y", 24)
+				.attr("fill", "currentColor")
+				.attr("text-anchor", "start")
+				.attr("font-size", "16px")
+				.text(unit));
 
 	const defs = svg.append("defs")
 

@@ -655,6 +655,7 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	benchmark := r.FormValue("benchmark")
+	unit := r.FormValue("unit")
 	var benchmarks []*BenchmarkJSON
 	if benchmark == "" {
 		benchmarks, err = fetchDefaultBenchmarks(ctx, qc, start, end, repository, branch)
@@ -662,8 +663,14 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		benchmarks, err = fetchAllBenchmarks(ctx, qc, false, start, end, repository, branch)
 	} else if benchmark == "regressions" {
 		benchmarks, err = fetchAllBenchmarks(ctx, qc, true, start, end, repository, branch)
-	} else {
+	} else if benchmark != "" && unit == "" {
 		benchmarks, err = fetchNamedBenchmark(ctx, qc, start, end, repository, branch, benchmark)
+	} else {
+		var result *BenchmarkJSON
+		result, err = fetchNamedUnitBenchmark(ctx, qc, start, end, repository, branch, benchmark, unit)
+		if result != nil && err == nil {
+			benchmarks = []*BenchmarkJSON{result}
+		}
 	}
 	if err == errBenchmarkNotFound {
 		log.Printf("Benchmark not found: %q", benchmark)

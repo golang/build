@@ -109,9 +109,13 @@ nav .left-separator {
   padding-left: 0.5rem;
 }
 
-.Dashboard-search {
+.Dashboard-search-benchmark {
   display: inline-block;
   width: 300px;
+}
+.Dashboard-search-unit {
+  display: inline-block;
+  width: 90px;
 }
 input, select {
   border: 1px solid transparent;
@@ -148,6 +152,10 @@ input[type=number] {
   flex-direction: row;
   margin: 8px;
 }
+.Dashboard-section-expand {
+  padding: 8px;
+  width: 100%;
+}
 .Dashboard-grid {
   display: flex;
   flex-direction: row;
@@ -155,4 +163,25 @@ input[type=number] {
   justify-content: left;
 }
 .Dashboard-grid-item {
+}
+.Dashboard-table {
+  padding: 16px;
+  width: 100%;
+}
+.Dashboard-table tr:nth-child(2n+1) {
+  background: #f4f4f4;
+}
+.Dashboard-table th {
+  background: #e0ebf5;
+  color: #375eab;
+  text-align: center;
+}
+.Dashboard-table td {
+  padding: 8px;
+  text-align: center;
+}
+.Dashboard-table-commit {
+  font-family: monospace;
+}
+.Dashboard-table-range {
 }
