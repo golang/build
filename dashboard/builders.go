@@ -2820,12 +2820,25 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		FlakyNet:       true,
-		HostType:       "host-linux-loong64-3a5000",
-		Name:           "linux-loong64-3a5000",
-		SkipSnapshot:   true,
-		distTestAdjust: loong64DistTestPolicy,
-		buildsRepo:     loong64BuildsRepoPolicy,
+		FlakyNet:     true,
+		HostType:     "host-linux-loong64-3a5000",
+		Name:         "linux-loong64-3a5000",
+		SkipSnapshot: true,
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			switch distTest {
+			case "api", "reboot":
+				return false
+			}
+			return run
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
+		},
 		privateGoProxy: true, // this builder is behind firewall
 		env: []string{
 			"GOARCH=loong64",
@@ -3207,25 +3220,6 @@ func mipsBuildsRepoPolicy(repo, branch, goBranch string) bool {
 
 // riscvDistTestPolicy is same as mipsDistTestPolicy for now.
 var riscvDistTestPolicy = mipsDistTestPolicy
-
-// loong64DistTestPolicy is a distTestAdjust policy function
-func loong64DistTestPolicy(run bool, distTest string, isNormalTry bool) bool {
-	switch distTest {
-	case "api", "reboot":
-		return false
-	}
-	return run
-}
-
-// loong64BuildsRepoPolicy is a buildsRepo policy function
-func loong64BuildsRepoPolicy(repo, branch, goBranch string) bool {
-	switch repo {
-	case "go", "net", "sys":
-		return branch == "master" && goBranch == "master"
-	default:
-		return false
-	}
-}
 
 // TryBuildersForProject returns the builders that should run as part of
 // a TryBot set for the given project.
