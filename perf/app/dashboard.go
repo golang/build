@@ -45,11 +45,14 @@ func (a *App) dashboardRegisterOnMux(mux *http.ServeMux) {
 // We could try to shoehorn this into benchfmt.Result, but that isn't really
 // the best fit for a graph.
 type BenchmarkJSON struct {
-	Name string
-	Unit string
+	Name           string
+	Unit           string
+	HigherIsBetter bool
 
 	// These will be sorted by CommitDate.
 	Values []ValueJSON
+
+	Regression *RegressionJSON
 }
 
 type ValueJSON struct {
@@ -316,13 +319,13 @@ from(bucket: "perf")
 	return groupBenchmarkResults(res, regressions)
 }
 
-type regression struct {
-	change         float64 // endpoint regression, if any
-	deltaIndex     int     // index at which largest increase of regression occurs
-	deltaScore     float64 // score of that change (in 95%ile boxes)
-	delta          float64 // size of that changes
-	unit           string
-	ignoredBecause string
+type RegressionJSON struct {
+	Change         float64 // endpoint regression, if any
+	DeltaIndex     int     // index at which largest increase of regression occurs
+	Delta          float64 // size of that changes
+	IgnoredBecause string
+
+	deltaScore float64 // score of that change (in 95%ile boxes)
 }
 
 // queryToJson process a QueryTableResult into a slice of BenchmarkJSON,
@@ -354,8 +357,9 @@ func queryToJson(res *api.QueryTableResult) ([]*BenchmarkJSON, error) {
 		b, ok := m[k]
 		if !ok {
 			b = &BenchmarkJSON{
-				Name: name,
-				Unit: unit,
+				Name:           name,
+				Unit:           unit,
+				HigherIsBetter: isHigherBetter(unit),
 			}
 			m[k] = b
 		}
@@ -380,69 +384,35 @@ func queryToJson(res *api.QueryTableResult) ([]*BenchmarkJSON, error) {
 	return s, nil
 }
 
-// reorderRegressionsFirst sorts the benchmarks in s so that those with the
-// largest detectable regressions come first, and returns a map from benchmark name
-// to the worst regression for that name (across all units)
-func reorderRegressionsFirst(s []*BenchmarkJSON) map[string]regression {
-	r := make(map[string]regression) // worst regression for each benchmark name, across all units for that benchmark
-
+// filterAndSortRegressions filters out benchmarks that didn't regress and sorts the
+// benchmarks in s so that those with the largest detectable regressions come first.
+func filterAndSortRegressions(s []*BenchmarkJSON) []*BenchmarkJSON {
 	// Compute per-benchmark estimates of point where the most interesting regression happened.
-	// TODO This information might be worth adding to the graphs in general, once we do that for the regressions view.
 	for _, b := range s {
-		if worst := worstRegression(b); worst.deltaScore > 1 && worst.delta > r[b.Name].delta {
-			r[b.Name] = worst
-		} else if _, ok := r[b.Name]; !ok { // don't overwrite success for one unit w/ failure explanation for another
-			r[b.Name] = worst // This is for regression ordering debugging and might end up removed.
-		}
+		b.Regression = worstRegression(b)
+		// TODO(mknyszek, drchase, mpratt): Filter out benchmarks once we're confident this
+		// algorithm works OK.
 	}
 
 	// Sort benchmarks with detectable regressions first, ordered by
 	// size of regression at end of sample.  Also sort the remaining
-	// benchmarks into end-of-sample regression order.  Keep benchmarks
-	// with the same name grouped together, which is assumed by the
-	// graph presentation server.
+	// benchmarks into end-of-sample regression order.
 	sort.Slice(s, func(i, j int) bool {
+		ri, rj := s[i].Regression, s[j].Regression
+		// regressions w/ a delta index come first
+		if (ri.DeltaIndex < 0) != (rj.DeltaIndex < 0) {
+			return rj.DeltaIndex < 0
+		}
+		if ri.Change != rj.Change {
+			// put larger regression first.
+			return ri.Change > rj.Change
+		}
 		if s[i].Name == s[j].Name {
 			return s[i].Unit < s[j].Unit
 		}
-		ri, iok := r[s[i].Name]
-		rj, jok := r[s[j].Name]
-		if iok != jok {
-			// a name with regression information attached comes first.
-			return iok
-		}
-		// regressions w/ a delta index come first
-		if (ri.deltaIndex < 0) != (rj.deltaIndex < 0) {
-			return rj.deltaIndex < 0
-		}
-		if ri.change != rj.change {
-			// put larger regression first.
-			return ri.change > rj.change
-		}
 		return s[i].Name < s[j].Name
 	})
-
-	return r
-}
-
-// renameBenchmarksWithRegressions changes the names of benchmarks to include information about regressions,
-// and returns the number of regression points that were detected.
-// TODO(drchase, mpratt) better if this can be done in the graph or surrounding text.
-func renameBenchmarksWithRegressions(s []*BenchmarkJSON, r map[string]regression) {
-	detected := 0
-	// This injects regression information into the titles.
-	for i, b := range s {
-		if change, ok := r[b.Name]; ok {
-			if change.deltaIndex >= 0 {
-				detected++
-				v := b.Values[change.deltaIndex]
-				commit, date := v.CommitHash[:7], v.CommitDate.Format(time.RFC3339)
-				s[i].Name = fmt.Sprintf("%s %s %3.1f%% regression, %3.1f%%point change at %s on %s (score %3.1f)", b.Name, change.unit, 100*change.change, 100*change.delta, commit, date, change.deltaScore)
-			} else {
-				s[i].Name = fmt.Sprintf("%s %s not ranked because %s", b.Name, change.unit, change.ignoredBecause)
-			}
-		}
-	}
+	return s
 }
 
 // groupBenchmarkResults groups all benchmark results from the passed query.
@@ -453,22 +423,17 @@ func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*Ben
 	if err != nil {
 		return nil, err
 	}
-
-	if !byRegression {
-		// Keep benchmarks with the same name grouped together, which is
-		// assumed by the JS.
-		sort.Slice(s, func(i, j int) bool {
-			if s[i].Name == s[j].Name {
-				return s[i].Unit < s[j].Unit
-			}
-			return s[i].Name < s[j].Name
-		})
-		return s, nil
+	if byRegression {
+		return filterAndSortRegressions(s), nil
 	}
-
-	regressions := reorderRegressionsFirst(s)
-	renameBenchmarksWithRegressions(s, regressions)
-
+	// Keep benchmarks with the same name grouped together, which is
+	// assumed by the JS.
+	sort.Slice(s, func(i, j int) bool {
+		if s[i].Name == s[j].Name {
+			return s[i].Unit < s[j].Unit
+		}
+		return s[i].Name < s[j].Name
+	})
 	return s, nil
 }
 
@@ -508,23 +473,33 @@ func changeScore(l1, c1, h1, l2, c2, h2 float64) float64 {
 	}
 }
 
-func worstRegression(b *BenchmarkJSON) regression {
+func isHigherBetter(unit string) bool {
+	switch unit {
+	case "B/s", "ops/s":
+		return true
+	}
+	return false
+}
+
+func worstRegression(b *BenchmarkJSON) *RegressionJSON {
 	values := b.Values
 	l := len(values)
 	ninf := math.Inf(-1)
 
 	sign := 1.0
-	// TODO unit "good direction" information must be available from somewhere else, but for now, do this.
-	switch b.Unit {
-	case "B/s", "ops/s":
-		sign = -1
+	if b.HigherIsBetter {
+		sign = -1.0
 	}
 
 	min := sign * values[l-1].Center
-	worst := regression{deltaScore: ninf, deltaIndex: -1, change: min, unit: b.Unit}
+	worst := &RegressionJSON{
+		DeltaIndex: -1,
+		Change:     min,
+		deltaScore: ninf,
+	}
 
 	if len(values) < 4 {
-		worst.ignoredBecause = "too few values"
+		worst.IgnoredBecause = "too few values"
 		return worst
 	}
 
@@ -541,12 +516,12 @@ func worstRegression(b *BenchmarkJSON) regression {
 
 	// MAGIC NUMBER "1".  Removing this added 25% to the "detected regressions", but they were all junk.
 	if median > 1 {
-		worst.ignoredBecause = "median change score > 1"
+		worst.IgnoredBecause = "median change score > 1"
 		return worst
 	}
 
 	if math.IsNaN(median) {
-		worst.ignoredBecause = "median is NaN"
+		worst.IgnoredBecause = "median is NaN"
 		return worst
 	}
 
@@ -559,16 +534,16 @@ func worstRegression(b *BenchmarkJSON) regression {
 		score := sign * changeScore(v1.Low, v1.Center, v1.High, v0.Low, v0.Center, v0.High)
 
 		if score > magicScoreThreshold && sign*v1.Center < min && score > worst.deltaScore {
-			worst.deltaIndex = i
+			worst.DeltaIndex = i
 			worst.deltaScore = score
-			worst.delta = sign * (v0.Center - v1.Center)
+			worst.Delta = sign * (v0.Center - v1.Center)
 		}
 
 		min = math.Min(sign*v0.Center, min)
 	}
 
-	if worst.deltaIndex == -1 {
-		worst.ignoredBecause = "didn't detect outlier regression"
+	if worst.DeltaIndex == -1 {
+		worst.IgnoredBecause = "didn't detect outlier regression"
 	}
 
 	return worst
@@ -692,7 +667,8 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		w = &gzipResponseWriter{w: gz, ResponseWriter: w}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	e := json.NewEncoder(w)
-	e.Encode(benchmarks)
+	if err := json.NewEncoder(w).Encode(benchmarks); err != nil {
+		log.Printf("Error encoding results: %v", err)
+		http.Error(w, "Internal error, see logs", 500)
+	}
 }

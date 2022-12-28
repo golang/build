@@ -14,6 +14,7 @@ function BandChart(data, {
 	unit,
 	repository,
 	minViewDeltaPercent,
+	higherIsBetter,
 } = {}) {
 	// Compute values.
 	const C = d3.map(data, d => d.CommitHash);
@@ -123,11 +124,7 @@ function BandChart(data, {
 	// By default, lower is better.
 	var bottomColor = goodColor;
 	var topColor = badColor;
-	const higherIsBetter = {
-		"B/s": true,
-		"ops/s": true
-	};
-	if (unit in higherIsBetter) {
+	if (higherIsBetter) {
 		bottomColor = badColor;
 		topColor = goodColor;
 	}

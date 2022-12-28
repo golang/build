@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-function Range(low, center, high, min, max, width, height, unit) {
+function Range(low, center, high, min, max, width, height, unit, higherIsBetter) {
 	const margin = 40;
 	const svg = d3.create("svg")
 		.attr("width", width)
@@ -13,11 +13,7 @@ function Range(low, center, high, min, max, width, height, unit) {
 	const goodColor = "#005AB5";
 	const badColor = "#DC3220";
 	const pickColor = function(n) {
-		const higherIsBetter = {
-			"B/s": true,
-			"ops/s": true
-		};
-		if (unit in higherIsBetter) {
+		if (higherIsBetter) {
 			if (n > 0) {
 				return goodColor;
 			}

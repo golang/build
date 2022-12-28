@@ -155,17 +155,44 @@ function addCharts(benchmarks, repository) {
 
 		let item = document.createElement("div");
 		item.classList.add("Dashboard-grid-item");
+		if (bench.Regression) {
+			const p = document.createElement("p");
+			p.classList.add("Dashboard-regression-description");
+			const r = bench.Regression;
+			if (r.DeltaIndex >= 0) {
+				// Generate some text indicating the regression.
+				const rd = bench.Values[r.DeltaIndex];
+				const regression = (Math.abs(r.Change)*100).toFixed(2);
+				const shortCommit = rd.CommitHash.slice(0, 7);
+				let diffText = "regression";
+				if ((bench.HigherIsBetter && r.Change < 0) || (bench.HigherIsBetter && r.Change > 0)) {
+					diffText = "improvement";
+				}
+				p.innerHTML = `${regression}% ${diffText}, ${(r.Delta*100).toFixed(2)}%-point change at <a href="?benchmark=${bench.Name}&unit=${bench.Unit}#${rd.CommitHash}">${shortCommit}</a>.`;
+
+				// Add a link to file a bug.
+				const title = `affected/package: ${regression}% regression in ${bench.Name} ${bench.Unit} at ${shortCommit}`;
+				const body = `Discovered a regression in ${bench.Unit} of ${regression}% for benchmark ${bench.Name} at ${shortCommit}.\n\n<ADD MORE DETAILS>.`
+				let query = `?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=Performance`;
+				p.innerHTML += ` <a href="https://github.com/golang/go/issues/new${query}">File an issue</a>.`;
+			} else {
+				p.textContext = `Not ranked because ${r.IgnoredBecause}.`;
+			}
+			item.appendChild(p);
+		}
 		item.appendChild(BandChart(bench.Values, {
 			benchmark: bench.Name,
 			unit: bench.Unit,
 			repository: repository,
 			minViewDeltaPercent: minViewDeltaPercent,
+			higherIsBetter: bench.HigherIsBetter,
 		}));
 		grid.appendChild(item);
 	}
 }
 
 function addTable(bench, unit, repository) {
+	const commitSelected = window.location.hash;
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
@@ -236,6 +263,9 @@ function addTable(bench, unit, repository) {
 
 		// Create a row per value.
 		const row = document.createElement("tr");
+		if (commitSelected && commitSelected.slice(1) === v.CommitHash) {
+			row.classList.add("selected");
+		}
 
 		// Commit date.
 		row.appendChild(createCell(Intl.DateTimeFormat([], {
@@ -247,6 +277,7 @@ function addTable(bench, unit, repository) {
 		const commitHash = createCell("", false);
 		const commitLink = document.createElement("a");
 		commitLink.href = "https://go.googlesource.com/" + repository + "/+show/" + v.CommitHash;
+		commitLink.id = v.CommitHash;
 		commitLink.textContent = v.CommitHash.slice(0, 7);
 		commitHash.appendChild(commitLink);
 		commitHash.classList.add("Dashboard-table-commit")
@@ -254,11 +285,21 @@ function addTable(bench, unit, repository) {
 
 		// Range visualization.
 		const range = createCell("", false);
-		range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 32, bench.Unit));
+		range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 32, bench.Unit, bench.HigherIsBetter));
 		range.classList.add("Dashboard-table-range")
 		row.appendChild(range);
 
 		table.appendChild(row);
+	}
+
+	if (commitSelected) {
+		// Now that we've generated anchors for every commit, let's scroll to the
+		// right one. The browser won't do this automatically because the anchors
+		// don't exist when the page is loaded.
+		const anchor = document.querySelector(commitSelected);
+		window.scrollTo({
+			top: anchor.getBoundingClientRect().top + window.pageYOffset,
+		})
 	}
 }
 

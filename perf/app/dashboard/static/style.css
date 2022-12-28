@@ -163,6 +163,8 @@ input[type=number] {
   justify-content: left;
 }
 .Dashboard-grid-item {
+  display: flex;
+  flex-direction: column;
 }
 .Dashboard-table {
   padding: 16px;
@@ -170,6 +172,12 @@ input[type=number] {
 }
 .Dashboard-table tr:nth-child(2n+1) {
   background: #f4f4f4;
+}
+.Dashboard-table tr:hover {
+  background: #ffff99;
+}
+.Dashboard-table tr.selected {
+  background: #ffff99;
 }
 .Dashboard-table th {
   background: #e0ebf5;
@@ -184,4 +192,10 @@ input[type=number] {
   font-family: monospace;
 }
 .Dashboard-table-range {
+}
+.Dashboard-regression-description {
+  display: inline-block;
+  width: 480px;
+  font-style: oblique;
+  text-align: center;
 }
