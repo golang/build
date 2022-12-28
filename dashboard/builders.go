@@ -2833,8 +2833,10 @@ func init() {
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
-			case "go", "net", "sys":
-				return branch == "master" && goBranch == "master"
+			case "go":
+				return atLeastGo1(goBranch, 19)
+			case "net", "sys":
+				return branch == "master" && atLeastGo1(goBranch, 19)
 			default:
 				return false
 			}
