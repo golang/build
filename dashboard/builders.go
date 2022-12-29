@@ -285,8 +285,13 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-js-wasm": {
-		Notes:          "Container with node.js for testing js/wasm.",
+		Notes:          "Container with Node.js 14 for testing js/wasm.",
 		ContainerImage: "js-wasm:latest",
+		SSHUsername:    "root",
+	},
+	"host-linux-amd64-js-wasm-node18": {
+		Notes:          "Container with Node.js 18 for testing js/wasm.",
+		ContainerImage: "js-wasm-node18:latest",
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-localdev": {
@@ -1957,7 +1962,6 @@ func init() {
 			}
 			return b
 		},
-
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if isNormalTry {
 				if strings.Contains(distTest, "/internal/") ||
@@ -1972,6 +1976,37 @@ func init() {
 			return run
 		},
 		numTryTestHelpers: 5,
+		env: []string{
+			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:        "js-wasm-node18",
+		HostType:    "host-linux-amd64-js-wasm-node18",
+		KnownIssues: []int{57017},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
+			switch repo {
+			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+				// Don't test these golang.org/x repos.
+				b = false
+			}
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
+				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
+				run = false
+			}
+			return run
+		},
+		numTryTestHelpers: 3,
 		env: []string{
 			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
