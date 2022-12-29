@@ -1945,7 +1945,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-71",
 		HostType:          "host-openbsd-amd64-71",
-		tryBot:            defaultTrySet(),
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
 	})
@@ -1959,7 +1958,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "openbsd-386-71",
 		HostType: "host-openbsd-386-71",
-		tryBot:   explicitTrySet("sys"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// https://go.dev/issue/49529: git seems to be too slow on this
 			// platform.
