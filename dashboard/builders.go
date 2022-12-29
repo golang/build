@@ -78,9 +78,9 @@ var slowBotAliases = map[string]string{
 	"netbsd-arm":            "netbsd-arm-bsiegert",
 	"netbsd-arm64":          "netbsd-arm64-bsiegert",
 	"nocgo":                 "linux-amd64-nocgo",
-	"openbsd":               "openbsd-amd64-70",
-	"openbsd-386":           "openbsd-386-70",
-	"openbsd-amd64":         "openbsd-amd64-70",
+	"openbsd":               "openbsd-amd64-72",
+	"openbsd-386":           "openbsd-386-72",
+	"openbsd-amd64":         "openbsd-amd64-72",
 	"openbsd-arm":           "openbsd-arm-jsing",
 	"openbsd-arm64":         "openbsd-arm64-jsing",
 	"openbsd-mips64":        "openbsd-mips64-jsing",
@@ -454,28 +454,6 @@ var Hosts = map[string]*HostConfig{
 		Owners:      []*gophers.Person{gh("bsiegert")},
 		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
-	"host-openbsd-386-68": {
-		VMImage:     "openbsd-386-68-v3", // v3 adds 009_exit syspatch; see go.dev/cl/278732.
-		machineType: "n2",                // force Intel; see go.dev/issue/49209
-		Notes:       "OpenBSD 6.8 (with 009_exit syspatch); GCE VM, built from build/env/openbsd-386",
-		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
-	"host-openbsd-386-70": {
-		VMImage:     "openbsd-386-70",
-		machineType: "n2", // force Intel; see go.dev/issue/49209
-		Notes:       "OpenBSD 7.0; GCE VM, built from build/env/openbsd-386",
-		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
-	"host-openbsd-386-70-n2d": {
-		// This host config is only for the runtime team to use investigating golang/go#49209.
-		VMImage:     "openbsd-386-70",
-		machineType: "n2d", // force AMD; see go.dev/issue/49209
-		Notes:       "OpenBSD 7.0; GCE VM, built from build/env/openbsd-386; AMD",
-		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
 	"host-openbsd-386-71": {
 		VMImage:     "openbsd-386-71",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
@@ -487,20 +465,6 @@ var Hosts = map[string]*HostConfig{
 		VMImage:     "openbsd-386-72",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		Notes:       "OpenBSD 7.2; GCE VM, built from build/env/openbsd-386",
-		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
-	"host-openbsd-amd64-68": {
-		VMImage:     "openbsd-amd64-68-v3", // v3 adds 009_exit syspatch; see go.dev/cl/278732.
-		machineType: "n2",                  // force Intel; see go.dev/issue/49209
-		Notes:       "OpenBSD 6.8 (with 009_exit syspatch); GCE VM, built from build/env/openbsd-amd64",
-		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
-	"host-openbsd-amd64-70": {
-		VMImage:     "openbsd-amd64-70",
-		machineType: "n2", // force Intel; see go.dev/issue/49209
-		Notes:       "OpenBSD 7.0; GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername: "gopher",
 		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
@@ -1979,50 +1943,23 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-68",
-		HostType:          "host-openbsd-amd64-68",
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:     "openbsd-386-68",
-		HostType: "host-openbsd-386-68",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "review" {
-				// https://go.dev/issue/49529: git seems to be too slow on this
-				// platform.
-				return false
-			}
-			return buildRepoByDefault(repo)
-		},
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-70",
-		HostType:          "host-openbsd-amd64-70",
-		tryBot:            defaultTrySet(),
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-71",
 		HostType:          "host-openbsd-amd64-71",
-		KnownIssues:       []int{57496},
+		tryBot:            defaultTrySet(),
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-72",
 		HostType:          "host-openbsd-amd64-72",
-		KnownIssues:       []int{57496},
+		tryBot:            defaultTrySet(),
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:     "openbsd-386-70",
-		HostType: "host-openbsd-386-70",
-		tryBot:   explicitTrySet("sys"),
+		Name:     "openbsd-386-71",
+		HostType: "host-openbsd-386-71",
+		tryBot:   defaultTrySet(),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// https://go.dev/issue/49529: git seems to be too slow on this
 			// platform.
@@ -2032,9 +1969,9 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:        "openbsd-386-71",
-		HostType:    "host-openbsd-386-71",
-		KnownIssues: []int{57496},
+		Name:     "openbsd-386-72",
+		HostType: "host-openbsd-386-72",
+		tryBot:   defaultTrySet(),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// https://go.dev/issue/49529: git seems to be too slow on this
 			// platform.
@@ -2042,25 +1979,6 @@ func init() {
 		},
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:        "openbsd-386-72",
-		HostType:    "host-openbsd-386-72",
-		KnownIssues: []int{57496},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// https://go.dev/issue/49529: git seems to be too slow on this
-			// platform.
-			return repo != "review" && buildRepoByDefault(repo)
-		},
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		// This builder is only for the runtime team to use investigating golang/go#49209.
-		Name:           "openbsd-386-70-n2d",
-		HostType:       "host-openbsd-386-70-n2d",
-		buildsRepo:     disabledBuilder,
-		distTestAdjust: noTestDirAndNoReboot,
 	})
 	addBuilder(BuildConfig{
 		Name:         "openbsd-arm-jsing",

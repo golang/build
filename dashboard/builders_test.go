@@ -103,7 +103,10 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-unified",
 				"linux-arm-aws",
 				"linux-arm64",
-				"openbsd-amd64-70",
+				"openbsd-386-71",
+				"openbsd-386-72",
+				"openbsd-amd64-71",
+				"openbsd-amd64-72",
 				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
@@ -137,7 +140,10 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64",
-				"openbsd-amd64-70",
+				"openbsd-386-71",
+				"openbsd-386-72",
+				"openbsd-amd64-71",
+				"openbsd-amd64-72",
 				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
@@ -176,7 +182,10 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64",
-				"openbsd-amd64-70",
+				"openbsd-386-71",
+				"openbsd-386-72",
+				"openbsd-amd64-71",
+				"openbsd-amd64-72",
 				"windows-386-2008-oldcc",
 				"windows-386-2012-oldcc",
 				"windows-amd64-2016-oldcc",
@@ -224,8 +233,10 @@ func TestTrybots(t *testing.T) {
 				"linux-arm-aws",
 				"linux-arm64",
 				"netbsd-amd64-9_3",
-				"openbsd-386-70",
-				"openbsd-amd64-70",
+				"openbsd-386-71",
+				"openbsd-386-72",
+				"openbsd-amd64-71",
+				"openbsd-amd64-72",
 				"windows-386-2008",
 				"windows-amd64-2016",
 			},
@@ -409,13 +420,9 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-loong64-3a5000", "sys"), onlyPost},
 		{b("linux-loong64-3a5000", "net"), onlyPost},
 
-		// OpenBSD 6.8.
-		{b("openbsd-amd64-68", "go"), onlyPost},
-		{b("openbsd-amd64-68@go1.99", "go"), onlyPost},
-
-		// OpenBSD 7.0.
-		{b("openbsd-amd64-70", "go"), both},
-		{b("openbsd-amd64-70@go1.99", "go"), both},
+		// OpenBSD 7.2.
+		{b("openbsd-amd64-72", "go"), both},
+		{b("openbsd-amd64-72@go1.99", "go"), both},
 
 		// FreeBSD 13.0
 		{b("freebsd-amd64-13_0", "go"), onlyPost},
@@ -519,7 +526,6 @@ func TestBuilderConfig(t *testing.T) {
 		// ... but not on most others:
 		{b("freebsd-386-12_3", "exp"), none},
 		{b("freebsd-amd64-12_3", "exp"), none},
-		{b("openbsd-amd64-68", "exp"), none},
 		{b("js-wasm", "exp"), none},
 
 		// exp is experimental; it doesn't test against release branches.
@@ -533,7 +539,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("windows-amd64-2016", "build"), both},
 		{b("darwin-amd64-10_14", "build"), none},
 		{b("darwin-amd64-10_15", "build"), onlyPost},
-		{b("openbsd-amd64-68", "build"), none},
 		{b("linux-amd64-fedora", "build"), none},
 		{b("linux-amd64-clang", "build"), none},
 		{b("linux-amd64-sid", "build"), none},
