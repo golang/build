@@ -28,6 +28,12 @@ type Entry struct {
 	Secondary []Owner `json:"secondary,omitempty"`
 }
 
+type displayEntry struct {
+	Primary   []Owner
+	Secondary []Owner
+	GerritURL string
+}
+
 type Request struct {
 	Payload struct {
 		// Paths is a set of relative paths rooted at go.googlesource.com,
@@ -197,37 +203,63 @@ func TranslatePathForIssues(path string) string {
 	return path
 }
 
-// translateOwnersPaths returns a copy of entries with all its keys
-// adjusted for better readability on https://dev.golang.org/owners.
-func translateOwnersPaths(entries map[string]*Entry) (map[string]*Entry, error) {
-	tm := make(map[string]*Entry)
+// formatEntries returns an entries map adjusted for better readability on
+// https://dev.golang.org/owners.
+func formatEntries(entries map[string]*Entry) (map[string]*displayEntry, error) {
+	tm := make(map[string]*displayEntry)
 	for path, entry := range entries {
 		tPath := TranslatePathForIssues(path)
 		if _, ok := tm[tPath]; ok {
 			return nil, fmt.Errorf("path translation of %q creates a duplicate entry %q", path, tPath)
 		}
-		tm[tPath] = entry
+		tm[tPath] = &displayEntry{
+			Primary:   entry.Primary,
+			Secondary: entry.Secondary,
+			GerritURL: gerritURL(path, tPath),
+		}
 	}
 	return tm, nil
 }
 
+func gerritURL(path, tPath string) string {
+	var project string
+	var dir string
+	if strings.HasPrefix(path, "go/") {
+		project = "go"
+		dir = tPath
+	} else if strings.HasPrefix(tPath, "x/") {
+		parts := strings.SplitN(tPath, "/", 3)
+		project = parts[1]
+		if len(parts) == 3 {
+			dir = parts[2]
+		}
+	} else {
+		return ""
+	}
+	url := "https://go-review.googlesource.com/q/project:" + project
+	if dir != "" {
+		url += "+dir:" + dir
+	}
+	return url
+}
+
 // ownerData is passed to the Template, which produces two tables.
 type ownerData struct {
-	Paths    map[string]*Entry
-	ArchOSes map[string]*Entry
+	Paths    map[string]*displayEntry
+	ArchOSes map[string]*displayEntry
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	indexCache.once.Do(func() {
-		paths, err := translateOwnersPaths(entries)
+		paths, err := formatEntries(entries)
 		if err != nil {
 			indexCache.err = err
 			return
 		}
 
-		archOses, err := translateOwnersPaths(archOses)
+		archOses, err := formatEntries(archOses)
 		if err != nil {
 			indexCache.err = err
 			return
@@ -319,7 +351,11 @@ body {
 </div>
 {{range $path, $entry := .Paths}}
 	<div class="entry">
-		<span class="path">{{$path}}</span>
+		<span class="path">
+			{{if $entry.GerritURL}}<a href="{{$entry.GerritURL}}" target="_blank" rel="noopener">{{end}}
+			{{$path}}
+			{{if $entry.GerritURL}}</a>{{end}}
+		</span>
 		<span class="primary">
 			{{range .Primary}}
 				<a href="{{githubURL .GitHubUsername}}" target="_blank" rel="noopener">@{{.GitHubUsername}}</a>
