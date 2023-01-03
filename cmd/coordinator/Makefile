@@ -19,16 +19,13 @@ DOCKER_IMAGE=golang/coordinator
 docker: *.go Dockerfile
 	docker build --force-rm -f Dockerfile --build-arg "version=$(VERSION)" --tag=$(DOCKER_IMAGE):$(VERSION) ../..
 
-docker-prod: docker
-	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_PROD):$(VERSION)
-	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
 docker-staging: docker
 	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_STAGING):$(VERSION)
 	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
-push-prod: docker-prod
-	docker push $(IMAGE_PROD):$(VERSION)
-	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
+push-prod:
+	gcloud builds submit --config ./cloudbuild.yaml --substitutions=TAG_NAME="$(VERSION)" ../../
+
 push-staging: docker-staging
 	docker push $(IMAGE_STAGING):$(VERSION)
 	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
