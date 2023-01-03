@@ -13,7 +13,6 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -147,7 +146,6 @@ func addHealthChecker(mux *http.ServeMux, hc *healthChecker) {
 var basePinErr atomic.Value
 
 func addHealthCheckers(ctx context.Context, mux *http.ServeMux, sc *secret.Client) {
-	addHealthChecker(mux, newMacHealthChecker())
 	addHealthChecker(mux, newMacOSARM64Checker())
 	addHealthChecker(mux, newOSUPPC64leChecker())
 	addHealthChecker(mux, newOSUPPC64lePower9Checker())
@@ -290,81 +288,6 @@ func newGitMirrorChecker() *healthChecker {
 			}
 		},
 	}
-}
-
-func newMacHealthChecker() *healthChecker {
-	var hosts []string
-	const numMacHosts = 8 // physical Mac Pros, not reverse buildlet connections. M1 Macs will be included in separate checks.
-	for i := 1; i <= numMacHosts; i++ {
-		for _, suf := range []string{"a", "b"} {
-			name := fmt.Sprintf("macstadium_host%02d%s", i, suf)
-			hosts = append(hosts, name)
-		}
-	}
-	checkHosts := reverseHostChecker(hosts)
-
-	// And check that the makemac daemon is listening.
-	var makeMac struct {
-		sync.Mutex
-		lastCheck  time.Time // currently unused
-		lastErrors []string
-		lastWarns  []string
-	}
-	setMakeMacStatus := func(errs, warns []string) {
-		makeMac.Lock()
-		defer makeMac.Unlock()
-		makeMac.lastCheck = time.Now()
-		makeMac.lastErrors = errs
-		makeMac.lastWarns = warns
-	}
-	go func() {
-		for {
-			errs, warns := fetchMakeMacStatus()
-			setMakeMacStatus(errs, warns)
-			time.Sleep(15 * time.Second)
-		}
-	}()
-	return &healthChecker{
-		ID:     "macs",
-		Title:  "MacStadium Mac VMs",
-		DocURL: "https://github.com/golang/build/tree/master/env/darwin/macstadium",
-		Check: func(w *checkWriter) {
-			// Check hosts.
-			checkHosts(w)
-			// Check makemac daemon.
-			makeMac.Lock()
-			defer makeMac.Unlock()
-			for _, v := range makeMac.lastWarns {
-				w.warnf("makemac daemon: %v", v)
-			}
-			for _, v := range makeMac.lastErrors {
-				w.errorf("makemac daemon: %v", v)
-			}
-		},
-	}
-}
-
-func fetchMakeMacStatus() (errs, warns []string) {
-	c := &http.Client{Timeout: 15 * time.Second}
-	res, err := c.Get("http://macstadiumd.golang.org:8713")
-	if err != nil {
-		return []string{fmt.Sprintf("failed to fetch status: %v", err)}, nil
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return []string{fmt.Sprintf("HTTP status %v", res.Status)}, nil
-	}
-	if res.Header.Get("Content-Type") != "application/json" {
-		return []string{fmt.Sprintf("unexpected content-type %q; want JSON", res.Header.Get("Content-Type"))}, nil
-	}
-	var resj struct {
-		Errors   []string
-		Warnings []string
-	}
-	if err := json.NewDecoder(res.Body).Decode(&resj); err != nil {
-		return []string{fmt.Sprintf("reading status response body: %v", err)}, nil
-	}
-	return resj.Errors, resj.Warnings
 }
 
 func newMacOSARM64Checker() *healthChecker {

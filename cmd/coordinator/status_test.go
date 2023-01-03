@@ -95,8 +95,6 @@ func TestHandleStatus_HealthFormatting(t *testing.T) {
 		t.Fatalf("output didn't contain %q: %s", suf, got)
 	}
 	for _, sub := range []string{
-		`<a href="/status/macs">MacStadium Mac VMs</a> [`,
-		`<li>macstadium_host06a not yet connected</li>`,
 		`<a href="/status/allgood">All Good Test</a>: ok`,
 		`<li>test-info</li>`,
 		`<li><span style='color: orange'>test-warn</span></li>`,

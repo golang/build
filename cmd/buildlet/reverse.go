@@ -33,14 +33,6 @@ func keyForMode(mode string) (string, error) {
 	if isDevReverseMode() {
 		return devBuilderKey(mode), nil
 	}
-	if os.Getenv("GO_BUILDER_ENV") == "macstadium_vm" {
-		infoKey := "guestinfo.key-" + mode
-		key := vmwareGetInfo(infoKey)
-		if key == "" {
-			return "", fmt.Errorf("no build key found for VMWare info-get key %q", infoKey)
-		}
-		return key, nil
-	}
 	keyPath := filepath.Join(homedir(), ".gobuildkey-"+mode)
 	if v := os.Getenv("GO_BUILD_KEY_PATH"); v != "" {
 		keyPath = v

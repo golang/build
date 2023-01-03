@@ -729,7 +729,10 @@ func TestSlowBotAliases(t *testing.T) {
 	}
 	ports := strings.Fields(string(out))
 
-	done := map[string]bool{}
+	done := map[string]bool{
+		// TODO:(golang/go#47019) - remove when alias added
+		"windows-arm64": true,
+	}
 
 	var add bytes.Buffer
 	check := func(term string, isArch bool) {
@@ -876,23 +879,6 @@ func TestMiscCompileLinuxGOARM5(t *testing.T) {
 		// a misc-compile TryBot. Report it as a failure in case the coverage
 		// was removed accidentally (e.g., as part of a refactor).
 		t.Errorf("no misc-compile TryBot coverage for the special 'linux-arm-arm5' pseudo-port")
-	}
-}
-
-// TestExpectedMacstadiumVMCount ensures that the right number of
-// instances of macOS virtual machines are expected at MacStadium.
-//
-// TODO(go.dev/issue/35698): remove once the scheduler allocates VMs based on demand.
-func TestExpectedMacstadiumVMCount(t *testing.T) {
-	t.Skip("MacStadium turndown")
-	got := 0
-	for host, config := range Hosts {
-		if strings.HasPrefix(host, "host-darwin-amd64-") && !strings.HasSuffix(host, "-aws") {
-			got += config.ExpectNum
-		}
-	}
-	if got != 16 {
-		t.Fatalf("macstadium host count: got %d; want 16", got)
 	}
 }
 

@@ -4,9 +4,6 @@
 # The only reason we upload them to GCS is because that's where the
 # automated VM/container creation scripts download them from.
 #
-# The notable exception is our Mac VMs on MacStadium. In those cases,
-# the images actually do download the stage0 binary on start-up.
-#
 
 GO=go1.19
 

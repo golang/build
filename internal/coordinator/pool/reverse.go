@@ -35,7 +35,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/md5"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -51,7 +50,6 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/revdial/v2"
-	"golang.org/x/build/types"
 )
 
 const minBuildletVersion = 23
@@ -115,56 +113,6 @@ func (p *ReverseBuildletPool) BuildletLastSeen(host string) (time.Time, bool) {
 
 	t, ok := p.hostLastGood[host]
 	return t, ok
-}
-
-// ServeReverseStatusJSON is an HTTP handler implementation which serves the status in
-// JSON format.
-func (p *ReverseBuildletPool) ServeReverseStatusJSON(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	status := p.BuildReverseStatusJSON()
-	j, _ := json.MarshalIndent(status, "", "\t")
-	w.Write(j)
-}
-
-// BuildReverseStatusJSON is an HTTP handler implementation which builds the reverse
-// status reverse buildlets.
-func (p *ReverseBuildletPool) BuildReverseStatusJSON() *types.ReverseBuilderStatus {
-	status := &types.ReverseBuilderStatus{}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, b := range p.buildlets {
-		hs := status.Host(b.hostType)
-		if hs.Machines == nil {
-			hs.Machines = make(map[string]*types.ReverseBuilder)
-		}
-		hs.Connected++
-		bs := &types.ReverseBuilder{
-			Name:         b.hostname,
-			HostType:     b.hostType,
-			ConnectedSec: time.Since(b.regTime).Seconds(),
-			Version:      b.version,
-		}
-		if b.inUse && !b.inHealthCheck {
-			hs.Busy++
-			bs.Busy = true
-			bs.BusySec = time.Since(b.inUseTime).Seconds()
-		} else {
-			hs.Idle++
-			bs.IdleSec = time.Since(b.inUseTime).Seconds()
-		}
-
-		hs.Machines[b.hostname] = bs
-	}
-	for hostType, queue := range p.hostQueue {
-		status.Host(hostType).Waiters = queue.Len()
-	}
-	for hostType, hc := range dashboard.Hosts {
-		if hc.ExpectNum > 0 {
-			status.Host(hostType).Expect = hc.ExpectNum
-		}
-	}
-	return status
 }
 
 // tryToGrab returns non-nil bc on success if a buildlet is free.

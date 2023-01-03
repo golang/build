@@ -250,36 +250,36 @@ func TestIssue42084(t *testing.T) {
 
 	// First, determine builds without try messages. Our target SlowBot shouldn't be included.
 	ts := newTrySet(work)
-	hasWindowsARM64Builder := false
+	hasLinuxArmBuilder := false
 	for _, bs := range ts.builds {
 		v := bs.NameAndBranch()
-		if v == "windows-arm64-10" {
-			hasWindowsARM64Builder = true
+		if v == "linux-arm" {
+			hasLinuxArmBuilder = true
 		}
 	}
-	if hasWindowsARM64Builder {
-		// This test relies on windows-arm64-10 builder not being a default
+	if hasLinuxArmBuilder {
+		// This test relies on linux-arm builder not being a default
 		// TryBot to provide coverage for issue 42084. If the build policy
 		// changes, need to pick another builder to use in this test.
-		t.Fatal("windows-arm64-10 builder was included even without TRY= message")
+		t.Fatal("linux-arm builder was included even without TRY= message")
 	}
 
 	// Next, add try messages, and check that the SlowBot is now included.
 	work.TryMessage = []*apipb.TryVoteMessage{
-		{Message: "TRY=windows-amd64", AuthorId: 1234, Version: 1},
-		{Message: "TRY=windows-arm64-10", AuthorId: 1234, Version: 1},
+		{Message: "TRY=linux", AuthorId: 1234, Version: 1},
+		{Message: "TRY=linux-arm", AuthorId: 1234, Version: 1},
 	}
 	ts = newTrySet(work)
-	hasWindowsARM64Builder = false
+	hasLinuxArmBuilder = false
 	for i, bs := range ts.builds {
 		v := bs.NameAndBranch()
 		t.Logf("build[%d]: %s", i, v)
-		if v == "windows-arm64-10" {
-			hasWindowsARM64Builder = true
+		if v == "linux-arm-aws" {
+			hasLinuxArmBuilder = true
 		}
 	}
-	if !hasWindowsARM64Builder {
-		t.Error("windows-arm64-10 SlowBot was not included")
+	if !hasLinuxArmBuilder {
+		t.Error("linux-arm SlowBot was not included")
 	}
 }
 

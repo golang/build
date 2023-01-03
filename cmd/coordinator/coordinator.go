@@ -360,7 +360,6 @@ func main() {
 	mux.HandleFunc("/style.css", handleStyleCSS)
 	mux.HandleFunc("/try", serveTryStatus(false))
 	mux.HandleFunc("/try.json", serveTryStatus(true))
-	mux.HandleFunc("/status/reverse.json", pool.ReversePool().ServeReverseStatusJSON)
 	mux.HandleFunc("/status/post-submit-active.json", handlePostSubmitActiveJSON)
 	mux.Handle("/dashboard", dashV2)
 	mux.HandleFunc("/queues", handleQueues)

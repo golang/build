@@ -26,7 +26,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
@@ -75,7 +74,6 @@ func main() {
 	}
 	log.Printf("bootstrap binary running")
 
-	var isMacStadiumVM bool
 	switch osArch {
 	case "linux/arm":
 		if onGCE {
@@ -97,15 +95,6 @@ func main() {
 		default:
 			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 		}
-	case "darwin/amd64":
-		// The MacStadium builders' baked-in stage0.sh
-		// bootstrap file doesn't set GO_BUILDER_ENV
-		// unfortunately, so use the filename it runs its
-		// downloaded bootstrap URL to determine whether we're
-		// in that environment.
-		isMacStadiumVM = len(os.Args) > 0 && strings.HasSuffix(os.Args[0], "run-builder")
-		log.Printf("isMacStadiumVM = %v", isMacStadiumVM)
-		os.Setenv("GO_BUILDER_ENV", "macstadium_vm")
 	}
 
 	if !awaitNetwork() {
@@ -115,7 +104,6 @@ func main() {
 	netDelay := prettyDuration(timeNetwork.Sub(timeStart))
 	log.Printf("network up after %v", netDelay)
 
-Download:
 	// Note: we name it ".exe" for Windows, but the name also
 	// works fine on Linux, etc.
 	target := filepath.FromSlash("./buildlet.exe")
@@ -202,15 +190,6 @@ Download:
 	case "solaris/amd64", "illumos/amd64":
 		hostType := buildEnv
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
-	case "windows/arm64":
-		switch buildEnv {
-		case "host-windows-arm64-mini", "host-windows11-arm64-mini":
-			cmd.Args = append(cmd.Args,
-				"--halt=true",
-				"--reverse-type="+buildEnv,
-				"--coordinator=farmer.golang.org:443",
-			)
-		}
 	}
 	// Release the serial port (if we opened it) so the buildlet
 	// process can open & write to it. At least on Windows, only
@@ -219,24 +198,6 @@ Download:
 		closeSerialLogOutput()
 	}
 	err := cmd.Run()
-	if isMacStadiumVM {
-		if err != nil {
-			log.Printf("error running buildlet: %v", err)
-			log.Printf("restarting in 2 seconds.")
-			time.Sleep(2 * time.Second) // in case we're spinning, slow it down
-		} else {
-			log.Printf("buildlet process exited; restarting.")
-		}
-		// Some of the MacStadium VM environments reuse their
-		// environment. Re-download the buildlet (if it
-		// changed-- httpdl does conditional downloading) and
-		// then re-run. At least on Sierra we never get this
-		// far because the buildlet will halt the machine
-		// before we get here. (and then cmd/makemac will
-		// recreate the VM)
-		// But if we get here, restart the process.
-		goto Download
-	}
 	if err != nil {
 		if configureSerialLogOutput != nil {
 			configureSerialLogOutput()

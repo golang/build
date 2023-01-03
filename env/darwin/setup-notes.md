@@ -1,18 +1,3 @@
-# For VMWare VMs only #
-
-The Disk should be formatted with a case insensitive file system (default).
-
-Install VMWare tools daemon.
-
-  - The UI is supposed to be able to do this automatically, but it's broken as of writing.
-  - Instead, mount darwin.iso from ISO/VMWARE TOOLS and run the installer from there.
-  - open security preferences and click "Allow" on blocked software install from VMware
-  - reboot
-  - make sure you can run and see:
-
-    $ /Library/Application Support/VMware Tools/vmware-tools-daemon --cmd "info-get guestinfo.name"
-    No value found
-
 # For all machine types
 
 - Turn on the computer.
@@ -36,12 +21,6 @@ Install VMWare tools daemon.
   `mv go $HOME/goboot`
 
 Create `$HOME/stage0.sh`.
-
-**For VMWare VMs**
-```
-#!/bin/bash
-while true; do (curl -v http://172.17.20.2:8713/stage0/$(sw_vers -productVersion) | sh); sleep 5; done
-```
 
 **For physical machines**
 ```

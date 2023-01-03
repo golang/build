@@ -34,7 +34,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -126,9 +125,6 @@ const (
 
 func main() {
 	builderEnv := os.Getenv("GO_BUILDER_ENV")
-	if builderEnv == "macstadium_vm" {
-		configureMacStadium()
-	}
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {
 	case "plan9":
@@ -1735,103 +1731,6 @@ var killProcessTree = killProcessTreeUnix
 
 func killProcessTreeUnix(p *os.Process) error {
 	return p.Kill()
-}
-
-// configureMacStadium configures the buildlet flags for use on a Mac
-// VM running on MacStadium under VMWare.
-func configureMacStadium() {
-	*haltEntireOS = true
-
-	// TODO: setup RAM disk for tmp and set *workDir
-
-	disableMacScreensaver()
-	enableMacDeveloperMode()
-
-	version, err := exec.Command("sw_vers", "-productVersion").Output()
-	if err != nil {
-		log.Fatalf("failed to find sw_vers -productVersion: %v", err)
-	}
-	majorMinor := regexp.MustCompile(`^(\d+)\.(\d+)`)
-	m := majorMinor.FindStringSubmatch(string(version))
-	if m == nil {
-		log.Fatalf("unsupported sw_vers version %q", version)
-	}
-	major, minor := m[1], m[2] // "10", "12"
-
-	// As of macOS 11 (Big Sur), the major digits are used to indicate the version of
-	// macOS. This version also introduced support for multiple architectures. This
-	// takes into account the need to distinguish between versions and architectures for
-	// the later versions.
-	mj, err := strconv.Atoi(major)
-	if err != nil {
-		log.Fatalf("unable to parse major version %q", major)
-	}
-	if mj >= 13 {
-		*reverseType = fmt.Sprintf("host-darwin-%s-%s", runtime.GOARCH, major)
-	} else if mj >= 11 {
-		// The darwin-amd64-{11,12}_0 hosts have a "_0" suffix as a historical
-		// relic from when it distinguished macOS 10.15, 10.14 and older, as below.
-		*reverseType = fmt.Sprintf("host-darwin-%s-%s_0", runtime.GOARCH, major)
-	} else {
-		*reverseType = fmt.Sprintf("host-darwin-%s-%s_%s", runtime.GOARCH, major, minor)
-	}
-	*coordinator = "farmer.golang.org:443"
-
-	// guestName is set by cmd/makemac to something like
-	// "mac_10_10_host01b" or "mac_10_12_host01a", which encodes
-	// three things: the mac OS version of the guest VM, which
-	// physical machine it's on (1 to 10, currently) and which of
-	// two possible VMs on that host is running (a or b). For
-	// monitoring purposes, we want stable hostnames and don't
-	// care which OS version is currently running (which changes
-	// constantly), so normalize these to only have the host
-	// number and side (a or b), without the OS version. The
-	// buildlet will report the OS version to the coordinator
-	// anyway. We could in theory do this normalization in the
-	// coordinator, but we don't want to put buildlet-specific
-	// knowledge there, and this file already contains a bunch of
-	// buildlet host-specific configuration, so normalize it here.
-	guestName := vmwareGetInfo("guestinfo.name") // "mac_10_12_host01a"
-	hostPos := strings.Index(guestName, "_host")
-	if hostPos == -1 {
-		// Assume cmd/makemac changed its conventions.
-		// Maybe all this normalization belongs there anyway,
-		// but normalizing here is a safer first step.
-		*hostname = guestName
-	} else {
-		*hostname = "macstadium" + guestName[hostPos:] // "macstadium_host01a"
-	}
-}
-
-func disableMacScreensaver() {
-	err := exec.Command("defaults", "-currentHost", "write", "com.apple.screensaver", "idleTime", "0").Run()
-	if err != nil {
-		log.Printf("disabling screensaver: %v", err)
-	}
-}
-
-// enableMacDeveloperMode enables developer mode on macOS for the
-// runtime tests. (Issue 31123)
-//
-// It is best effort; errors are logged but otherwise ignored.
-func enableMacDeveloperMode() {
-	// Macs are configured with password-less sudo. Without sudo we get prompts
-	// that "SampleTools wants to make changes" that block the buildlet from starting.
-	// But oddly, not via gomote. Only during startup. The environment must be different
-	// enough that in one case macOS asks for permission (because it can use the GUI?)
-	// and in the gomote case (where the environment is largely scrubbed) it can't do
-	// the GUI dialog somehow and must just try to do it anyway and finds that passwordless
-	// sudo works. But using sudo seems to make it always work.
-	// For extra paranoia, use a context to not block start-up.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	out, err := exec.CommandContext(ctx, "/usr/bin/sudo", "/usr/sbin/DevToolsSecurity", "-enable").CombinedOutput()
-	if err != nil {
-		log.Printf("Error enabling developer mode: %v, %s", err, out)
-		return
-	}
-	log.Printf("DevToolsSecurity: %s", out)
 }
 
 func vmwareGetInfo(key string) string {
