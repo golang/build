@@ -1978,26 +1978,6 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-68",
-		HostType:          "host-openbsd-amd64-68",
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:     "openbsd-386-68",
-		HostType: "host-openbsd-386-68",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			if repo == "review" {
-				// https://go.dev/issue/49529: git seems to be too slow on this
-				// platform.
-				return false
-			}
-			return buildRepoByDefault(repo)
-		},
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-71",
 		HostType:          "host-openbsd-amd64-71",
 		distTestAdjust:    noTestDirAndNoReboot,
