@@ -285,8 +285,13 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-js-wasm": {
-		Notes:          "Container with node.js for testing js/wasm.",
+		Notes:          "Container with Node.js 14 for testing js/wasm.",
 		ContainerImage: "js-wasm:latest",
+		SSHUsername:    "root",
+	},
+	"host-linux-amd64-js-wasm-node18": {
+		Notes:          "Container with Node.js 18 for testing js/wasm.",
+		ContainerImage: "js-wasm-node18:latest",
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-localdev": {
@@ -1921,7 +1926,6 @@ func init() {
 			}
 			return b
 		},
-
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if isNormalTry {
 				if strings.Contains(distTest, "/internal/") ||
@@ -1941,6 +1945,57 @@ func init() {
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:        "js-wasm-node18",
+		HostType:    "host-linux-amd64-js-wasm-node18",
+		KnownIssues: []int{57017},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
+			switch repo {
+			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+				// Don't test these golang.org/x repos.
+				b = false
+			}
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
+				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
+				run = false
+			}
+			return run
+		},
+		numTryTestHelpers: 3,
+		env: []string{
+			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-amd64-68",
+		HostType:          "host-openbsd-amd64-68",
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:     "openbsd-386-68",
+		HostType: "host-openbsd-386-68",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			if repo == "review" {
+				// https://go.dev/issue/49529: git seems to be too slow on this
+				// platform.
+				return false
+			}
+			return buildRepoByDefault(repo)
+		},
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-71",
@@ -2701,12 +2756,27 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		FlakyNet:       true,
-		HostType:       "host-linux-loong64-3a5000",
-		Name:           "linux-loong64-3a5000",
-		SkipSnapshot:   true,
-		distTestAdjust: loong64DistTestPolicy,
-		buildsRepo:     loong64BuildsRepoPolicy,
+		FlakyNet:     true,
+		HostType:     "host-linux-loong64-3a5000",
+		Name:         "linux-loong64-3a5000",
+		SkipSnapshot: true,
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			switch distTest {
+			case "api", "reboot":
+				return false
+			}
+			return run
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go":
+				return atLeastGo1(goBranch, 19)
+			case "net", "sys":
+				return branch == "master" && atLeastGo1(goBranch, 19)
+			default:
+				return false
+			}
+		},
 		privateGoProxy: true, // this builder is behind firewall
 		env: []string{
 			"GOARCH=loong64",
@@ -3088,25 +3158,6 @@ func mipsBuildsRepoPolicy(repo, branch, goBranch string) bool {
 
 // riscvDistTestPolicy is same as mipsDistTestPolicy for now.
 var riscvDistTestPolicy = mipsDistTestPolicy
-
-// loong64DistTestPolicy is a distTestAdjust policy function
-func loong64DistTestPolicy(run bool, distTest string, isNormalTry bool) bool {
-	switch distTest {
-	case "api", "reboot":
-		return false
-	}
-	return run
-}
-
-// loong64BuildsRepoPolicy is a buildsRepo policy function
-func loong64BuildsRepoPolicy(repo, branch, goBranch string) bool {
-	switch repo {
-	case "go", "net", "sys":
-		return branch == "master" && goBranch == "master"
-	default:
-		return false
-	}
-}
 
 // TryBuildersForProject returns the builders that should run as part of
 // a TryBot set for the given project.

@@ -406,7 +406,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "net"), both},
 
 		{b("linux-loong64-3a5000", "go"), onlyPost},
+		{b("linux-loong64-3a5000@go1.99", "go"), onlyPost},
+		{b("linux-loong64-3a5000@go1.18", "go"), none}, // Go 1.18 doesn't support this port.
 		{b("linux-loong64-3a5000", "sys"), onlyPost},
+		{b("linux-loong64-3a5000@go1.99", "sys"), onlyPost},
+		{b("linux-loong64-3a5000@go1.18", "sys"), none},
 		{b("linux-loong64-3a5000", "net"), onlyPost},
 
 		// OpenBSD 7.2.
