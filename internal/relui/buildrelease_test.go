@@ -327,9 +327,9 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		"go/tool/something_orother/compile": "",
 		"go/pkg/something_orother/race.a":   "",
 	})
-	checkZip(t, dlURL, files, "windows-arm64.zip", &task.WebsiteFile{
+	checkZip(t, dlURL, files, "windows-amd64.zip", &task.WebsiteFile{
 		OS:   "windows",
-		Arch: "arm64",
+		Arch: "amd64",
 		Kind: "archive",
 	}, map[string]string{
 		"go/VERSION":                        wantVersion,
