@@ -729,10 +729,7 @@ func TestSlowBotAliases(t *testing.T) {
 	}
 	ports := strings.Fields(string(out))
 
-	done := map[string]bool{
-		// TODO:(golang/go#47019) - remove when alias added
-		"windows-arm64": true,
-	}
+	done := map[string]bool{}
 
 	var add bytes.Buffer
 	check := func(term string, isArch bool) {

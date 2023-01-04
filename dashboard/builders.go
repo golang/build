@@ -100,9 +100,7 @@ var slowBotAliases = map[string]string{
 	"windows-386":           "windows-386-2008",
 	"windows-amd64":         "windows-amd64-2016",
 	"windows-arm":           "windows-arm-zx2c4",
-	// TODO:(golang/go#47019) - uncomment when builder returns and
-	//   update test.
-	// "windows-arm64":         "windows-arm64-11",
+	"windows-arm64":         "windows-arm64-11",
 }
 
 // Builders are the different build configurations.
@@ -567,6 +565,12 @@ var Hosts = map[string]*HostConfig{
 		IsReverse: true,
 		ExpectNum: 0,
 		Owners:    []*gophers.Person{gh("zx2c4")},
+	},
+	"host-windows11-arm64-azure": { // host name known to cmd/buildlet/stage0, cannot change
+		Notes:     "Azure windows 11 arm64 VMs",
+		HostArch:  "windows-arm64",
+		IsReverse: true,
+		ExpectNum: 5,
 	},
 }
 
@@ -2462,6 +2466,17 @@ func init() {
 		env: []string{
 			"GOARM=7",
 			"GO_TEST_TIMEOUT_SCALE=3"},
+	})
+	addBuilder(BuildConfig{
+		Name:              "windows-arm64-11",
+		HostType:          "host-windows11-arm64-azure",
+		numTryTestHelpers: 1,
+		env: []string{
+			"GOARCH=arm64",
+			// Note: GOMAXPROCS=4 workaround for go.dev/issue/51019
+			// tentatively removed here, since Azure VMs have 3x more
+			// RAM than the previous win11/arm64 machines.
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-10_14",
