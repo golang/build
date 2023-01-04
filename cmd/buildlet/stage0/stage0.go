@@ -178,6 +178,14 @@ func main() {
 	case "solaris/amd64", "illumos/amd64":
 		hostType := buildEnv
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
+	case "windows/arm64":
+		switch buildEnv {
+		case "host-windows11-arm64-azure":
+			hostType := buildEnv
+			cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)
+		default:
+			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
+		}
 	}
 	// Release the serial port (if we opened it) so the buildlet
 	// process can open & write to it. At least on Windows, only
