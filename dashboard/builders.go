@@ -1932,9 +1932,9 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:        "js-wasm-node18",
 		HostType:    "host-linux-amd64-js-wasm-node18",
-		KnownIssues: []int{57017},
+		KnownIssues: []int{57614},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := buildRepoByDefault(repo)
+			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
 			switch repo {
 			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
 				// Don't test these golang.org/x repos.
