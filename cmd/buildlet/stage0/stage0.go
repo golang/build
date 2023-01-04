@@ -89,12 +89,7 @@ func main() {
 		if onGCE {
 			break
 		}
-		switch env := os.Getenv("GO_BUILDER_ENV"); env {
-		case "host-linux-arm64-aws":
-			// No special setup.
-		default:
-			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
-		}
+		panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", os.Getenv("GO_BUILDER_ENV")))
 	}
 
 	if !awaitNetwork() {
@@ -146,8 +141,6 @@ func main() {
 	switch buildEnv {
 	case "host-linux-arm-aws":
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
-	case "host-linux-arm64-aws":
-		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
 	case "host-linux-loong64-3a5000":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 		cmd.Args = append(cmd.Args, os.ExpandEnv("--workdir=${WORKDIR}"))
@@ -181,12 +174,7 @@ func main() {
 		if onGCE {
 			break
 		}
-		switch buildEnv {
-		case "host-linux-arm64-aws":
-			// no special configuration
-		default:
-			panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
-		}
+		panic(fmt.Sprintf("unknown/unspecified $GO_BUILDER_ENV value %q", env))
 	case "solaris/amd64", "illumos/amd64":
 		hostType := buildEnv
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(hostType)...)

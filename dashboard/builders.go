@@ -337,14 +337,6 @@ var Hosts = map[string]*HostConfig{
 		isEC2:          true,
 		SSHUsername:    "root",
 	},
-	"host-linux-arm64-aws": {
-		Notes:          "Debian Buster, EC2 arm64 instance. See x/build/env/linux-arm64/aws",
-		VMImage:        "ami-03089323a1d38e652",
-		ContainerImage: "gobuilder-arm64-aws:latest",
-		machineType:    "m6g.xlarge",
-		isEC2:          true,
-		SSHUsername:    "root",
-	},
 	"host-linux-arm64-bullseye": {
 		Notes:           "Debian Bullseye",
 		ContainerImage:  "linux-arm64-bullseye:latest",
@@ -2652,10 +2644,6 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-arm64-aws",
-		HostType: "host-linux-arm64-aws",
-	})
-	addBuilder(BuildConfig{
 		Name:              "linux-arm64",
 		HostType:          "host-linux-arm64-bullseye",
 		tryBot:            defaultTrySet(),
@@ -2663,7 +2651,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-boringcrypto",
-		HostType: "host-linux-arm64-aws",
+		HostType: "host-linux-arm64-bullseye",
 		env: []string{
 			"GOEXPERIMENT=boringcrypto",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",

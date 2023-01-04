@@ -479,7 +479,7 @@ var firstClassBuilders = []string{
 	"linux-386-longtest",
 	"linux-amd64-longtest",
 	"linux-arm-aws",
-	"linux-arm64-aws",
+	"linux-arm64",
 
 	"darwin-amd64-12_0",
 	"darwin-arm64-12",
