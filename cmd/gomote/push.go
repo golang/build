@@ -286,7 +286,8 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 	if notHave > maxNotHavePrint {
 		logf("Remote doesn't have %d files (only showed %d).", notHave, maxNotHavePrint)
 	}
-	if _, hasVersion := remote["VERSION"]; !hasVersion {
+	_, localHasVersion := local["VERSION"]
+	if _, remoteHasVersion := remote["VERSION"]; !remoteHasVersion && !localHasVersion {
 		logf("Remote lacks a VERSION file; sending a fake one")
 		toSend = append(toSend, "VERSION")
 	}
@@ -354,7 +355,7 @@ func generateDeltaTgz(goroot string, files []string) (*bytes.Buffer, error) {
 	tw := tar.NewWriter(zw)
 	for _, file := range files {
 		// Special.
-		if file == "VERSION" {
+		if file == "VERSION" && !localFileExists(filepath.Join(goroot, file)) {
 			// TODO(bradfitz): a dummy VERSION file's contents to make things
 			// happy. Notably it starts with "devel ". Do we care about it
 			// being accurate beyond that?
@@ -433,4 +434,9 @@ func getGOROOT() (string, error) {
 	}
 	goroot = filepath.Clean(goroot)
 	return goroot, nil
+}
+
+func localFileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
 }
