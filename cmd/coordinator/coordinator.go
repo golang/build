@@ -1251,7 +1251,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		go ts.notifyStarting()
 	}
 	for _, bconf := range builders {
-		goVersion := types.MajorMinor{int(work.GoVersion[0].Major), int(work.GoVersion[0].Minor)}
+		goVersion := types.MajorMinor{Major: int(work.GoVersion[0].Major), Minor: int(work.GoVersion[0].Minor)}
 		if goVersion.Less(bconf.MinimumGoVersion) {
 			continue
 		}
@@ -1280,7 +1280,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			if !linuxBuilder.BuildsRepoTryBot(key.Project, "master", branch) {
 				continue
 			}
-			goVersion := types.MajorMinor{int(work.GoVersion[i].Major), int(work.GoVersion[i].Minor)}
+			goVersion := types.MajorMinor{Major: int(work.GoVersion[i].Major), Minor: int(work.GoVersion[i].Minor)}
 			if goVersion.Less(linuxBuilder.MinimumGoVersion) {
 				continue
 			}
