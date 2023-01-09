@@ -45,6 +45,9 @@ windows-amd64   windows    amd64      windows-amd64-2008-oldcc
 	Race enabled, Long tests on windows-amd64-longtest-oldcc
 	Running on GCP
 
+windows-arm64   windows    arm64      windows-arm64-11
+	Running on reverse builder: Azure windows 11 arm64 VMs
+
 
 
 Targets for release 1.19
@@ -94,6 +97,9 @@ windows-amd64   windows    amd64      windows-amd64-2008-oldcc
 	Race enabled, Long tests on windows-amd64-longtest-oldcc
 	Running on GCP
 
+windows-arm64   windows    arm64      windows-arm64-11
+	Running on reverse builder: Azure windows 11 arm64 VMs
+
 
 
 Targets for release 1.20
@@ -139,6 +145,9 @@ windows-386     windows    386        windows-386-2008
 windows-amd64   windows    amd64      windows-amd64-2008
 	Long tests on windows-amd64-longtest
 	Running on GCP
+
+windows-arm64   windows    arm64      windows-arm64-11
+	Running on reverse builder: Azure windows 11 arm64 VMs
 
 
 

@@ -103,6 +103,10 @@ var allReleases = map[int]ReleaseTargets{
 			LongTestBuilder: "windows-amd64-longtest-oldcc",
 			Race:            true,
 		},
+		"windows-arm64": &Target{
+			SecondClass: true,
+			Builder:     "windows-arm64-11",
+		},
 	},
 	19: {
 		"linux-386": &Target{
