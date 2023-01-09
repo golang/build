@@ -24,7 +24,7 @@ Authenticate with "az login".
 
 ## VM strategy for Azure
 
-At the moment, windows-arm64 Azure VMs are configured as reverse builders, and they are set up with no public IP address and no exposed ports. To interact with the VMs directly (e.g. to log in and poke around) it is recommended to use the Azure "bastion" feature, which provides RDP-like access to VMs from within the portal.
+At the moment, windows-arm64 Azure VMs are configured as reverse builders, and they are set up with no public IP address and no exposed ports. To interact with the VMs directly (e.g. to log in and poke around) it is recommended to use the Azure "bastion" feature, which provides RDP-like access to VMs from within the portal.  If you need to log in, use the account "gopheradmin" (password in Valentine). You can also run PowerShell scripts on the deployed VMs via "az vm run-command invoke --command-id=RunPowerShellScript ... --scripts @scriptpath" to perform upkeep operations.
 
 ## Deployment VM creation
 

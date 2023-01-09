@@ -105,6 +105,11 @@ $bootstrap_exe_path = "$builder_dir\bootstrap.exe"
 mkdir $builder_dir
 Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/buildlet-stage0.windows-arm64' -Output $bootstrap_exe_path
 
+# Download stage zero loop script.
+Write-Host "downloading loop script"
+$loop_script_path = "$builder_dir\windows-arm64-stage0-loop.bat"
+Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/windows-arm64-stage0-loop.bat' -Output $loop_script_path
+
 # Install the OpenSSH Client
 Add-WindowsCapability -Online -Name OpenSSH.Client
 # Install the OpenSSH Server
@@ -149,9 +154,9 @@ Set-LocalUser -Name $buildlet_user -PasswordNeverExpires $true
 # this setting needs to persist across reboots.
 [Environment]::SetEnvironmentVariable('GO_BUILDER_ENV', 'host-windows11-arm64-azure', [System.EnvironmentVariableTarget]::Machine)
 
-# Run the bootstrap program on login
+# Run the bootstrap loop script on login
 Write-Host "setting stage0 to run on start"
-$bootstrap_cmd = "cmd /k ""cd $builder_dir && $bootstrap_exe_path"""
+$bootstrap_cmd = "cmd /k ""cd $builder_dir && windows-arm64-stage0-loop.bat"""
 New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Buildlet" -PropertyType ExpandString -Value $bootstrap_cmd -Force
 
 # Setup autologon and reboot
