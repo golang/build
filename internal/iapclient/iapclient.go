@@ -37,13 +37,13 @@ var gomoteConfig = &oauth2.Config{
 	ClientID:     "872405196845-odamr0j3kona7rp7fima6h4ummnd078t.apps.googleusercontent.com",
 	ClientSecret: "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",
 	Endpoint:     google.Endpoint,
-	Scopes:       []string{"openid email"},
+	Scopes:       []string{"email openid profile"},
 }
 
 func login(ctx context.Context) (*oauth2.Token, error) {
 	resp, err := http.PostForm("https://oauth2.googleapis.com/device/code", url.Values{
 		"client_id": []string{gomoteConfig.ClientID},
-		"scope":     []string{"email openid profile"},
+		"scope":     gomoteConfig.Scopes,
 	})
 	if err != nil {
 		return nil, err
