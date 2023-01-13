@@ -34,8 +34,8 @@ Deployment VMs are set up with invocations of the following az CLI command:
 az vm create \
   --name=MyNewVmName \
   --resource-group=dev_buildlets \
-  --admin-username=<pick your admin account name> \
-  --admin-password=<pick password> \
+  --admin-username=gopheradmin \
+  --admin-password=<password from valentine> \
   --image=microsoftwindowsdesktop:windows11preview-arm64:win11-22h2-ent:latest \
   --nsg-rule=NONE \
   --size=Standard_D8ps_v5 \
@@ -43,7 +43,7 @@ az vm create \
   --public-ip-address ""
 ```
 
-and then configure as described below in VM setup. This VM will have no public IP address or open ports, thus will be usable only by the coordinator.
+and then configure as described below in VM setup. This VM will have no public IP address or open ports, thus will be usable only by the coordinator. 
 
 Notes:
 * the "image" argument above is arm-specific, and in addition "size" argument also encodes the arm64-ness of the VM (strangely)
@@ -80,6 +80,23 @@ az vm run-command invoke \
     --name="MyNewVM" \
     --resource-group=dev_buildlets \
     --scripts @antivirusadditions.ps1
+```
+
+## First login
+
+Log into the new builder as "gopher" at least once so as to go through the "initial login" Windows workflow.
+
+## Builder key
+
+Generate a builder key for the VMs according to the directions in [x/build/cmd/genbuilderkey](https://go.googlesource.com/build/+/fdfb99e1de1f68b555502056567be459d98a0e71/cmd/genbuilderkey/README.md).
+
+Once the key is available, write it to the builder (via "az vm run-command invoke" as above) using a PowerShell script of the form
+
+```
+Write-Host "writing builder key"
+
+$key = "<insert key here>"
+$key | Out-File -Encoding ascii -FilePath C:\Users\gopher\.gobuildkey-host-windows11-arm64-azure
 ```
 
 ## Debugging/testing VM creation
