@@ -8,10 +8,8 @@ Write-Host "Adding drive and process exclusions"
 
 # Antivirus setup.
 
-$drive = "C"
-
-Add-MpPreference -ExclusionPath "$(drive):\" -ErrorAction SilentlyContinue
-Add-MpPreference -ExclusionProcess "$(drive):\*" -ErrorAction SilentlyContinue
+Add-MpPreference -ExclusionPath "C:\" -ErrorAction SilentlyContinue
+Add-MpPreference -ExclusionProcess "C:\*" -ErrorAction SilentlyContinue
 
 Write-Host "Attempting to disable scanning engines via Set-MpPreference"
 

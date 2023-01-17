@@ -33,13 +33,13 @@ Deployment VMs are set up with invocations of the following az CLI command:
 ```
 az vm create \
   --name=MyNewVmName \
-  --resource-group=dev_buildlets \
+  --resource-group=<dev/prod>_buildlets \
   --admin-username=gopheradmin \
   --admin-password=<password from valentine> \
   --image=microsoftwindowsdesktop:windows11preview-arm64:win11-22h2-ent:latest \
-  --nsg-rule=NONE \
-  --size=Standard_D8ps_v5 \
-  --subscription=<set subscription ID here> \
+  --nsg=<dev/prod>_buildlets-security-group \
+  --size=Standard_D4ps_v5 \
+  --subscription=<Development/Production> \
   --public-ip-address ""
 ```
 
@@ -57,7 +57,8 @@ Once a VM has been created, you can apply Go-specific configuration to it by run
 az vm run-command invoke \
     --command-id=RunPowerShellScript \
     --name="MyNewVM" \
-    --resource-group=dev_buildlets \
+    --subscription=<Development/Production> \
+    --resource-group=<dev/prod>_buildlets \
     --scripts @startup.ps1
 ```
 
@@ -67,24 +68,26 @@ Notes:
 
 * output from the command is in JSON
 * exit status of the "az" command does NOT accurately reflect exit status of the powershell script.
+* errors about things already existing are expected
+
+## First login
+
+Log into the new builder as "gopher" at least once so as to go through the "initial login" Windows workflow. Find the VM in the Azure portal, and enter the login in the Bastion section. Choose "no" on all the setup prompts.
 
 ## Follow-ons to disable antivirus
 
 In later versions of windows, it can be very difficult to completely disable the system's antivirus software, due to "features" such as [tamper protection](https://learn.microsoft.com/en-us/microsoft-365/security/defender-endpoint/prevent-changes-to-security-settings-with-tamper-protection?view=o365-worldwide), which make it almost impossible to programmatically turn off windows defender (and which ensure that any changes made are undone when the system reboots).
 
-Running this command should help somewhat:
+Open Windows Security, Virus & threat protection, Manage settings, and turn off Tamper Protection. Then run this command:
 
 ```
 az vm run-command invoke \
     --command-id=RunPowerShellScript \
     --name="MyNewVM" \
-    --resource-group=dev_buildlets \
+    --subscription=<Development/Production> \
+    --resource-group=<prod/dev>_buildlets \
     --scripts @antivirusadditions.ps1
 ```
-
-## First login
-
-Log into the new builder as "gopher" at least once so as to go through the "initial login" Windows workflow.
 
 ## Builder key
 
