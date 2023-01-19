@@ -41,6 +41,8 @@ type GerritClient interface {
 	ReadFile(ctx context.Context, project, commit, file string) ([]byte, error)
 	// GetCommitsInRefs gets refs in which the specified commits were merged into.
 	GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error)
+	// QueryChanges get change IDs which match the query.
+	QueryChanges(ctx context.Context, query string) ([]string, error)
 }
 
 type RealGerritClient struct {
@@ -207,4 +209,16 @@ func ChangeLink(changeID string) string {
 		return fmt.Sprintf("(unparseable change ID %q)", changeID)
 	}
 	return "https://go.dev/cl/" + parts[1]
+}
+
+func (c *RealGerritClient) QueryChanges(ctx context.Context, query string) ([]string, error) {
+	changes, err := c.Client.QueryChanges(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, len(changes))
+	for i, change := range changes {
+		ids[i] = change.ID
+	}
+	return ids, nil
 }

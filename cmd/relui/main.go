@@ -221,6 +221,14 @@ func main() {
 	dh.RegisterDefinition("Tag x/ repos", tagTasks.NewDefinition())
 	dh.RegisterDefinition("Tag a single x/ repo", tagTasks.NewSingleDefinition())
 
+	bundleTasks := &task.BundleNSSRootsTask{
+		Gerrit:           gerritClient,
+		GerritURL:        "https://go.googlesource.com",
+		CreateBuildlet:   coordinator.CreateBuildlet,
+		LatestGoBinaries: task.LatestGoBinaries,
+	}
+	dh.RegisterDefinition("Update x/crypto NSS root bundle", bundleTasks.NewDefinition())
+
 	var base *url.URL
 	if *baseURL != "" {
 		base, err = url.Parse(*baseURL)

@@ -527,6 +527,10 @@ func (g *FakeGerrit) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	ServeTarball("", repoContent, w, r)
 }
 
+func (g *FakeGerrit) QueryChanges(ctx context.Context, query string) ([]string, error) {
+	return nil, nil
+}
+
 // NewFakeSignService returns a fake signing service that can sign PKGs, MSIs,
 // and generate GPG signatures. MSIs are "signed" by adding a suffix to them.
 // PKGs must actually be tarballs with a prefix of "I'm a PKG!\n". Any files
