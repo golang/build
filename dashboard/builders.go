@@ -451,24 +451,10 @@ var Hosts = map[string]*HostConfig{
 		Owners:      []*gophers.Person{gh("bsiegert")},
 		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
-	"host-openbsd-386-71": {
-		VMImage:     "openbsd-386-71",
-		machineType: "n2", // force Intel; see go.dev/issue/49209
-		Notes:       "OpenBSD 7.1; GCE VM, built from build/env/openbsd-386",
-		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
 	"host-openbsd-386-72": {
 		VMImage:     "openbsd-386-72",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		Notes:       "OpenBSD 7.2; GCE VM, built from build/env/openbsd-386",
-		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
-	},
-	"host-openbsd-amd64-71": {
-		VMImage:     "openbsd-amd64-71",
-		machineType: "n2", // force Intel; see go.dev/issue/49209
-		Notes:       "OpenBSD 7.1; GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername: "gopher",
 		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
@@ -1966,26 +1952,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:              "openbsd-amd64-71",
-		HostType:          "host-openbsd-amd64-71",
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
 		Name:              "openbsd-amd64-72",
 		HostType:          "host-openbsd-amd64-72",
 		tryBot:            defaultTrySet(),
-		distTestAdjust:    noTestDirAndNoReboot,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:     "openbsd-386-71",
-		HostType: "host-openbsd-386-71",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// https://go.dev/issue/49529: git seems to be too slow on this
-			// platform.
-			return repo != "review" && buildRepoByDefault(repo)
-		},
 		distTestAdjust:    noTestDirAndNoReboot,
 		numTryTestHelpers: 4,
 	})
