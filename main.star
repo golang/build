@@ -109,4 +109,47 @@ luci.builder(
     schedule = "with 1m interval",
 )
 
+# A console for CI builders.
+luci.console_view(
+    name = "go-master-ci",
+    repo = "https://go.googlesource.com/go",
+    title = "Go main branch continuous integration",
+    refs = ["refs/heads/master"],
+    entries = [
+        luci.console_view_entry(
+            builder = "linux-amd64",
+            category = "linux",
+        ),
+    ],
+)
+
+# Basic linux/amd64 CI builder.
+luci.builder(
+    name = "linux-amd64",
+    bucket = "ci",
+    executable = luci.executable(
+        name = "golangbuild",
+        cipd_package = "infra/experimental/golangbuild/${platform}",
+        cipd_version = "latest",
+        cmd = ["golangbuild"],
+    ),
+    dimensions = {
+        "os": "Linux",
+        "cpu": "x86-64",
+    },
+    properties = {
+        "project": "go",
+    },
+    service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+)
+
+# Poller for the 'master' branch for the main Go repository.
+luci.gitiles_poller(
+    name = "go-master-trigger",
+    bucket = "ci",
+    repo = "https://go.googlesource.com/go",
+    refs = ["refs/heads/master"],
+    triggers = ["linux-amd64"],
+)
+
 exec("./recipes.star")
