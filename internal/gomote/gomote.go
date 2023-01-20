@@ -605,7 +605,8 @@ func (s *Server) sessionAndClient(ctx context.Context, gomoteID, ownerID string)
 // isPrivilegedUser returns true if the user is trusted to use sensitive machines.
 // The user has to be a part of the appropriate IAM group.
 func isPrivilegedUser(email string) bool {
-	return strings.HasSuffix(email, "@google.com") || strings.HasSuffix(email, "@symbolic-datum-552.iam.gserviceaccount.com")
+	return strings.HasSuffix(email, "@google.com") || strings.HasSuffix(email, "@symbolic-datum-552.iam.gserviceaccount.com") ||
+		strings.HasSuffix(email, "@go-security-trybots.iam.gserviceaccount.com")
 }
 
 // iapEmailRE matches the email string returned by Identity Aware Proxy for sessions where
