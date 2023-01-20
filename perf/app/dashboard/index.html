@@ -122,7 +122,7 @@ function removeLoadingMessage() {
 	loading.parentNode.removeChild(loading);
 }
 
-function addCharts(benchmarks) {
+function addCharts(benchmarks, repository) {
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
@@ -158,13 +158,14 @@ function addCharts(benchmarks) {
 		item.appendChild(BandChart(bench.Values, {
 			benchmark: bench.Name,
 			unit: bench.Unit,
+			repository: repository,
 			minViewDeltaPercent: minViewDeltaPercent,
 		}));
 		grid.appendChild(item);
 	}
 }
 
-function addTable(bench, unit) {
+function addTable(bench, unit, repository) {
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
@@ -245,7 +246,7 @@ function addTable(bench, unit) {
 		// Commit hash.
 		const commitHash = createCell("", false);
 		const commitLink = document.createElement("a");
-		commitLink.href = "https://go.googlesource.com/go/+show/" + v.CommitHash;
+		commitLink.href = "https://go.googlesource.com/" + repository + "/+show/" + v.CommitHash;
 		commitLink.textContent = v.CommitHash.slice(0, 7);
 		commitHash.appendChild(commitLink);
 		commitHash.classList.add("Dashboard-table-commit")
@@ -331,6 +332,10 @@ function prefillSearch() {
 }
 prefillSearch()
 
+// Grab the repository so we can plumb it into UI elements.
+// prefillSearch set this up for us just now.
+const repository = document.getElementById('repository-select').value;
+
 // Fetch content.
 let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
 let unit = (new URLSearchParams(window.location.search)).get('unit');
@@ -357,9 +362,9 @@ fetch(dataURL)
 				failure(benchmark, "got more that one benchmark when a unit was specified");
 				throw new Error("Data fetch failed");
 			}
-			addTable(benchmarks[0], unit);
+			addTable(benchmarks[0], unit, repository);
 		} else {
-			addCharts(benchmarks);
+			addCharts(benchmarks, repository);
 		}
 	});
 </script>

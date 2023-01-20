@@ -12,6 +12,7 @@ function BandChart(data, {
 	height = 240, // outer height, in pixels
 	benchmark,
 	unit,
+	repository,
 	minViewDeltaPercent,
 } = {}) {
 	// Compute values.
@@ -252,7 +253,7 @@ function BandChart(data, {
 		.selectAll("path")
 		.data(I)
 		.join("a")
-			.attr("xlink:href", (d, i) => "https://go.googlesource.com/go/+show/"+C[i])
+			.attr("xlink:href", (d, i) => "https://go.googlesource.com/"+repository+"/+show/"+C[i])
 			.append("rect")
 				.attr("pointer-events", "all")
 				.attr("x", (d, i) => {
