@@ -37,7 +37,6 @@ var (
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
 	dvyukov      = gh("dvyukov")
-	empijei      = gh("empijei")
 	filippo      = gh("FiloSottile")
 	findleyr     = gh("findleyr")
 	gri          = gh("griesemer")
@@ -414,8 +413,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{securityTeam},
 	},
 	"go/src/html/template": {
-		Primary:   []Owner{empijei},
-		Secondary: []Owner{kele},
+		Primary: []Owner{securityTeam},
 	},
 	"go/src/image": {
 		Primary:   []Owner{nigeltao},
