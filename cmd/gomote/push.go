@@ -328,7 +328,8 @@ func isGoToolDistGenerated(path string) bool {
 		"src/cmd/internal/objabi/zbootstrap.go",
 		"src/go/build/zcgo.go",
 		"src/internal/buildcfg/zbootstrap.go",
-		"src/runtime/internal/sys/zversion.go":
+		"src/runtime/internal/sys/zversion.go",
+		"src/time/tzdata/zzipdata.go":
 		return true
 	}
 	return false
