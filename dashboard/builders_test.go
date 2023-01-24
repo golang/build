@@ -98,9 +98,7 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-boringcrypto",
-				"linux-amd64-nounified",
 				"linux-amd64-race",
-				"linux-amd64-unified",
 				"linux-arm-aws",
 				"linux-arm64",
 				"openbsd-amd64-72",
@@ -134,6 +132,7 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-boringcrypto",
+				"linux-amd64-nounified",
 				"linux-amd64-race",
 				"linux-arm-aws",
 				"linux-arm64",
@@ -579,19 +578,12 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-staticlockranking@go1.19", "go"), onlyPost},
 		{b("linux-amd64-staticlockranking", "net"), none},
 
-		{b("linux-amd64-unified", "go"), both},
-		{b("linux-amd64-unified", "tools"), onlyPost},
-		{b("linux-amd64-unified", "net"), none},
-		{b("linux-amd64-unified@dev.unified", "go"), both},
-		{b("linux-amd64-unified@dev.unified", "tools"), onlyPost},
-		{b("linux-amd64-unified@dev.unified", "net"), none},
-
-		{b("linux-amd64-nounified", "go"), both},
-		{b("linux-amd64-nounified", "tools"), both},
+		{b("linux-amd64-nounified", "go"), none},
+		{b("linux-amd64-nounified", "tools"), none},
 		{b("linux-amd64-nounified", "net"), none},
-		{b("linux-amd64-nounified@dev.unified", "go"), both},
-		{b("linux-amd64-nounified@dev.unified", "tools"), both},
-		{b("linux-amd64-nounified@dev.unified", "net"), none},
+		{b("linux-amd64-nounified@go1.20", "go"), both},
+		{b("linux-amd64-nounified@go1.20", "tools"), both},
+		{b("linux-amd64-nounified@go1.20", "net"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {

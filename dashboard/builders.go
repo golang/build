@@ -1647,33 +1647,14 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64-unified",
-		HostType: "host-linux-amd64-buster",
-		Notes:    "builder with GOEXPERIMENT=unified, see go.dev/issue/46786",
-		tryBot: func(repo, branch, goBranch string) bool {
-			// TODO(go.dev/issue/52150): Restore testing against tools repo.
-			return (repo == "go" /*|| repo == "tools"*/) && (goBranch == "master" || goBranch == "dev.unified")
-		},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.unified")
-		},
-		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=1",
-			"GOEXPERIMENT=unified",
-		},
-		numTestHelpers:    1,
-		numTryTestHelpers: 4,
-		KnownIssues:       []int{52150},
-	})
-	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nounified",
 		HostType: "host-linux-amd64-buster",
-		Notes:    "builder with GOEXPERIMENT=nounified, see go.dev/issue/51397",
+		Notes:    "builder with GOEXPERIMENT=nounified, see go.dev/issue/51397 and go.dev/issue/57977",
 		tryBot: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.unified")
+			return (repo == "go" || repo == "tools") && goBranch == "release-branch.go1.20"
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "tools") && (goBranch == "master" || goBranch == "dev.unified")
+			return (repo == "go" || repo == "tools") && goBranch == "release-branch.go1.20"
 		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
