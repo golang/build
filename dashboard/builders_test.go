@@ -101,7 +101,6 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm64",
 				"openbsd-amd64-72",
-				"windows-386-2012",
 				"windows-386-2016",
 				"windows-amd64-2016",
 
@@ -152,7 +151,6 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm64",
 				"openbsd-amd64-72",
-				"windows-386-2012",
 				"windows-386-2016",
 				"windows-amd64-2016",
 

@@ -2244,8 +2244,9 @@ func init() {
 			// of Go, hence the atLeastGo1 call below; versions of Go
 			// prior to 1.20 will use the *-oldcc variant instead. See
 			// issue 35006 for more details.
+			// Go 1.20 is also the last version with Windows 8/8.1 support. See proposal 57004.
 			return onlyGo(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20)
+				atLeastGo1(goBranch, 20) && atMostGo1(goBranch, 20)
 		},
 		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 		tryBot: func(repo, branch, goBranch string) bool {
@@ -2348,8 +2349,9 @@ func init() {
 			// of Go, hence the atLeastGo1 call below; versions of Go
 			// prior to 1.20 will use the *-oldcc variant instead. See
 			// issue 35006 for more details.
+			// Go 1.20 is also the last version with Windows 8/8.1 support. See proposal 57004.
 			return onlyGo(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20)
+				atLeastGo1(goBranch, 20) && atMostGo1(goBranch, 20)
 		},
 		env: []string{
 			"GOARCH=amd64",
