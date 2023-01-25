@@ -513,7 +513,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest", "exp"), onlyPost},
 		{b("windows-386-2008", "exp"), both},
 		{b("windows-amd64-2016", "exp"), both},
-		{b("darwin-amd64-10_14", "exp"), onlyPost},
+		{b("darwin-amd64-10_14", "exp"), none},
 		{b("darwin-amd64-10_15", "exp"), onlyPost},
 		// ... but not on most others:
 		{b("freebsd-386-12_3", "exp"), none},
@@ -545,11 +545,15 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-386-emu", "build"), none},
 		{b("android-amd64-emu", "build"), none},
 
-		// Only use latest macOS for subrepos, and only amd64:
-		{b("darwin-amd64-10_14", "net"), onlyPost},
-
 		{b("darwin-amd64-10_15", "go"), onlyPost},
-		{b("darwin-amd64-10_14", "go"), onlyPost},
+
+		// Go 1.20 is the last release with macOS 10.14 support:
+		{b("darwin-amd64-10_14", "go"), none},
+		{b("darwin-amd64-10_14@go1.21", "go"), none},
+		{b("darwin-amd64-10_14@go1.20", "go"), onlyPost},
+		{b("darwin-amd64-10_14", "net"), none},
+		{b("darwin-amd64-10_14@go1.21", "net"), none},
+		{b("darwin-amd64-10_14@go1.20", "net"), onlyPost},
 
 		// plan9 only lived at master. We didn't support any past releases.
 		// But it's off for now as it's always failing.
