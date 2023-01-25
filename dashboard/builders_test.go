@@ -102,7 +102,6 @@ func TestTrybots(t *testing.T) {
 				"linux-arm-aws",
 				"linux-arm64",
 				"openbsd-amd64-72",
-				"windows-386-2008",
 				"windows-386-2012",
 				"windows-amd64-2016",
 
@@ -225,7 +224,6 @@ func TestTrybots(t *testing.T) {
 				"netbsd-amd64-9_3",
 				"openbsd-386-72",
 				"openbsd-amd64-72",
-				"windows-386-2008",
 				"windows-amd64-2016",
 			},
 		},
@@ -235,7 +233,6 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"linux-amd64",
 				"linux-amd64-race",
-				"windows-386-2008",
 				"windows-amd64-2016",
 			},
 		},
@@ -511,7 +508,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "exp"), both},
 		{b("linux-amd64-race", "exp"), both},
 		{b("linux-amd64-longtest", "exp"), onlyPost},
-		{b("windows-386-2008", "exp"), both},
+		{b("windows-386-2008", "exp"), none},
 		{b("windows-amd64-2016", "exp"), both},
 		{b("darwin-amd64-10_14", "exp"), none},
 		{b("darwin-amd64-10_15", "exp"), onlyPost},
