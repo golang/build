@@ -433,7 +433,7 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	defaultApprove := deps.buildTasks.ApproveAction
 	approvedTrybots := false
 	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "TryBot failures") {
+		if strings.Contains(ctx.TaskName, "Run advisory TryBot") {
 			approvedTrybots = true
 			return nil
 		}

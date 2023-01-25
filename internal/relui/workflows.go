@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net/http"
 	"path"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -448,7 +449,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		result := wf.Task3(wd, "Run advisory TryBot "+bc.Name, tasks.runAdvisoryTryBot, wf.Const(bc), skipTests, source)
 		advisoryResults = append(advisoryResults, result)
 	}
-	tryBotsApproved := wf.Action1(wd, "Approve any TryBot failures", tasks.checkAdvisoryTrybots, wf.Slice(advisoryResults...))
+	tryBotsApproved := wf.Action1(wd, "Wait for advisory TryBots", tasks.checkAdvisoryTrybots, wf.Slice(advisoryResults...))
 
 	signedAndTested := wf.Task2(wd, "Wait for signing and tests", func(ctx *wf.TaskContext, artifacts []artifact, version string) ([]artifact, error) {
 		// Note: Note this needs to happen somewhere, doesn't matter where. Maybe move it to a nicer place later.
@@ -761,14 +762,23 @@ func (b *BuildReleaseTasks) runAdvisoryTryBot(ctx *wf.TaskContext, bc *dashboard
 			return tryBotResult{bc.Name, true}, nil
 		}
 	}
-
 	passed := false
-	_, err := b.runBuildStep(ctx, nil, bc, source, "", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-		var err error
-		passed, err = bs.RunTryBot(ctx, r)
-		return err
-	})
-	return tryBotResult{bc.Name, passed}, err
+	for attempt := 1; attempt <= workflow.MaxRetries && !passed; attempt++ {
+		ctx.Printf("======== Trybot Attempt %d of %d ========\n", attempt, workflow.MaxRetries)
+		_, err := b.runBuildStep(ctx, nil, bc, source, "", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+			var err error
+			passed, err = bs.RunTryBot(ctx, r)
+			return err
+		})
+		if err != nil {
+			ctx.Printf("Trybot Attempt failed: %v\n", err)
+		}
+	}
+	if !passed {
+		ctx.Printf("Advisory TryBot failed. Check the logs and approve this task if it's okay:\n")
+		return tryBotResult{bc.Name, passed}, b.ApproveAction(ctx)
+	}
+	return tryBotResult{bc.Name, passed}, nil
 }
 
 func (b *BuildReleaseTasks) checkAdvisoryTrybots(ctx *wf.TaskContext, results []tryBotResult) error {
@@ -778,11 +788,12 @@ func (b *BuildReleaseTasks) checkAdvisoryTrybots(ctx *wf.TaskContext, results []
 			fails = append(fails, r.Name)
 		}
 	}
-	if len(fails) == 0 {
+	if len(fails) != 0 {
+		sort.Strings(fails)
+		ctx.Printf("Some advisory TryBots failed and their failures have been approved:\n%v", strings.Join(fails, "\n"))
 		return nil
 	}
-	ctx.Printf("Some advisory TryBots failed. Check their logs and approve this task if it's okay:\n%v", strings.Join(fails, "\n"))
-	return b.ApproveAction(ctx)
+	return nil
 }
 
 // runBuildStep is a convenience function that manages resources a build step might need.
