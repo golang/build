@@ -1631,7 +1631,7 @@ func init() {
 		Notes:       "SSA internal checks enabled",
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
-			"GO_GCFLAGS=-d=ssa/check/on,dclstack",
+			"GO_GCFLAGS=-d=ssa/check/on",
 		},
 	})
 	addBuilder(BuildConfig{
