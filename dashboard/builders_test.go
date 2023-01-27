@@ -786,7 +786,9 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	// All completed ports should have either a real TryBot or at least a misc-compile TryBot,
 	// so this map is meant to be used to temporarily fix tests
 	// when the work of adding a new port is actively underway.
-	knownMissing := map[string]bool{}
+	knownMissing := map[string]bool{
+		"openbsd-mips64": true, // go.dev/issue/58110
+	}
 
 	var done = make(map[string]bool)
 	check := func(goos, goarch string) {

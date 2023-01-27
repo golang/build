@@ -1576,7 +1576,7 @@ func init() {
 	addMiscCompile("-freebsd", "freebsd-386", "freebsd-arm", "freebsd-arm64")
 	addMiscCompile("-netbsd", "netbsd-386", "netbsd-amd64")
 	addMiscCompile("-netbsd-arm", "netbsd-arm", "netbsd-arm64")
-	addMiscCompile("-openbsd", "openbsd-386", "openbsd-mips64")
+	addMiscCompile("-openbsd", "openbsd-386") // openbsd-mips64 go.dev/issue/58110
 	addMiscCompile("-openbsd-arm", "openbsd-arm", "openbsd-arm64")
 	addMiscCompile("-plan9", "plan9-386", "plan9-amd64", "plan9-arm")
 	addMiscCompile("-solaris", "solaris-amd64", "illumos-amd64")
