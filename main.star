@@ -113,8 +113,22 @@ luci.builder(
 luci.console_view(
     name = "go-master-ci",
     repo = "https://go.googlesource.com/go",
-    title = "Go main branch continuous integration",
+    title = "master",
     refs = ["refs/heads/master"],
+    entries = [
+        luci.console_view_entry(
+            builder = "linux-amd64",
+            category = "linux",
+        ),
+    ],
+)
+
+# A console for CI builders.
+luci.console_view(
+    name = "go-release-1-20-ci",
+    repo = "https://go.googlesource.com/go",
+    title = "release-branch.go1.20",
+    refs = ["refs/heads/release-branch.go1.20"],
     entries = [
         luci.console_view_entry(
             builder = "linux-amd64",
@@ -149,6 +163,15 @@ luci.gitiles_poller(
     bucket = "ci",
     repo = "https://go.googlesource.com/go",
     refs = ["refs/heads/master"],
+    triggers = ["linux-amd64"],
+)
+
+# Poller for the 'release-branch.go1.20' branch for the main Go repository.
+luci.gitiles_poller(
+    name = "go-release-1-20-trigger",
+    bucket = "ci",
+    repo = "https://go.googlesource.com/go",
+    refs = ["refs/heads/release-branch.go1.20"],
     triggers = ["linux-amd64"],
 )
 
