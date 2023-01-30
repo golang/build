@@ -52,7 +52,7 @@ var slowBotAliases = map[string]string{
 	"freebsd-riscv64":       "freebsd-riscv64-unmatched",
 	"illumos":               "illumos-amd64",
 	"ios":                   "ios-arm64-corellium",
-	"js":                    "js-wasm",
+	"js":                    "js-wasm-node18",
 	"linux":                 "linux-amd64",
 	"linux-arm":             "linux-arm-aws",
 	"linux-loong64":         "linux-loong64-3a5000",
@@ -95,7 +95,7 @@ var slowBotAliases = map[string]string{
 	"s390x":                 "linux-s390x-ibm",
 	"solaris":               "solaris-amd64-oraclerel",
 	"solaris-amd64":         "solaris-amd64-oraclerel",
-	"wasm":                  "js-wasm",
+	"wasm":                  "js-wasm-node18",
 	"windows":               "windows-amd64-2016",
 	"windows-386":           "windows-386-2008",
 	"windows-amd64":         "windows-amd64-2016",
@@ -1583,6 +1583,7 @@ func init() {
 	addMiscCompile("-other-1", "dragonfly-amd64", "linux-loong64")
 	addMiscCompile("-other-2", "linux-riscv64", "linux-s390x", "linux-arm-arm5") // 'linux-arm-arm5' is linux/arm with GOARM=5.
 	addMiscCompileGo1(20, "-go1.20", "freebsd-riscv64")
+	addMiscCompileGo1(21, "-go1.21", "js-wasm") // TODO(go.dev/issue/57614): Use a misc-compile trybot for js/wasm until Node 18 builder can work as a trybot.
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
 	// Then consider subrepos too, so "mobile" can at least be included
@@ -1869,7 +1870,8 @@ func init() {
 		HostType: "host-linux-amd64-js-wasm",
 		tryBot:   explicitTrySet("go"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := buildRepoByDefault(repo)
+			// Go 1.20 is the last Go release that works with Node 14. See issue 57614.
+			b := buildRepoByDefault(repo) && atMostGo1(goBranch, 20)
 			switch repo {
 			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
 				// Don't test these golang.org/x repos.
@@ -1904,7 +1906,8 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:        "js-wasm-node18",
 		HostType:    "host-linux-amd64-js-wasm-node18",
-		KnownIssues: []int{57614},
+		KnownIssues: []int{57614}, // After this known issue is resolved, re-enable it as a TryBot below:
+		//tryBot:      explicitTrySet("go"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
 			switch repo {
