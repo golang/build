@@ -1583,7 +1583,6 @@ func init() {
 	addMiscCompile("-other-1", "dragonfly-amd64", "linux-loong64")
 	addMiscCompile("-other-2", "linux-riscv64", "linux-s390x", "linux-arm-arm5") // 'linux-arm-arm5' is linux/arm with GOARM=5.
 	addMiscCompileGo1(20, "-go1.20", "freebsd-riscv64")
-	addMiscCompileGo1(21, "-go1.21", "js-wasm") // TODO(go.dev/issue/57614): Use a misc-compile trybot for js/wasm until Node 18 builder can work as a trybot.
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
 	// Then consider subrepos too, so "mobile" can at least be included
@@ -1904,10 +1903,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:        "js-wasm-node18",
-		HostType:    "host-linux-amd64-js-wasm-node18",
-		KnownIssues: []int{57614}, // After this known issue is resolved, re-enable it as a TryBot below:
-		//tryBot:      explicitTrySet("go"),
+		Name:     "js-wasm-node18",
+		HostType: "host-linux-amd64-js-wasm-node18",
+		tryBot:   explicitTrySet("go"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
 			switch repo {

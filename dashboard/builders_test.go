@@ -94,6 +94,7 @@ func TestTrybots(t *testing.T) {
 			branch: "master",
 			want: []string{
 				"freebsd-amd64-12_3",
+				"js-wasm-node18",
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-boringcrypto",
@@ -119,7 +120,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-other-1",
 				"misc-compile-other-2",
 				"misc-compile-go1.20",
-				"misc-compile-go1.21",
 			},
 		},
 		{
@@ -127,6 +127,7 @@ func TestTrybots(t *testing.T) {
 			branch: "release-branch.go1.21",
 			want: []string{
 				"freebsd-amd64-12_3",
+				"js-wasm-node18",
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-boringcrypto",
@@ -152,7 +153,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-other-1",
 				"misc-compile-other-2",
 				"misc-compile-go1.20",
-				"misc-compile-go1.21",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
@@ -501,8 +501,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "go"), onlyPost},
 		{b("android-386-emu", "go"), onlyPost},
 
-		{b("js-wasm-node18", "go"), onlyPost},
-		{b("js-wasm-node18@go1.21", "go"), onlyPost},
+		{b("js-wasm-node18", "go"), both},
+		{b("js-wasm-node18@go1.21", "go"), both},
 		{b("js-wasm-node18@go1.20", "go"), none},
 		// Keep using js-wasm builder (with Node 14) only for Go 1.20 and older:
 		{b("js-wasm", "go"), none},
