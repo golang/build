@@ -225,7 +225,7 @@ type commit struct {
 	User       string
 }
 
-// shortUser returns a shortened version of a user string.
+// ShortUser returns a shortened version of a user string.
 func (c *commit) ShortUser() string {
 	user := c.User
 	if i, j := strings.Index(user, "<"), strings.Index(user, ">"); 0 <= i && i < j {

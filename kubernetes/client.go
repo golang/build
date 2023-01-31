@@ -212,7 +212,7 @@ func (c *Client) GetPods(ctx context.Context) ([]api.Pod, error) {
 	return list.Items, nil
 }
 
-// PodDelete deletes the specified Kubernetes pod.
+// DeletePod deletes the specified Kubernetes pod.
 func (c *Client) DeletePod(ctx context.Context, podName string) error {
 	url := c.nsEndpoint() + "pods/" + podName
 	req, err := http.NewRequest("DELETE", url, strings.NewReader(`{"gracePeriodSeconds":0}`))
@@ -429,7 +429,7 @@ func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 	return string(body), nil
 }
 
-// PodNodes returns the list of nodes that comprise the Kubernetes cluster
+// GetNodes returns the list of nodes that comprise the Kubernetes cluster
 func (c *Client) GetNodes(ctx context.Context) ([]api.Node, error) {
 	var list api.NodeList
 	if err := c.do(ctx, "GET", c.endpointURL+"/nodes", &list); err != nil {

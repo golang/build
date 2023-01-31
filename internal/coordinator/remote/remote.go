@@ -201,7 +201,7 @@ func (sp *SessionPool) Session(buildletName string) (*Session, error) {
 	return nil, fmt.Errorf("remote buildlet does not exist=%s", buildletName)
 }
 
-// Buildlet returns the buildlet client associated with the Session.
+// BuildletClient returns the buildlet client associated with the Session.
 func (sp *SessionPool) BuildletClient(buildletName string) (buildlet.Client, error) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()

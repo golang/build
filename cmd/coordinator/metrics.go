@@ -110,7 +110,7 @@ func recordSSHPublicKeyAuthHandler(fn ssh.PublicKeyHandler) ssh.PublicKeyHandler
 	}
 }
 
-// recordRDPCount records the use of the gomote RDP functionality and sends it
+// recordGomoteRDPUsage records the use of the gomote RDP functionality and sends it
 // to the configured metrics backend.
 func recordGomoteRDPUsage(ctx context.Context) {
 	stats.Record(ctx, mGomoteRDPCount.M(1))

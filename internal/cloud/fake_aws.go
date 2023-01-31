@@ -83,7 +83,7 @@ func (f *FakeAWSClient) RunningInstances(ctx context.Context) ([]*Instance, erro
 	return instances, nil
 }
 
-// InstanceTypesArm retrieves all EC2 instance types in a region which support the ARM64 architecture.
+// InstanceTypesARM retrieves all EC2 instance types in a region which support the ARM64 architecture.
 func (f *FakeAWSClient) InstanceTypesARM(ctx context.Context) ([]*InstanceType, error) {
 	if ctx == nil {
 		return nil, errors.New("invalid params")

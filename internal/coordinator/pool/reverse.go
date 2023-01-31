@@ -620,7 +620,7 @@ func (s byTypeThenHostname) Less(i, j int) bool {
 	return ti < tj
 }
 
-// builderrKey generates the builder key used by reverse builders
+// builderKey generates the builder key used by reverse builders
 // to authenticate with the coordinator.
 func builderKey(builder string) string {
 	if len(builderMasterKey) == 0 {

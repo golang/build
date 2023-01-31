@@ -609,7 +609,7 @@ func labelsForIssue(ctx context.Context, repoID maintner.GitHubRepoID, issues is
 	return labels, nil
 }
 
-// removeLabelForIssue removes the given label from the given repo with the
+// removeLabelFromIssue removes the given label from the given repo with the
 // given issueNum. If the issue did not have the label already (or the label
 // didn't exist), return nil.
 func removeLabelFromIssue(ctx context.Context, repoID maintner.GitHubRepoID, issues issuesService, issueNum int, label string) error {
@@ -1483,7 +1483,7 @@ var oldCongratsMsgs = []string{
 	`It's your first ever CL! Congrats, and thanks for sending!`,
 }
 
-// isSubectToFreeze returns true if a repository is subject to the release
+// isSubjectToFreeze returns true if a repository is subject to the release
 // freeze. x/ repos can be subject if they are vendored into golang/go.
 func isSubjectToFreeze(repo string) bool {
 	switch repo {

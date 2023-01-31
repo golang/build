@@ -66,7 +66,7 @@ func (br *BuilderRev) SnapshotURL(buildEnv *buildenv.Environment) string {
 
 var TestHookSnapshotExists func(*BuilderRev) bool
 
-// snapshotExists reports whether the snapshot exists in storage.
+// SnapshotExists reports whether the snapshot exists in storage.
 // It returns potentially false negatives on network errors.
 // Callers must not depend on this as more than an optimization.
 func (br *BuilderRev) SnapshotExists(ctx context.Context, buildEnv *buildenv.Environment) bool {

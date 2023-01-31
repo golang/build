@@ -60,7 +60,7 @@ func (c *client) SetOnHeartbeatFailure(fn func()) {
 
 var ErrClosed = errors.New("buildlet: Client closed")
 
-// Closes destroys and closes down the buildlet, destroying all state
+// Close destroys and closes down the buildlet, destroying all state
 // immediately.
 func (c *client) Close() error {
 	// TODO(bradfitz): have a Client-wide Done channel we set on

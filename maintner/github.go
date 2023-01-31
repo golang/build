@@ -776,7 +776,7 @@ func (c *Corpus) initGithub() {
 	}
 }
 
-// GitHubLimiter sets a limiter that controls the rate of requests made
+// SetGitHubLimiter sets a limiter that controls the rate of requests made
 // to GitHub APIs. If nil, requests are not limited. Only valid in leader mode.
 // The limiter must only be set before Sync or SyncLoop is called.
 func (c *Corpus) SetGitHubLimiter(l *rate.Limiter) {
@@ -1693,7 +1693,7 @@ func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]interf
 	return its, res, err
 }
 
-// foreach walks over all pages of items from getPage and calls fn for each item.
+// foreachItem walks over all pages of items from getPage and calls fn for each item.
 // If the first page's response was cached, fn is never called.
 func (p *githubRepoPoller) foreachItem(
 	ctx context.Context,

@@ -198,7 +198,7 @@ func (com *Commit) AddResult(tx *datastore.Transaction, r *Result) error {
 	return nil
 }
 
-// removeResult removes the denormalized Result data from the ResultData field
+// RemoveResult removes the denormalized Result data from the ResultData field
 // for the given builder and go hash.
 // It must be called from within the datastore transaction that gets and puts
 // the Commit. Note this is slightly different to AddResult, above.

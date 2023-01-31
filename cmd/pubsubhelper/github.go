@@ -74,7 +74,7 @@ func handleGithubWebhook(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validate compares the signature in the request header with the body.
+// validateGithubRequest compares the signature in the request header with the body.
 func validateGithubRequest(w http.ResponseWriter, r *http.Request) (body []byte, err error) {
 	// Decode signature header.
 	sigHeader := r.Header.Get("X-Hub-Signature")

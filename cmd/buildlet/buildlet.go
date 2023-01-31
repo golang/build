@@ -1027,7 +1027,7 @@ func absExecDir(dirArg string, sysMode bool, cmdDir string) (absDir string, err 
 	return filepath.Join(*workDir, relDir), nil
 }
 
-// needsBashWrappers reports whether the given command needs to
+// needsBashWrapper reports whether the given command needs to
 // run through bash.
 func needsBashWrapper(cmd string) bool {
 	if !strings.HasSuffix(cmd, ".bash") {

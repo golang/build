@@ -429,7 +429,7 @@ func (t *tester) commentResults(ctx context.Context, change *gerrit.ChangeInfo, 
 	return nil
 }
 
-// findCharges queries a gerrit instance for changes which should be tested, returning a
+// findChanges queries a gerrit instance for changes which should be tested, returning a
 // slice of revisions for each change.
 func (t *tester) findChanges(ctx context.Context) ([]*gerrit.ChangeInfo, error) {
 	return t.gerrit.QueryChanges(

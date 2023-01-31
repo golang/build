@@ -17,7 +17,7 @@ func init() {
 	runCmdContext = runCmdContextLinux
 }
 
-// runCommandContext runs cmd controlled by ctx, killing it and all its
+// runCmdContextLinux runs cmd controlled by ctx, killing it and all its
 // children if necessary. cmd.SysProcAttr must be unset.
 func runCmdContextLinux(ctx context.Context, cmd *exec.Cmd) error {
 	if cmd.SysProcAttr != nil {

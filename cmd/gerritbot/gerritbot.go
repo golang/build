@@ -380,7 +380,7 @@ func (b *bot) claApproved(ctx context.Context, repo maintner.GitHubRepoID, pr *g
 	return false, nil
 }
 
-// prShortLink returns text referencing an Issue or Pull Request that will be
+// githubShortLink returns text referencing an Issue or Pull Request that will be
 // automatically converted into a link by GitHub.
 func githubShortLink(owner, repo string, number int) string {
 	return fmt.Sprintf("%s#%d", owner+"/"+repo, number)

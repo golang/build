@@ -16,7 +16,7 @@ func gh(githubUsername string) Owner {
 	return Owner{GitHubUsername: githubUsername, GerritEmail: p.Gerrit}
 }
 
-// archOsTeamn returns the *Entry for an architecture or OS team at github
+// archOsTeam returns the *Entry for an architecture or OS team at github
 func archOsTeam(teamName string) *Entry {
 	return &Entry{Primary: []Owner{gh("golang/" + teamName)}}
 }
