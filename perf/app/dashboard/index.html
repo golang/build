@@ -296,7 +296,7 @@ function addTable(bench, unit, repository) {
 
 		// Range visualization.
 		const range = createCell("", false);
-		range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 32, bench.Unit, bench.HigherIsBetter));
+		range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 48, bench.Unit, bench.HigherIsBetter));
 		range.classList.add("Dashboard-table-range")
 		row.appendChild(range);
 

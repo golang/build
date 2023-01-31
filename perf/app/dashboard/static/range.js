@@ -28,6 +28,17 @@ function Range(low, center, high, min, max, width, height, unit, higherIsBetter)
 	const xScale = d3.scaleLinear([min, max], [margin, width-margin]);
 	const yBaseline = 3*height/4;
 
+	// Draw zero line.
+	const tick = d3.line()
+		.x(d => xScale(d[0]))
+		.y(d => d[1])
+
+	svg.append("path")
+		.attr("fill", "none")
+		.attr("stroke", "#cccccc")
+		.attr("stroke-width", 1)
+		.attr("d", tick([[0, 0], [0, height]]))
+
 	// Draw line.
 	const line = d3.line()
 		.x(d => xScale(d))
@@ -36,7 +47,7 @@ function Range(low, center, high, min, max, width, height, unit, higherIsBetter)
 	const partialStroke = function() {
 		return svg.append("path")
 			.attr("fill", "none")
-			.attr("stroke-width", 6);
+			.attr("stroke-width", 3.5);
 	}
 	if (high < 0) {
 		partialStroke().attr("stroke", pickColor(high))
@@ -50,10 +61,6 @@ function Range(low, center, high, min, max, width, height, unit, higherIsBetter)
 		partialStroke().attr("stroke", pickColor(low))
 			.attr("d", line([low, high]));
 	}
-
-	const tick = d3.line()
-		.x(d => xScale(d[0]))
-		.y(d => d[1])
 
 	const xTicks = [low, center, high];
 	for (const i in xTicks) {
