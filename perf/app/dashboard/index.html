@@ -165,16 +165,25 @@ function addCharts(benchmarks, repository) {
 				const regression = (Math.abs(r.Change)*100).toFixed(2);
 				const shortCommit = rd.CommitHash.slice(0, 7);
 				let diffText = "regression";
-				if ((bench.HigherIsBetter && r.Change < 0) || (bench.HigherIsBetter && r.Change > 0)) {
+				let isRegression = true;
+				if (r.Change < 0) {
+					// Note: r.Change already has its sign flipped for HigherIsBetter.
+					// Positive always means regression, negative always means improvement.
 					diffText = "improvement";
+					isRegression = false;
 				}
 				p.innerHTML = `${regression}% ${diffText}, ${(r.Delta*100).toFixed(2)}%-point change at <a href="?benchmark=${bench.Name}&unit=${bench.Unit}#${commitToId(rd.CommitHash)}">${shortCommit}</a>.`;
 
 				// Add a link to file a bug.
-				const title = `affected/package: ${regression}% regression in ${bench.Name} ${bench.Unit} at ${shortCommit}`;
-				const body = `Discovered a regression in ${bench.Unit} of ${regression}% for benchmark ${bench.Name} at ${shortCommit}.\n\n<ADD MORE DETAILS>.`
-				let query = `?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=Performance`;
-				p.innerHTML += ` <a href="https://github.com/golang/go/issues/new${query}">File an issue</a>.`;
+				if (isRegression) {
+					const title = `affected/package: ${regression}% regression in ${bench.Name} ${bench.Unit} at ${shortCommit}`;
+					const body = `Discovered a regression in ${bench.Unit} of ${regression}% for benchmark ${bench.Name} at ${shortCommit}.\n\n<ADD MORE DETAILS>.`
+					let query = `?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=Performance`;
+					p.innerHTML += ` <a href="https://github.com/golang/go/issues/new${query}">File an issue</a>.`;
+				} else {
+					// Include a grinning emoji if it's an improvement.
+					p.innerHTML += ` <span style="font-style: normal;">&#128513;</span>`;
+				}
 			} else {
 				p.textContext = `Not ranked because ${r.IgnoredBecause}.`;
 			}
