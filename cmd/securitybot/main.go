@@ -65,14 +65,34 @@ func (bi *buildInfo) isSubrepo() bool {
 	return repos.ByGerritProject[repo] != nil
 }
 
+func createBuildletWithRetry(ctx context.Context, coordinator *buildlet.GRPCCoordinatorClient, builderType string) (buildlet.RemoteClient, error) {
+	const retries int = 5
+	var err error
+	for i := 0; i < retries; i++ {
+		var c buildlet.RemoteClient
+		c, err = coordinator.CreateBuildletWithStatus(ctx, builderType, func(status types.BuildletWaitStatus) {})
+		if err == nil {
+			return c, nil
+		}
+		// TODO(roland): we currently only care about retrying when we hit this
+		// particular AWS error, but we may want to retry in other cases in the
+		// future?
+		if !strings.Contains(err.Error(), "ResourceNotReady: failed waiting for successful resource state") {
+			return nil, err
+		}
+		log.Printf("%s: failed to create buildlet (attempt %d): %s", builderType, retries, err)
+		time.Sleep(time.Second * 30)
+	}
+	return nil, fmt.Errorf("failed to create buildlet after %d attempts, last error: %s", retries, err)
+}
+
 // runTests creates a buildlet for the specified builderType, sends a copy of go1.4 and the change tarball to
 // the buildlet, and then executes the platform specific 'all' script, streaming the output to a GCS bucket.
 // The buildlet is destroyed on return.
 func (t *tester) runTests(ctx context.Context, builderType string, info *buildInfo) builderResult {
 	log.Printf("%s: creating buildlet", builderType)
-	c, err := t.coordinator.CreateBuildletWithStatus(ctx, builderType, func(status types.BuildletWaitStatus) {})
+	c, err := createBuildletWithRetry(ctx, t.coordinator, builderType)
 	if err != nil {
-		log.Printf("%s: failed to create buildlet: %s", builderType, err)
 		return builderResult{builderType: builderType, err: fmt.Errorf("failed to create buildlet: %s", err)}
 	}
 	buildletName := c.RemoteName()
@@ -136,9 +156,11 @@ func (t *tester) runTests(ctx context.Context, builderType string, info *buildIn
 	// proxy, we instead wait to disable the network until right before we
 	// actually execute the tests, and manually download module dependencies
 	// using "go mod download" if we are testing a subrepo branch.
+	var disableNetwork bool
 	for i, v := range env {
 		if v == "GO_DISABLE_OUTBOUND_NETWORK=1" {
 			env = append(env[:i], env[i+1:]...)
+			disableNetwork = true
 			break
 		}
 	}
@@ -224,7 +246,9 @@ func (t *tester) runTests(ctx context.Context, builderType string, info *buildIn
 			return builderResult{builderType: builderType, err: fmt.Errorf("go mod download failed: %s", remoteErr)}
 		}
 	}
-	opts.ExtraEnv = append(opts.ExtraEnv, "GO_DISABLE_OUTBOUND_NETWORK=1")
+	if disableNetwork {
+		opts.ExtraEnv = append(opts.ExtraEnv, "GO_DISABLE_OUTBOUND_NETWORK=1")
+	}
 	remoteErr, execErr := c.Exec(ctx, cmd, opts)
 	if execErr != nil {
 		log.Printf("%s: failed to execute tests: %s", builderType, execErr)
@@ -418,7 +442,7 @@ func (t *tester) commentResults(ctx context.Context, change *gerrit.ChangeInfo, 
 	}
 	w.Flush()
 
-	comment := fmt.Sprintf("Tests %s\n%s", state, buf.String())
+	comment := fmt.Sprintf("Tests %s\n\n%s", state, buf.String())
 	if err := t.gerrit.SetReview(ctx, change.ID, change.CurrentRevision, gerrit.ReviewInput{
 		Message: comment,
 		Labels:  map[string]int{"TryBot-Result": label},
