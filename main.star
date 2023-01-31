@@ -117,7 +117,7 @@ luci.console_view(
     refs = ["refs/heads/master"],
     entries = [
         luci.console_view_entry(
-            builder = "linux-amd64",
+            builder = "linux-amd64-master",
             category = "linux",
         ),
     ],
@@ -131,31 +131,39 @@ luci.console_view(
     refs = ["refs/heads/release-branch.go1.20"],
     entries = [
         luci.console_view_entry(
-            builder = "linux-amd64",
+            builder = "linux-amd64-go1.20",
             category = "linux",
         ),
     ],
 )
 
-# Basic linux/amd64 CI builder.
-luci.builder(
-    name = "linux-amd64",
-    bucket = "ci",
-    executable = luci.executable(
-        name = "golangbuild",
-        cipd_package = "infra/experimental/golangbuild/${platform}",
-        cipd_version = "latest",
-        cmd = ["golangbuild"],
-    ),
-    dimensions = {
-        "os": "Linux",
-        "cpu": "x86-64",
-    },
-    properties = {
-        "project": "go",
-    },
-    service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-)
+def _define_linux_amd64_builder(go_branch):
+    """Defines a standard linux-amd64 builder
+
+    Args:
+      go_branch: string, name of the Go branch the builder will build.
+    """
+    luci.builder(
+        name = 'linux-amd64-%s' % (go_branch),
+        bucket = "ci",
+        executable = luci.executable(
+            name = "golangbuild",
+            cipd_package = "infra/experimental/golangbuild/${platform}",
+            cipd_version = "latest",
+            cmd = ["golangbuild"],
+        ),
+        dimensions = {
+            "os": "Linux",
+            "cpu": "x86-64",
+        },
+        properties = {
+            "project": "go",
+        },
+        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+    )
+
+_define_linux_amd64_builder("master")
+_define_linux_amd64_builder("go1.20")
 
 # Poller for the 'master' branch for the main Go repository.
 luci.gitiles_poller(
@@ -163,7 +171,7 @@ luci.gitiles_poller(
     bucket = "ci",
     repo = "https://go.googlesource.com/go",
     refs = ["refs/heads/master"],
-    triggers = ["linux-amd64"],
+    triggers = ["linux-amd64-master"],
 )
 
 # Poller for the 'release-branch.go1.20' branch for the main Go repository.
@@ -172,7 +180,7 @@ luci.gitiles_poller(
     bucket = "ci",
     repo = "https://go.googlesource.com/go",
     refs = ["refs/heads/release-branch.go1.20"],
-    triggers = ["linux-amd64"],
+    triggers = ["linux-amd64-go1.20"],
 )
 
 exec("./recipes.star")
