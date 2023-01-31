@@ -10,6 +10,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -773,6 +774,10 @@ func (b *BuildReleaseTasks) runAdvisoryTryBot(ctx *wf.TaskContext, bc *dashboard
 		if err != nil {
 			ctx.Printf("Trybot Attempt failed: %v\n", err)
 		}
+	}
+	if errors.Is(ctx.Context.Err(), context.Canceled) {
+		ctx.Printf("Advisory TryBot timed out or was canceled\n")
+		return tryBotResult{bc.Name, passed}, nil
 	}
 	if !passed {
 		ctx.Printf("Advisory TryBot failed. Check the logs and approve this task if it's okay:\n")
