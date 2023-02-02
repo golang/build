@@ -1519,70 +1519,89 @@ func init() {
 	})
 
 	// addMiscCompileGo1 adds a misc-compile TryBot that
-	// runs buildall.bash on the specified target(s), up to 3 max.
-	// The targets are matched against the "go tool dist list" name,
-	// but with hyphens instead of forward slashes ("linux-amd64", etc).
+	// runs buildall.bash on the specified target ("$goos-$goarch").
 	// If min is non-zero, it specifies the minimum Go 1.x version.
-	addMiscCompileGo1 := func(min int, suffix string, targets ...string) {
-		if len(targets) > 3 {
-			// This limit will do until we have better visibility
-			// into holistic TryBot completion times via metrics.
-			panic("at most 3 targets may be specified to avoid making TryBots slow; see issues 32632 and 17104")
-		}
+	addMiscCompileGo1 := func(min int, goos, goarch, extraSuffix string, extraEnv ...string) {
 		var v types.MajorMinor
 		var alsoNote string
 		if min != 0 {
 			v = types.MajorMinor{Major: 1, Minor: min}
 			alsoNote = fmt.Sprintf(" Applies to Go 1.%d and newer.", min)
 		}
+		// As an extra special case, add -arm5 to buildall.bash's filtering pattern for
+		// the linux-arm-arm5 case. buildall.bash treats this case specially and it explicitly
+		// unsets GOARM, so we can't just tell it what to do that way. For now, just do what
+		// it wants, but continue to pass GOARM for this case so that we can change buildall.bash
+		// safely.
+		//
+		// TODO(mknyszek): Fix buildall.bash to not explicitly unset GOARM. Consider rewriting it
+		// to better fit this new platform-per-builder model (which should simplify it a good bit).
+		filterSuffix := ""
+		if extraSuffix == "-arm5" {
+			filterSuffix = extraSuffix
+		}
+		platform := goos + "-" + goarch + extraSuffix
 		addBuilder(BuildConfig{
-			Name:     "misc-compile" + suffix,
-			HostType: "host-linux-amd64-bullseye",
-			tryBot:   defaultTrySet(),
-			env: []string{
-				"GO_DISABLE_OUTBOUND_NETWORK=1",
-			},
+			Name:             "misc-compile-" + platform,
+			HostType:         "host-linux-amd64-bullseye",
+			tryBot:           defaultTrySet(),
+			env:              append(extraEnv, "GO_DISABLE_OUTBOUND_NETWORK=1", "GOOS="+goos, "GOARCH="+goarch),
 			tryOnly:          true,
 			MinimumGoVersion: v,
 			CompileOnly:      true,
-			Notes:            "Runs buildall.bash to cross-compile & vet std+cmd packages for " + strings.Join(targets, " & ") + ", but doesn't run any tests." + alsoNote,
+			Notes:            "Runs buildall.bash to cross-compile & vet std+cmd packages (or runs 'go test -c' for subrepos) for " + platform + ", but doesn't run any tests." + alsoNote,
 			allScriptArgs: []string{
 				// Filtering pattern to buildall.bash:
-				"^(" + strings.Join(targets, "|") + ")$",
+				"^(" + goos + "-" + goarch + filterSuffix + ")$",
 			},
 		})
 	}
 	// addMiscCompile adds a misc-compile TryBot
 	// for all supported Go versions.
-	addMiscCompile := func(suffix string, targets ...string) { addMiscCompileGo1(0, suffix, targets...) }
+	addMiscCompile := func(goos, goarch string) { addMiscCompileGo1(0, goos, goarch, "") }
 
-	// Arrange so that no more than 3 ports are tested sequentially in each misc-compile
-	// TryBot to avoid any individual misc-compile TryBot from becoming a bottleneck for
-	// overall TryBot completion time (currently 10 minutes; see go.dev/issue/17104).
+	// To keep things simple, have each misc-compile builder handle exactly one platform.
 	//
-	// The TestTryBotsCompileAllPorts test is used to detect any gaps in TryBot coverage
-	// when new ports are added, and the misc-compile pairs below can be re-arranged.
+	// This is potentially wasteful as there could be much more VM creation overhead, but
+	// it shouldn't add any latency. It also adds some visual noise. The alternative was
+	// more complex support for subrepos; this keeps things simple by following the same
+	// general principle as all the other builders.
 	//
-	// (In the past, we used flexible regexp patterns that matched all architectures
-	// for a given GOOS value. However, over time as new architectures were added,
-	// some misc-compile TryBot could become much slower than others.)
-	//
-	// See go.dev/issue/32632.
-	addMiscCompile("-windows-arm", "windows-arm", "windows-arm64")
-	addMiscCompile("-darwin", "darwin-amd64", "darwin-arm64")
-	addMiscCompile("-mips", "linux-mips", "linux-mips64")
-	addMiscCompile("-mipsle", "linux-mipsle", "linux-mips64le")
-	addMiscCompile("-ppc", "linux-ppc64", "linux-ppc64le", "aix-ppc64")
-	addMiscCompile("-freebsd", "freebsd-386", "freebsd-arm", "freebsd-arm64")
-	addMiscCompile("-netbsd", "netbsd-386", "netbsd-amd64")
-	addMiscCompile("-netbsd-arm", "netbsd-arm", "netbsd-arm64")
-	addMiscCompile("-openbsd", "openbsd-386") // openbsd-mips64 go.dev/issue/58110
-	addMiscCompile("-openbsd-arm", "openbsd-arm", "openbsd-arm64")
-	addMiscCompile("-plan9", "plan9-386", "plan9-amd64", "plan9-arm")
-	addMiscCompile("-solaris", "solaris-amd64", "illumos-amd64")
-	addMiscCompile("-other-1", "dragonfly-amd64", "linux-loong64")
-	addMiscCompile("-other-2", "linux-riscv64", "linux-s390x", "linux-arm-arm5") // 'linux-arm-arm5' is linux/arm with GOARM=5.
-	addMiscCompileGo1(20, "-go1.20", "freebsd-riscv64")
+	// See https://go.dev/issue/58163 for more details.
+	addMiscCompile("windows", "arm")
+	addMiscCompile("windows", "arm64")
+	addMiscCompile("darwin", "amd64")
+	addMiscCompile("darwin", "arm64")
+	addMiscCompile("linux", "mips")
+	addMiscCompile("linux", "mips64")
+	addMiscCompile("linux", "mipsle")
+	addMiscCompile("linux", "mips64le")
+	addMiscCompile("linux", "ppc64")
+	addMiscCompile("linux", "ppc64le")
+	addMiscCompile("aix", "ppc64")
+	addMiscCompile("freebsd", "386")
+	addMiscCompile("freebsd", "arm")
+	addMiscCompile("freebsd", "arm64")
+	addMiscCompile("netbsd", "386")
+	addMiscCompile("netbsd", "amd64")
+	addMiscCompile("netbsd", "arm")
+	addMiscCompile("netbsd", "arm64")
+	addMiscCompile("openbsd", "386")
+	// openbsd-mips64 go.dev/issue/58110
+	addMiscCompile("openbsd", "arm")
+	addMiscCompile("openbsd", "arm64")
+	addMiscCompile("plan9", "386")
+	addMiscCompile("plan9", "amd64")
+	addMiscCompile("plan9", "arm")
+	addMiscCompile("solaris", "amd64")
+	addMiscCompile("illumos", "amd64")
+	addMiscCompile("dragonfly", "amd64")
+	addMiscCompile("linux", "loong64")
+	addMiscCompile("linux", "riscv64")
+	addMiscCompile("linux", "s390x")
+	addMiscCompile("linux", "arm")
+	addMiscCompileGo1(0, "linux", "arm", "-arm5", "GOARM=5")
+	addMiscCompileGo1(20, "freebsd", "riscv64", "-go1.20")
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
 	// Then consider subrepos too, so "mobile" can at least be included
@@ -2996,22 +3015,35 @@ func addBuilder(c BuildConfig) {
 // It adds a post-submit-only builder with KnownIssue, GoDeps set to the provided values,
 // and runs on a limited set of branches to get test results without potential disruption
 // for contributors. It can be modified as needed when onboarding a misc-compile builder.
-func tryNewMiscCompile(suffix, rx string, knownIssue int, goDeps []string) {
+func tryNewMiscCompile(goos, goarch, extraSuffix string, knownIssue int, goDeps []string, extraEnv ...string) {
 	if knownIssue == 0 {
 		panic("tryNewMiscCompile: knownIssue parameter must be non-zero")
 	}
+	// As an extra special case, add -arm5 to buildall.bash's filtering pattern for
+	// the linux-arm-arm5 case. buildall.bash treats this case specially and it explicitly
+	// unsets GOARM, so we can't just tell it what to do that way. For now, just do what
+	// it wants, but continue to pass GOARM for this case so that we can change buildall.bash
+	// safely.
+	//
+	// TODO(mknyszek): Fix buildall.bash to not explicitly unset GOARM. Consider rewriting it
+	// to better fit this new platform-per-builder model (which should simplify it a good bit).
+	filterSuffix := ""
+	if extraSuffix == "-arm5" {
+		filterSuffix = extraSuffix
+	}
+	platform := goos + "-" + goarch + extraSuffix
 	addBuilder(BuildConfig{
-		Name:        "misc-compile" + suffix,
+		Name:        "misc-compile" + platform,
 		HostType:    "host-linux-amd64-bullseye",
 		buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
 		KnownIssues: []int{knownIssue},
 		GoDeps:      goDeps,
-		env:         []string{"GO_DISABLE_OUTBOUND_NETWORK=1"},
+		env:         append(extraEnv, "GOOS="+goos, "GOARCH="+goarch, "GO_DISABLE_OUTBOUND_NETWORK=1"),
 		CompileOnly: true,
-		Notes:       fmt.Sprintf("Tries buildall.bash to cross-compile & vet std+cmd packages for "+rx+", but doesn't run any tests. See go.dev/issue/%d.", knownIssue),
+		Notes:       fmt.Sprintf("Tries buildall.bash to cross-compile & vet std+cmd packages for "+platform+", but doesn't run any tests. See go.dev/issue/%d.", knownIssue),
 		allScriptArgs: []string{
 			// Filtering pattern to buildall.bash:
-			rx,
+			"^(" + goos + "-" + goarch + filterSuffix + ")$",
 		},
 	})
 }
