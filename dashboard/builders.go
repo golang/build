@@ -556,7 +556,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "Azure windows 11 arm64 VMs",
 		HostArch:  "windows-arm64",
 		IsReverse: true,
-		ExpectNum: 5,
+		ExpectNum: 2,
 	},
 }
 
