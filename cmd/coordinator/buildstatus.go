@@ -1049,15 +1049,21 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 	env = append(env, st.conf.ModulesEnv(st.SubName)...)
 
 	args := []string{"test"}
-	if !st.conf.IsLongTest() {
-		args = append(args, "-short")
-	}
-	if st.conf.IsRace() {
-		args = append(args, "-race")
-	}
-	if scale := st.conf.GoTestTimeoutScale(); scale != 1 {
-		const goTestDefaultTimeout = 10 * time.Minute // Default value taken from Go 1.20.
-		args = append(args, "-timeout="+(goTestDefaultTimeout*time.Duration(scale)).String())
+	if st.conf.CompileOnly {
+		// Build all packages, but avoid running the binary by executing /bin/true for the tests.
+		// We assume for a compile-only build we're just running on a Linux system.
+		args = append(args, "-exec", "/bin/true")
+	} else {
+		if !st.conf.IsLongTest() {
+			args = append(args, "-short")
+		}
+		if st.conf.IsRace() {
+			args = append(args, "-race")
+		}
+		if scale := st.conf.GoTestTimeoutScale(); scale != 1 {
+			const goTestDefaultTimeout = 10 * time.Minute // Default value taken from Go 1.20.
+			args = append(args, "-timeout="+(goTestDefaultTimeout*time.Duration(scale)).String())
+		}
 	}
 
 	var remoteErrors []error
