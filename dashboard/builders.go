@@ -1461,14 +1461,10 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 // should use trybots based on the platform.
 func crossCompileBuildSet(goos, goarch string) func(proj, branch, goBranch string) bool {
 	return func(proj, branch, goBranch string) bool {
-		if branch != "master" {
-			// TODO(#58163): Remove this once we finish testing misc-compile builders for subrepos.
-			return false
+		if proj != "go" && branch != "master" {
+			return false // #58311
 		}
 		switch proj {
-		case "go":
-			// TODO(#58163): Remove this once we finish testing misc-compile builders for subrepos.
-			return false
 		case "benchmarks":
 			return goarch != "loong64" // #58306
 		case "build":
@@ -1606,13 +1602,13 @@ func init() {
 		addBuilder(BuildConfig{
 			Name:             "misc-compile-" + platform,
 			HostType:         "host-linux-amd64-bullseye",
-			tryBot:           onlyGo,
+			tryBot:           crossCompileBuildSet(goos, goarch),
 			env:              append(extraEnv, "GO_DISABLE_OUTBOUND_NETWORK=1", "GOOS="+goos, "GOARCH="+goarch),
 			tryOnly:          true,
 			MinimumGoVersion: v,
 			CompileOnly:      true,
 			SkipSnapshot:     true,
-			Notes:            "Runs make.bash for " + platform + ", but doesn't run any tests." + alsoNote,
+			Notes:            "Runs make.bash (or compile-only go test) for " + platform + ", but doesn't run any tests." + alsoNote,
 		})
 	}
 	// addMiscCompile adds a misc-compile TryBot
@@ -1661,39 +1657,6 @@ func init() {
 	addMiscCompile("linux", "arm")
 	addMiscCompileGo1(0, "linux", "arm", "-arm5", "GOARM=5")
 	addMiscCompileGo1(20, "freebsd", "riscv64", "-go1.20")
-
-	tryNewMiscCompileForSubrepos("windows", "arm", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("windows", "arm64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("darwin", "amd64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("darwin", "arm64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "mips", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "mips64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "mipsle", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "mips64le", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "ppc64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "ppc64le", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("aix", "ppc64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("freebsd", "386", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("freebsd", "arm", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("freebsd", "arm64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("netbsd", "386", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("netbsd", "amd64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("netbsd", "arm", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("netbsd", "arm64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("openbsd", "386", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("openbsd", "arm", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("openbsd", "arm64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("plan9", "386", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("plan9", "amd64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("plan9", "arm", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("solaris", "amd64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("illumos", "amd64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("dragonfly", "amd64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "loong64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "riscv64", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "s390x", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "arm", "", 58163, nil)
-	tryNewMiscCompileForSubrepos("linux", "arm", "-arm5", 58163, nil, "GOARM=5")
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
 	// Then consider subrepos too, so "mobile" can at least be included
@@ -3103,22 +3066,18 @@ func addBuilder(c BuildConfig) {
 	Builders[c.Name] = &c
 }
 
-// tryNewMiscCompileForSubrepos is an intermediate step towards adding a real addMiscCompile TryBot
-// for only subrepos.
+// tryNewMiscCompile is an intermediate step towards adding a real addMiscCompile TryBot.
 //
 // It adds a post-submit-only builder with KnownIssue, GoDeps set to the provided values,
 // and runs on a limited set of branches to get test results without potential disruption
 // for contributors. It can be modified as needed when onboarding a misc-compile builder.
-//
-// TODO(#58163): This function is supposed to be for all repos, but while we set up misc-compile
-// builders for subrepos we first only want to add it as a post-submit builder.
-func tryNewMiscCompileForSubrepos(goos, goarch, extraSuffix string, knownIssue int, goDeps []string, extraEnv ...string) {
+func tryNewMiscCompile(goos, goarch, extraSuffix string, knownIssue int, goDeps []string, extraEnv ...string) {
 	if knownIssue == 0 {
 		panic("tryNewMiscCompile: knownIssue parameter must be non-zero")
 	}
 	platform := goos + "-" + goarch + extraSuffix
 	addBuilder(BuildConfig{
-		Name:         "misc-compile-" + platform + "-subrepo",
+		Name:         "misc-compile-" + platform,
 		HostType:     "host-linux-amd64-bullseye",
 		buildsRepo:   crossCompileBuildSet(goos, goarch),
 		KnownIssues:  []int{knownIssue},
