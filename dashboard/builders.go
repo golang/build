@@ -737,8 +737,16 @@ type BuildConfig struct {
 	tryBot  func(proj, branch, goBranch string) bool
 	tryOnly bool // only used for trybots, and not regular builds
 
-	CompileOnly bool // if true, compile tests, but don't run them
-	FlakyNet    bool // network tests are flaky (try anyway, but ignore some failures)
+	// CompileOnly indicates that tests should only be compiled but not run.
+	// Note that this will not prevent the test binary from running for tests
+	// for the main Go repo, so this flag is insufficient for disabling
+	// tests in a cross-compiled setting. See #58297.
+	CompileOnly bool
+
+	// FlakyNet indicates that network tests are flaky on this builder.
+	// The builder will try to run the tests anyway, but will ignore some of the
+	// failures.
+	FlakyNet bool
 
 	// buildsRepo optionally specifies whether this builder does
 	// builds (of any type) for the given repo ("go", "net", etc.)
@@ -1022,6 +1030,54 @@ func (c *BuildConfig) IsLongTest() bool {
 	return false
 }
 
+// TargetArch returns the build target architecture.
+//
+// It starts from the host arch, then applies any environment
+// variables that would override either GOOS, GOARCH, or GOARM.
+func (c *BuildConfig) TargetArch() string {
+	var goos, goarch, goarm string
+	hostArch := c.HostConfig().HostArch
+	h := strings.Split(hostArch, "-")
+	switch len(h) {
+	case 3:
+		goarm = h[2]
+		fallthrough
+	case 2:
+		goos = h[0]
+		goarch = h[1]
+	default:
+		panic("bad host arch " + hostArch)
+	}
+	for _, v := range c.Env() {
+		if strings.HasPrefix(v, "GOOS=") {
+			goos = v[len("GOOS="):]
+		}
+		if strings.HasPrefix(v, "GOARCH=") {
+			goarch = v[len("GOARCH="):]
+		}
+		if strings.HasPrefix(v, "GOARM=") {
+			goarm = v[len("GOARM="):]
+		}
+	}
+	if goarch == "arm" && goarm == "" {
+		goarm = "7"
+	}
+	targetArch := goos + "-" + goarch
+	if goarm != "" {
+		targetArch += "-" + goarm
+	}
+	return targetArch
+}
+
+// IsCrossCompileOnly indicates that this builder configuration
+// cross-compiles for some platform other than the host, and that
+// it does not run any tests.
+//
+// TODO(#58297): Remove this and make c.CompileOnly sufficient.
+func (c *BuildConfig) IsCrossCompileOnly() bool {
+	return c.TargetArch() != c.HostConfig().HostArch && c.CompileOnly
+}
+
 // OutboundNetworkAllowed reports whether this builder should be
 // allowed to make outbound network requests. This is only enforced
 // on some builders. (Currently most Linux ones)
@@ -1058,7 +1114,7 @@ func (c *BuildConfig) AllScript() string {
 	if strings.HasPrefix(c.Name, "plan9-") {
 		return "src/all.rc"
 	}
-	if strings.HasPrefix(c.Name, "misc-compile") {
+	if c.IsCrossCompileOnly() {
 		return "src/make.bash"
 	}
 	return "src/all.bash"
@@ -1166,8 +1222,8 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 			return false
 		}
 	}
-	if repo != "go" && strings.HasPrefix(c.Name, "misc-compile") {
-		// misc-compile builders are explicitly disabled for subrepo builds for now.
+	if repo != "go" && c.IsCrossCompileOnly() {
+		// Cross-compiling builders are explicitly disabled for subrepo builds for now.
 		return false
 	}
 	if p := c.buildsRepo; p != nil {
@@ -1519,7 +1575,6 @@ func init() {
 			MinimumGoVersion: v,
 			CompileOnly:      true,
 			SkipSnapshot:     true,
-			StopAfterMake:    true,
 			Notes:            "Runs make.bash for " + platform + ", but doesn't run any tests." + alsoNote,
 		})
 	}
@@ -2988,16 +3043,15 @@ func tryNewMiscCompile(goos, goarch, extraSuffix string, knownIssue int, goDeps 
 	}
 	platform := goos + "-" + goarch + extraSuffix
 	addBuilder(BuildConfig{
-		Name:          "misc-compile-" + platform,
-		HostType:      "host-linux-amd64-bullseye",
-		buildsRepo:    func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
-		KnownIssues:   []int{knownIssue},
-		GoDeps:        goDeps,
-		env:           append(extraEnv, "GOOS="+goos, "GOARCH="+goarch, "GO_DISABLE_OUTBOUND_NETWORK=1"),
-		CompileOnly:   true,
-		SkipSnapshot:  true,
-		StopAfterMake: true,
-		Notes:         fmt.Sprintf("Tries make.bash for "+platform+" See go.dev/issue/%d.", knownIssue),
+		Name:         "misc-compile-" + platform,
+		HostType:     "host-linux-amd64-bullseye",
+		buildsRepo:   func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
+		KnownIssues:  []int{knownIssue},
+		GoDeps:       goDeps,
+		env:          append(extraEnv, "GOOS="+goos, "GOARCH="+goarch, "GO_DISABLE_OUTBOUND_NETWORK=1"),
+		CompileOnly:  true,
+		SkipSnapshot: true,
+		Notes:        fmt.Sprintf("Tries make.bash for "+platform+" See go.dev/issue/%d.", knownIssue),
 	})
 }
 

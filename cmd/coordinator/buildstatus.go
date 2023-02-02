@@ -638,7 +638,10 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		remoteErr, err = st.runBenchmarkTests()
 	} else if st.IsSubrepo() {
 		remoteErr, err = st.runSubrepoTests()
-	} else {
+	} else if !st.conf.IsCrossCompileOnly() {
+		// Only run platform tests if we're not cross-compiling.
+		// dist can't actually build test packages without running them yet.
+		// See #58297.
 		remoteErr, err = st.runTests(st.getHelpers())
 	}
 

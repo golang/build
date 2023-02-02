@@ -886,6 +886,18 @@ func TestSlowBotAliases(t *testing.T) {
 	}
 }
 
+// TestCrossCompileOnlyBuilders checks to make sure that only misc-compile
+// builders and the linux-s390x-crosscompile builder have IsCrossCompileOnly
+// return true.
+func TestCrossCompileOnlyBuilders(t *testing.T) {
+	for _, conf := range Builders {
+		isMiscCompile := strings.HasPrefix(conf.Name, "misc-compile") || conf.Name == "linux-s390x-crosscompile"
+		if ccOnly := conf.IsCrossCompileOnly(); isMiscCompile != ccOnly {
+			t.Errorf("builder %q has unexpected IsCrossCompileOnly state (want %t, got %t)", conf.Name, isMiscCompile, ccOnly)
+		}
+	}
+}
+
 // TestTryBotsCompileAllPorts verifies that each port (go tool dist list)
 // is covered by either a real TryBot or a misc-compile TryBot.
 //
