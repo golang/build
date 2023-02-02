@@ -441,6 +441,8 @@ func tgzToMap(r io.Reader) (map[string]string, error) {
 	return result, nil
 }
 
+// LatestGoBinaries returns a URL to the latest linux/amd64
+// Go distribution archive using the go.dev/dl/ JSON API.
 func LatestGoBinaries(ctx context.Context) (string, error) {
 	resp, err := ctxhttp.Get(ctx, http.DefaultClient, "https://go.dev/dl/?mode=json")
 	if err != nil {

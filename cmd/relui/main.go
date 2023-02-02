@@ -193,9 +193,11 @@ func main() {
 		ApproveAction: relui.ApproveActionDep(dbPool),
 	}
 	versionTasks := &task.VersionTasks{
-		Gerrit:         gerritClient,
-		GoProject:      "go",
-		CreateBuildlet: coordinator.CreateBuildlet,
+		Gerrit:           gerritClient,
+		GerritURL:        "https://go.googlesource.com",
+		GoProject:        "go",
+		CreateBuildlet:   coordinator.CreateBuildlet,
+		LatestGoBinaries: task.LatestGoBinaries,
 	}
 	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, commTasks); err != nil {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)

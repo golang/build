@@ -256,6 +256,18 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		h.RegisterDefinition("pre-announce "+r.name, wd)
 	}
 
+	// Register a one-off "update stdlib index CL"-only workflow for Go 1.20.
+	// See go.dev/issue/58227 and go.dev/issue/58228 for context on why this is needed.
+	{
+		wd := wf.New()
+
+		coordinators := wf.Param(wd, releaseCoordinators)
+		updateStdlibIndexCL := wf.Task2(wd, "Mail update stdlib index CL for 1.20", version.CreateUpdateStdlibIndexCL, coordinators, wf.Const("go1.20"))
+		wf.Output(wd, "Stdlib regeneration CL", updateStdlibIndexCL)
+
+		h.RegisterDefinition("Mail CL to regenerate x/tools/internal/imports after 1.20 release", wd)
+	}
+
 	// Register dry-run release workflows.
 	registerBuildTestSignOnlyWorkflow(h, version, build, currentMajor+1, task.KindBeta)
 
@@ -395,7 +407,7 @@ func addSingleReleaseWorkflow(
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
 	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, pushed))
 	if kind == task.KindMajor {
-		updateStdlibIndexCL := wf.Task3(wd, fmt.Sprintf("Mail update stdlib index CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, wf.Const("master"), coordinators, versionPublished)
+		updateStdlibIndexCL := wf.Task2(wd, fmt.Sprintf("Mail update stdlib index CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, versionPublished)
 		wf.Output(wd, "Stdlib regeneration CL", updateStdlibIndexCL)
 	}
 	wf.Output(wd, "Released version", versionPublished)

@@ -143,7 +143,7 @@ func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit str
 	return t.Gerrit.Tag(ctx, t.GoProject, version, commit)
 }
 
-func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, branch string, reviewers []string, version string) (string, error) {
+func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, reviewers []string, version string) (string, error) {
 	var files = make(map[string]string) // Map key is relative path, and map value is file content.
 
 	binaries, err := t.LatestGoBinaries(ctx)
@@ -186,13 +186,9 @@ func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, bran
 	}
 	files["internal/imports/zstdlib.go"] = tools["zstdlib.go"]
 
-	major, err := t.GetCurrentMajor(ctx)
-	if err != nil {
-		return "", err
-	}
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",
-		Subject: fmt.Sprintf("internal/imports: update stdlib index for %v", major),
+		Subject: fmt.Sprintf("internal/imports: update stdlib index for %s\n\nFor golang/go#38706.", strings.Replace(version, "go", "Go ", 1)),
 		Branch:  "master",
 	}
 	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
