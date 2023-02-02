@@ -256,18 +256,6 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		h.RegisterDefinition("pre-announce "+r.name, wd)
 	}
 
-	// Register a one-off "update stdlib index CL"-only workflow for Go 1.20.
-	// See go.dev/issue/58227 and go.dev/issue/58228 for context on why this is needed.
-	{
-		wd := wf.New()
-
-		coordinators := wf.Param(wd, releaseCoordinators)
-		updateStdlibIndexCL := wf.Task2(wd, "Mail update stdlib index CL for 1.20", version.CreateUpdateStdlibIndexCL, coordinators, wf.Const("go1.20"))
-		wf.Output(wd, "Stdlib regeneration CL", updateStdlibIndexCL)
-
-		h.RegisterDefinition("Mail CL to regenerate x/tools/internal/imports after 1.20 release", wd)
-	}
-
 	// Register dry-run release workflows.
 	registerBuildTestSignOnlyWorkflow(h, version, build, currentMajor+1, task.KindBeta)
 
@@ -387,7 +375,7 @@ func addSingleReleaseWorkflow(
 	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
 
 	dlcl := wf.Task3(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
-	dlclCommit := wf.Task2(wd, "Wait for DL CL", version.AwaitCL, dlcl, wf.Const(""))
+	dlclCommit := wf.Task2(wd, "Wait for DL CL submission", version.AwaitCL, dlcl, wf.Const(""))
 	wf.Output(wd, "Download CL submitted", dlclCommit)
 
 	// Tag version and upload to CDN/website.
@@ -407,8 +395,9 @@ func addSingleReleaseWorkflow(
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
 	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, pushed))
 	if kind == task.KindMajor {
-		updateStdlibIndexCL := wf.Task2(wd, fmt.Sprintf("Mail update stdlib index CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, versionPublished)
-		wf.Output(wd, "Stdlib regeneration CL", updateStdlibIndexCL)
+		goimportsCL := wf.Task2(wd, fmt.Sprintf("Mail goimports CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, versionPublished)
+		goimportsCommit := wf.Task2(wd, "Wait for goimports CL submission", version.AwaitCL, goimportsCL, wf.Const(""))
+		wf.Output(wd, "goimports CL submitted", goimportsCommit)
 	}
 	wf.Output(wd, "Released version", versionPublished)
 	return versionPublished
