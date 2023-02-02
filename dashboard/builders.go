@@ -788,8 +788,7 @@ type BuildConfig struct {
 	// script completes, returning its result as the result of the
 	// whole build. It does not run or compile any of the tests,
 	// nor does it write a snapshot of the world to cloud
-	// storage. This option is only supported for builders whose
-	// BuildConfig.SplitMakeRun returns true.
+	// storage.
 	StopAfterMake bool
 
 	// needsGoProxy is whether this builder should have GOPROXY set.
@@ -1060,28 +1059,9 @@ func (c *BuildConfig) AllScript() string {
 		return "src/all.rc"
 	}
 	if strings.HasPrefix(c.Name, "misc-compile") {
-		return "src/buildall.bash"
+		return "src/make.bash"
 	}
 	return "src/all.bash"
-}
-
-// SplitMakeRun reports whether the coordinator should first compile
-// (using c.MakeScript), then snapshot, then run the tests (ideally
-// sharded) using cmd/dist test.
-// Eventually this function should always return true (and then be deleted)
-// but for now we've only set up the scripts and verified that the main
-// configurations work.
-func (c *BuildConfig) SplitMakeRun() bool {
-	switch c.AllScript() {
-	case "src/all.bash", "src/all.bat",
-		"src/race.bash", "src/race.bat",
-		"src/all.rc":
-		// These we've verified to work.
-		return true
-	}
-	// TODO(bradfitz): buildall.bash should really just be N small container
-	// jobs instead of a "buildall.bash". Then we can delete this whole method.
-	return false
 }
 
 func (c *BuildConfig) IsTryOnly() bool { return c.tryOnly }
@@ -1186,7 +1166,8 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 			return false
 		}
 	}
-	if repo != "go" && !c.SplitMakeRun() {
+	if repo != "go" && strings.HasPrefix(c.Name, "misc-compile") {
+		// misc-compile builders are explicitly disabled for subrepo builds for now.
 		return false
 	}
 	if p := c.buildsRepo; p != nil {
@@ -1528,18 +1509,6 @@ func init() {
 			v = types.MajorMinor{Major: 1, Minor: min}
 			alsoNote = fmt.Sprintf(" Applies to Go 1.%d and newer.", min)
 		}
-		// As an extra special case, add -arm5 to buildall.bash's filtering pattern for
-		// the linux-arm-arm5 case. buildall.bash treats this case specially and it explicitly
-		// unsets GOARM, so we can't just tell it what to do that way. For now, just do what
-		// it wants, but continue to pass GOARM for this case so that we can change buildall.bash
-		// safely.
-		//
-		// TODO(mknyszek): Fix buildall.bash to not explicitly unset GOARM. Consider rewriting it
-		// to better fit this new platform-per-builder model (which should simplify it a good bit).
-		filterSuffix := ""
-		if extraSuffix == "-arm5" {
-			filterSuffix = extraSuffix
-		}
 		platform := goos + "-" + goarch + extraSuffix
 		addBuilder(BuildConfig{
 			Name:             "misc-compile-" + platform,
@@ -1549,11 +1518,9 @@ func init() {
 			tryOnly:          true,
 			MinimumGoVersion: v,
 			CompileOnly:      true,
-			Notes:            "Runs buildall.bash to cross-compile & vet std+cmd packages (or runs 'go test -c' for subrepos) for " + platform + ", but doesn't run any tests." + alsoNote,
-			allScriptArgs: []string{
-				// Filtering pattern to buildall.bash:
-				"^(" + goos + "-" + goarch + filterSuffix + ")$",
-			},
+			SkipSnapshot:     true,
+			StopAfterMake:    true,
+			Notes:            "Runs make.bash for " + platform + ", but doesn't run any tests." + alsoNote,
 		})
 	}
 	// addMiscCompile adds a misc-compile TryBot
@@ -3019,32 +2986,18 @@ func tryNewMiscCompile(goos, goarch, extraSuffix string, knownIssue int, goDeps 
 	if knownIssue == 0 {
 		panic("tryNewMiscCompile: knownIssue parameter must be non-zero")
 	}
-	// As an extra special case, add -arm5 to buildall.bash's filtering pattern for
-	// the linux-arm-arm5 case. buildall.bash treats this case specially and it explicitly
-	// unsets GOARM, so we can't just tell it what to do that way. For now, just do what
-	// it wants, but continue to pass GOARM for this case so that we can change buildall.bash
-	// safely.
-	//
-	// TODO(mknyszek): Fix buildall.bash to not explicitly unset GOARM. Consider rewriting it
-	// to better fit this new platform-per-builder model (which should simplify it a good bit).
-	filterSuffix := ""
-	if extraSuffix == "-arm5" {
-		filterSuffix = extraSuffix
-	}
 	platform := goos + "-" + goarch + extraSuffix
 	addBuilder(BuildConfig{
-		Name:        "misc-compile" + platform,
-		HostType:    "host-linux-amd64-bullseye",
-		buildsRepo:  func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
-		KnownIssues: []int{knownIssue},
-		GoDeps:      goDeps,
-		env:         append(extraEnv, "GOOS="+goos, "GOARCH="+goarch, "GO_DISABLE_OUTBOUND_NETWORK=1"),
-		CompileOnly: true,
-		Notes:       fmt.Sprintf("Tries buildall.bash to cross-compile & vet std+cmd packages for "+platform+", but doesn't run any tests. See go.dev/issue/%d.", knownIssue),
-		allScriptArgs: []string{
-			// Filtering pattern to buildall.bash:
-			"^(" + goos + "-" + goarch + filterSuffix + ")$",
-		},
+		Name:          "misc-compile-" + platform,
+		HostType:      "host-linux-amd64-bullseye",
+		buildsRepo:    func(repo, branch, goBranch string) bool { return repo == "go" && branch == "master" },
+		KnownIssues:   []int{knownIssue},
+		GoDeps:        goDeps,
+		env:           append(extraEnv, "GOOS="+goos, "GOARCH="+goarch, "GO_DISABLE_OUTBOUND_NETWORK=1"),
+		CompileOnly:   true,
+		SkipSnapshot:  true,
+		StopAfterMake: true,
+		Notes:         fmt.Sprintf("Tries make.bash for "+platform+" See go.dev/issue/%d.", knownIssue),
 	})
 }
 

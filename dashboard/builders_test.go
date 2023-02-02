@@ -933,12 +933,23 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 			}
 
 			if strings.HasPrefix(conf.Name, "misc-compile-") {
-				re, err := regexp.Compile(conf.allScriptArgs[0])
-				if err != nil {
-					t.Fatalf("invalid misc-compile filtering pattern for builder %q: %q",
-						conf.Name, conf.allScriptArgs[0])
+				var cGoos, cGoarch string
+				for _, v := range conf.env {
+					if strings.HasPrefix(v, "GOOS=") {
+						cGoos = v[len("GOOS="):]
+					}
+					if strings.HasPrefix(v, "GOARCH=") {
+						cGoarch = v[len("GOARCH="):]
+					}
 				}
-				if re.MatchString(goosArch) {
+				if cGoos == "" {
+					t.Errorf("missing GOOS env var for misc-compile builder %q", conf.Name)
+				}
+				if cGoarch == "" {
+					t.Errorf("missing GOARCH env var for misc-compile builder %q", conf.Name)
+				}
+				cGoosArch := cGoos + "-" + cGoarch
+				if goosArch == cGoosArch {
 					// There's a misc-compile TryBot for this GOOS/GOARCH pair.
 					done[goosArch] = true
 					break
@@ -968,35 +979,34 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 // the TestTryBotsCompileAllPorts wouldn't report if the misc-compile
 // TryBot that covers is is accidentally removed. Check it explicitly.
 func TestMiscCompileLinuxGOARM5(t *testing.T) {
-	var ok bool
 	for _, b := range Builders {
 		if !strings.HasPrefix(b.Name, "misc-compile-") {
 			continue
 		}
-		re, err := regexp.Compile(b.allScriptArgs[0])
-		if err != nil {
-			t.Fatalf("invalid misc-compile filtering pattern for builder %q: %q",
-				b.Name, b.allScriptArgs[0])
-		}
-		if !re.MatchString("linux-arm-arm5") {
-			continue
-		}
+		var hasGOOS, hasGOARCH, hasGOARM bool
 		for _, v := range b.env {
+			if v == "GOOS=linux" {
+				hasGOOS = true
+				continue
+			}
+			if v == "GOARCH=arm" {
+				hasGOARCH = true
+				continue
+			}
 			if v == "GOARM=5" {
-				ok = true
-				break
+				hasGOARM = true
+				continue
 			}
 		}
-		if ok {
-			break
+		if hasGOOS && hasGOARCH && hasGOARM {
+			// Found it. Nothing left to do.
+			return
 		}
 	}
-	if !ok {
-		// We get here if the linux-arm-arm5 port is no longer checked by
-		// a misc-compile TryBot. Report it as a failure in case the coverage
-		// was removed accidentally (e.g., as part of a refactor).
-		t.Errorf("no misc-compile TryBot coverage for the special 'linux-arm-arm5' pseudo-port")
-	}
+	// We get here if the linux-arm-arm5 port is no longer checked by
+	// a misc-compile TryBot. Report it as a failure in case the coverage
+	// was removed accidentally (e.g., as part of a refactor).
+	t.Errorf("no misc-compile TryBot coverage for the special 'linux-arm-arm5' pseudo-port")
 }
 
 // Test that we have longtest builders and

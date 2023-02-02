@@ -292,8 +292,7 @@ func (st *buildStatus) onceInitHelpersFunc() {
 }
 
 // useSnapshot reports whether this type of build uses a snapshot of
-// make.bash if it exists (anything can SplitMakeRun) and that the
-// snapshot exists.
+// make.bash if it exists and that the snapshot exists.
 func (st *buildStatus) useSnapshot() bool {
 	return st.useSnapshotFor(st.Rev)
 }
@@ -309,7 +308,7 @@ func (st *buildStatus) useSnapshotFor(rev string) bool {
 	}
 	br := st.BuilderRev
 	br.Rev = rev
-	b := st.conf.SplitMakeRun() && br.SnapshotExists(context.TODO(), pool.NewGCEConfiguration().BuildEnv())
+	b := br.SnapshotExists(context.TODO(), pool.NewGCEConfiguration().BuildEnv())
 	if st.useSnapshotMemo == nil {
 		st.useSnapshotMemo = make(map[string]bool)
 	}
@@ -444,12 +443,7 @@ func (st *buildStatus) build() error {
 
 	makeTest := st.CreateSpan("make_and_test") // warning: magic event named used by handleLogs
 
-	var remoteErr error
-	if st.conf.SplitMakeRun() {
-		remoteErr, err = st.runAllSharded()
-	} else {
-		remoteErr, err = st.runAllLegacy()
-	}
+	remoteErr, err := st.runAllSharded()
 	makeTest.Done(err)
 
 	// bc (aka st.bc) may be invalid past this point, so let's
@@ -658,32 +652,6 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	if remoteErr != nil {
 		return fmt.Errorf("tests failed: %v", remoteErr), nil
 	}
-	return nil, nil
-}
-
-// runAllLegacy executes all.bash (or .bat, or whatever) in the traditional way.
-// remoteErr and err are as described at the top of this file.
-//
-// TODO(bradfitz,adg): delete this function when all builders
-// can split make & run (and then delete the SplitMakeRun method)
-func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
-	allScript := st.conf.AllScript()
-	sp := st.CreateSpan("legacy_all_path", allScript)
-	remoteErr, err = st.bc.Exec(st.ctx, "./go/"+allScript, buildlet.ExecOpts{
-		Output:   st,
-		ExtraEnv: st.conf.Env(),
-		Debug:    true,
-		Args:     st.conf.AllScriptArgs(),
-	})
-	if err != nil {
-		sp.Done(err)
-		return nil, err
-	}
-	if remoteErr != nil {
-		sp.Done(err)
-		return fmt.Errorf("all script failed: %v", remoteErr), nil
-	}
-	sp.Done(nil)
 	return nil, nil
 }
 
@@ -1494,9 +1462,7 @@ func (st *buildStatus) fetchSubrepoAndBaseline(repoDir, baselineDir string) (bas
 
 var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")
 
-// runTests is only called for builders which support a split make/run
-// (should be everything, at least soon). Currently (2015-05-27) iOS
-// and Android do not.
+// runTests runs tests for the main Go repo.
 //
 // After runTests completes, the caller must assume that st.bc might be invalid
 // (It's possible that only one of the helper buildlets survived).
