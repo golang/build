@@ -2612,7 +2612,6 @@ func init() {
 			"GOHOSTOS=linux",
 			"CGO_ENABLED=1",
 		},
-		KnownIssues: []int{42212, 51001, 52724},
 	})
 	addBuilder(BuildConfig{
 		Name:              "android-amd64-emu",
@@ -2644,18 +2643,16 @@ func init() {
 			"GOHOSTOS=linux",
 			"CGO_ENABLED=1",
 		},
-		KnownIssues: []int{42212, 51001, 52724},
 	})
 	addBuilder(BuildConfig{
 		Name:     "illumos-amd64",
 		HostType: "host-illumos-amd64-jclulow",
 	})
 	addBuilder(BuildConfig{
-		Name:        "solaris-amd64-oraclerel",
-		HostType:    "host-solaris-oracle-amd64-oraclerel",
-		Notes:       "Oracle Solaris release version",
-		FlakyNet:    true,
-		KnownIssues: []int{51443},
+		Name:     "solaris-amd64-oraclerel",
+		HostType: "host-solaris-oracle-amd64-oraclerel",
+		Notes:    "Oracle Solaris release version",
+		FlakyNet: true,
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64-sid-buildlet",
@@ -2768,7 +2765,6 @@ func init() {
 			"GOARCH=loong64",
 			"GOHOSTARCH=loong64",
 		},
-		KnownIssues: []int{53116, 53093},
 	})
 	addBuilder(BuildConfig{
 		FlakyNet:       true,
@@ -3023,7 +3019,6 @@ func init() {
 		},
 		RunBench:     true,
 		SkipSnapshot: true,
-		KnownIssues:  []int{53538},
 	})
 }
 
