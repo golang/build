@@ -208,7 +208,7 @@ func main() {
 	}
 
 	// Set up and clean $TMPDIR and $GOCACHE directories.
-	if runtime.GOOS != "windows" && runtime.GOOS != "plan9" {
+	if runtime.GOOS != "plan9" { // go.dev/cl/207283 seems to indicate plan9 should work, but someone needs to test it.
 		processTmpDirEnv = filepath.Join(*workDir, "tmp")
 		processGoCacheEnv = filepath.Join(*workDir, "gocache")
 		removeAllAndMkdir(processTmpDirEnv)
@@ -1863,8 +1863,7 @@ func removeAllAndMkdir(dir string) {
 // when deleting.
 func removeAllIncludingReadonly(dir string) error {
 	err := os.RemoveAll(dir)
-	if err == nil || !os.IsPermission(err) ||
-		runtime.GOOS == "windows" { // different filesystem permission model; also our windows builders are ephemeral single-use VMs anyway
+	if err == nil || !os.IsPermission(err) {
 		return err
 	}
 	// Make a best effort (ignoring errors) attempt to make all
