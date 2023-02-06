@@ -2754,7 +2754,7 @@ func init() {
 			switch repo {
 			case "go":
 				return atLeastGo1(goBranch, 19)
-			case "net", "sys":
+			case "arch", "net", "sys":
 				return branch == "master" && atLeastGo1(goBranch, 19)
 			default:
 				return false
