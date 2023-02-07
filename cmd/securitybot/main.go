@@ -16,9 +16,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"strings"
 	"sync"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -514,7 +516,24 @@ var firstClassBuilders = []string{
 
 func main() {
 	flag.Parse()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// When kubernetes attempts to kill a workload (i.e. during a restart or
+	// rollout) it sends a SIGTERM, followed by a SIGKILL after a specified
+	// timeout. In order to cleanly shutdown the service, as well as destroying
+	// any created buildlets etc, cancel the global context we pass around,
+	// which should cascade down.
+	sigtermChan := make(chan os.Signal, 1)
+	signal.Notify(sigtermChan, syscall.SIGTERM)
+	go func() {
+		<-sigtermChan
+		// Cancelling the context should cause the program to exit, either via
+		// a error leading to a log.Fatalf, or the select loop hitting ctx.Done.
+		// TODO(roland): we may want to make the shutdown somewhat more graceful,
+		// perhaps commenting that the current run was aborted if we are in the
+		// middle of one, but for now just exiting cleanly is better than nothing.
+		cancel()
+	}()
 
 	creds, err := google.FindDefaultCredentials(ctx, gerrit.OAuth2Scopes...)
 	if err != nil {
@@ -567,8 +586,13 @@ func main() {
 		}
 	} else {
 		ticker := time.NewTicker(time.Minute)
-		for range ticker.C {
-			changes, err := t.findChanges(context.Background())
+		for {
+			select {
+			case <-ticker.C:
+			case <-ctx.Done():
+				return
+			}
+			changes, err := t.findChanges(ctx)
 			if err != nil {
 				log.Fatalf("findChanges failed: %v", err)
 			}
@@ -576,14 +600,14 @@ func main() {
 
 			for _, change := range changes {
 				log.Printf("testing CL %d patchset %d (%s)", change.ChangeNumber, change.Revisions[change.CurrentRevision].PatchSetNumber, change.CurrentRevision)
-				if err := t.commentBeginning(context.Background(), change); err != nil {
+				if err := t.commentBeginning(ctx, change); err != nil {
 					log.Fatalf("commentBeginning failed: %v", err)
 				}
 				results, err := t.run(ctx, change.CurrentRevision, change.Branch, builders)
 				if err != nil {
 					log.Fatalf("run failed: %v", err)
 				}
-				if err := t.commentResults(context.Background(), change, results); err != nil {
+				if err := t.commentResults(ctx, change, results); err != nil {
 					log.Fatalf("commentResults failed: %v", err)
 				}
 			}
