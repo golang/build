@@ -21,9 +21,18 @@ type VersionTasks struct {
 	LatestGoBinaries func(context.Context) (string, error)
 }
 
-func (t *VersionTasks) GetCurrentMajor(ctx context.Context) (int, error) {
+// GetCurrentMajor returns the most recent major Go version, and the time at
+// which its tag was created.
+func (t *VersionTasks) GetCurrentMajor(ctx context.Context) (int, time.Time, error) {
 	_, currentMajor, err := t.tagInfo(ctx)
-	return currentMajor, err
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	info, err := t.Gerrit.GetTag(ctx, t.GoProject, fmt.Sprintf("go1.%d", currentMajor))
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	return currentMajor, info.Created.Time(), nil
 }
 
 func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, currentMajor int, _ error) {

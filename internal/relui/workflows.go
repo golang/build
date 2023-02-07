@@ -230,7 +230,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 	}
 
 	// Register pre-announcement workflows.
-	currentMajor, err := version.GetCurrentMajor(ctx)
+	currentMajor, _, err := version.GetCurrentMajor(ctx)
 	if err != nil {
 		return err
 	}
@@ -263,20 +263,24 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 }
 
 func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
-	currentMajor, err := version.GetCurrentMajor(ctx)
+	currentMajor, majorReleaseTime, err := version.GetCurrentMajor(ctx)
 	if err != nil {
 		return err
 	}
-	releases := []struct {
+	type release struct {
 		kind   task.ReleaseKind
 		major  int
 		suffix string
-	}{
+	}
+	releases := []release{
 		{task.KindMajor, currentMajor + 1, "final"},
 		{task.KindRC, currentMajor + 1, "next RC"},
 		{task.KindBeta, currentMajor + 1, "next beta"},
 		{task.KindCurrentMinor, currentMajor, "next minor"},
 		{task.KindPrevMinor, currentMajor - 1, "next minor"},
+	}
+	if time.Since(majorReleaseTime) < 7*24*time.Hour {
+		releases = append(releases, release{task.KindMajor, currentMajor, "final"})
 	}
 	for _, r := range releases {
 		wd := wf.New()
