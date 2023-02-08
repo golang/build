@@ -929,7 +929,7 @@ func (b *gopherbot) pingEarlyIssues(ctx context.Context) error {
 	// for general Go 1.x development. Update the openTreeURLs map appropriately when
 	// running this task.
 	openTreeURLs := map[string]string{
-		"1.20": "https://groups.google.com/g/golang-dev/c/CI6o6CT0DtY/m/4Z0QoB_IAAAJ",
+		"1.21": "https://groups.google.com/g/golang-dev/c/09IwUs7cxXA/m/_JHOzNjXBAAJ",
 	}
 	if url, ok := openTreeURLs[nextMajor]; !ok {
 		return fmt.Errorf("openTreeURLs[%q] is missing a value, please fill it in", nextMajor)
