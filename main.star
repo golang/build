@@ -98,89 +98,55 @@ luci.list_view(
     title = "Production builders",
 )
 
-luci.builder(
-    name = "Example Builder",
-    bucket = "ci",
-    executable = luci.recipe(
-        # The name of the recipe we just added.
-        name = "hello_world",
-    ),
-    service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-    schedule = "with 1m interval",
-)
+PORTS = {
+    "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
+    "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
+}
 
-# A console for CI builders.
-luci.console_view(
-    name = "go-master-ci",
-    repo = "https://go.googlesource.com/go",
-    title = "master",
-    refs = ["refs/heads/master"],
-    entries = [
-        luci.console_view_entry(
-            builder = "linux-amd64-master",
-            category = "linux",
-        ),
-    ],
-)
+BRANCHES = {
+    "master":"master",
+    "go1.20":"release-branch.go1.20",
+}
 
-# A console for CI builders.
-luci.console_view(
-    name = "go-release-1-20-ci",
-    repo = "https://go.googlesource.com/go",
-    title = "release-branch.go1.20",
-    refs = ["refs/heads/release-branch.go1.20"],
-    entries = [
-        luci.console_view_entry(
-            builder = "linux-amd64-go1.20",
-            category = "linux",
-        ),
-    ],
-)
+def _define_go_ci():
+    for branchname, ref in BRANCHES.items():
+        builders = []
+        for port, dimensions in PORTS.items():
+            name = "%s-%s" %(port, branchname)
+            luci.builder(
+                name = name,
+                bucket = "ci",
+                executable = luci.executable(
+                    name = "golangbuild",
+                    cipd_package = "infra/experimental/golangbuild/${platform}",
+                    cipd_version = "latest",
+                    cmd = ["golangbuild"],
+                ),
+                dimensions = dimensions,
+                properties = {
+                    "project": "go",
+                },
+                service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+            )
+            builders.append(name)
+        luci.gitiles_poller(
+            name = "go-%s-trigger" % branchname,
+            bucket = "ci",
+            repo = "https://go.googlesource.com/go",
+            refs = ["refs/heads/" + ref],
+            triggers = builders,
+        )
+        luci.console_view(
+            name = "go-%s-ci" % branchname,
+            repo = "https://go.googlesource.com/go",
+            title = branchname,
+            refs = ["refs/heads/" + ref],
+            entries = [
+                luci.console_view_entry(builder = builder, category = builder.split('-')[0])
+                for builder in builders
+            ],
+        )
 
-def _define_linux_amd64_builder(go_branch):
-    """Defines a standard linux-amd64 builder
-
-    Args:
-      go_branch: string, name of the Go branch the builder will build.
-    """
-    luci.builder(
-        name = 'linux-amd64-%s' % (go_branch),
-        bucket = "ci",
-        executable = luci.executable(
-            name = "golangbuild",
-            cipd_package = "infra/experimental/golangbuild/${platform}",
-            cipd_version = "latest",
-            cmd = ["golangbuild"],
-        ),
-        dimensions = {
-            "os": "Linux",
-            "cpu": "x86-64",
-        },
-        properties = {
-            "project": "go",
-        },
-        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-    )
-
-_define_linux_amd64_builder("master")
-_define_linux_amd64_builder("go1.20")
-
-# Poller for the 'master' branch for the main Go repository.
-luci.gitiles_poller(
-    name = "go-master-trigger",
-    bucket = "ci",
-    repo = "https://go.googlesource.com/go",
-    refs = ["refs/heads/master"],
-    triggers = ["linux-amd64-master"],
-)
-
-# Poller for the 'release-branch.go1.20' branch for the main Go repository.
-luci.gitiles_poller(
-    name = "go-release-1-20-trigger",
-    bucket = "ci",
-    repo = "https://go.googlesource.com/go",
-    refs = ["refs/heads/release-branch.go1.20"],
-    triggers = ["linux-amd64-go1.20"],
-)
+_define_go_ci()
 
 exec("./recipes.star")
