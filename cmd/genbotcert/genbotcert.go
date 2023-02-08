@@ -13,15 +13,25 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"flag"
 	"fmt"
-	"io/ioutil"
+	"log"
 	"os"
 )
 
 func main() {
-	if err := doMain(os.Args[1]); err != nil {
-		fmt.Fprintf(os.Stderr, "fatal error: %v", err)
-		os.Exit(1)
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: genbotcert <bot-hostname>")
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+	if flag.NArg() != 1 {
+		flag.Usage()
+		os.Exit(2)
+	}
+
+	if err := doMain(flag.Arg(0)); err != nil {
+		log.Fatalln(err)
 	}
 }
 
@@ -37,13 +47,12 @@ func doMain(cn string) error {
 			Bytes: x509.MarshalPKCS1PrivateKey(key),
 		},
 	)
-
-	if err := ioutil.WriteFile(cn+".key", privPem, 0600); err != nil {
+	if err := os.WriteFile(cn+".key", privPem, 0600); err != nil {
 		return err
 	}
 
 	subj := pkix.Name{
-		CommonName:   os.Args[1] + ".bots.golang.org",
+		CommonName:   cn + ".bots.golang.org",
 		Organization: []string{"Google"},
 	}
 
@@ -58,7 +67,7 @@ func doMain(cn string) error {
 		return err
 	}
 	csrPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrBytes})
-	if err := ioutil.WriteFile(cn+".csr", csrPem, 0644); err != nil {
+	if err := os.WriteFile(cn+".csr", csrPem, 0600); err != nil {
 		return err
 	}
 
