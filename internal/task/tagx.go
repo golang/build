@@ -529,7 +529,7 @@ func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit str
 		if err != nil {
 			return "", false, fmt.Errorf("parsing date of rev %#v: %v", rev, err)
 		}
-		if i == 200 || (rev.Revision != firstRev && ts.Add(7*24*time.Hour).Before(time.Now())) {
+		if i == 200 || (rev.Revision != firstRev && ts.Add(6*7*24*time.Hour).Before(time.Now())) {
 			repoStatus.Revisions = repoStatus.Revisions[:i]
 			break
 		}
