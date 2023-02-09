@@ -57,6 +57,10 @@ luci.project(
             roles = acl.PROJECT_CONFIGS_READER,
             groups = "googlers",
         ),
+        acl.entry(
+            roles = acl.CQ_COMMITTER,
+            groups = "mdb/golang-luci-admin",
+        ),
     ],
 )
 
@@ -108,27 +112,41 @@ BRANCHES = {
     "go1.20":"release-branch.go1.20",
 }
 
+luci.cq_group(
+    name = "go_repo",
+    watch = cq.refset(
+        repo = "https://go.googlesource.com/go",
+        refs = ["refs/heads/%s" % branch for branch in BRANCHES.values()]
+    ),
+    allow_submit_with_open_deps = True,
+)
+
 def _define_go_ci():
     for branchname, ref in BRANCHES.items():
         builders = []
         for port, dimensions in PORTS.items():
-            name = "%s-%s" %(port, branchname)
-            luci.builder(
-                name = name,
-                bucket = "ci",
-                executable = luci.executable(
-                    name = "golangbuild",
-                    cipd_package = "infra/experimental/golangbuild/${platform}",
-                    cipd_version = "latest",
-                    cmd = ["golangbuild"],
-                ),
-                dimensions = dimensions,
-                properties = {
-                    "project": "go",
-                },
-                service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+            for bucket in ["ci", "try"]:
+                name = "%s-%s" %(port, branchname)
+                luci.builder(
+                    name = name,
+                    bucket = bucket,
+                    executable = luci.executable(
+                        name = "golangbuild",
+                        cipd_package = "infra/experimental/golangbuild/${platform}",
+                        cipd_version = "latest",
+                        cmd = ["golangbuild"],
+                    ),
+                    dimensions = dimensions,
+                    properties = {
+                        "project": "go",
+                    },
+                    service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+                )
+            builders.append("ci/%s" % name)
+            luci.cq_tryjob_verifier(
+                builder = "try/%s" % name,
+                cq_group = "go_repo",
             )
-            builders.append(name)
         luci.gitiles_poller(
             name = "go-%s-trigger" % branchname,
             bucket = "ci",
