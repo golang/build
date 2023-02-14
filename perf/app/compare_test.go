@@ -5,6 +5,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,6 @@ import (
 	"testing"
 
 	"golang.org/x/build/perfdata"
-	"golang.org/x/net/context"
 	"golang.org/x/perf/storage/benchfmt"
 )
 

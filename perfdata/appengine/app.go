@@ -6,6 +6,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -18,7 +19,6 @@ import (
 	"golang.org/x/build/perfdata/app"
 	"golang.org/x/build/perfdata/db"
 	"golang.org/x/build/perfdata/fs/gcs"
-	"golang.org/x/net/context"
 	oauth2 "google.golang.org/api/oauth2/v2"
 	"google.golang.org/appengine"
 	aelog "google.golang.org/appengine/log"

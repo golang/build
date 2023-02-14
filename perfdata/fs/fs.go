@@ -7,12 +7,11 @@
 package fs
 
 import (
+	"context"
 	"errors"
 	"io"
 	"sort"
 	"sync"
-
-	"golang.org/x/net/context"
 )
 
 // An FS stores uploaded benchmark data files.

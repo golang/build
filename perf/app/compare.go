@@ -5,6 +5,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 	"github.com/google/safehtml"
 	"github.com/google/safehtml/template"
 	"golang.org/x/build/perfdata/query"
-	"golang.org/x/net/context"
 	"golang.org/x/perf/benchstat"
 	"golang.org/x/perf/storage/benchfmt"
 )

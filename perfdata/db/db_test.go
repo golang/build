@@ -9,6 +9,7 @@ package db_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -20,7 +21,6 @@ import (
 	"golang.org/x/build/internal/diff"
 	. "golang.org/x/build/perfdata/db"
 	"golang.org/x/build/perfdata/db/dbtest"
-	"golang.org/x/net/context"
 	"golang.org/x/perf/storage/benchfmt"
 )
 

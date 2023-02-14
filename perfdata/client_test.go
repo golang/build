@@ -6,6 +6,7 @@ package perfdata
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,7 +16,6 @@ import (
 	"testing"
 
 	"golang.org/x/build/internal/diff"
-	"golang.org/x/net/context"
 	"golang.org/x/perf/storage/benchfmt"
 )
 

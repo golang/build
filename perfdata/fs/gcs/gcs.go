@@ -6,9 +6,10 @@
 package gcs
 
 import (
+	"context"
+
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/perfdata/fs"
-	"golang.org/x/net/context"
 )
 
 // impl is an fs.FS backed by Google Cloud Storage.

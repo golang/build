@@ -1,6 +1,7 @@
 package task
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,7 +10,6 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
-	"golang.org/x/net/context"
 )
 
 // VersionTasks contains tasks related to versioning the release.
