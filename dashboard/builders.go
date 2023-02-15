@@ -2727,7 +2727,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:              "linux-arm-aws",
 		HostType:          "host-linux-arm-aws",
-		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 1,
 		env: []string{
 			"GOARCH=arm",
