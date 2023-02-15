@@ -2279,6 +2279,36 @@ func init() {
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
+		Name:     "windows-386-2016",
+		HostType: "host-windows-amd64-2016",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has modern/recent C compilers installed,
+			// meaning that we only want to use it with 1.20+ versions
+			// of Go, hence the atLeastGo1 call below; versions of Go
+			// prior to 1.20 will use the *-oldcc variant instead. See
+			// issue 35006 for more details.
+			return onlyGo(repo, branch, goBranch) &&
+				atLeastGo1(goBranch, 20)
+		},
+		KnownIssues: []int{58007},
+		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+	})
+	addBuilder(BuildConfig{
+		Name:     "windows-386-2016-oldcc",
+		HostType: "host-windows-amd64-2016-oldcc",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// This builder has legacy C compilers installed, suitable
+			// for versions of Go prior to 1.20, hence the atMostGo1
+			// call below. Newer (1.20 and later) will use the
+			// non-oldcc variant instead. See issue 35006 for more
+			// details.
+			return onlyGo(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
+		KnownIssues: []int{58007},
+		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+	})
+	addBuilder(BuildConfig{
 		Name:           "windows-amd64-2012-oldcc",
 		HostType:       "host-windows-amd64-2012-oldcc",
 		distTestAdjust: noTestDirAndNoReboot,
