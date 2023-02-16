@@ -102,29 +102,38 @@ luci.list_view(
     title = "Production builders",
 )
 
-PORTS = {
+MAIN_REPO_PORTS = {
     "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
     "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
 }
-
-BRANCHES = {
+MAIN_REPO_BRANCHES = {
     "master":"master",
     "go1.20":"release-branch.go1.20",
+}
+
+# To begin with, use a smaller set of ports and branches
+# for testing golang.org/x repos.
+OTHER_REPO_PORTS = {
+    "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
+}
+OTHER_REPO_BRANCHES = {
+    "master":"master",
 }
 
 luci.cq_group(
     name = "go_repo",
     watch = cq.refset(
         repo = "https://go.googlesource.com/go",
-        refs = ["refs/heads/%s" % branch for branch in BRANCHES.values()]
+        refs = ["refs/heads/%s" % branch for branch in MAIN_REPO_BRANCHES.values()]
     ),
     allow_submit_with_open_deps = True,
 )
 
 def _define_go_ci():
-    for branchname, ref in BRANCHES.items():
+    # Main Go repo.
+    for branchname, ref in MAIN_REPO_BRANCHES.items():
         builders = []
-        for port, dimensions in PORTS.items():
+        for port, dimensions in MAIN_REPO_PORTS.items():
             for bucket in ["ci", "try"]:
                 name = "%s-%s" %(port, branchname)
                 luci.builder(
@@ -157,13 +166,56 @@ def _define_go_ci():
         luci.console_view(
             name = "go-%s-ci" % branchname,
             repo = "https://go.googlesource.com/go",
-            title = branchname,
+            title = "go %s" % branchname,
             refs = ["refs/heads/" + ref],
             entries = [
                 luci.console_view_entry(builder = builder, category = builder.split('-')[0])
                 for builder in builders
             ],
         )
+
+    # golang.org/x repos.
+    #
+    # (Start with golang.org/x/image only before generalizing to more repos.)
+    for project in ["image"]:
+        for branchname, ref in OTHER_REPO_BRANCHES.items():
+            builders = []
+            for port, dimensions in OTHER_REPO_PORTS.items():
+                for bucket in ["ci"]:
+                    name = "%s-%s-%s" %(project, port, branchname)
+                    luci.builder(
+                        name = name,
+                        bucket = bucket,
+                        executable = luci.executable(
+                            name = "golangbuild",
+                            cipd_package = "infra/experimental/golangbuild/${platform}",
+                            cipd_version = "latest",
+                            cmd = ["golangbuild"],
+                        ),
+                        dimensions = dimensions,
+                        properties = {
+                            "project": project,
+                        },
+                        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+                    )
+                builders.append("ci/%s" % name)
+            luci.gitiles_poller(
+                name = "%s-%s-trigger" % (project, branchname),
+                bucket = "ci",
+                repo = "https://go.googlesource.com/%s" % project,
+                refs = ["refs/heads/" + ref],
+                triggers = builders,
+            )
+            luci.console_view(
+                name = "%s-%s-ci" % (project, branchname),
+                repo = "https://go.googlesource.com/%s" % project,
+                title = "x/%s %s" % (project, branchname),
+                refs = ["refs/heads/" + ref],
+                entries = [
+                    luci.console_view_entry(builder = builder, category = builder.split('-')[0])
+                    for builder in builders
+                ],
+            )
 
 _define_go_ci()
 
