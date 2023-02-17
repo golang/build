@@ -2290,8 +2290,9 @@ func init() {
 			return onlyGo(repo, branch, goBranch) &&
 				atLeastGo1(goBranch, 20)
 		},
-		KnownIssues: []int{58007},
 		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot: defaultTrySet(),
+		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:     "windows-386-2016-oldcc",
@@ -2305,8 +2306,14 @@ func init() {
 			return onlyGo(repo, branch, goBranch) &&
 				atMostGo1(goBranch, 19)
 		},
-		KnownIssues: []int{58007},
 		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot: func(repo, branch, goBranch string) bool {
+			// See comment above about the atMostGo1 call below.
+			dft := defaultTrySet()
+			return dft(repo, branch, goBranch) &&
+				atMostGo1(goBranch, 19)
+		},
+		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:           "windows-amd64-2012-oldcc",

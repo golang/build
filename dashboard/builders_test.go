@@ -102,6 +102,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64",
 				"openbsd-amd64-72",
 				"windows-386-2012",
+				"windows-386-2016",
 				"windows-amd64-2016",
 
 				"misc-compile-windows-arm",
@@ -152,6 +153,7 @@ func TestTrybots(t *testing.T) {
 				"linux-arm64",
 				"openbsd-amd64-72",
 				"windows-386-2012",
+				"windows-386-2016",
 				"windows-amd64-2016",
 
 				"misc-compile-windows-arm",
@@ -210,6 +212,7 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-72",
 				"windows-386-2008",
 				"windows-386-2012",
+				"windows-386-2016",
 				"windows-amd64-2016",
 
 				"misc-compile-windows-arm",
@@ -267,6 +270,7 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-72",
 				"windows-386-2008-oldcc",
 				"windows-386-2012-oldcc",
+				"windows-386-2016-oldcc",
 				"windows-amd64-2016-oldcc",
 
 				"misc-compile-windows-arm",
