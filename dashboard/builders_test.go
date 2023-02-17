@@ -255,12 +255,13 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.18",
+			branch: "release-branch.go1.19",
 			want: []string{
 				"freebsd-amd64-12_3",
 				"js-wasm",
 				"linux-386",
 				"linux-amd64",
+				"linux-amd64-boringcrypto",
 				"linux-amd64-race",
 				"linux-arm64",
 				"openbsd-amd64-72",
