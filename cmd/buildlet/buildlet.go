@@ -1065,7 +1065,7 @@ func pathEnv(goos string, env, path []string, workDir string) (kv string, ok boo
 		"$EMPTY", "",
 	)
 
-	// Apply substitions to a copy of the path argument.
+	// Apply substitutions to a copy of the path argument.
 	subst := make([]string, 0, len(path))
 	for _, elem := range path {
 		if s := r.Replace(elem); s != "" {

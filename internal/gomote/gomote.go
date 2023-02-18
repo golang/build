@@ -333,7 +333,7 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 		Path:     req.GetPath(),
 	})
 	if execErr != nil {
-		// there were system errors preventing the command from being started or seen to completition.
+		// there were system errors preventing the command from being started or seen to completion.
 		return status.Errorf(codes.Aborted, "unable to execute command: %s", execErr)
 	}
 	if remoteErr != nil {
@@ -501,7 +501,7 @@ func (s *Server) WriteFileFromURL(ctx context.Context, req *protos.WriteFileFrom
 	}
 	var rc io.ReadCloser
 	// objects stored in the gomote staging bucket are only accessible when you have been granted explicit permissions. A builder
-	// requires a signed URL in order to access objects stored in the the gomote staging bucket.
+	// requires a signed URL in order to access objects stored in the gomote staging bucket.
 	if onObjectStore(s.gceBucketName, req.GetUrl()) {
 		object, err := objectFromURL(s.gceBucketName, req.GetUrl())
 		if err != nil {
@@ -572,7 +572,7 @@ func (s *Server) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromUR
 	return &protos.WriteTGZFromURLResponse{}, nil
 }
 
-// session is a helper function that retreives a session associated with the gomoteID and ownerID.
+// session is a helper function that retrieves a session associated with the gomoteID and ownerID.
 func (s *Server) session(gomoteID, ownerID string) (*remote.Session, error) {
 	session, err := s.buildlets.Session(gomoteID)
 	if err != nil {

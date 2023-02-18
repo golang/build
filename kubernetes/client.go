@@ -70,7 +70,7 @@ func (c *Client) nsEndpoint() string {
 
 // RunLongLivedPod creates a new pod resource in the default pod namespace with
 // the given pod API specification. It assumes the pod runs a
-// long-lived server (i.e. if the container exit quickly quickly, even
+// long-lived server (i.e. if the container exit quickly, even
 // with success, then that is an error).
 //
 // It returns the pod status once it has entered the Running phase.
@@ -335,7 +335,7 @@ func (c *Client) _WatchPod(ctx context.Context, podName, podResourceVersion stri
 
 		// bufio.Reader.ReadBytes is blocking, so we watch for
 		// context timeout or cancellation in a goroutine
-		// and close the response body when see see it. The
+		// and close the response body when see it. The
 		// response body is also closed via defer when the
 		// request is made, but closing twice is OK.
 		go func() {

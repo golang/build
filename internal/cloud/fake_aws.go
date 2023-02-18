@@ -48,7 +48,7 @@ func NewFakeAWSClient() *FakeAWSClient {
 	}
 }
 
-// Instance returns the `Instance` record for the rquested instance. The instance record will
+// Instance returns the `Instance` record for the requested instance. The instance record will
 // return records for recently terminated instances. If an instance is not found an error will
 // be returned.
 func (f *FakeAWSClient) Instance(ctx context.Context, instID string) (*Instance, error) {

@@ -62,7 +62,7 @@ type awsClient interface {
 	RunningInstances(ctx context.Context) ([]*cloud.Instance, error)
 }
 
-// EC2Opt is optional configuration for the the buildlet.
+// EC2Opt is optional configuration for the buildlet.
 type EC2Opt func(*EC2Buildlet)
 
 // EC2Buildlet manages a pool of AWS EC2 buildlets.

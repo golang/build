@@ -139,7 +139,7 @@ var (
 // mustInitMasterKeyCache populates the masterKeyCache
 // with the master key. If no master key is found it will
 // log an error and exit. If `masterKey()` is called before
-// the key is initialzed then it will log an error and exit.
+// the key is initialized then it will log an error and exit.
 func mustInitMasterKeyCache(sc *secret.Client) {
 	keyOnce.Do(func() { loadKey(sc) })
 }

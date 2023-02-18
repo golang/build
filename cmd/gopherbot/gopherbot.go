@@ -758,7 +758,7 @@ var emptyGerritCommentOpts gerritCommentOpts
 // addGerritComment adds the given comment to the CL specified by the changeID
 // and the patch set identified by the version.
 //
-// As an idempotence check, before adding the comment the comment and the list
+// As an idempotence check, before adding the comment and the list
 // of oldPhrases are checked against the CL to ensure that no phrase in the list
 // has already been added to the list as a comment.
 func (b *gopherbot) addGerritComment(ctx context.Context, changeID, comment string, opts *gerritCommentOpts) error {
@@ -2651,7 +2651,7 @@ func fetchCodeOwners(ctx context.Context, oReq *owners.Request) (*owners.Respons
 // primary and secondary users into a single entry.
 // If a user is a primary in one entry but secondary on another, they are
 // primary in the returned entry.
-// If a users email matches the authorEmail, the the user is omitted from the
+// If a users email matches the authorEmail, the user is omitted from the
 // result.
 // The resulting order of the entries is non-deterministic.
 func mergeOwnersEntries(entries []*owners.Entry, authorEmail string) *owners.Entry {

@@ -45,7 +45,7 @@ func NewServer() *SigningServer {
 	}
 }
 
-// UpdateSigningStatus uses a bidirectional streaming connection to send signing requests to the client and
+// UpdateSigningStatus uses a bidirectional streaming connection to send signing requests to the client
 // and receive status updates on signing requests. There is no specific order which the requests or responses
 // need to occur in. The connection returns an error once the context is canceled or an error is encountered.
 func (rs *SigningServer) UpdateSigningStatus(stream protos.ReleaseService_UpdateSigningStatusServer) error {

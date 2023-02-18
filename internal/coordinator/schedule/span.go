@@ -42,7 +42,7 @@ func (s *Span) OptText() string {
 	return s.optText
 }
 
-// Start is the start time for the span..
+// Start is the start time for the span.
 func (s *Span) Start() time.Time {
 	return s.start
 }

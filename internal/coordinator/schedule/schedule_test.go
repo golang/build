@@ -64,7 +64,7 @@ func (c *getBuildletCall) start(t *testing.T, s *Scheduler) {
 		close(c.done)
 	}()
 
-	// Wait for si to be enqueued, or this call to be satisified.
+	// Wait for si to be enqueued, or this call to be satisfied.
 	if !trueSoon(func() bool {
 		select {
 		case <-c.done:

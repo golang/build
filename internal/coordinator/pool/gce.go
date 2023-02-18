@@ -274,7 +274,7 @@ func (c *GCEConfiguration) GoDSClient() *datastore.Client {
 	return goDSClient
 }
 
-// TryDepsErr retrives any Trybot dependency error.
+// TryDepsErr retrieves any Trybot dependency error.
 func (c *GCEConfiguration) TryDepsErr() error {
 	return errTryDeps
 }

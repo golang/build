@@ -115,7 +115,7 @@ type secretClient interface {
 // Client is used to interact with the GCP Secret Management service.
 type Client struct {
 	client    secretClient
-	projectID string // projectID specifies the ID of the GCP project where secrets are retreived from.
+	projectID string // projectID specifies the ID of the GCP project where secrets are retrieved from.
 }
 
 // NewClient creates a Secret Manager Client
@@ -176,7 +176,7 @@ func buildNamePath(projectID, name, version string) string {
 }
 
 // MustNewClient instantiates an instance of the Secret Manager Client. If there is an error
-// this fuction will exit.
+// this function will exit.
 func MustNewClient() *Client {
 	c, err := NewClient()
 	if err != nil {

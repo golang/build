@@ -110,7 +110,7 @@ func TestAddBootstrapAlive(t *testing.T) {
 
 func TestAddBootstrapError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call AddBootstrap.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -255,7 +255,7 @@ func TestInstanceAlive(t *testing.T) {
 
 func TestInstanceAliveError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call InstanceAlive.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -323,7 +323,7 @@ func TestListDirectory(t *testing.T) {
 
 func TestListDirectoryError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call ListDirectory.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -428,7 +428,7 @@ func TestDestroyInstance(t *testing.T) {
 
 func TestDestroyInstanceError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call DestroyInstance.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -519,7 +519,7 @@ func TestExecuteCommand(t *testing.T) {
 
 func TestExecuteCommandError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call TestExecuteCommand.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -595,7 +595,7 @@ func TestExecuteCommandError(t *testing.T) {
 
 func TestReadTGZToURLError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call ReadTGZToURL.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -667,7 +667,7 @@ func TestRemoveFiles(t *testing.T) {
 
 func TestRemoveFilesError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call RemoveFiles.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -747,7 +747,7 @@ func TestSignSSHKey(t *testing.T) {
 
 func TestSignSSHKeyError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call SignSSHKey.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc          string
@@ -823,7 +823,7 @@ func TestUploadFile(t *testing.T) {
 
 func TestUploadFileError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call UploadFile.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -875,7 +875,7 @@ func TestWriteFileFromURL(t *testing.T) {
 
 func TestWriteFileFromURLError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call TestWriteFileFromURL.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string
@@ -967,7 +967,7 @@ func TestWriteTGZFromURLGomoteStaging(t *testing.T) {
 
 func TestWriteTGZFromURLError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call TestWriteTGZFromURL.
-	// If overrideID is set to true, the test will use a different gomoteID than the
+	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
 	testCases := []struct {
 		desc       string

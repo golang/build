@@ -505,7 +505,7 @@ func (cl *GerritCL) Subject() string {
 	return strings.Replace(cl.Commit.Msg, "\n", " ", -1)
 }
 
-// CommitAtVersion returns the git commit of the specifid version of this CL.
+// CommitAtVersion returns the git commit of the specified version of this CL.
 // It returns nil if version is not in the range [1, cl.Version].
 func (cl *GerritCL) CommitAtVersion(version int32) *GitCommit {
 	if version < 1 || version > cl.Version {

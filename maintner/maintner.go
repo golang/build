@@ -234,7 +234,7 @@ func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 	return c.update(ctx, nil)
 }
 
-// ErrSplit is returned when the the client notices the leader's
+// ErrSplit is returned when the client notices the leader's
 // mutation log has changed. This can happen if the leader restarts
 // with uncommitted transactions. (The leader only commits mutations
 // periodically.)

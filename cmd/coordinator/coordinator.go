@@ -1586,7 +1586,7 @@ func (ts *trySet) awaitTryBuild(idx int, bs *buildStatus, brev buildgo.BuilderRe
 
 // wanted reports whether this trySet is still active.
 //
-// If the commmit has been submitted, or change abandoned, or the
+// If the commit has been submitted, or change abandoned, or the
 // checkbox unchecked, wanted returns false.
 func (ts *trySet) wanted() bool {
 	statusMu.Lock()

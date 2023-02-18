@@ -763,7 +763,7 @@ func getActiveBuilds(ctx context.Context) (builds []types.ActivePostSubmitBuild)
 // URLs of builds which are currently in progress.
 func (td *uiTemplateData) populateBuildingURLs(ctx context.Context, activeBuilds []types.ActivePostSubmitBuild) {
 	// active maps from a build record with its status URL zeroed
-	// out to to the actual value of that status URL.
+	// out to the actual value of that status URL.
 	active := map[types.ActivePostSubmitBuild]string{}
 	for _, rec := range activeBuilds {
 		statusURL := rec.StatusURL

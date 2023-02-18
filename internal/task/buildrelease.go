@@ -137,7 +137,7 @@ var dropPatterns = []string{
 	// Remove pkg/${GOOS}_${GOARCH}/cmd. This saves a bunch of
 	// space, and users don't typically rebuild cmd/compile,
 	// cmd/link, etc. If they want to, they still can, but they'll
-	// have to pay the cost of rebuilding dependent libaries. No
+	// have to pay the cost of rebuilding dependent libraries. No
 	// need to ship them just in case.
 	`pkg/[^/]+/cmd/.*`,
 	// Clean up .exe~ files; see go.dev/issue/23894.
