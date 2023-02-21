@@ -59,7 +59,11 @@ luci.project(
         ),
         acl.entry(
             roles = acl.CQ_COMMITTER,
-            groups = "mdb/golang-luci-admin",
+            groups = "authenticated-users",
+        ),
+        acl.entry(
+            roles = acl.CQ_DRY_RUNNER,
+            groups = "authenticated-users",
         ),
     ],
 )
