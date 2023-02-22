@@ -2000,8 +2000,9 @@ func (st *buildStatus) repeatedCommunicationError(execErr error) error {
 	if execErr == nil {
 		return nil
 	}
-	// For now, only do this for plan9, which is flaky (Issue 31261)
-	if strings.HasPrefix(st.Name, "plan9-") && execErr == errBuildletsGone {
+	// For now, only do this for plan9, which is flaky (Issue 31261),
+	// but not for plan9-arm (Issue 52677)
+	if strings.HasPrefix(st.Name, "plan9-") && st.Name != "plan9-arm" && execErr == errBuildletsGone {
 		// TODO: give it two tries at least later (store state
 		// somewhere; global map?). But for now we're going to
 		// only give it one try.
