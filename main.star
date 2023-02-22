@@ -128,7 +128,8 @@ def _define_go_ci():
     # Main Go repo.
     for branch_name, ref in MAIN_REPO_BRANCHES.items():
         luci.cq_group(
-            name = "go_repo_%s" % branch_name,
+            # cq group names must match "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"
+            name = ("go_repo_%s" % branch_name).replace(".", "-"),
             watch = cq.refset(
                 repo = "https://go.googlesource.com/go",
                 refs = ["refs/heads/%s" % ref]
@@ -157,7 +158,8 @@ def _define_go_ci():
             builders.append("ci/%s" % name)
             luci.cq_tryjob_verifier(
                 builder = "try/%s" % name,
-                cq_group = "go_repo_%s" % branch_name,
+                # cq group names must match "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"
+                cq_group = ("go_repo_%s" % branch_name).replace(".", "-"),
             )
         luci.gitiles_poller(
             name = "go-%s-trigger" % branch_name,
