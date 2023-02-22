@@ -502,8 +502,8 @@ var allowedBuilders = map[string]bool{
 // firstClassBuilders is the default set of builders to test against,
 // representing the first class ports as defined by the port policy.
 var firstClassBuilders = []string{
-	"linux-386-longtest",
-	"linux-amd64-longtest",
+	"linux-386",
+	"linux-amd64-longtest-race",
 	"linux-arm-aws",
 	"linux-arm64",
 
