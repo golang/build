@@ -124,7 +124,7 @@ func windowsMSI() error {
 		return err
 	}
 
-	msi := filepath.Join(cwd, "msi") // known to cmd/release
+	msi := filepath.Join(cwd, "msi") // known to internal/task.BuildletStep.BuildWindowsMSI
 	if err := os.Mkdir(msi, 0755); err != nil {
 		return err
 	}

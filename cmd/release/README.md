@@ -4,4 +4,4 @@
 
 # golang.org/x/build/cmd/release
 
-Command release builds a Go release.
+Command release was used to build Go releases before relui fully replaced its functionality.
