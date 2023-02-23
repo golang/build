@@ -117,6 +117,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 				Version:          "go1.18.4",
 				SecondaryVersion: "go1.17.12",
 				Security:         "the standard library",
+				CVEs:             []string{"cve-1234", "cve-5678"},
 				Names:            []string{"Alice"},
 			},
 			wantSubject: "[security] Go 1.18.4 and Go 1.17.12 pre-announcement",
@@ -127,6 +128,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 				Target:   Date{2022, time.July, 12},
 				Version:  "go1.18.4",
 				Security: "the toolchain",
+				CVEs:     []string{"cve-1234", "cve-5678"},
 				Names:    []string{"Alice", "Bob"},
 			},
 			wantSubject: "[security] Go 1.18.4 pre-announcement",
@@ -277,6 +279,7 @@ func TestPreAnnounceRelease(t *testing.T) {
 		versions     []string
 		target       Date
 		security     string
+		cves         []string
 		coordinators []string
 		want         SentMail
 		wantLog      string
@@ -286,6 +289,7 @@ func TestPreAnnounceRelease(t *testing.T) {
 			versions:     []string{"go1.18.4", "go1.17.11"}, // Intentionally not 1.17.12 so the real email doesn't get in the way.
 			target:       Date{2022, time.July, 12},
 			security:     "the standard library",
+			cves:         []string{"cve-2022-1234", "cve-2023-1234"},
 			coordinators: []string{"tatiana"},
 			want:         SentMail{Subject: "[security] Go 1.18.4 and Go 1.17.11 pre-announcement"},
 			wantLog: `pre-announcement subject: [security] Go 1.18.4 and Go 1.17.11 pre-announcement
@@ -293,7 +297,11 @@ func TestPreAnnounceRelease(t *testing.T) {
 pre-announcement body HTML:
 <p>Hello gophers,</p>
 <p>We plan to issue Go 1.18.4 and Go 1.17.11 during US business hours on Tuesday, July 12.</p>
-<p>These minor releases include PRIVATE security fixes to the standard library.</p>
+<p>These minor releases include PRIVATE security fixes to the standard library, covering the following CVEs:</p>
+<ul>
+<li>cve-2022-1234</li>
+<li>cve-2023-1234</li>
+</ul>
 <p>Following our security policy, this is the pre-announcement of those releases.</p>
 <p>Thanks,<br>
 Tatiana for the Go team</p>
@@ -303,7 +311,11 @@ Hello gophers,
 
 We plan to issue Go 1.18.4 and Go 1.17.11 during US business hours on Tuesday, July 12.
 
-These minor releases include PRIVATE security fixes to the standard library.
+These minor releases include PRIVATE security fixes to the standard library, covering the following CVEs:
+
+-	cve-2022-1234
+
+-	cve-2023-1234
 
 Following our security policy, this is the pre-announcement of those releases.
 
@@ -320,7 +332,7 @@ Tatiana for the Go team` + "\n",
 			}
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			sentMail, err := tasks.PreAnnounceRelease(ctx, tc.versions, tc.target, tc.security, tc.coordinators)
+			sentMail, err := tasks.PreAnnounceRelease(ctx, tc.versions, tc.target, tc.security, tc.cves, tc.coordinators)
 			if err != nil {
 				t.Fatal("task function returned non-nil error:", err)
 			}

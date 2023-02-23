@@ -7,6 +7,7 @@ package task
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -74,6 +75,10 @@ type releasePreAnnouncement struct {
 	// release pre-announcement. It should not reveal details
 	// beyond what's allowed by the security policy.
 	Security string
+
+	// CVEs is the list of CVEs for PRIVATE track fixes to
+	// be included in the release pre-announcement.
+	CVEs []string
 
 	// Names is an optional list of release coordinator names to
 	// include in the sign-off message.
@@ -185,7 +190,7 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions [
 
 // PreAnnounceRelease sends an email pre-announcing a Go release
 // containing PRIVATE track security fixes planned for the target date.
-func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, versions []string, target Date, security string, users []string) (SentMail, error) {
+func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, versions []string, target Date, security string, cves []string, users []string) (SentMail, error) {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for pre-announce release task; a minimum of a minute left on context is required")
 	}
@@ -202,6 +207,9 @@ func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, version
 	if security == "" {
 		return SentMail{}, fmt.Errorf("security content is not specified")
 	}
+	if len(cves) == 0 {
+		return SentMail{}, errors.New("CVEs are not specified")
+	}
 	names, err := coordinatorFirstNames(users)
 	if err != nil {
 		return SentMail{}, err
@@ -211,6 +219,7 @@ func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, version
 		Target:   target,
 		Version:  versions[0],
 		Security: security,
+		CVEs:     cves,
 		Names:    names,
 	}
 	if len(versions) == 2 {

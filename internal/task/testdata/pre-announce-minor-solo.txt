@@ -2,7 +2,11 @@ Hello gophers,
 
 We plan to issue Go 1.18.4 during US business hours on Tuesday, July 12.
 
-This minor release includes PRIVATE security fixes to the toolchain.
+This minor release includes PRIVATE security fixes to the toolchain, covering the following CVEs:
+
+-	cve-1234
+
+-	cve-5678
 
 Following our security policy, this is the pre-announcement of the release.
 

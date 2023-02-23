@@ -106,6 +106,12 @@ It must be three to seven days after the pre-announcement as documented in the s
 
 It must not reveal details beyond what's allowed by the security policy.`,
 	}
+	securityPreAnnCVEsParam = wf.ParamDef[[]string]{
+		Name:      "PRIVATE-track CVEs",
+		ParamType: wf.SliceShort,
+		Example:   "CVE-2023-XXXX",
+		Doc:       "List of CVEs for PRIVATE track fixes contained in the release to be included in the pre-announcement.",
+	}
 
 	securitySummaryParameter = wf.ParamDef[string]{
 		Name: "Security Summary (optional)",
@@ -248,9 +254,10 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		versions := wf.Task1(wd, "Get next versions", version.GetNextVersions, wf.Const(r.kinds))
 		targetDate := wf.Param(wd, targetDateParam)
 		securityContent := wf.Param(wd, securityPreAnnParam)
+		cves := wf.Param(wd, securityPreAnnCVEsParam)
 		coordinators := wf.Param(wd, releaseCoordinators)
 
-		sentMail := wf.Task4(wd, "mail-pre-announcement", comm.PreAnnounceRelease, versions, targetDate, securityContent, coordinators)
+		sentMail := wf.Task5(wd, "mail-pre-announcement", comm.PreAnnounceRelease, versions, targetDate, securityContent, cves, coordinators)
 		wf.Output(wd, "Pre-announcement URL", wf.Task1(wd, "await-pre-announcement", comm.AwaitAnnounceMail, sentMail))
 
 		h.RegisterDefinition("pre-announce "+r.name, wd)
