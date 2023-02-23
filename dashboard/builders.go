@@ -97,7 +97,7 @@ var slowBotAliases = map[string]string{
 	"solaris-amd64":         "solaris-amd64-oraclerel",
 	"wasm":                  "js-wasm-node18",
 	"windows":               "windows-amd64-2016",
-	"windows-386":           "windows-386-2008",
+	"windows-386":           "windows-386-2016",
 	"windows-amd64":         "windows-amd64-2016",
 	"windows-arm":           "windows-arm-zx2c4",
 	"windows-arm64":         "windows-arm64-11",
@@ -2291,8 +2291,8 @@ func init() {
 			return onlyGo(repo, branch, goBranch) &&
 				atLeastGo1(goBranch, 20)
 		},
-		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot: defaultTrySet(),
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
@@ -2307,7 +2307,7 @@ func init() {
 			return onlyGo(repo, branch, goBranch) &&
 				atMostGo1(goBranch, 19)
 		},
-		env:         []string{"GOARCH=386", "GOHOSTARCH=386"},
+		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
 		tryBot: func(repo, branch, goBranch string) bool {
 			// See comment above about the atMostGo1 call below.
 			dft := defaultTrySet()
