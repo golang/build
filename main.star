@@ -127,6 +127,7 @@ OTHER_REPO_PORTS = {
 OTHER_REPO_BRANCHES = {
     "master":"master",
 }
+OTHER_REPO_GO_BRANCHES = MAIN_REPO_BRANCHES
 
 def _define_go_ci():
     # Main Go repo.
@@ -185,19 +186,19 @@ def _define_go_ci():
 
     # golang.org/x repos. (Anything other than project == 'go'.)
     for project in OTHER_REPOS:
-        # TODO: add the "Go toolchain to test x repo with" dimension here
-            for branch_name, ref in OTHER_REPO_BRANCHES.items():
-                luci.cq_group(
-                    name = "%s_repo_%s" % (project, branch_name),
-                    watch = cq.refset(
-                        repo = "https://go.googlesource.com/%s" % project,
-                        refs = ["refs/heads/%s" % ref]
-                    ),
-                    allow_submit_with_open_deps = True,
-                )
+        for branch_name, ref in OTHER_REPO_BRANCHES.items():
+            luci.cq_group(
+                name = "%s_repo_%s" % (project, branch_name),
+                watch = cq.refset(
+                    repo = "https://go.googlesource.com/%s" % project,
+                    refs = ["refs/heads/%s" % ref]
+                ),
+                allow_submit_with_open_deps = True,
+            )
+            for go_branch_title, go_branch_name in OTHER_REPO_GO_BRANCHES.items():
                 builders = []
                 for port, dimensions in OTHER_REPO_PORTS.items():
-                    name = "%s-%s-%s" %(project, port, branch_name)
+                    name = "%s-%s-%s-%s" %(project, port, branch_name, go_branch_title)
                     for bucket in ["ci", "try"]:
                         luci.builder(
                             name = name,
@@ -211,7 +212,7 @@ def _define_go_ci():
                             dimensions = dimensions,
                             properties = {
                                 "project": project,
-                                "go_branch": "master",
+                                "go_branch": go_branch_name,
                             },
                             service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
                         )
@@ -228,9 +229,9 @@ def _define_go_ci():
                     triggers = builders,
                 )
                 luci.console_view(
-                    name = "%s-%s-ci" % (project, branch_name),
+                    name = "%s-%s-%s-ci" % (project, branch_name, go_branch_title),
                     repo = "https://go.googlesource.com/%s" % project,
-                    title = "x/%s %s" % (project, branch_name),
+                    title = "x/%s %s (@ Go %s)" % (project, branch_name, go_branch_title),
                     refs = ["refs/heads/" + ref],
                     entries = [
                         luci.console_view_entry(builder = builder, category = builder.split('-')[0])
