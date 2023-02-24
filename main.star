@@ -115,8 +115,12 @@ MAIN_REPO_BRANCHES = {
     "go1.20":"release-branch.go1.20",
 }
 
-# To begin with, use a smaller set of ports and branches
+# To begin with, use a subset of repos, ports, and branches
 # for testing golang.org/x repos.
+OTHER_REPOS = [
+    "build",
+    "image",
+]
 OTHER_REPO_PORTS = {
     "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
 }
@@ -179,8 +183,8 @@ def _define_go_ci():
             ],
         )
 
-    # golang.org/x repos.
-    for project in ["build", "image"]:
+    # golang.org/x repos. (Anything other than project == 'go'.)
+    for project in OTHER_REPOS:
         for branch_name, ref in OTHER_REPO_BRANCHES.items():
             luci.cq_group(
                 name = "%s_repo_%s" % (project, branch_name),
