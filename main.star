@@ -185,56 +185,58 @@ def _define_go_ci():
 
     # golang.org/x repos. (Anything other than project == 'go'.)
     for project in OTHER_REPOS:
-        for branch_name, ref in OTHER_REPO_BRANCHES.items():
-            luci.cq_group(
-                name = "%s_repo_%s" % (project, branch_name),
-                watch = cq.refset(
-                    repo = "https://go.googlesource.com/%s" % project,
-                    refs = ["refs/heads/%s" % ref]
-                ),
-                allow_submit_with_open_deps = True,
-            )
-            builders = []
-            for port, dimensions in OTHER_REPO_PORTS.items():
-                name = "%s-%s-%s" %(project, port, branch_name)
-                for bucket in ["ci", "try"]:
-                    luci.builder(
-                        name = name,
-                        bucket = bucket,
-                        executable = luci.executable(
-                            name = "golangbuild",
-                            cipd_package = "infra/experimental/golangbuild/${platform}",
-                            cipd_version = "latest",
-                            cmd = ["golangbuild"],
-                        ),
-                        dimensions = dimensions,
-                        properties = {
-                            "project": project,
-                        },
-                        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-                    )
-                builders.append("ci/%s" % name)
-                luci.cq_tryjob_verifier(
-                    builder = "try/%s" % name,
-                    cq_group = "%s_repo_%s" % (project, branch_name),
+        # TODO: add the "Go toolchain to test x repo with" dimension here
+            for branch_name, ref in OTHER_REPO_BRANCHES.items():
+                luci.cq_group(
+                    name = "%s_repo_%s" % (project, branch_name),
+                    watch = cq.refset(
+                        repo = "https://go.googlesource.com/%s" % project,
+                        refs = ["refs/heads/%s" % ref]
+                    ),
+                    allow_submit_with_open_deps = True,
                 )
-            luci.gitiles_poller(
-                name = "%s-%s-trigger" % (project, branch_name),
-                bucket = "ci",
-                repo = "https://go.googlesource.com/%s" % project,
-                refs = ["refs/heads/" + ref],
-                triggers = builders,
-            )
-            luci.console_view(
-                name = "%s-%s-ci" % (project, branch_name),
-                repo = "https://go.googlesource.com/%s" % project,
-                title = "x/%s %s" % (project, branch_name),
-                refs = ["refs/heads/" + ref],
-                entries = [
-                    luci.console_view_entry(builder = builder, category = builder.split('-')[0])
-                    for builder in builders
-                ],
-            )
+                builders = []
+                for port, dimensions in OTHER_REPO_PORTS.items():
+                    name = "%s-%s-%s" %(project, port, branch_name)
+                    for bucket in ["ci", "try"]:
+                        luci.builder(
+                            name = name,
+                            bucket = bucket,
+                            executable = luci.executable(
+                                name = "golangbuild",
+                                cipd_package = "infra/experimental/golangbuild/${platform}",
+                                cipd_version = "latest",
+                                cmd = ["golangbuild"],
+                            ),
+                            dimensions = dimensions,
+                            properties = {
+                                "project": project,
+                                "go_branch": "master",
+                            },
+                            service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+                        )
+                    builders.append("ci/%s" % name)
+                    luci.cq_tryjob_verifier(
+                        builder = "try/%s" % name,
+                        cq_group = "%s_repo_%s" % (project, branch_name),
+                    )
+                luci.gitiles_poller(
+                    name = "%s-%s-trigger" % (project, branch_name),
+                    bucket = "ci",
+                    repo = "https://go.googlesource.com/%s" % project,
+                    refs = ["refs/heads/" + ref],
+                    triggers = builders,
+                )
+                luci.console_view(
+                    name = "%s-%s-ci" % (project, branch_name),
+                    repo = "https://go.googlesource.com/%s" % project,
+                    title = "x/%s %s" % (project, branch_name),
+                    refs = ["refs/heads/" + ref],
+                    entries = [
+                        luci.console_view_entry(builder = builder, category = builder.split('-')[0])
+                        for builder in builders
+                    ],
+                )
 
 _define_go_ci()
 
