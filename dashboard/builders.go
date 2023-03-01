@@ -1247,8 +1247,8 @@ func buildRepoByDefault(repo string) bool {
 	case "go":
 		// Build the main Go repository by default.
 		return true
-	case "mobile", "exp", "build", "vulndb":
-		// Don't build x/mobile, x/exp, x/build, x/vulndb by default.
+	case "mobile", "exp", "build", "vulndb", "pkgsite-metrics":
+		// Don't build the above repos by default.
 		//
 		// Builders need to explicitly opt-in to build these repos.
 		return false
@@ -1259,9 +1259,9 @@ func buildRepoByDefault(repo string) bool {
 }
 
 var (
-	defaultPlusExp            = defaultPlus("exp")
-	defaultPlusExpBuild       = defaultPlus("exp", "build")
-	defaultPlusExpBuildVulnDB = defaultPlus("exp", "build", "vulndb")
+	defaultPlusExp                          = defaultPlus("exp")
+	defaultPlusExpBuild                     = defaultPlus("exp", "build")
+	defaultPlusExpBuildVulnDBPkgsiteMetrics = defaultPlus("exp", "build", "vulndb", "pkgsite-metrics")
 )
 
 // defaultPlus returns a buildsRepo policy function that returns true for all
@@ -1476,8 +1476,6 @@ func crossCompileBuildSet(goos, goarch string) func(proj, branch, goBranch strin
 			// mobile fails to build on all cross-compile platforms. This is somewhat expected
 			// given the nature of the repository. Leave this as a blanket policy for now.
 			return false
-		case "pkgsite-metrics":
-			return goos != "aix" && goos != "solaris" // #58301
 		case "vuln":
 			// Failure to build because of a dependency not supported on plan9.
 			return goos != "plan9"
@@ -1553,7 +1551,7 @@ func init() {
 		Name:       "linux-amd64",
 		HostType:   "host-linux-amd64-bullseye",
 		tryBot:     defaultTrySet(),
-		buildsRepo: defaultPlusExpBuildVulnDB,
+		buildsRepo: defaultPlusExpBuildVulnDBPkgsiteMetrics,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
