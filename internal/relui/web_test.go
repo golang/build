@@ -51,7 +51,7 @@ func TestFileServerHandler(t *testing.T) {
 			desc:     "sets headers and returns file",
 			path:     "/testing/test.css",
 			wantCode: http.StatusOK,
-			wantBody: "/**\n * Copyright 2022 Go Authors All rights reserved.\n " +
+			wantBody: "/**\n * Copyright 2022 The Go Authors. All rights reserved.\n " +
 				"* Use of this source code is governed by a BSD-style\n " +
 				"* license that can be found in the LICENSE file.\n */\n\n.Header { font-size: 10rem; }\n",
 			wantHeaders: map[string]string{
