@@ -30,6 +30,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"github.com/google/go-github/v48/github"
+	"github.com/shurcooL/githubv4"
 	"go4.org/strutil"
 	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/gerrit"
@@ -47,7 +48,7 @@ import (
 var (
 	dryRun          = flag.Bool("dry-run", false, "just report what would've been done, without changing anything")
 	daemon          = flag.Bool("daemon", false, "run in daemon mode")
-	githubTokenFile = flag.String("github-token-file", filepath.Join(os.Getenv("HOME"), "keys", "github-gobot"), `File to load Github token from. File should be of form <username>:<token>`)
+	githubTokenFile = flag.String("github-token-file", filepath.Join(os.Getenv("HOME"), "keys", "github-gobot"), `File to load GitHub token from. File should be of form <username>:<token>`)
 	// go here: https://go-review.googlesource.com/settings#HTTPCredentials
 	// click "Obtain Password"
 	// The next page will have a .gitcookies file - look for the part that has
@@ -112,7 +113,7 @@ type milestone struct {
 	Name   string
 }
 
-func getGithubToken(ctx context.Context, sc *secret.Client) (string, error) {
+func getGitHubToken(ctx context.Context, sc *secret.Client) (string, error) {
 	if metadata.OnGCE() && sc != nil {
 		ctxSc, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -163,17 +164,18 @@ func getGerritAuth(ctx context.Context, sc *secret.Client) (username string, pas
 	return f[0], f[1], nil
 }
 
-func getGithubClient(ctx context.Context, sc *secret.Client) (*github.Client, error) {
-	token, err := getGithubToken(ctx, sc)
+func getGitHubClients(ctx context.Context, sc *secret.Client) (*github.Client, *githubv4.Client, error) {
+	token, err := getGitHubToken(ctx, sc)
 	if err != nil {
 		if *dryRun {
-			return github.NewClient(http.DefaultClient), nil
+			// Note: GitHub API v4 requires requests to be authenticated, which isn't implemented here.
+			return github.NewClient(http.DefaultClient), githubv4.NewClient(http.DefaultClient), nil
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(context.Background(), ts)
-	return github.NewClient(tc), nil
+	return github.NewClient(tc), githubv4.NewClient(tc), nil
 }
 
 func getGerritClient(ctx context.Context, sc *secret.Client) (*gerrit.Client, error) {
@@ -230,7 +232,7 @@ func main() {
 	}
 	ctx := context.Background()
 
-	ghc, err := getGithubClient(ctx, sc)
+	ghV3, ghV4, err := getGitHubClients(ctx, sc)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -246,10 +248,11 @@ func main() {
 	var goRepo = maintner.GitHubRepoID{Owner: "golang", Repo: "go"}
 	var vscode = maintner.GitHubRepoID{Owner: "golang", Repo: "vscode-go"}
 	bot := &gopherbot{
-		ghc:    ghc,
+		ghc:    ghV3,
+		ghV4:   ghV4,
 		gerrit: gerrit,
 		mc:     mc,
-		is:     ghc.Issues,
+		is:     ghV3.Issues,
 		deletedChanges: map[gerritChange]bool{
 			{"crypto", 35958}:  true,
 			{"scratch", 71730}: true,
@@ -408,6 +411,7 @@ func main() {
 
 type gopherbot struct {
 	ghc    *github.Client
+	ghV4   *githubv4.Client
 	gerrit *gerrit.Client
 	mc     apipb.MaintnerServiceClient
 	corpus *maintner.Corpus
@@ -949,28 +953,97 @@ func (b *gopherbot) pingEarlyIssues(ctx context.Context) error {
 	// for general Go 1.x development. Update the openTreeURLs map appropriately when
 	// running this task.
 	openTreeURLs := map[string]string{
-		"1.21": "https://groups.google.com/g/golang-dev/c/09IwUs7cxXA/m/_JHOzNjXBAAJ",
+		"1.22": "https://groups.google.com/g/golang-dev/c/FNPk2joOsXs/m/roCc_a4fBAAJ",
 	}
 	if url, ok := openTreeURLs[nextMajor]; !ok {
 		return fmt.Errorf("openTreeURLs[%q] is missing a value, please fill it in", nextMajor)
 	} else if !strings.HasPrefix(url, "https://groups.google.com/g/golang-dev/c/") {
 		return fmt.Errorf("openTreeURLs[%q] is %q, which doesn't begin with the usual prefix, so please double-check that the URL is correct", nextMajor, url)
 	}
+	var milestoneNumber int // TODO: Determine the milestone number dynamically.
+	if nextMajor == "1.22" {
+		milestoneNumber = 298
+	} else {
+		return fmt.Errorf("major to milestone number mapping is not implemented")
+	}
 
-	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
-		if !gi.HasLabelID(earlyInCycleID) || gi.Milestone.Title != "Go"+nextMajor {
-			return nil
+	// Find all open early-in-cycle issues in the current major release milestone.
+	type issue struct {
+		ID     githubv4.ID
+		Number int
+		Title  string
+
+		TimelineItems struct {
+			Nodes []struct {
+				IssueComment struct {
+					Author struct{ Login string }
+					Body   string
+				} `graphql:"...on IssueComment"`
+			}
+		} `graphql:"timelineItems(since: $avoidDupSince, itemTypes: ISSUE_COMMENT, last: 100)"`
+	}
+	var earlyIssues []issue
+	variables := map[string]interface{}{
+		"avoidDupSince":   githubv4.DateTime{Time: time.Now().Add(-30 * 24 * time.Hour)},
+		"milestoneNumber": githubv4.String(fmt.Sprint(milestoneNumber)), // For some reason GitHub API v4 uses string type for milestone numbers.
+		"issueCursor":     (*githubv4.String)(nil),
+	}
+	for {
+		var q struct {
+			Repository struct {
+				Issues struct {
+					Nodes    []issue
+					PageInfo struct {
+						EndCursor   githubv4.String
+						HasNextPage bool
+					}
+				} `graphql:"issues(first: 100, after: $issueCursor, filterBy: {states: OPEN, labels: \"early-in-cycle\", milestoneNumber: $milestoneNumber}, orderBy: {field: CREATED_AT, direction: ASC})"`
+			} `graphql:"repository(owner: \"golang\", name: \"go\")"`
 		}
+		err := b.ghV4.Query(ctx, &q, variables)
+		if err != nil {
+			return err
+		}
+		earlyIssues = append(earlyIssues, q.Repository.Issues.Nodes...)
+		if !q.Repository.Issues.PageInfo.HasNextPage {
+			break
+		}
+		variables["issueCursor"] = githubv4.NewString(q.Repository.Issues.PageInfo.EndCursor)
+	}
+
+	// Ping them.
+EarlyIssuesLoop:
+	for _, i := range earlyIssues {
+		for _, n := range i.TimelineItems.Nodes {
+			if n.IssueComment.Author.Login == "gopherbot" && strings.Contains(n.IssueComment.Body, "friendly reminder") {
+				log.Printf("skipping early-in-cycle issue %d, it was already pinged", i.Number)
+				continue EarlyIssuesLoop
+			}
+		}
+
+		// Post a comment.
 		if *dryRun {
-			log.Printf("[dry run] would ping early-in-cycle issue %d", gi.Number)
-			return nil
+			log.Printf("[dry run] would ping early-in-cycle issue\n\t#%d %s", i.Number, i.Title)
+			continue
 		}
-		log.Printf("pinging early-in-cycle issue %d", gi.Number)
+		log.Printf("pinging early-in-cycle issue %d (%.32s…)", i.Number, i.Title)
 		time.Sleep(3 * time.Second) // Take a moment between pinging issues, since a human will be running this task manually.
-		msg := fmt.Sprintf("This issue is currently labeled as early-in-cycle for Go %s.\n"+
-			"That [time is now](%s), so a friendly reminder to look at it again.", nextMajor, openTreeURLs[nextMajor])
-		return b.addGitHubComment(ctx, b.gorepo, gi.Number, msg)
-	})
+		var m struct {
+			AddComment struct {
+				ClientMutationID string // GraphQL doesn't permit empty mutations.
+			} `graphql:"addComment(input: $input)"`
+		}
+		err := b.ghV4.Mutate(ctx, &m, githubv4.AddCommentInput{
+			SubjectID: i.ID,
+			Body: githubv4.String(fmt.Sprintf("This issue is currently labeled as early-in-cycle for Go %s.\n"+
+				"That [time is now](%s), so a friendly reminder to look at it again.", nextMajor, openTreeURLs[nextMajor])),
+		}, nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // freezeOldIssues locks any issue that's old and closed.
