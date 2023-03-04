@@ -98,6 +98,10 @@ func (fakeGitHub) EditMilestone(_ context.Context, owner string, repo string, nu
 	return nil, nil, nil
 }
 
+func (fakeGitHub) PostComment(_ context.Context, _ githubv4.ID, _ string) error {
+	return fmt.Errorf("pretend that PostComment failed")
+}
+
 var (
 	flagRun   = flag.Bool("run-destructive-milestones-test", false, "Run the milestone test. Requires repository owner and name flags, and GITHUB_TOKEN set in the environment.")
 	flagOwner = flag.String("milestones-github-owner", "", "Owner of testing repository")

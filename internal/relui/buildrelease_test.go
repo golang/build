@@ -30,6 +30,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-github/github"
 	"github.com/google/uuid"
+	"github.com/shurcooL/githubv4"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/gcsfs"
@@ -739,6 +740,10 @@ func (fakeGitHub) EditIssue(_ context.Context, owner string, repo string, number
 
 func (fakeGitHub) EditMilestone(_ context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
 	return nil, nil, nil
+}
+
+func (fakeGitHub) PostComment(_ context.Context, _ githubv4.ID, _ string) error {
+	return fmt.Errorf("pretend that PostComment failed")
 }
 
 type verboseListener struct {

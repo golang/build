@@ -266,6 +266,27 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		h.RegisterDefinition("pre-announce "+r.name, wd)
 	}
 
+	// Register workflows for miscellaneous tasks that happen as part of the Go release cycle.
+	{
+		// Register a "ping early-in-cycle issues" workflow.
+		wd := wf.New()
+		openTreeURL := wf.Param(wd, wf.ParamDef[string]{
+			Name:    "Open Tree URL",
+			Doc:     `Open Tree URL is the URL of an announcement that the tree is open for general Go 1.x development.`,
+			Example: "https://groups.google.com/g/golang-dev/c/09IwUs7cxXA/m/c2jyIhECBQAJ",
+			Check: func(openTreeURL string) error {
+				if !strings.HasPrefix(openTreeURL, "https://groups.google.com/g/golang-dev/c/") {
+					return fmt.Errorf("openTreeURL value %q doesn't begin with the usual prefix, so please double-check that the URL is correct", openTreeURL)
+				}
+				return nil
+			},
+		})
+		devVer := wf.Task0(wd, "Get development version", version.GetDevelVersion)
+		pinged := wf.Task2(wd, "Ping early-in-cycle issues", milestone.PingEarlyIssues, devVer, openTreeURL)
+		wf.Output(wd, "pinged", pinged)
+		h.RegisterDefinition("ping early-in-cycle issues in development milestone", wd)
+	}
+
 	// Register dry-run release workflows.
 	registerBuildTestSignOnlyWorkflow(h, version, build, currentMajor+1, task.KindBeta)
 

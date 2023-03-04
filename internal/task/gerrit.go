@@ -38,6 +38,7 @@ type GerritClient interface {
 	// ListProjects lists all the projects on the server.
 	ListProjects(ctx context.Context) ([]string, error)
 	// ReadFile reads a file from project at the specified commit.
+	// If the file doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
 	ReadFile(ctx context.Context, project, commit, file string) ([]byte, error)
 	// GetCommitsInRefs gets refs in which the specified commits were merged into.
 	GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error)

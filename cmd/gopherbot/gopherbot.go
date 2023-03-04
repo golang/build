@@ -440,7 +440,6 @@ var tasks = []struct {
 	// Tasks that are specific to the golang/go repo.
 	{"kicktrain", (*gopherbot).getOffKickTrain},
 	{"unwait-release", (*gopherbot).unwaitRelease},
-	{"ping-early-issues", (*gopherbot).pingEarlyIssues},
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label compiler/runtime issues", (*gopherbot).labelCompilerRuntimeIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
@@ -929,120 +928,6 @@ func (b *gopherbot) unwaitRelease(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
-}
-
-// pingEarlyIssues pings early-in-cycle issues in the next major release milestone.
-// This is run manually (with --only-run) at the opening of a release cycle.
-func (b *gopherbot) pingEarlyIssues(ctx context.Context) error {
-	// We only run this task if it was explicitly requested via
-	// the --only-run flag.
-	if *onlyRun == "" {
-		return nil
-	}
-
-	// Compute nextMajor, a value like "1.17" representing that Go 1.17
-	// is the next major version (the version whose development just started).
-	majorReleases, _, err := b.fetchReleases(ctx)
-	if err != nil {
-		return err
-	}
-	nextMajor := majorReleases[len(majorReleases)-1]
-
-	// The message posted in this task links to an announcement that the tree is open
-	// for general Go 1.x development. Update the openTreeURLs map appropriately when
-	// running this task.
-	openTreeURLs := map[string]string{
-		"1.22": "https://groups.google.com/g/golang-dev/c/FNPk2joOsXs/m/roCc_a4fBAAJ",
-	}
-	if url, ok := openTreeURLs[nextMajor]; !ok {
-		return fmt.Errorf("openTreeURLs[%q] is missing a value, please fill it in", nextMajor)
-	} else if !strings.HasPrefix(url, "https://groups.google.com/g/golang-dev/c/") {
-		return fmt.Errorf("openTreeURLs[%q] is %q, which doesn't begin with the usual prefix, so please double-check that the URL is correct", nextMajor, url)
-	}
-	var milestoneNumber int // TODO: Determine the milestone number dynamically.
-	if nextMajor == "1.22" {
-		milestoneNumber = 298
-	} else {
-		return fmt.Errorf("major to milestone number mapping is not implemented")
-	}
-
-	// Find all open early-in-cycle issues in the current major release milestone.
-	type issue struct {
-		ID     githubv4.ID
-		Number int
-		Title  string
-
-		TimelineItems struct {
-			Nodes []struct {
-				IssueComment struct {
-					Author struct{ Login string }
-					Body   string
-				} `graphql:"...on IssueComment"`
-			}
-		} `graphql:"timelineItems(since: $avoidDupSince, itemTypes: ISSUE_COMMENT, last: 100)"`
-	}
-	var earlyIssues []issue
-	variables := map[string]interface{}{
-		"avoidDupSince":   githubv4.DateTime{Time: time.Now().Add(-30 * 24 * time.Hour)},
-		"milestoneNumber": githubv4.String(fmt.Sprint(milestoneNumber)), // For some reason GitHub API v4 uses string type for milestone numbers.
-		"issueCursor":     (*githubv4.String)(nil),
-	}
-	for {
-		var q struct {
-			Repository struct {
-				Issues struct {
-					Nodes    []issue
-					PageInfo struct {
-						EndCursor   githubv4.String
-						HasNextPage bool
-					}
-				} `graphql:"issues(first: 100, after: $issueCursor, filterBy: {states: OPEN, labels: \"early-in-cycle\", milestoneNumber: $milestoneNumber}, orderBy: {field: CREATED_AT, direction: ASC})"`
-			} `graphql:"repository(owner: \"golang\", name: \"go\")"`
-		}
-		err := b.ghV4.Query(ctx, &q, variables)
-		if err != nil {
-			return err
-		}
-		earlyIssues = append(earlyIssues, q.Repository.Issues.Nodes...)
-		if !q.Repository.Issues.PageInfo.HasNextPage {
-			break
-		}
-		variables["issueCursor"] = githubv4.NewString(q.Repository.Issues.PageInfo.EndCursor)
-	}
-
-	// Ping them.
-EarlyIssuesLoop:
-	for _, i := range earlyIssues {
-		for _, n := range i.TimelineItems.Nodes {
-			if n.IssueComment.Author.Login == "gopherbot" && strings.Contains(n.IssueComment.Body, "friendly reminder") {
-				log.Printf("skipping early-in-cycle issue %d, it was already pinged", i.Number)
-				continue EarlyIssuesLoop
-			}
-		}
-
-		// Post a comment.
-		if *dryRun {
-			log.Printf("[dry run] would ping early-in-cycle issue\n\t#%d %s", i.Number, i.Title)
-			continue
-		}
-		log.Printf("pinging early-in-cycle issue %d (%.32s…)", i.Number, i.Title)
-		time.Sleep(3 * time.Second) // Take a moment between pinging issues, since a human will be running this task manually.
-		var m struct {
-			AddComment struct {
-				ClientMutationID string // GraphQL doesn't permit empty mutations.
-			} `graphql:"addComment(input: $input)"`
-		}
-		err := b.ghV4.Mutate(ctx, &m, githubv4.AddCommentInput{
-			SubjectID: i.ID,
-			Body: githubv4.String(fmt.Sprintf("This issue is currently labeled as early-in-cycle for Go %s.\n"+
-				"That [time is now](%s), so a friendly reminder to look at it again.", nextMajor, openTreeURLs[nextMajor])),
-		}, nil)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 

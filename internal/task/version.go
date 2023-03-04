@@ -6,7 +6,11 @@ package task
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strconv"
 	"strings"
 	"time"
@@ -50,19 +54,20 @@ func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, curre
 	}
 	// Find the most recently released major version.
 	// Going down from a high number is convenient for testing.
-	currentMajor = 100
-	for ; ; currentMajor-- {
+	for currentMajor := 100; currentMajor > 0; currentMajor-- {
 		base := fmt.Sprintf("go1.%d", currentMajor)
-		// Handle either go1.20 or go1.21.0
+		// Handle either go1.20 or go1.21.0.
 		for _, tag := range []string{base, base + ".0"} {
 			if tags[tag] {
 				return tags, currentMajor, tag, nil
 			}
 		}
 	}
+	return nil, 0, "", fmt.Errorf("couldn't find the most recently released major version out of %d tags", len(tagList))
 }
 
 // GetNextVersions returns the next for each of the given types of release.
+// It uses the same format as Go tags (for example, "go1.23.4").
 func (t *VersionTasks) GetNextVersions(ctx context.Context, kinds []ReleaseKind) ([]string, error) {
 	var next []string
 	for _, k := range kinds {
@@ -76,6 +81,7 @@ func (t *VersionTasks) GetNextVersions(ctx context.Context, kinds []ReleaseKind)
 }
 
 // GetNextVersion returns the next for the given type of release.
+// It uses the same format as Go tags (for example, "go1.23.4").
 func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (string, error) {
 	tags, currentMajor, _, err := t.tagInfo(ctx)
 	if err != nil {
@@ -105,6 +111,55 @@ func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (st
 		return fmt.Sprintf("go1.%d.0", currentMajor+1), nil
 	}
 	return "", fmt.Errorf("unknown release kind %v", kind)
+}
+
+// GetDevelVersion returns the current major Go 1.x version in development.
+//
+// This value is determined by reading the value of the Version constant in
+// the internal/goversion package of the main Go repository at HEAD commit.
+func (t *VersionTasks) GetDevelVersion(ctx context.Context) (int, error) {
+	mainBranch, err := t.Gerrit.ReadBranchHead(ctx, t.GoProject, "HEAD")
+	if err != nil {
+		return 0, err
+	}
+	tipCommit, err := t.Gerrit.ReadBranchHead(ctx, t.GoProject, mainBranch)
+	if err != nil {
+		return 0, err
+	}
+	// Fetch the goversion.go file, extract the declaration from the parsed AST.
+	//
+	// This is a pragmatic approach that relies on the trajectory of the
+	// internal/goversion package being predictable and unlikely to change.
+	// If that stops being true, this implementation is easy to re-write.
+	const goversionPath = "src/internal/goversion/goversion.go"
+	b, err := t.Gerrit.ReadFile(ctx, t.GoProject, tipCommit, goversionPath)
+	if errors.Is(err, gerrit.ErrResourceNotExist) {
+		return 0, fmt.Errorf("did not find goversion.go file (%v); possibly the internal/goversion package changed (as it's permitted to)", err)
+	} else if err != nil {
+		return 0, err
+	}
+	f, err := parser.ParseFile(token.NewFileSet(), goversionPath, b, 0)
+	if err != nil {
+		return 0, err
+	}
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, s := range g.Specs {
+			v, ok := s.(*ast.ValueSpec)
+			if !ok || len(v.Names) != 1 || v.Names[0].String() != "Version" || len(v.Values) != 1 {
+				continue
+			}
+			l, ok := v.Values[0].(*ast.BasicLit)
+			if !ok || l.Kind != token.INT {
+				continue
+			}
+			return strconv.Atoi(l.Value)
+		}
+	}
+	return 0, fmt.Errorf("did not find Version declaration in %s; possibly the internal/goversion package changed (as it's permitted to)", goversionPath)
 }
 
 func nextVersion(version string) (string, error) {

@@ -79,6 +79,29 @@ func TestGetNextVersion(t *testing.T) {
 	}
 }
 
+func TestGetDevelVersion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test that uses internet in short mode")
+	}
+
+	cl := gerrit.NewClient("https://go-review.googlesource.com", nil)
+	tasks := &VersionTasks{
+		Gerrit:    &RealGerritClient{Client: cl},
+		GoProject: "go",
+	}
+	ctx := &workflow.TaskContext{
+		Context: context.Background(),
+		Logger:  &testLogger{t, ""},
+	}
+	got, err := tasks.GetDevelVersion(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got < 22 {
+		t.Errorf("GetDevelVersion: got %d, want 22 or higher", got)
+	}
+}
+
 type versionsClient struct {
 	tags []string
 	GerritClient
