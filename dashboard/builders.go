@@ -84,6 +84,7 @@ var slowBotAliases = map[string]string{
 	"openbsd-arm":           "openbsd-arm-jsing",
 	"openbsd-arm64":         "openbsd-arm64-jsing",
 	"openbsd-mips64":        "openbsd-mips64-jsing",
+	"openbsd-ppc64":         "openbsd-ppc64-n2vi",
 	"plan9":                 "plan9-arm",
 	"plan9-386":             "plan9-386-0intro",
 	"plan9-amd64":           "plan9-amd64-0intro",
@@ -482,6 +483,16 @@ var Hosts = map[string]*HostConfig{
 		ExpectNum:   1,
 		Owners:      []*gophers.Person{gh("4a6f656c")},
 		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
+	},
+	"host-openbsd-ppc64-n2vi": {
+		IsReverse:   true,
+		ExpectNum:   1,
+		Owners:      []*gophers.Person{gh("n2vi")},
+		Notes:       "TalosII T2P9D01 (dual Power9 32GB) OpenBSD-current",
+		GoBootstrap: "none",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/home/gopher/go-openbsd-ppc64-bootstrap",
+		},
 	},
 	"host-plan9-386-0intro": {
 		IsReverse: true,
@@ -2083,6 +2094,22 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=5",
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:         "openbsd-ppc64-n2vi",
+		HostType:     "host-openbsd-ppc64-n2vi",
+		SkipSnapshot: true,
+		FlakyNet:     true,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
+		},
+		distTestAdjust: noTestDirAndNoReboot,
+		tryBot:         nil,
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-386-9_3",

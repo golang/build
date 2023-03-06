@@ -978,6 +978,7 @@ func init() {
 	addPerson("Eric Dube", "eric.alex.dube@gmail.com")
 	addPerson("Eric Engestrom", "eric@engestrom.ch", "@1ace")
 	addPerson("Eric Garrido", "ekg@google.com", "@minusnine")
+	addPerson("Eric Grosse", "grosse@gmail.com", "@n2vi")
 	addPerson("Eric Hopper", "hopper@omnifarious.org")
 	addPerson("Eric Koleda", "ekoleda+devrel@google.com")
 	addPerson("Eric Lagergren", "ericscottlagergren@gmail.com", "@ericlagergren")
