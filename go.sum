@@ -1028,8 +1028,6 @@ golang.org/x/oauth2 v0.0.0-20210805134026-6f1e6394065a/go.mod h1:KelEdhl1UZF7XfJ
 golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f/go.mod h1:KelEdhl1UZF7XfJ4dDtk6s++YSgaE7mD/BuKKDLBl4A=
 golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8 h1:RerP+noqYHUQ8CMRcPlC2nvTa4dcBIjegkuWdcUDuqg=
 golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8/go.mod h1:KelEdhl1UZF7XfJ4dDtk6s++YSgaE7mD/BuKKDLBl4A=
-golang.org/x/perf v0.0.0-20220913151710-7c6e287988f3 h1:ChUtQhjSq/uYjerTlcpLrOkD2bGMcrRuDutZVPHo3WE=
-golang.org/x/perf v0.0.0-20220913151710-7c6e287988f3/go.mod h1:UBKtEnL8aqnd+0JHqZ+2qoMDwtuy6cYhhKNoHLBiTQc=
 golang.org/x/perf v0.0.0-20221222170352-3fd27c239283 h1:MTXrvYGLsaCdRXRtex0LY6RotT5TXmQ3Ru+5d1CnPIM=
 golang.org/x/perf v0.0.0-20221222170352-3fd27c239283/go.mod h1:UBKtEnL8aqnd+0JHqZ+2qoMDwtuy6cYhhKNoHLBiTQc=
 golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=

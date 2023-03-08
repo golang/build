@@ -13,6 +13,7 @@ require (
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
 	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20190129172621-c8b1d7a94ddf
 	github.com/NYTimes/gziphandler v1.1.1
+	github.com/ajstarks/svgo v0.0.0-20210923152817-c3b6e2f0c527
 	github.com/aws/aws-sdk-go v1.30.15
 	github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625
 	github.com/creack/pty v1.1.18
@@ -73,7 +74,6 @@ require (
 	cloud.google.com/go/monitoring v1.4.0 // indirect
 	cloud.google.com/go/trace v1.2.0 // indirect
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
-	github.com/ajstarks/svgo v0.0.0-20210923152817-c3b6e2f0c527 // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751 // indirect
 	github.com/alecthomas/units v0.0.0-20190924025748-f65c72e2690d // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
