@@ -120,9 +120,11 @@ MAIN_REPO_BRANCHES = {
 OTHER_REPOS = [
     "build",
     "image",
+    "mod",
 ]
 OTHER_REPO_PORTS = {
     "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
+    "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
 }
 OTHER_REPO_BRANCHES = {
     "master":"master",
