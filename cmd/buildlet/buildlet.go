@@ -1691,7 +1691,7 @@ func httpStatus(err error) int {
 	return he.statusCode
 }
 
-// requirePassword is an http.Handler auth wrapper that enforces a
+// requirePasswordHandler is an http.Handler auth wrapper that enforces an
 // HTTP Basic password. The username is ignored.
 type requirePasswordHandler struct {
 	h        http.Handler

@@ -61,7 +61,7 @@ func CoordinatorProcess() *Process {
 	return process
 }
 
-// Process is a datastore record about the lifetime of a coordinator process.
+// ProcessRecord is a datastore record about the lifetime of a coordinator process.
 //
 // Example GQL query:
 // SELECT * From Process where LastHeartbeat > datetime("2016-01-01T00:00:00Z")

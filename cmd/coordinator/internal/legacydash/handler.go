@@ -187,7 +187,7 @@ func builderKeyRevoked(builder string) bool {
 	return false
 }
 
-// AuthHandler wraps a http.HandlerFunc with a handler that validates the
+// AuthHandler wraps an http.HandlerFunc with a handler that validates the
 // supplied key and builder query parameters.
 func AuthHandler(h dashHandler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
