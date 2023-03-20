@@ -114,12 +114,15 @@ luci.list_view(
 # The format of a builder type is thus $HOST(-$RUN_MOD)*.
 BUILDER_TYPES = [
 	"linux-amd64",
+	"linux-amd64-race",
 	"windows-amd64",
+	"windows-amd64-race",
 ]
 
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = [
+	"race",
 ]
 
 # PROJECTS lists the go.googlesource.com/<project> projects we build and test for.
@@ -146,6 +149,14 @@ HOSTS = {
     "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
 }
 
+# Return the host type for the given builder type.
+def host_of(builder_type):
+	return "-".join(builder_type.split("-")[:2])
+
+# Return a list of run-time modifications enabled in the given builder type.
+def run_mods_of(builder_type):
+	return [x for x in builder_type.split("-") if x in RUN_MODS]
+
 # builder_name produces the final builder name.
 def builder_name(project, go_branch_short, builder_type):
 	if project == "go":
@@ -160,10 +171,7 @@ def builder_name(project, go_branch_short, builder_type):
 # Creates a builder definition and returns the full name including
 # a bucket prefix.
 def define_builder(bucket, project, go_branch_short, builder_type):
-	# TODO(mknyszek): Support $HOST(-$RUN_MOD)* format when we have
-	# run-time modifications we'd like to try. Then, apply RUN_MODS
-	# to the builder definition below.
-	dimensions = HOSTS[builder_type]
+	dimensions = HOSTS[host_of(builder_type)]
 	name = builder_name(project, go_branch_short, builder_type)
 	properties = {
 		"project": project,
@@ -173,6 +181,10 @@ def define_builder(bucket, project, go_branch_short, builder_type):
 		# convenience.
 		"go_branch": GO_BRANCHES[go_branch_short],
 	}
+
+	run_mods = run_mods_of(builder_type)
+	if "race" in run_mods:
+	  properties["race_mode"] = True
 
 	luci.builder(
 		name = name,
@@ -192,7 +204,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
 # category produces a luci.console_view_entry.category from a builder_type.
 def category_from_builder_type(builder_type):
 	components = builder_type.split("-")
-	return components[0] + "|" + components[1] # Produces "$GOOS|$GOARCH"
+	return "|".join(components) # Produces "$GOOS|$GOARCH(|$RUN_MOD)*"
 
 # enabled returns two boolean values: the first one indicates if this builder_type
 # should run in presubmit for the given project and branch, and the second indicates
