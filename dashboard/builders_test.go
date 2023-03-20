@@ -949,6 +949,7 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	// when the work of adding a new port is actively underway.
 	knownMissing := map[string]bool{
 		"openbsd-mips64": true, // go.dev/issue/58110
+		"openbsd-ppc64":  true, // go.dev/issue/56001
 	}
 
 	var done = make(map[string]bool)
