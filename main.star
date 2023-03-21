@@ -143,6 +143,8 @@ GO_BRANCHES = {
 }
 
 # HOSTS is a mapping of host types to Swarming dimensions.
+#
+# The format of each host is $GOOS-$GOARCH(-$HOST_SPECIFIER)?.
 HOSTS = {
     "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
     "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
@@ -210,10 +212,19 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     )
     return bucket + "/" + name
 
-# category produces a luci.console_view_entry.category from a builder_type.
-def category_from_builder_type(builder_type):
-    components = builder_type.split("-")
-    return "|".join(components)  # Produces "$GOOS|$GOARCH(|$RUN_MOD)*"
+def display_for_builder_type(builder_type):
+    """Produces the category and short name for a luci.console_view_entry.
+
+    Args:
+        builder_type: A name defined in `BUILDER_TYPES`.
+
+    Returns:
+		The category and the short name.
+    """
+    components = builder_type.split("-", 2)
+    short_name = components[2] if len(components) > 2 else None
+    category = "|".join(components[:2])
+    return category, short_name  # Produces: "$GOOS|$GOARCH", $HOST_SPECIFIER(-$RUN_MOD)*
 
 # enabled returns two boolean values: the first one indicates if this builder_type
 # should run in presubmit for the given project and branch, and the second indicates
@@ -225,6 +236,8 @@ def enabled(project, go_branch_short, builder_type):
 def _define_go_ci():
     for project in PROJECTS:
         for go_branch_short, go_branch in GO_BRANCHES.items():
+            # Set up a CQ group for the builder definitions below.
+            #
             # cq group names must match "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"
             cq_group_name = ("%s_repo_%s" % (project, go_branch_short)).replace(".", "-")
             luci.cq_group(
@@ -236,7 +249,21 @@ def _define_go_ci():
                 allow_submit_with_open_deps = True,
             )
 
-            postsubmit_builders = {}  # Map of builder name to builder type.
+            # Set up a console for the builder definitions below.
+            if project == "go":
+                console_title = go_branch_short
+            else:
+                console_title = "x/%s (%s)" % (project, go_branch_short)
+            console_view_name = "%s-%s-ci" % (project, go_branch_short)
+            luci.console_view(
+                name = console_view_name,
+                repo = "https://go.googlesource.com/%s" % project,
+                title = console_title,
+                refs = ["refs/heads/" + go_branch],
+            )
+
+            # Define builders.
+            postsubmit_builders = []
             for builder_type in BUILDER_TYPES:
                 presubmit, postsubmit = enabled(project, go_branch_short, builder_type)
                 if presubmit:
@@ -247,31 +274,23 @@ def _define_go_ci():
                     )
                 if postsubmit:
                     name = define_builder("ci", project, go_branch_short, builder_type)
-                    postsubmit_builders[name] = builder_type
+                    category, short_name = display_for_builder_type(builder_type)
+                    luci.console_view_entry(
+                        console_view = console_view_name,
+                        builder = name,
+                        category = category,
+                        short_name = short_name,
+                    )
+                    postsubmit_builders.append(name)
 
+            # Create the gitiles_poller last because we need the full set of builders to
+            # trigger at the point of definition.
             luci.gitiles_poller(
                 name = "%s-%s-trigger" % (project, go_branch_short),
                 bucket = "ci",
                 repo = "https://go.googlesource.com/%s" % project,
                 refs = ["refs/heads/" + go_branch],
-                triggers = postsubmit_builders.keys(),
-            )
-            if project == "go":
-                console_title = go_branch_short
-            else:
-                console_title = "x/%s (%s)" % (project, go_branch_short)
-            luci.console_view(
-                name = "%s-%s-ci" % (project, go_branch_short),
-                repo = "https://go.googlesource.com/%s" % project,
-                title = console_title,
-                refs = ["refs/heads/" + go_branch],
-                entries = [
-                    luci.console_view_entry(
-                        builder = name,
-                        category = category_from_builder_type(builder_type),
-                    )
-                    for name, builder_type in postsubmit_builders.items()
-                ],
+                triggers = postsubmit_builders,
             )
 
 _define_go_ci()
