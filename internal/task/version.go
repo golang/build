@@ -114,14 +114,21 @@ func nextVersion(version string) (string, error) {
 	return fmt.Sprintf("%s%d", version[:lastNonDigit+1], n+1), nil
 }
 
+func (t *VersionTasks) GenerateVersionFile(_ *workflow.TaskContext, distpack bool, version string, timestamp time.Time) (string, error) {
+	if !distpack {
+		return version, nil
+	}
+	return fmt.Sprintf("%v\ntime %v\n", version, timestamp.Format(time.RFC3339)), nil
+}
+
 // CreateAutoSubmitVersionCL mails an auto-submit change to update VERSION on branch.
-func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch string, reviewers []string, version string) (string, error) {
+func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch string, reviewers []string, versionFile string) (string, error) {
 	return t.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: t.GoProject,
 		Branch:  branch,
-		Subject: fmt.Sprintf("[%v] %v", branch, version),
+		Subject: fmt.Sprintf("[%v] %v", branch, versionFile),
 	}, reviewers, map[string]string{
-		"VERSION": version,
+		"VERSION": versionFile,
 	})
 }
 

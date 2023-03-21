@@ -40,14 +40,18 @@ import (
 
 func TestRelease(t *testing.T) {
 	t.Run("beta", func(t *testing.T) {
-		testRelease(t, "go1.18beta1", task.KindBeta)
+		testRelease(t, "go1.17", 18, "go1.18beta1", task.KindBeta)
 	})
 	t.Run("rc", func(t *testing.T) {
-		testRelease(t, "go1.18rc1", task.KindRC)
+		testRelease(t, "go1.17", 18, "go1.18rc1", task.KindRC)
 	})
 	t.Run("major", func(t *testing.T) {
-		testRelease(t, "go1.18", task.KindMajor)
+		testRelease(t, "go1.17", 18, "go1.18", task.KindMajor)
 	})
+}
+
+func TestDistpack(t *testing.T) {
+	testRelease(t, "go1.20", 21, "go1.21", task.KindMajor)
 }
 
 func TestSecurity(t *testing.T) {
@@ -96,7 +100,7 @@ type releaseTestDeps struct {
 	publishedFiles map[string]*task.WebsiteFile
 }
 
-func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
+func newReleaseTestDeps(t *testing.T, previousTag, wantVersion string) *releaseTestDeps {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
@@ -168,7 +172,7 @@ esac
 
 	goRepo := task.NewFakeRepo(t, "go")
 	base := goRepo.Commit(goFiles)
-	goRepo.Tag("go1.17", base)
+	goRepo.Tag(previousTag, base)
 	dlRepo := task.NewFakeRepo(t, "dl")
 	toolsRepo := task.NewFakeRepo(t, "tools")
 	toolsRepo1 := toolsRepo.Commit(map[string]string{
@@ -238,12 +242,12 @@ esac
 	}
 }
 
-func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
-	deps := newReleaseTestDeps(t, wantVersion)
+func testRelease(t *testing.T, prevTag string, major int, wantVersion string, kind task.ReleaseKind) {
+	deps := newReleaseTestDeps(t, prevTag, wantVersion)
 	wd := workflow.New()
 
 	deps.gerrit.wantReviewers = []string{"heschi", "dmitshur"}
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, kind, workflow.Const(deps.gerrit.wantReviewers))
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, major, kind, workflow.Const(deps.gerrit.wantReviewers))
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -253,7 +257,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.Run(deps.ctx, &verboseListener{t: t, onStall: deps.cancel})
+	outputs, err := w.Run(deps.ctx, &verboseListener{t: t, onStall: deps.cancel})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +266,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	wantPublishedFiles := map[string]string{
 		wantVersion + ".src.tar.gz": "source",
 	}
-	for _, t := range releasetargets.TargetsForGo1Point(18) {
+	for _, t := range releasetargets.TargetsForGo1Point(major) {
 		switch t.GOOS {
 		case "darwin":
 			wantPublishedFiles[wantVersion+"."+t.Name+".tar.gz"] = "archive"
@@ -305,12 +309,16 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if len(wantPublishedFiles) != 0 {
 		t.Errorf("missing %d published files: %v", len(wantPublishedFiles), wantPublishedFiles)
 	}
+	versionFile := outputs["VERSION file"].(string)
+	if !strings.Contains(versionFile, wantVersion) {
+		t.Errorf("version file should contain %q, got %q", wantVersion, versionFile)
+	}
 	checkTGZ(t, dlURL, files, "src.tar.gz", &task.WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
 	}, map[string]string{
-		"go/VERSION":       wantVersion,
+		"go/VERSION":       versionFile,
 		"go/src/make.bash": makeScript,
 	})
 	checkContents(t, dlURL, files, "windows-amd64.msi", &task.WebsiteFile{
@@ -323,16 +331,15 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		Arch: "amd64",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        wantVersion,
+		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
-		"go/pkg/something_orother/race.a":   "",
 	})
 	checkZip(t, dlURL, files, "windows-amd64.zip", &task.WebsiteFile{
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        wantVersion,
+		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
 	checkTGZ(t, dlURL, files, "linux-armv6l.tar.gz", &task.WebsiteFile{
@@ -340,7 +347,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		Arch: "armv6l",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        wantVersion,
+		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
 	checkContents(t, dlURL, files, "darwin-amd64.pkg", &task.WebsiteFile{
@@ -371,14 +378,14 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if string(version) != wantVersion {
-			t.Errorf("VERSION file is %q, expected %q", version, wantVersion)
+		if string(version) != versionFile {
+			t.Errorf("VERSION file is %q, expected %q", version, versionFile)
 		}
 	}
 }
 
 func testSecurity(t *testing.T, mergeFixes bool) {
-	deps := newReleaseTestDeps(t, "go1.18rc1")
+	deps := newReleaseTestDeps(t, "go1.17", "go1.18rc1")
 
 	// Set up the fake merge process. Once we stop to ask for approval, commit
 	// the fix to the public server.
@@ -429,7 +436,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 }
 
 func TestAdvisoryTrybotFail(t *testing.T) {
-	deps := newReleaseTestDeps(t, "go1.18rc1")
+	deps := newReleaseTestDeps(t, "go1.17", "go1.18rc1")
 	defaultApprove := deps.buildTasks.ApproveAction
 	approvedTrybots := false
 	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
@@ -462,9 +469,17 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 
 // makeScript pretends to be make.bash. It creates a fake go command that
 // knows how to fake the commands the release process runs.
-const makeScript = `#!/bin/bash
+const makeScript = `#!/bin/bash -eu
 
 GO=../
+
+if [[ $# >0 && $1 == "-distpack" ]]; then
+	mkdir -p $GO/pkg/distpack
+	tmp=$(mktemp).tar.gz
+	tar czf $tmp -C $GO/.. go
+	mv $tmp $GO/pkg/distpack/go1.99.src.tar.gz
+fi
+
 mkdir -p $GO/bin
 
 cat <<'EOF' >$GO/bin/go
@@ -494,6 +509,22 @@ cp $GO/bin/go $GO/bin/go.exe
 # versimilitude.
 mkdir -p $GO/tool/something_orother/
 touch $GO/tool/something_orother/compile
+
+if [[ $# >0 && $1 == "-distpack" ]]; then
+	case $GOOS in
+	"windows")
+		tmp=$(mktemp).zip
+		# The zip command isn't installed on our buildlets. Python is.
+		(cd $GO/.. && python3 -m zipfile -c $tmp go/)
+		mv $tmp $GO/pkg/distpack/go1.99.$GOOS-$GOARCH.zip
+		;;
+	*)
+		tmp=$(mktemp).tar.gz
+		tar czf $tmp -C $GO/.. go
+		mv $tmp $GO/pkg/distpack/go1.99.$GOOS-$GOARCH.tar.gz
+		;;
+	esac
+fi
 `
 
 // allScript pretends to be all.bash. It is hardcoded to pass.
@@ -501,7 +532,7 @@ const allScript = `#!/bin/bash -eu
 
 echo "I'm a test! :D"
 
-if [[ $GO_BUILDER_NAME =~ "js-wasm" ]]; then
+if [[ $GO_BUILDER_NAME = "js-wasm" ]]; then
   echo "Oh no, WASM is broken"
   exit 1
 fi

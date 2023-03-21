@@ -325,7 +325,11 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 		branch = "master"
 	}
 	branchVal := wf.Const(branch)
-	source := wf.Task3(wd, "Build source archive", build.buildSource, branchVal, wf.Const(""), nextVersion)
+	distpackVal := wf.Const(enableDistpack(major))
+	timestamp := wf.Task0(wd, "Timestamp release", now)
+	versionFile := wf.Task3(wd, "Generate VERSION file", version.GenerateVersionFile, distpackVal, nextVersion, timestamp)
+	wf.Output(wd, "VERSION file", versionFile)
+	source := wf.Task4(wd, "Build source archive", build.buildSource, distpackVal, branchVal, wf.Const(""), versionFile)
 	artifacts := build.addBuildTasks(wd, major, nextVersion, source)
 	wf.Output(wd, "Artifacts", artifacts)
 
@@ -361,6 +365,14 @@ func addCommTasks(
 	wf.Output(wd, "Tweet URL", tweetURL)
 }
 
+func enableDistpack(major int) bool {
+	return major > 20
+}
+
+func now(_ context.Context) (time.Time, error) {
+	return time.Now().UTC().Round(time.Second), nil
+}
+
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
 	wd *wf.Definition, major int, kind task.ReleaseKind, coordinators wf.Value[[]string],
@@ -371,15 +383,19 @@ func addSingleReleaseWorkflow(
 		branch = "master"
 	}
 	branchVal := wf.Const(branch)
+	distpackVal := wf.Const(enableDistpack(major))
 	startingHead := wf.Task1(wd, "Read starting branch head", version.ReadBranchHead, branchVal)
 
 	// Select version, check milestones.
 	nextVersion := wf.Task1(wd, "Get next version", version.GetNextVersion, kindVal)
+	timestamp := wf.Task0(wd, "Timestamp release", now)
+	versionFile := wf.Task3(wd, "Generate VERSION file", version.GenerateVersionFile, distpackVal, nextVersion, timestamp)
+	wf.Output(wd, "VERSION file", versionFile)
 	milestones := wf.Task2(wd, "Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
 
 	securityRef := wf.Param(wd, wf.ParamDef[string]{Name: "Ref from the private repository to build from (optional)"})
-	source := wf.Task3(wd, "Build source archive", build.buildSource, startingHead, securityRef, nextVersion, wf.After(checked))
+	source := wf.Task4(wd, "Build source archive", build.buildSource, distpackVal, startingHead, securityRef, versionFile, wf.After(checked))
 
 	// Build, test, and sign release.
 	signedAndTestedArtifacts := build.addBuildTasks(wd, major, nextVersion, source)
@@ -397,8 +413,8 @@ func addSingleReleaseWorkflow(
 	// been public when we started, but it should be now.
 	tagCommit := startingHead
 	if branch != "master" {
-		publishingHead := wf.Task3(wd, "Check branch state matches source archive", build.checkSourceMatch, branchVal, nextVersion, source, wf.After(okayToTagAndPublish))
-		versionCL := wf.Task3(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, coordinators, nextVersion, wf.After(publishingHead))
+		publishingHead := wf.Task4(wd, "Check branch state matches source archive", build.checkSourceMatch, distpackVal, branchVal, versionFile, source, wf.After(okayToTagAndPublish))
+		versionCL := wf.Task3(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, coordinators, versionFile, wf.After(publishingHead))
 		tagCommit = wf.Task2(wd, "Wait for version CL submission", version.AwaitCL, versionCL, publishingHead)
 	}
 	tagged := wf.Action2(wd, "Tag version", version.TagRelease, nextVersion, tagCommit, wf.After(okayToTagAndPublish))
@@ -428,29 +444,40 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 
 		// Build release artifacts for the platform.
 		// Also create installers and perform platform-specific signing where applicable.
-		bin := wf.Task2(wd, "Build binary archive", tasks.buildBinary, targetVal, source)
+		bin := wf.Task3(wd, "Build binary archive", tasks.buildBinary, wf.Const(enableDistpack(major)), targetVal, source)
+		// Windows distpacks are zip files, but we need to pass tarballs to buildlets.
+		var tar wf.Value[artifact]
 		switch target.GOOS {
 		case "darwin":
-			pkg := wf.Task3(wd, "Build PKG installer", tasks.buildDarwinPKG, targetVal, version, bin)
+			tar = bin
+			pkg := wf.Task3(wd, "Build PKG installer", tasks.buildDarwinPKG, targetVal, version, tar)
 			signedPKG := wf.Task2(wd, "Sign PKG installer", tasks.signArtifact, pkg, wf.Const(sign.BuildMacOS))
 			signedTGZ := wf.Task2(wd, "Convert to .tgz", tasks.convertPKGToTGZ, targetVal, signedPKG)
 			artifacts = append(artifacts, signedPKG, signedTGZ)
 		case "windows":
-			msi := wf.Task2(wd, "Build MSI installer", tasks.buildWindowsMSI, targetVal, bin)
+			var zip wf.Value[artifact]
+			if enableDistpack(major) {
+				zip = bin
+				tar = wf.Task2(wd, "Convert to .tgz", tasks.convertZipToTGZ, targetVal, bin)
+			} else {
+				tar = bin
+				zip = wf.Task2(wd, "Convert to .zip", tasks.convertTGZToZip, targetVal, bin)
+			}
+			msi := wf.Task2(wd, "Build MSI installer", tasks.buildWindowsMSI, targetVal, tar)
 			signedMSI := wf.Task2(wd, "Sign MSI installer", tasks.signArtifact, msi, wf.Const(sign.BuildWindows))
-			zip := wf.Task2(wd, "Convert to .zip", tasks.convertTGZToZip, targetVal, bin)
 			artifacts = append(artifacts, signedMSI, zip)
 		default:
-			artifacts = append(artifacts, bin)
+			tar = bin
+			artifacts = append(artifacts, tar)
 		}
 
 		if target.BuildOnly {
 			continue
 		}
-		short := wf.Action4(wd, "Run short tests", tasks.runTests, targetVal, wf.Const(dashboard.Builders[target.Builder]), skipTests, bin)
+		short := wf.Action4(wd, "Run short tests", tasks.runTests, targetVal, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
 		testsPassed = append(testsPassed, short)
 		if target.LongTestBuilder != "" {
-			long := wf.Action4(wd, "Run long tests", tasks.runTests, targetVal, wf.Const(dashboard.Builders[target.Builder]), skipTests, bin)
+			long := wf.Action4(wd, "Run long tests", tasks.runTests, targetVal, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
 			testsPassed = append(testsPassed, long)
 		}
 	}
@@ -513,24 +540,42 @@ type BuildReleaseTasks struct {
 	ApproveAction          func(*wf.TaskContext) error
 }
 
-func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, revision, securityRevision, version string) (artifact, error) {
+func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, distpack bool, revision, securityRevision, versionFile string) (artifact, error) {
+	url := b.GerritURL
+	rev := revision
+	if securityRevision != "" {
+		url = b.PrivateGerritURL
+		rev = securityRevision
+	}
+	if distpack {
+		return b.runBuildStep(ctx, nil, dashboard.Builders["linux-amd64"], artifact{}, "src.tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+			return bs.BuildSourceDistpack(ctx, b.GerritHTTPClient, url, rev, versionFile, w)
+		})
+	}
 	return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
-		if securityRevision != "" {
-			return task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.PrivateGerritURL, securityRevision, version, w)
-		}
-		return task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.GerritURL, revision, version, w)
+		return task.WriteSourceArchive(ctx, b.GerritHTTPClient, url, rev, versionFile, w)
 	})
 }
 
-func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, branch, version string, source artifact) (head string, _ error) {
+func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, distpack bool, branch, versionFile string, source artifact) (head string, _ error) {
 	head, err := b.GerritClient.ReadBranchHead(ctx, "go", branch)
 	if err != nil {
 		return "", err
 	}
-	_, err = b.runBuildStep(ctx, nil, nil, source, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
+	var bc *dashboard.BuildConfig
+	if distpack {
+		bc = dashboard.Builders["linux-amd64"]
+	}
+	_, err = b.runBuildStep(ctx, nil, bc, source, "", func(bs *task.BuildletStep, r io.Reader, _ io.Writer) error {
 		branchArchive := &bytes.Buffer{}
-		if err := task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.GerritURL, head, version, branchArchive); err != nil {
-			return err
+		if distpack {
+			if err := bs.BuildSourceDistpack(ctx, b.GerritHTTPClient, b.GerritURL, head, versionFile, branchArchive); err != nil {
+				return err
+			}
+		} else {
+			if err := task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.GerritURL, head, versionFile, branchArchive); err != nil {
+				return err
+			}
 		}
 		branchHashes, err := tarballHashes(branchArchive)
 		if err != nil {
@@ -572,7 +617,19 @@ func tarballHashes(r io.Reader) (map[string]string, error) {
 	return hashes, nil
 }
 
-func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
+func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, distpack bool, target *releasetargets.Target, source artifact) (artifact, error) {
+	if distpack {
+		suffix := "tar.gz"
+		if target.GOOS == "windows" {
+			suffix = "zip"
+		}
+		// Always run distpack builds on Linux.
+		bc := dashboard.Builders["linux-amd64"]
+		return b.runBuildStep(ctx, target, bc, source, suffix, func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+			return bs.BuildBinaryDistpack(ctx, r, w)
+		})
+	}
+
 	bc := dashboard.Builders[target.Builder]
 	return b.runBuildStep(ctx, target, bc, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildBinary(ctx, r, w)
@@ -598,9 +655,23 @@ func (b *BuildReleaseTasks) buildWindowsMSI(ctx *wf.TaskContext, target *release
 		return bs.BuildWindowsMSI(ctx, r, w)
 	})
 }
+
 func (b *BuildReleaseTasks) convertTGZToZip(ctx *wf.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
 	return b.runBuildStep(ctx, target, nil, binary, "zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return task.ConvertTGZToZIP(r, w)
+	})
+}
+
+func (b *BuildReleaseTasks) convertZipToTGZ(ctx *wf.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
+	return b.runBuildStep(ctx, target, nil, binary, "tar.gz", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+		// Reading the whole file isn't ideal, but we need a ReaderAt, and
+		// don't have access to the lower-level file (which would support
+		// seeking) here.
+		content, err := io.ReadAll(r)
+		if err != nil {
+			return err
+		}
+		return task.ConvertZIPToTGZ(bytes.NewReader(content), int64(len(content)), w)
 	})
 }
 
@@ -814,7 +885,8 @@ func (b *BuildReleaseTasks) checkAdvisoryTrybots(ctx *wf.TaskContext, results []
 }
 
 // runBuildStep is a convenience function that manages resources a build step might need.
-// If target and build config are specified, a BuildletStep will be passed to f.
+// If a build config is specified, a BuildletStep will be passed to f. The target and build config
+// need not match.
 // If input with a scratch file is specified, its content will be opened and passed as a Reader to f.
 // If outputSuffix is specified, a unique filename will be generated based off
 // it (and the target name, if any), the file will be opened and passed as a

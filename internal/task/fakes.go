@@ -37,10 +37,13 @@ func ServeTarball(pathMatch string, files map[string]string, w http.ResponseWrit
 
 	for name, contents := range files {
 		if err := tw.WriteHeader(&tar.Header{
-			Typeflag: tar.TypeReg,
-			Name:     name,
-			Size:     int64(len(contents)),
-			Mode:     0777,
+			Typeflag:   tar.TypeReg,
+			Name:       name,
+			Size:       int64(len(contents)),
+			Mode:       0777,
+			ModTime:    time.Now(),
+			AccessTime: time.Now(),
+			ChangeTime: time.Now(),
 		}); err != nil {
 			panic(err)
 		}

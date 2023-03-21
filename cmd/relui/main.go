@@ -238,7 +238,13 @@ func main() {
 	}
 	var h http.Handler = relui.NewServer(dbPool, w, base, siteHeader, ms)
 	if metadata.OnGCE() {
-		h = access.RequireIAPAuthHandler(h, access.IAPSkipAudienceValidation)
+		project, err := metadata.ProjectID()
+		if err != nil {
+			log.Fatal("failed to read project ID from metadata server")
+		}
+		if project == "symbolic-datum-552" {
+			h = access.RequireIAPAuthHandler(h, access.IAPSkipAudienceValidation)
+		}
 	}
 	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: GRPCHandler(grpcServer, h)}))
 }

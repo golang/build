@@ -222,6 +222,66 @@ type BuildletStep struct {
 	LogWriter   io.Writer
 }
 
+func (b *BuildletStep) BuildSourceDistpack(ctx *workflow.TaskContext, client *http.Client, gerritURL, revision, versionFile string, out io.Writer) error {
+	ctx.Printf("Create source archive.")
+	tarURL := gerritURL + "/+archive/" + revision + ".tar.gz"
+	resp, err := client.Get(tarURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to fetch %q: %v", tarURL, resp.Status)
+	}
+
+	ctx.Printf("Pushing source to buildlet from %v.", tarURL)
+	if err := b.Buildlet.PutTar(ctx, resp.Body, "go"); err != nil {
+		return fmt.Errorf("failed to put source tarball: %v", err)
+	}
+	ctx.Printf("Writing VERSION file.")
+	if err := b.Buildlet.Put(ctx, bytes.NewBufferString(versionFile), "go/VERSION", 0666); err != nil {
+		return fmt.Errorf("failed to write VERSION file: %v", err)
+	}
+	return b.buildDistpack(ctx, "*.src.tar.gz", []string{"GOOS=linux", "GOARCH=amd64"}, out)
+}
+
+func (b *BuildletStep) BuildBinaryDistpack(ctx *workflow.TaskContext, sourceArchive io.Reader, out io.Writer) error {
+	ctx.Printf("Pushing source to buildlet.")
+	if err := b.Buildlet.PutTar(ctx, sourceArchive, ""); err != nil {
+		return fmt.Errorf("failed to put source tarball: %v", err)
+	}
+	// This must not match the module files, which currently start with v0.0.1.
+	glob := fmt.Sprintf("go*%v-%v.*", b.Target.GOOS, b.Target.GOARCH)
+	makeEnv := b.makeEnv()
+	makeEnv = append(makeEnv, "GOOS="+b.Target.GOOS, "GOARCH="+b.Target.GOARCH)
+	return b.buildDistpack(ctx, glob, makeEnv, out)
+}
+
+func (b *BuildletStep) buildDistpack(ctx *workflow.TaskContext, packGlob string, makeEnv []string, out io.Writer) error {
+	buildEnv := buildenv.Production
+	if u := b.BuildConfig.GoBootstrapURL(buildEnv); u != "" {
+		ctx.Printf("Installing go1.4.")
+		if err := b.Buildlet.PutTarFromURL(ctx, u, go14); err != nil {
+			return err
+		}
+	}
+
+	ctx.Printf("Building (make.bash only) with -distpack.")
+	if err := b.exec(ctx, goDir+"/src/make.bash", []string{"-distpack"}, buildlet.ExecOpts{
+		ExtraEnv: makeEnv,
+	}); err != nil {
+		return err
+	}
+	distpackGlob := fmt.Sprintf("%v/pkg/distpack/%v", goDir, packGlob)
+	if err := b.exec(ctx, "bash", []string{"-c", "mkdir fetch && mv " + distpackGlob + " fetch/"}, buildlet.ExecOpts{
+		Dir:         ".",
+		SystemLevel: true,
+	}); err != nil {
+		return err
+	}
+	return fetchFile(ctx, b.Buildlet, out, "fetch")
+}
+
 // BuildBinary builds a binary distribution from sourceArchive and writes it to out.
 func (b *BuildletStep) BuildBinary(ctx *workflow.TaskContext, sourceArchive io.Reader, out io.Writer) error {
 	buildEnv := buildenv.Production
@@ -285,8 +345,10 @@ func (b *BuildletStep) BuildBinary(ctx *workflow.TaskContext, sourceArchive io.R
 }
 
 func (b *BuildletStep) makeEnv() []string {
+	// Use the target build config for distpack builds.
+	bc := dashboard.Builders[b.Target.Builder]
 	// We need GOROOT_FINAL both during the binary build and test runs. See go.dev/issue/52236.
-	makeEnv := []string{"GOROOT_FINAL=" + b.BuildConfig.GorootFinal()}
+	makeEnv := []string{"GOROOT_FINAL=" + bc.GorootFinal()}
 	// Add extra vars from the target's configuration.
 	makeEnv = append(makeEnv, b.Target.ExtraEnv...)
 	return makeEnv
@@ -597,6 +659,49 @@ func ConvertTGZToZIP(r io.Reader, w io.Writer) error {
 		if _, err := io.Copy(w, tr); err != nil {
 			return err
 		}
+	}
+	return zw.Close()
+}
+
+func ConvertZIPToTGZ(r io.ReaderAt, size int64, w io.Writer) error {
+	zr, err := zip.NewReader(r, size)
+	if err != nil {
+		return err
+	}
+
+	zw := gzip.NewWriter(w)
+	tw := tar.NewWriter(zw)
+
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, "/") {
+			continue
+		}
+		if err := tw.WriteHeader(&tar.Header{
+			Name:     f.Name,
+			Typeflag: tar.TypeReg,
+			Mode:     0o777,
+			Size:     int64(f.UncompressedSize64),
+
+			AccessTime: f.Modified,
+			ChangeTime: f.Modified,
+			ModTime:    f.Modified,
+		}); err != nil {
+			return err
+		}
+		content, err := f.Open()
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(tw, content); err != nil {
+			return err
+		}
+		if err := content.Close(); err != nil {
+			return err
+		}
+	}
+
+	if err := tw.Close(); err != nil {
+		return err
 	}
 	return zw.Close()
 }
