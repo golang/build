@@ -262,7 +262,7 @@ def _define_go_ci():
                 console_title = "x/%s (%s)" % (project, go_branch_short)
             luci.console_view(
                 name = "%s-%s-ci" % (project, go_branch_short),
-                repo = "https://go.googlesource.com/go",
+                repo = "https://go.googlesource.com/%s" % project,
                 title = console_title,
                 refs = ["refs/heads/" + go_branch],
                 entries = [
