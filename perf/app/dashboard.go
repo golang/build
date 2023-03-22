@@ -196,18 +196,6 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end tim
 			unit: "peak-RSS-bytes",
 		},
 		{
-			name: "BleveQuery",
-			unit: "sec/op",
-		},
-		{
-			name: "BleveQuery",
-			unit: "average-RSS-bytes",
-		},
-		{
-			name: "BleveQuery",
-			unit: "peak-RSS-bytes",
-		},
-		{
 			name: "GoBuildKubelet",
 			unit: "sec/op",
 		},
