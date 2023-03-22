@@ -37,20 +37,22 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
-func TestRelease(t *testing.T) {
-	t.Run("beta", func(t *testing.T) {
-		testRelease(t, "go1.17", 18, "go1.18beta1", task.KindBeta)
-	})
-	t.Run("rc", func(t *testing.T) {
-		testRelease(t, "go1.17", 18, "go1.18rc1", task.KindRC)
-	})
-	t.Run("major", func(t *testing.T) {
-		testRelease(t, "go1.17", 18, "go1.18", task.KindMajor)
+func TestNonDistpack(t *testing.T) {
+	t.Run("minor", func(t *testing.T) {
+		testRelease(t, "go1.20", 20, "go1.20.1", task.KindCurrentMinor)
 	})
 }
 
-func TestDistpack(t *testing.T) {
-	testRelease(t, "go1.20", 21, "go1.21", task.KindMajor)
+func TestRelease(t *testing.T) {
+	t.Run("beta", func(t *testing.T) {
+		testRelease(t, "go1.20", 21, "go1.21beta1", task.KindBeta)
+	})
+	t.Run("rc", func(t *testing.T) {
+		testRelease(t, "go1.20", 21, "go1.21rc1", task.KindRC)
+	})
+	t.Run("major", func(t *testing.T) {
+		testRelease(t, "go1.20", 21, "go1.21.0", task.KindMajor)
+	})
 }
 
 func TestSecurity(t *testing.T) {

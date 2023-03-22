@@ -28,21 +28,21 @@ type VersionTasks struct {
 // GetCurrentMajor returns the most recent major Go version, and the time at
 // which its tag was created.
 func (t *VersionTasks) GetCurrentMajor(ctx context.Context) (int, time.Time, error) {
-	_, currentMajor, err := t.tagInfo(ctx)
+	_, currentMajor, currentMajorTag, err := t.tagInfo(ctx)
 	if err != nil {
 		return 0, time.Time{}, err
 	}
-	info, err := t.Gerrit.GetTag(ctx, t.GoProject, fmt.Sprintf("go1.%d", currentMajor))
+	info, err := t.Gerrit.GetTag(ctx, t.GoProject, currentMajorTag)
 	if err != nil {
 		return 0, time.Time{}, err
 	}
 	return currentMajor, info.Created.Time(), nil
 }
 
-func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, currentMajor int, _ error) {
+func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, currentMajor int, currentMajorTag string, _ error) {
 	tagList, err := t.Gerrit.ListTags(ctx, t.GoProject)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, "", err
 	}
 	tags = map[string]bool{}
 	for _, tag := range tagList {
@@ -52,11 +52,14 @@ func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, curre
 	// Going down from a high number is convenient for testing.
 	currentMajor = 100
 	for ; ; currentMajor-- {
-		if tags[fmt.Sprintf("go1.%d", currentMajor)] {
-			break
+		base := fmt.Sprintf("go1.%d", currentMajor)
+		// Handle either go1.20 or go1.21.0
+		for _, tag := range []string{base, base + ".0"} {
+			if tags[tag] {
+				return tags, currentMajor, tag, nil
+			}
 		}
 	}
-	return tags, currentMajor, nil
 }
 
 // GetNextVersions returns the next for each of the given types of release.
@@ -74,7 +77,7 @@ func (t *VersionTasks) GetNextVersions(ctx context.Context, kinds []ReleaseKind)
 
 // GetNextVersion returns the next for the given type of release.
 func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (string, error) {
-	tags, currentMajor, err := t.tagInfo(ctx)
+	tags, currentMajor, _, err := t.tagInfo(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +102,7 @@ func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (st
 	case KindRC:
 		return findUnused(fmt.Sprintf("go1.%drc1", currentMajor+1))
 	case KindMajor:
-		return fmt.Sprintf("go1.%d", currentMajor+1), nil
+		return fmt.Sprintf("go1.%d.0", currentMajor+1), nil
 	}
 	return "", fmt.Errorf("unknown release kind %v", kind)
 }

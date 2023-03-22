@@ -33,12 +33,15 @@ import (
 )
 
 type releaseAnnouncement struct {
+	// Kind is the kind of release being announced.
+	Kind ReleaseKind
+
 	// Version is the Go version that has been released.
 	//
 	// The version string must use the same format as Go tags. For example:
 	// 	• "go1.17.2" for a minor Go release
-	// 	• "go1.18" for a major Go release
-	// 	• "go1.18beta1" or "go1.18rc1" for a pre-release
+	// 	• "go1.21.0" for a major Go release
+	// 	• "go1.21beta1" or "go1.21rc1" for a pre-release
 	Version string
 	// SecondaryVersion is an older Go version that was also released.
 	// This only applies to minor releases when two releases are made.
@@ -129,7 +132,7 @@ type SentMail struct {
 }
 
 // AnnounceRelease sends an email announcing a Go release to Google Groups.
-func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions []string, security []string, users []string) (SentMail, error) {
+func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, kind ReleaseKind, versions []string, security []string, users []string) (SentMail, error) {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for announce release task; a minimum of a minute left on context is required")
 	}
@@ -142,6 +145,7 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions [
 	}
 
 	r := releaseAnnouncement{
+		Kind:     kind,
 		Version:  versions[0],
 		Security: security,
 		Names:    names,
@@ -307,18 +311,18 @@ func announcementMail(data any) (MailContent, error) {
 	var name string
 	switch r := data.(type) {
 	case releaseAnnouncement:
-		if i := strings.Index(r.Version, "beta"); i != -1 { // A beta release.
+		switch r.Kind {
+		case KindBeta:
 			name = "announce-beta.md"
-		} else if i := strings.Index(r.Version, "rc"); i != -1 { // Release Candidate.
+		case KindRC:
 			name = "announce-rc.md"
-		} else if strings.Count(r.Version, ".") == 1 { // Major release like "go1.X".
+		case KindMajor:
 			name = "announce-major.md"
-		} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
+		case KindCurrentMinor, KindPrevMinor:
 			name = "announce-minor.md"
-		} else {
-			return MailContent{}, fmt.Errorf("unknown version format: %q", r.Version)
+		default:
+			return MailContent{}, fmt.Errorf("unknown release kind: %v", r.Kind)
 		}
-
 		if len(r.Security) > 0 && name != "announce-minor.md" {
 			// The Security field isn't supported in templates other than minor,
 			// so report an error instead of silently dropping it.

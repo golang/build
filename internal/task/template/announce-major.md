@@ -4,8 +4,8 @@ Hello gophers,
 
 We have just released Go {{short .Version}}.
 
-To find out what has changed in Go {{short .Version}}, read the release notes:
-https://go.dev/doc/{{.Version}}
+To find out what has changed in Go {{major .Version}}, read the release notes:
+https://go.dev/doc/go{{.Version|major}}
 
 You can download binary and source distributions from our download page:
 https://go.dev/dl/#{{.Version}}

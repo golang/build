@@ -304,7 +304,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 			securitySummary = wf.Param(wd, securitySummaryParameter)
 			securityFixes = wf.Param(wd, securityFixesParameter)
 		}
-		addCommTasks(wd, build, comm, wf.Slice(versionPublished), securitySummary, securityFixes, coordinators)
+		addCommTasks(wd, build, comm, r.kind, wf.Slice(versionPublished), securitySummary, securityFixes, coordinators)
 
 		h.RegisterDefinition(fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
 	}
@@ -348,19 +348,19 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 
 	securitySummary := wf.Param(wd, securitySummaryParameter)
 	securityFixes := wf.Param(wd, securityFixesParameter)
-	addCommTasks(wd, build, comm, wf.Slice(v1Published, v2Published), securitySummary, securityFixes, coordinators)
+	addCommTasks(wd, build, comm, task.KindCurrentMinor, wf.Slice(v1Published, v2Published), securitySummary, securityFixes, coordinators)
 
 	return wd, nil
 }
 
 func addCommTasks(
 	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
-	versions wf.Value[[]string], securitySummary wf.Value[string], securityFixes, coordinators wf.Value[[]string],
+	kind task.ReleaseKind, versions wf.Value[[]string], securitySummary wf.Value[string], securityFixes, coordinators wf.Value[[]string],
 ) {
 	okayToAnnounceAndTweet := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(versions))
 
 	// Announce that a new Go release has been published.
-	sentMail := wf.Task3(wd, "mail-announcement", comm.AnnounceRelease, versions, securityFixes, coordinators, wf.After(okayToAnnounceAndTweet))
+	sentMail := wf.Task4(wd, "mail-announcement", comm.AnnounceRelease, wf.Const(kind), versions, securityFixes, coordinators, wf.After(okayToAnnounceAndTweet))
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
 	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, versions, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
 
@@ -404,7 +404,7 @@ func addSingleReleaseWorkflow(
 	signedAndTestedArtifacts, modules := build.addBuildTasks(wd, major, nextVersion, timestamp, source)
 	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
 
-	dlcl := wf.Task3(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
+	dlcl := wf.Task5(wd, "Mail DL CL", version.MailDLCL, wf.Const(major), kindVal, nextVersion, coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
 	dlclCommit := wf.Task2(wd, "Wait for DL CL submission", version.AwaitCL, dlcl, wf.Const(""))
 	wf.Output(wd, "Download CL submitted", dlclCommit)
 

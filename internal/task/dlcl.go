@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"go/format"
 	"path"
-	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -19,50 +18,38 @@ import (
 )
 
 // MailDLCL mails a golang.org/dl CL that adds commands for the
-// specified Go versions. It accepts one or two versions only.
+// specified Go version.
 //
-// The versions must use the same format as Go tags. For example:
+// The version must use the same format as Go tags. For example:
 //   - "go1.17.2" and "go1.16.9" for a minor Go release
-//   - "go1.18" for a major Go release
+//   - "go1.21.0" for a major Go release
 //   - "go1.18beta1" or "go1.18rc1" for a pre-release
 //
 // On success, the ID of the change is returned, like "dl~1234".
-func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, versions []string, reviewers []string, dryRun bool) (changeID string, _ error) {
-	if err := oneOrTwoGoVersions(versions); err != nil {
-		return "", err
-	}
-
+func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, major int, kind ReleaseKind, version string, reviewers []string, dryRun bool) (changeID string, _ error) {
 	var files = make(map[string]string) // Map key is relative path, and map value is file content.
 
 	// Generate main.go files for versions from the template.
-	for _, ver := range versions {
-		var buf bytes.Buffer
-		versionNoPatch, err := versionNoPatch(ver)
-		if err != nil {
-			return "", err
-		}
-		if err := dlTmpl.Execute(&buf, struct {
-			Year                int
-			Version             string // "go1.5.3rc2"
-			VersionNoPatch      string // "go1.5"
-			CapitalSpaceVersion string // "Go 1.5"
-			DocHost             string // "go.dev" or "tip.golang.org" for rc/beta
-		}{
-			Year:                time.Now().UTC().Year(),
-			Version:             ver,
-			VersionNoPatch:      versionNoPatch,
-			DocHost:             docHost(ver),
-			CapitalSpaceVersion: strings.Replace(ver, "go", "Go ", 1),
-		}); err != nil {
-			return "", fmt.Errorf("dlTmpl.Execute: %v", err)
-		}
-		gofmted, err := format.Source(buf.Bytes())
-		if err != nil {
-			return "", fmt.Errorf("could not gofmt: %v", err)
-		}
-		files[path.Join(ver, "main.go")] = string(gofmted)
-		ctx.Printf("file %q (command %q):\n%s", path.Join(ver, "main.go"), "golang.org/dl/"+ver, gofmted)
+	var buf bytes.Buffer
+	if err := dlTmpl.Execute(&buf, struct {
+		Year                int
+		Version             string // "go1.5.3rc2"
+		DocLink             string // "https://go.dev/doc/go1.5"
+		CapitalSpaceVersion string // "Go 1.5.0"
+	}{
+		Year:                time.Now().UTC().Year(),
+		Version:             version,
+		DocLink:             docLink(major, kind, version),
+		CapitalSpaceVersion: strings.Replace(version, "go", "Go ", 1),
+	}); err != nil {
+		return "", fmt.Errorf("dlTmpl.Execute: %v", err)
 	}
+	gofmted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return "", fmt.Errorf("could not gofmt: %v", err)
+	}
+	files[path.Join(version, "main.go")] = string(gofmted)
+	ctx.Printf("file %q (command %q):\n%s", path.Join(version, "main.go"), "golang.org/dl/"+version, gofmted)
 
 	// Create a Gerrit CL using the Gerrit API.
 	if dryRun {
@@ -70,7 +57,7 @@ func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, versions []string, re
 	}
 	changeInput := gerrit.ChangeInput{
 		Project: "dl",
-		Subject: "dl: add " + strings.Join(versions, " and "),
+		Subject: "dl: add " + version,
 		Branch:  "master",
 	}
 	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
@@ -94,23 +81,16 @@ func oneOrTwoGoVersions(versions []string) error {
 	return nil
 }
 
-func docHost(ver string) string {
-	if strings.Contains(ver, "rc") || strings.Contains(ver, "beta") {
-		return "tip.golang.org"
+func docLink(major int, kind ReleaseKind, ver string) string {
+	if kind == KindCurrentMinor || kind == KindPrevMinor {
+		return fmt.Sprintf("https://go.dev/doc/devel/release#%v", ver)
 	}
-	return "go.dev"
-}
 
-func versionNoPatch(ver string) (string, error) {
-	rx := regexp.MustCompile(`^(go\d+\.\d+)($|[\.]?\d*)($|rc|beta|\.)`)
-	m := rx.FindStringSubmatch(ver)
-	if m == nil {
-		return "", fmt.Errorf("unrecognized version %q", ver)
+	host := "go.dev"
+	if kind == KindBeta || kind == KindRC {
+		host = "tip.golang.org"
 	}
-	if m[2] != "" {
-		return "devel/release#" + m[1] + ".minor", nil
-	}
-	return m[1], nil
+	return fmt.Sprintf("https://%v/doc/go1.%d", host, major)
 }
 
 var dlTmpl = template.Must(template.New("").Parse(`// Copyright {{.Year}} The Go Authors. All rights reserved.
@@ -127,7 +107,7 @@ var dlTmpl = template.Must(template.New("").Parse(`// Copyright {{.Year}} The Go
 // And then use the {{.Version}} command as if it were your normal go
 // command.
 //
-// See the release notes at https://{{.DocHost}}/doc/{{.VersionNoPatch}}.
+// See the release notes at {{.DocLink}}.
 //
 // File bugs at https://go.dev/issue/new.
 package main

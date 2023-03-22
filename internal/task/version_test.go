@@ -49,7 +49,7 @@ func TestGetNextVersion(t *testing.T) {
 		Gerrit: &versionsClient{
 			tags: []string{
 				"go1.3beta1", "go1.3beta2", "go1.3rc1", "go1.3", "go1.3.1", "go1.3.2", "go1.3.3",
-				"go1.4beta1", "go1.4beta2", "go1.4rc1", "go1.4", "go1.4.1",
+				"go1.4beta1", "go1.4beta2", "go1.4rc1", "go1.4.0", "go1.4.1",
 				"go1.5beta1", "go1.5rc1",
 			},
 		},
@@ -70,7 +70,7 @@ func TestGetNextVersion(t *testing.T) {
 	want := map[ReleaseKind]string{
 		KindBeta:         "go1.5beta2",
 		KindRC:           "go1.5rc2",
-		KindMajor:        "go1.5",
+		KindMajor:        "go1.5.0",
 		KindCurrentMinor: "go1.4.2",
 		KindPrevMinor:    "go1.3.4",
 	}
