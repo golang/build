@@ -380,13 +380,20 @@ var windowsData = map[string]string{
   <RegistrySearch Id="installed" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installed" />
 </Property>
 <MediaTemplate EmbedCab="yes" CompressionLevel="high" MaximumUncompressedMediaSize="10" />
-<?if $(var.GoMajorVersion < 21) ?>
+<?if $(var.GoMajorVersion) < 21 ?>
 <Condition Message="Windows 7 (with Service Pack 1) or greater required.">
     ((VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1))
 </Condition>
 <?else?>
 <Condition Message="Windows 10 or greater required.">
-    (VersionNT >= 1000)
+<!-- In true MS fashion, Windows 10 pretends to be windows 8.1.
+	See https://learn.microsoft.com/en-us/troubleshoot/windows-client/application-management/versionnt-value-for-windows-10-server .
+	Workarounds exist, but seem difficult/flaky.
+	1) We could build a "bootstrapper" with wix burn, but then we'll be building .exes and there might be implications to that.
+	2) We can try one of the things listed here: https://stackoverflow.com/q/31932646 but that takes us back to https://github.com/wixtoolset/issues/issues/5824 and needing a bootstrapper.
+	So we're stuck with checking for 8.1.
+-->
+    (VersionNT >= 603)
 </Condition>
 <?endif?>
 <MajorUpgrade AllowDowngrades="yes" />
