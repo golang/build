@@ -22,6 +22,9 @@ type Target struct {
 	LongTestBuilder string
 	Race            bool
 	ExtraEnv        []string // Extra environment variables set during toolchain build.
+
+	// For Darwin targets, the minimum targeted version, e.g. 10.13 or 13.
+	MinMacOSVersion string
 }
 
 // ReleaseTargets maps a target name (usually but not always $GOOS-$GOARCH)
@@ -51,13 +54,15 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 var allReleases = map[int]ReleaseTargets{
 	18: {
 		"darwin-amd64": &Target{
-			Builder:  "darwin-amd64-12_0",
-			Race:     true,
-			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
+			Builder:         "darwin-amd64-12_0",
+			Race:            true,
+			MinMacOSVersion: "10.13",                                           // Issues #36025 #35459
+			ExtraEnv:        []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
 		},
 		"darwin-arm64": &Target{
-			Builder: "darwin-arm64-12",
-			Race:    true,
+			Builder:         "darwin-arm64-12",
+			Race:            true,
+			MinMacOSVersion: "11", // Big Sur was the first release with M1 support.
 		},
 		"freebsd-386": &Target{
 			SecondClass: true,
@@ -122,11 +127,13 @@ var allReleases = map[int]ReleaseTargets{
 	20: {
 		// 1.20 drops Race .as from the distribution.
 		"darwin-amd64": &Target{
-			Builder:  "darwin-amd64-13",
-			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
+			Builder:         "darwin-amd64-13",
+			MinMacOSVersion: "10.13",                                           // Issues #36025 #35459
+			ExtraEnv:        []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
 		},
 		"darwin-arm64": &Target{
-			Builder: "darwin-arm64-12",
+			Builder:         "darwin-arm64-12",
+			MinMacOSVersion: "11", // Big Sur was the first release with M1 support.
 		},
 		"freebsd-386": &Target{
 			SecondClass: true,
@@ -152,6 +159,12 @@ var allReleases = map[int]ReleaseTargets{
 			LongTestBuilder: "windows-amd64-longtest",
 		},
 	},
+	21: {
+		"darwin-amd64": &Target{
+			Builder:         "darwin-amd64-13",
+			MinMacOSVersion: "10.15", // go.dev/issue/57125
+		},
+	},
 }
 
 func init() {
@@ -167,6 +180,10 @@ func init() {
 			}
 			if target.GOARCH == "" {
 				target.GOARCH = parts[1]
+			}
+
+			if (target.MinMacOSVersion != "") != (target.GOOS == "darwin") {
+				panic("must set MinMacOSVersion in target " + target.Name)
 			}
 		}
 	}

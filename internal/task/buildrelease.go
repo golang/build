@@ -353,7 +353,11 @@ chmod o-w .
 		return err
 	}
 	var buf bytes.Buffer
-	if err := darwinDistTmpl.ExecuteTemplate(&buf, "dist.xml", darwinDistData[b.Target.GOARCH]); err != nil {
+	distData := darwinDistData{
+		HostArchs: map[string]string{"amd64": "x86_64", "arm64": "arm64"}[b.Target.GOARCH],
+		MinOS:     b.Target.MinMacOSVersion,
+	}
+	if err := darwinDistTmpl.ExecuteTemplate(&buf, "dist.xml", distData); err != nil {
 		return err
 	}
 	if err := b.Buildlet.Put(ctx, &buf, "pkg-distribution", 0644); err != nil {
@@ -386,21 +390,10 @@ func darwinPKGBackground(goarch string) ([]byte, error) {
 }
 
 var darwinDistTmpl = template.Must(template.New("").ParseFS(darwinPKGData, "_data/darwinpkg/dist.xml"))
-var darwinDistData = map[string]struct { // Map key is the target GOARCH.
-	HostArchs   string // hostArchitectures option value.
-	MinOS       string // Minimum required system.version.ProductVersion.
-	MinOSPretty string // For example, "macOS 11".
-}{
-	"arm64": {
-		HostArchs:   "arm64",
-		MinOS:       "11.0.0",
-		MinOSPretty: "macOS 11",
-	},
-	"amd64": {
-		HostArchs:   "x86_64",
-		MinOS:       "10.13.0",
-		MinOSPretty: "macOS 10.13",
-	},
+
+type darwinDistData struct {
+	HostArchs string // hostArchitectures option value.
+	MinOS     string // Minimum required system.version.ProductVersion.
 }
 
 // ConvertPKGToTGZ converts a macOS installer (.pkg) to a .tar.gz tarball.

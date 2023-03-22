@@ -10,7 +10,7 @@
     function installCheck() {
       if (!(system.compareVersions(system.version.ProductVersion, '{{.MinOS}}') >= 0)) {
         my.result.title = 'Unable to install';
-        my.result.message = 'Go requires {{.MinOSPretty}} or later.';
+        my.result.message = 'Go requires macOS {{.MinOS}} or later.';
         my.result.type = 'Fatal';
         return false;
       }
