@@ -108,14 +108,15 @@ func windowsMSI() error {
 	}
 
 	// Build package.
-	verMajor, verMinor, verPatch := splitVersion(version)
+	verMajor, verMinor := splitVersion(version)
 
 	fmt.Fprintln(os.Stderr, "running wix candle")
 	if err := runDir(win, filepath.Join(wix, "candle"),
 		"-nologo",
 		"-arch", msArch(),
 		"-dGoVersion="+version,
-		fmt.Sprintf("-dWixGoVersion=%v.%v.%v", verMajor, verMinor, verPatch),
+		fmt.Sprintf("-dGoMajorVersion=%v", verMajor),
+		fmt.Sprintf("-dWixGoVersion=1.%v.%v", verMajor, verMinor),
 		"-dArch="+runtime.GOARCH,
 		"-dSourceDir="+goDir,
 		filepath.Join(win, "installer.wxs"),
@@ -274,12 +275,11 @@ func ext() string {
 	return ""
 }
 
-var versionRe = regexp.MustCompile(`^go(\d+(\.\d+)*)`)
+var versionRe = regexp.MustCompile(`^go1\.(\d+(\.\d+)?)`)
 
 // splitVersion splits a Go version string such as "go1.9" or "go1.10.2" (as matched by versionRe)
-// into its three parts: major, minor, and patch
-// It's based on the Git tag.
-func splitVersion(v string) (major, minor, patch int) {
+// into its parts: major and minor.
+func splitVersion(v string) (major, minor int) {
 	m := versionRe.FindStringSubmatch(v)
 	if m == nil {
 		return
@@ -290,10 +290,6 @@ func splitVersion(v string) (major, minor, patch int) {
 
 		if len(parts) >= 2 {
 			minor, _ = strconv.Atoi(parts[1])
-
-			if len(parts) >= 3 {
-				patch, _ = strconv.Atoi(parts[2])
-			}
 		}
 	}
 	return
@@ -359,7 +355,7 @@ var windowsData = map[string]string{
     Name="Go Programming Language $(var.Arch) $(var.GoVersion)"
     Language="1033"
     Version="$(var.WixGoVersion)"
-    Manufacturer="https://golang.org"
+    Manufacturer="https://go.dev"
     UpgradeCode="$(var.UpgradeCode)" >
 
 <Package
@@ -374,9 +370,9 @@ var windowsData = map[string]string{
 
 <Property Id="ARPCOMMENTS" Value="The Go programming language is a fast, statically typed, compiled language that feels like a dynamically typed, interpreted language." />
 <Property Id="ARPCONTACT" Value="golang-nuts@googlegroups.com" />
-<Property Id="ARPHELPLINK" Value="https://golang.org/help/" />
-<Property Id="ARPREADME" Value="https://golang.org" />
-<Property Id="ARPURLINFOABOUT" Value="https://golang.org" />
+<Property Id="ARPHELPLINK" Value="https://go.dev/help" />
+<Property Id="ARPREADME" Value="https://go.dev" />
+<Property Id="ARPURLINFOABOUT" Value="https://go.dev" />
 <Property Id="LicenseAccepted">1</Property>
 <Icon Id="gopher.ico" SourceFile="images\gopher.ico"/>
 <Property Id="ARPPRODUCTICON" Value="gopher.ico" />
@@ -384,9 +380,15 @@ var windowsData = map[string]string{
   <RegistrySearch Id="installed" Type="raw" Root="HKCU" Key="Software\GoProgrammingLanguage" Name="installed" />
 </Property>
 <MediaTemplate EmbedCab="yes" CompressionLevel="high" MaximumUncompressedMediaSize="10" />
+<?if $(var.GoMajorVersion < 21) ?>
 <Condition Message="Windows 7 (with Service Pack 1) or greater required.">
     ((VersionNT > 601) OR (VersionNT = 601 AND ServicePackLevel >= 1))
 </Condition>
+<?else?>
+<Condition Message="Windows 10 or greater required.">
+    (VersionNT >= 1000)
+</Condition>
+<?endif?>
 <MajorUpgrade AllowDowngrades="yes" />
 
 <CustomAction
@@ -487,7 +489,7 @@ var windowsData = map[string]string{
     <Custom Action="SetApplicationRootDirectory" Before="InstallFinalize" />
 </InstallExecuteSequence>
 
-<!-- Notify top level applications of the new PATH variable (golang.org/issue/18680)  -->
+<!-- Notify top level applications of the new PATH variable (go.dev/issue/18680)  -->
 <CustomActionRef Id="WixBroadcastEnvironmentChange" />
 
 <!-- Include the user interface -->

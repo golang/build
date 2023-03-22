@@ -13,17 +13,17 @@ import (
 func TestSplitVersion(t *testing.T) {
 	// Test splitVersion.
 	for _, tt := range []struct {
-		v                   string
-		major, minor, patch int
+		v            string
+		minor, patch int
 	}{
-		{"go1", 1, 0, 0},
-		{"go1.34", 1, 34, 0},
-		{"go1.34.7", 1, 34, 7},
+		{"go1", 0, 0},
+		{"go1.34", 34, 0},
+		{"go1.34.7", 34, 7},
 	} {
-		major, minor, patch := splitVersion(tt.v)
-		if major != tt.major || minor != tt.minor || patch != tt.patch {
-			t.Errorf("splitVersion(%q) = %v, %v, %v; want %v, %v, %v",
-				tt.v, major, minor, patch, tt.major, tt.minor, tt.patch)
+		minor, patch := splitVersion(tt.v)
+		if minor != tt.minor || patch != tt.patch {
+			t.Errorf("splitVersion(%q) = %v, %v; want %v, %v",
+				tt.v, minor, patch, tt.minor, tt.patch)
 		}
 	}
 }
