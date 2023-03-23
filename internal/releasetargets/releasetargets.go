@@ -5,7 +5,9 @@
 package releasetargets
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"sort"
 	"strings"
 	"sync"
@@ -35,6 +37,10 @@ type OSArch struct {
 	OS, Arch string
 }
 
+func (o OSArch) String() string {
+	return o.OS + "-" + o.Arch
+}
+
 func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 	result := map[OSArch]bool{}
 	for _, target := range rt {
@@ -47,8 +53,8 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 
 // allReleases contains all the targets for all releases we're currently
 // supporting. To reduce duplication, targets from earlier versions are
-// propagated forward unless overridden. To remove a target in a later release,
-// set it to nil explicitly.
+// propagated forward unless overridden. To stop configuring a target in a
+// later release, set it to nil explicitly.
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
 var allReleases = map[int]ReleaseTargets{
@@ -164,12 +170,27 @@ var allReleases = map[int]ReleaseTargets{
 			Builder:         "darwin-amd64-13",
 			MinMacOSVersion: "10.15", // go.dev/issue/57125
 		},
+		"linux-s390x":   nil,
+		"linux-ppc64le": nil,
+		"windows-arm": &Target{
+			Builder:     "windows-arm64-11", // Windows builds need a builder to create their MSIs.
+			SecondClass: true,
+			BuildOnly:   true,
+		},
 	},
 }
+
+//go:generate ./genlatestports.bash
+//go:embed allports/*.txt
+var allPortsFS embed.FS
+var allPorts = map[int][]OSArch{}
 
 func init() {
 	for _, targets := range allReleases {
 		for name, target := range targets {
+			if target == nil {
+				continue
+			}
 			if target.Name != "" {
 				panic(fmt.Sprintf("target.Name in %q should be left inferred", name))
 			}
@@ -187,6 +208,24 @@ func init() {
 			}
 		}
 	}
+	files, err := allPortsFS.ReadDir("allports")
+	if err != nil {
+		panic(err)
+	}
+	for _, f := range files {
+		major := 0
+		if n, err := fmt.Sscanf(f.Name(), "go1.%d.txt", &major); err != nil || n == 0 {
+			panic("failed to parse filename " + f.Name())
+		}
+		body, err := fs.ReadFile(allPortsFS, "allports/"+f.Name())
+		if err != nil {
+			panic(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+			os, arch, _ := strings.Cut(line, "/")
+			allPorts[major] = append(allPorts[major], OSArch{os, arch})
+		}
+	}
 }
 
 func sortedReleases() []int {
@@ -198,10 +237,17 @@ func sortedReleases() []int {
 	return releases
 }
 
+var unbuildableOSs = map[string]bool{
+	"android": true,
+	"ios":     true,
+	"js":      true,
+}
+
 // TargetsForGo1Point returns the ReleaseTargets that apply to the given
 // version.
 func TargetsForGo1Point(x int) ReleaseTargets {
 	targets := ReleaseTargets{}
+	var ports []OSArch
 	for _, release := range sortedReleases() {
 		if release > x {
 			break
@@ -213,6 +259,23 @@ func TargetsForGo1Point(x int) ReleaseTargets {
 				copy := *target
 				targets[osarch] = &copy
 			}
+		}
+		if p, ok := allPorts[release]; ok {
+			ports = p
+		}
+	}
+	for _, osarch := range ports {
+		_, unbuildable := unbuildableOSs[osarch.OS]
+		_, exists := targets[osarch.String()]
+		if unbuildable || exists {
+			continue
+		}
+		targets[osarch.String()] = &Target{
+			Name:        osarch.String(),
+			GOOS:        osarch.OS,
+			GOARCH:      osarch.Arch,
+			SecondClass: true,
+			BuildOnly:   true,
 		}
 	}
 	return targets

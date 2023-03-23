@@ -1327,9 +1327,9 @@ func (c *BuildConfig) MakeScriptArgs() []string {
 }
 
 // GorootFinal returns the default install location for
-// releases for this platform.
-func (c *BuildConfig) GorootFinal() string {
-	if strings.HasPrefix(c.Name, "windows-") {
+// releases for the given GOOS.
+func GorootFinal(goos string) string {
+	if goos == "windows" {
 		return "c:\\go"
 	}
 	return "/usr/local/go"

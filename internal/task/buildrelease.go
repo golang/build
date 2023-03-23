@@ -345,10 +345,8 @@ func (b *BuildletStep) BuildBinary(ctx *workflow.TaskContext, sourceArchive io.R
 }
 
 func (b *BuildletStep) makeEnv() []string {
-	// Use the target build config for distpack builds.
-	bc := dashboard.Builders[b.Target.Builder]
 	// We need GOROOT_FINAL both during the binary build and test runs. See go.dev/issue/52236.
-	makeEnv := []string{"GOROOT_FINAL=" + bc.GorootFinal()}
+	makeEnv := []string{"GOROOT_FINAL=" + dashboard.GorootFinal(b.Target.GOOS)}
 	// Add extra vars from the target's configuration.
 	makeEnv = append(makeEnv, b.Target.ExtraEnv...)
 	return makeEnv

@@ -151,7 +151,7 @@ func (t *tester) runTests(ctx context.Context, builderType string, info *buildIn
 		return builderResult{builderType: builderType, err: fmt.Errorf("failed to get work dir: %s", err)}
 	}
 
-	env := append(buildConfig.Env(), "GOPATH="+work+"/gopath", "GOROOT_FINAL="+buildConfig.GorootFinal(), "GOROOT="+work+"/go")
+	env := append(buildConfig.Env(), "GOPATH="+work+"/gopath", "GOROOT_FINAL="+dashboard.GorootFinal(buildConfig.GOOS()), "GOROOT="+work+"/go")
 	// Because we are unable to determine the internal GCE hostname of the
 	// coordinator, we cannot use the same GOPROXY proxy that the public TryBots
 	// use to get around the disabled network. Instead of using that proxy

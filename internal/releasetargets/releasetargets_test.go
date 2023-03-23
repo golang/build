@@ -54,8 +54,14 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 	for _, name := range targetNames {
 		target := targets[name]
 		var flags []string
+		builder := target.Builder
 		if target.BuildOnly {
-			flags = append(flags, "Build only")
+			if builder == "" {
+				builder = "(cross-compiled, no tests)"
+			} else {
+				flags = append(flags, "Build only")
+			}
+
 		}
 		if target.Race {
 			flags = append(flags, "Race enabled")
@@ -63,7 +69,7 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 		if target.LongTestBuilder != "" {
 			flags = append(flags, "Long tests on "+target.LongTestBuilder)
 		}
-		fmt.Fprintf(w, "%-15v %-10v %-10v %v\n", name, target.GOOS, target.GOARCH, target.Builder)
+		fmt.Fprintf(w, "%-15v %-10v %-10v %v\n", name, target.GOOS, target.GOARCH, builder)
 		if len(flags) != 0 {
 			fmt.Fprintf(w, "\t%v\n", strings.Join(flags, ", "))
 		}
@@ -93,6 +99,9 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 func TestBuildersExist(t *testing.T) {
 	for _, rel := range allReleases {
 		for _, target := range rel {
+			if target == nil || target.Builder == "" {
+				continue
+			}
 			_, ok := dashboard.Builders[target.Builder]
 			if !ok {
 				t.Errorf("missing builder: %q", target.Builder)
