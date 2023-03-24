@@ -626,6 +626,23 @@ func TestBuilderConfig(t *testing.T) {
 		{b("js-wasm-node18", "tour"), none},
 		{b("js-wasm-node18", "website"), none},
 
+		{b("wasip1-wasm-wazero", "go"), onlyPost},
+		{b("wasip1-wasm-wazero@go1.21", "go"), onlyPost},
+		{b("wasip1-wasm-wazero@go1.20", "go"), none},
+		// Test wasip1/wasm on a subset of golang.org/x repos:
+		{b("wasip1-wasm-wazero", "arch"), onlyPost},
+		{b("wasip1-wasm-wazero", "crypto"), onlyPost},
+		{b("wasip1-wasm-wazero", "sys"), onlyPost},
+		{b("wasip1-wasm-wazero", "net"), onlyPost},
+		{b("wasip1-wasm-wazero", "benchmarks"), none},
+		{b("wasip1-wasm-wazero", "debug"), none},
+		{b("wasip1-wasm-wazero", "mobile"), none},
+		{b("wasip1-wasm-wazero", "perf"), none},
+		{b("wasip1-wasm-wazero", "talks"), none},
+		{b("wasip1-wasm-wazero", "tools"), none},
+		{b("wasip1-wasm-wazero", "tour"), none},
+		{b("wasip1-wasm-wazero", "website"), none},
+
 		// Race builders. Linux for all, GCE builders for
 		// post-submit, and only post-submit for "go" for
 		// Darwin (limited resources).
@@ -665,6 +682,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("freebsd-386-12_3", "exp"), none},
 		{b("freebsd-amd64-12_3", "exp"), none},
 		{b("js-wasm", "exp"), none},
+		{b("wasip1-wasm-wazero", "exp"), none},
 
 		// exp is experimental; it doesn't test against release branches.
 		{b("linux-amd64@go1.99", "exp"), none},
@@ -691,6 +709,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64@go1.20", "pkgsite-metrics"), both},
 
 		{b("js-wasm", "build"), none},
+		{b("wasip1-wasm-wazero", "build"), none},
 		{b("android-386-emu", "build"), none},
 		{b("android-amd64-emu", "build"), none},
 

@@ -53,6 +53,7 @@ var slowBotAliases = map[string]string{
 	"illumos":               "illumos-amd64",
 	"ios":                   "ios-arm64-corellium",
 	"js":                    "js-wasm-node18",
+	"wasip1":                "wasip1-wasm-wazero",
 	"linux":                 "linux-amd64",
 	"linux-arm":             "linux-arm-aws",
 	"linux-loong64":         "linux-loong64-3a5000",
@@ -97,6 +98,7 @@ var slowBotAliases = map[string]string{
 	"solaris":               "solaris-amd64-oraclerel",
 	"solaris-amd64":         "solaris-amd64-oraclerel",
 	"wasm":                  "js-wasm-node18",
+	"wazero":                "wasip1-wasm-wazero",
 	"windows":               "windows-amd64-2016",
 	"windows-386":           "windows-386-2016",
 	"windows-amd64":         "windows-amd64-2016",
@@ -320,6 +322,11 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-amd64-stretch": {
 		Notes:          "Debian Stretch",
 		ContainerImage: "linux-x86-stretch:latest",
+		SSHUsername:    "root",
+	},
+	"host-linux-amd64-wasip1-wasm-wazero": {
+		Notes:          "Container with Wazero for testing wasip1/wasm.",
+		ContainerImage: "wasip1-wasm-wazero:latest",
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-wsl": {
@@ -3088,6 +3095,37 @@ func init() {
 		},
 		RunBench:     true,
 		SkipSnapshot: true,
+	})
+	addBuilder(BuildConfig{
+		Name:        "wasip1-wasm-wazero",
+		HostType:    "host-linux-amd64-wasip1-wasm-wazero",
+		KnownIssues: []int{58141},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
+			switch repo {
+			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+				// Don't test these golang.org/x repos.
+				b = false
+			}
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
+				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
+				run = false
+			}
+			return run
+		},
+		numTryTestHelpers: 3,
+		env: []string{
+			"GOOS=wasip1", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
 	})
 }
 
