@@ -1270,9 +1270,9 @@ func buildRepoByDefault(repo string) bool {
 }
 
 var (
-	defaultPlusExp                          = defaultPlus("exp")
-	defaultPlusExpBuild                     = defaultPlus("exp", "build")
-	defaultPlusExpBuildVulnDBPkgsiteMetrics = defaultPlus("exp", "build", "vulndb", "pkgsite-metrics")
+	defaultPlusExp            = defaultPlus("exp")
+	defaultPlusExpBuild       = defaultPlus("exp", "build")
+	defaultPlusExpBuildVulnDB = defaultPlus("exp", "build", "vulndb")
 )
 
 // defaultPlus returns a buildsRepo policy function that returns true for all
@@ -1559,10 +1559,16 @@ func init() {
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=softfloat"},
 	})
 	addBuilder(BuildConfig{
-		Name:       "linux-amd64",
-		HostType:   "host-linux-amd64-bullseye",
-		tryBot:     defaultTrySet(),
-		buildsRepo: defaultPlusExpBuildVulnDBPkgsiteMetrics,
+		Name:     "linux-amd64",
+		HostType: "host-linux-amd64-bullseye",
+		tryBot:   defaultTrySet(),
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := defaultPlusExpBuildVulnDB(repo, branch, goBranch)
+			if repo == "pkgsite-metrics" {
+				b = atLeastGo1(goBranch, 20)
+			}
+			return b
+		},
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
