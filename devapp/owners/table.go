@@ -976,11 +976,12 @@ var archOses = map[string]*Entry{
 	"freebsd":   archOsTeam("freebsd"),
 	"illumos":   archOsTeam("illumos"),
 	"ios":       archOsTeam("ios"),
+	"js":        archOsTeam("js"),
 	"netbsd":    archOsTeam("netbsd"),
 	"openbsd":   archOsTeam("openbsd"),
 	"plan9":     archOsTeam("plan9"),
 	"solaris":   archOsTeam("solaris"), // team is empty as of 2022-10
-	"wasm":      archOsTeam("wasm"),
+	"wasip1":    archOsTeam("wasm"),
 	"windows":   archOsTeam("windows"),
 
 	// Architectures.  There is no team for "x86" or "amd64".
@@ -992,6 +993,7 @@ var archOses = map[string]*Entry{
 	"riscv64": archOsTeam("riscv64"),
 	"loong64": archOsTeam("loong64"),
 	"s390x":   archOsTeam("s390x"),
+	"wasm":    archOsTeam("wasm"),
 }
 
 var wasmOwners = []Owner{neelance, cherryyz}
