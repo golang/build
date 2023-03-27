@@ -114,14 +114,18 @@ luci.list_view(
 # The format of a builder type is thus $HOST(-$RUN_MOD)*.
 BUILDER_TYPES = [
     "linux-amd64",
+    "linux-amd64-longtest",
+    "linux-amd64-longtest-race",
     "linux-amd64-race",
     "windows-amd64",
+    "windows-amd64-longtest",
     "windows-amd64-race",
 ]
 
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = [
+    "longtest",
     "race",
 ]
 
@@ -196,6 +200,11 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     run_mods = run_mods_of(builder_type)
     if "race" in run_mods:
         properties["race_mode"] = True
+    if "longtest" in run_mods:
+        properties["env"] = {
+            "GO_TEST_SHORT": 0,
+            "GO_TEST_TIMEOUT_SCALE": 5,
+        }
 
     luci.builder(
         name = name,
@@ -231,7 +240,10 @@ def display_for_builder_type(builder_type):
 # if this builder_type should run in postsubmit for the given project and branch.
 # buildifier: disable=unused-variable
 def enabled(project, go_branch_short, builder_type):
-    return True, True
+    run_mods = run_mods_of(builder_type)
+    presubmit = not any(["longtest" in run_mods, "race" in run_mods])
+    postsubmit = True
+    return presubmit, postsubmit
 
 def _define_go_ci():
     for project in PROJECTS:
