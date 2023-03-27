@@ -23,6 +23,22 @@ func doMain() error {
 	defer f.Close()
 	canvas := svg.New(f)
 	canvas.Start(600, 400)
+	canvas.Style("text/css",
+		`text {
+	fill: black;
+}
+line, path {
+	stroke: black;
+	fill: none;
+}
+@media (prefers-color-scheme: dark) {
+	text {
+		fill: white;
+	}
+	line, path {
+		stroke: white;
+	}
+}`)
 	canvas.Translate(300, 200)
 	for i, month := range strings.Split("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec", " ") {
 		angle := func(midx int) float64 {
@@ -33,7 +49,7 @@ func doMain() error {
 		// Draw a single black wedge of the calendar.
 		path := fmt.Sprintf("M 0,0 L %v,%v A 100,100 0 0 0 %v,%v L 0 0",
 			100*math.Sin(begin), 100*math.Cos(begin), 100*math.Sin(end), 100*math.Cos(end))
-		canvas.Path(path, "stroke: black; fill:none")
+		canvas.Path(path)
 
 		// Draw the text. Spin it around for readability in the second half.
 		canvas.RotateTranslate(50, 0, angle(i)*360/(2*math.Pi)+20)
@@ -99,7 +115,7 @@ func doMain() error {
 				canvas.Arc(int(x*arcRadius), int(y*arcRadius), int(arcRadius), int(arcRadius), 0, false, true, int(nx*arcRadius), int(ny*arcRadius), "stroke-width:10; fill:none; stroke: "+color)
 			}
 			// Draw the line from the inner edge of the arc.
-			canvas.Line(int(x*(arcRadius-5)), int(y*(arcRadius-5)), int(x*(arcRadius+lineLength)), int(y*(arcRadius+lineLength)), "stroke:black")
+			canvas.Line(int(x*(arcRadius-5)), int(y*(arcRadius-5)), int(x*(arcRadius+lineLength)), int(y*(arcRadius+lineLength)))
 			canvas.Text(int(x*(arcRadius+lineLength+textoff)), int(y*(arcRadius+lineLength+textoff)), relName+": "+m.name, "text-anchor: "+textAnchor)
 		}
 	}
