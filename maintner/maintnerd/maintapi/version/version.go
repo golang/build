@@ -25,11 +25,6 @@ func ParseTag(tagName string) (major, minor, patch int, ok bool) {
 	if !strings.HasPrefix(tagName, prefix) {
 		return 0, 0, 0, false
 	}
-	if strings.HasSuffix(tagName, ".0") {
-		// Trailing zero version components must be omitted in Go tags,
-		// so reject if we see one.
-		return 0, 0, 0, false
-	}
 	v := strings.SplitN(tagName[len(prefix):], ".", 4)
 	if len(v) > 3 {
 		return 0, 0, 0, false
