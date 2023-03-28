@@ -202,8 +202,8 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         properties["race_mode"] = True
     if "longtest" in run_mods:
         properties["env"] = {
-            "GO_TEST_SHORT": 0,
-            "GO_TEST_TIMEOUT_SCALE": 5,
+            "GO_TEST_SHORT": "0",
+            "GO_TEST_TIMEOUT_SCALE": "5",
         }
 
     luci.builder(
