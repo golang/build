@@ -20,3 +20,5 @@ steps:
 images:
 - 'gcr.io/symbolic-datum-552/coordinator:${TAG_NAME}'
 - 'gcr.io/symbolic-datum-552/coordinator:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY
