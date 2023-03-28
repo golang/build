@@ -394,6 +394,8 @@ func TestTrybots(t *testing.T) {
 }
 
 func checkBuildersForProject(t *testing.T, gotBuilders []*BuildConfig, want []string) {
+	t.Helper()
+
 	var got []string
 	for _, bc := range gotBuilders {
 		got = append(got, bc.Name)

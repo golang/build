@@ -2628,6 +2628,23 @@ func init() {
 		env:            []string{"CGO_ENABLED=0"},
 	})
 	addBuilder(BuildConfig{
+		Name:     "darwin-amd64-longtest",
+		HostType: "host-darwin-amd64-13-aws",
+		Notes:    "macOS 13 with go test -short=false",
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo)
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		needsGoProxy: true, // for cmd/go module tests
+		env: []string{
+			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
+		},
+	})
+	addBuilder(BuildConfig{
 		Name:           "darwin-arm64-11",
 		HostType:       "host-darwin-arm64-11",
 		distTestAdjust: macTestPolicy,
