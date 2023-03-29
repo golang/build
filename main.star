@@ -205,6 +205,17 @@ def define_builder(bucket, project, go_branch_short, builder_type):
             "GO_TEST_SHORT": "0",
             "GO_TEST_TIMEOUT_SCALE": "5",
         }
+    if project == "go" and bucket == "ci":
+        # The main repo builder also triggers subrepo builders of the same builder type.
+        #
+        # TODO(mknyszek): This rule will not apply for some ports in the future. Some
+        # ports only apply to the main Go repository and are not supported by all subrepos.
+        # PROJECTS should probably contain a table of supported ports or something.
+        properties["builders_to_trigger"] = [
+            "golang/%s/%s" % (bucket, builder_name(project, go_branch_short, builder_type))
+            for project in PROJECTS
+            if project != "go"
+        ]
 
     luci.builder(
         name = name,
