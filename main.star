@@ -312,6 +312,39 @@ def _define_go_ci():
                 triggers = postsubmit_builders,
             )
 
+def _define_tricium():
+    refsets = []
+    for project in PROJECTS:
+        for go_branch_short, go_branch in GO_BRANCHES.items():
+            refsets.append(
+                cq.refset(
+                    repo = "https://go.googlesource.com/%s" % project,
+                    refs = ["refs/heads/%s" % go_branch],
+                ),
+            )
+    name = "tricium-linux-amd64"
+    luci.builder(
+        name = name,
+        bucket = "try",
+        executable = luci.recipe(
+            name = "tricium_simple",
+        ),
+        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+        dimensions = HOSTS[host_of("linux-amd64")],
+    )
+    luci.cq_group(
+        name = "tricium",
+        watch = refsets,
+        allow_submit_with_open_deps = True,
+        verifiers = [
+            luci.cq_tryjob_verifier(
+                builder = "try/" + name,
+                mode_allowlist = [cq.MODE_ANALYZER_RUN],
+            ),
+        ],
+    )
+
 _define_go_ci()
+_define_tricium()
 
 exec("./recipes.star")
