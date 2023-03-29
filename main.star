@@ -281,12 +281,16 @@ def _define_go_ci():
             postsubmit_builders = []
             for builder_type in BUILDER_TYPES:
                 presubmit, postsubmit = enabled(project, go_branch_short, builder_type)
-                if presubmit:
-                    name = define_builder("try", project, go_branch_short, builder_type)
-                    luci.cq_tryjob_verifier(
-                        builder = name,
-                        cq_group = cq_group_name,
-                    )
+
+                # Define presubmit builders.
+                name = define_builder("try", project, go_branch_short, builder_type)
+                luci.cq_tryjob_verifier(
+                    builder = name,
+                    cq_group = cq_group_name,
+                    includable_only = not presubmit,
+                )
+
+                # Define post-submit builders.
                 if postsubmit:
                     name = define_builder("ci", project, go_branch_short, builder_type)
                     category, short_name = display_for_builder_type(builder_type)
