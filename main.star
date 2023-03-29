@@ -231,7 +231,7 @@ def display_for_builder_type(builder_type):
         builder_type: A name defined in `BUILDER_TYPES`.
 
     Returns:
-		The category and the short name.
+        The category and the short name.
     """
     components = builder_type.split("-", 2)
     short_name = components[2] if len(components) > 2 else None
@@ -315,13 +315,15 @@ def _define_go_ci():
 def _define_tricium():
     refsets = []
     for project in PROJECTS:
-        for go_branch_short, go_branch in GO_BRANCHES.items():
-            refsets.append(
-                cq.refset(
-                    repo = "https://go.googlesource.com/%s" % project,
-                    refs = ["refs/heads/%s" % go_branch],
-                ),
-            )
+        refsets.append(
+            cq.refset(
+                repo = "https://go.googlesource.com/%s" % project,
+                refs = [
+                    "refs/heads/%s" % go_branch
+                    for go_branch in GO_BRANCHES.values()
+                ],
+            ),
+        )
     name = "tricium-linux-amd64"
     luci.builder(
         name = name,
