@@ -17,7 +17,7 @@ def bundler(
         executable = luci.recipe(
             name = "recipe_bundler",
             cipd_package = "infra/recipe_bundles/chromium.googlesource.com/infra/infra",
-            cipd_version = "git_revision:acc7f2b0336dd85304eb4ac08143647f22e6812c",
+            cipd_version = "git_revision:910dab144e53063038e4e67a7d7bac729203f43c",
             use_bbagent = True,
             use_python3 = True,
         ),
@@ -29,7 +29,7 @@ def bundler(
         properties = {
             # This property controls the version of the recipe_bundler go tool:
             #   https://chromium.googlesource.com/infra/infra/+/master/go/src/infra/tools/recipe_bundler
-            "recipe_bundler_vers": "git_revision:e17798c24f16b783aedbf989791ea9caa741bdaf",
+            "recipe_bundler_vers": "git_revision:910dab144e53063038e4e67a7d7bac729203f43c",
             # These control the prefix of the CIPD package names that the tool
             # will create.
             "package_name_prefix": "golang/recipe_bundles",
