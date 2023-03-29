@@ -275,21 +275,8 @@ def _define_go_ci():
                 allow_submit_with_open_deps = True,
             )
 
-            # Set up a console for the builder definitions below.
-            if project == "go":
-                console_title = go_branch_short
-            else:
-                console_title = "x/%s (%s)" % (project, go_branch_short)
-            console_view_name = "%s-%s-ci" % (project, go_branch_short)
-            luci.console_view(
-                name = console_view_name,
-                repo = "https://go.googlesource.com/%s" % project,
-                title = console_title,
-                refs = ["refs/heads/" + go_branch],
-            )
-
             # Define builders.
-            postsubmit_builders = []
+            postsubmit_builders = {}
             for builder_type in BUILDER_TYPES:
                 presubmit, postsubmit = enabled(project, go_branch_short, builder_type)
 
@@ -304,14 +291,7 @@ def _define_go_ci():
                 # Define post-submit builders.
                 if postsubmit:
                     name = define_builder("ci", project, go_branch_short, builder_type)
-                    category, short_name = display_for_builder_type(builder_type)
-                    luci.console_view_entry(
-                        console_view = console_view_name,
-                        builder = name,
-                        category = category,
-                        short_name = short_name,
-                    )
-                    postsubmit_builders.append(name)
+                    postsubmit_builders[name] = display_for_builder_type(builder_type)
 
             # Create the gitiles_poller last because we need the full set of builders to
             # trigger at the point of definition.
@@ -320,8 +300,43 @@ def _define_go_ci():
                 bucket = "ci",
                 repo = "https://go.googlesource.com/%s" % project,
                 refs = ["refs/heads/" + go_branch],
-                triggers = postsubmit_builders,
+                triggers = postsubmit_builders.keys(),
             )
+
+            # Set up consoles for postsubmit builders.
+            def make_console_view_entries(builders):
+                return [
+                    luci.console_view_entry(
+                        builder = name,
+                        category = display[0],
+                        short_name = display[1],
+                    )
+                    for name, display in builders.items()
+                ]
+
+            if project == "go":
+                luci.console_view(
+                    name = "%s-%s-ci" % (project, go_branch_short),
+                    repo = "https://go.googlesource.com/go",
+                    title = go_branch_short,
+                    refs = ["refs/heads/" + go_branch],
+                    entries = make_console_view_entries(postsubmit_builders),
+                )
+            else:
+                luci.console_view(
+                    name = "%s-%s-ci" % (project, go_branch_short),
+                    repo = "https://go.googlesource.com/%s" % project,
+                    title = "x/%s (against %s, by subrepo commit)" % (project, go_branch_short),
+                    refs = ["refs/heads/master"],
+                    entries = make_console_view_entries(postsubmit_builders),
+                )
+                luci.console_view(
+                    name = "%s-%s-by-go-ci" % (project, go_branch_short),
+                    repo = "https://go.googlesource.com/go",
+                    title = "x/%s (against %s, by go commit)" % (project, go_branch_short),
+                    refs = ["refs/heads/" + go_branch],
+                    entries = make_console_view_entries(postsubmit_builders),
+                )
 
 def _define_tricium():
     refsets = []
