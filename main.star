@@ -218,6 +218,9 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         dimensions = dimensions,
         properties = properties,
         service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+        resultdb_settings = resultdb.settings(
+            enable = True,
+        ),
     )
     return bucket + "/" + name
 
