@@ -51,6 +51,12 @@ luci.project(
             roles = "role/buildbucket.reader",
             groups = "googlers",
         ),
+
+        # Allow task service accounts to spawn builds.
+        luci.binding(
+            roles = "role/buildbucket.triggerer",
+            groups = "project-golang-task-accounts",
+        ),
     ],
     acls = [
         acl.entry(
