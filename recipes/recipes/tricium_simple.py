@@ -22,7 +22,7 @@ def RunSteps(api):
       'https://%s' % api.tryserver.gerrit_change.host,
        api.tryserver.gerrit_change.change, api.tryserver.gerrit_change.patchset)
   repo_path = api.path['start_dir'].join(project)
-  url = 'https://%s' % api.tryserver.gerrit_change.host
+  url = 'https://%s/%s' % (api.tryserver.gerrit_change.host, api.tryserver.gerrit_change.project)
   ref = "refs/changes/%d/%d/%d" % (api.tryserver.gerrit_change.change%100,
                                    api.tryserver.gerrit_change.change,
                                    api.tryserver.gerrit_change.patchset)
