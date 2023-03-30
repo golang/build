@@ -179,15 +179,21 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		if rel == "." {
 			return nil
 		}
+		if rel == ".git" {
+			if fi.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil // .git is a file in `git worktree` checkouts.
+		}
 		if fi.IsDir() {
 			switch rel {
-			case ".git", "pkg", "bin":
+			case "pkg", "bin":
 				return filepath.SkipDir
 			}
 		}
 		inf := fileInfo{fi: fi}
 		if isGitIgnored(path) {
-			if fi.Mode().IsDir() {
+			if fi.IsDir() {
 				return filepath.SkipDir
 			}
 			return nil
