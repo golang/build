@@ -327,19 +327,65 @@ def _define_go_ci():
                     title = go_branch_short,
                     refs = ["refs/heads/" + go_branch],
                     entries = make_console_view_entries(postsubmit_builders),
+                    header = {
+                        "links": [
+                            {
+                                "name": "General",
+                                "links": [
+                                    {
+                                        "text": "Contributing",
+                                        "url": "https://go.dev/doc/contribute",
+                                        "alt": "Go contribution guide",
+                                    },
+                                    {
+                                        "text": "Release cycle",
+                                        "url": "https://go.dev/s/release",
+                                        "alt": "Go release cycle overview",
+                                    },
+                                    {
+                                        "text": "Wiki",
+                                        "url": "https://go.dev/wiki",
+                                        "alt": "The Go wiki on GitHub",
+                                    },
+                                    {
+                                        "text": "Playground",
+                                        "url": "https://go.dev/play",
+                                        "alt": "Go playground",
+                                    },
+                                ],
+                            },
+                        ],
+                        "console_groups": [
+                            {
+                                "title": {"text": "golang.org/x repos"},
+                                "console_ids": [
+                                    # The *-by-go-ci consoles would be more appropriate,
+                                    # but because they have the same builder set and these
+                                    # bubbles show just the latest build, it doesn't actually
+                                    # matter.
+                                    "%s-%s-ci" % (project, go_branch_short)
+                                    for project in PROJECTS
+                                    if project != "go"
+                                ],
+                            },
+                        ],
+                    },
                 )
             else:
+                console_title = "x/" + project
+                if go_branch_short != "gotip":
+                    console_title += " on " + go_branch_short
                 luci.console_view(
                     name = "%s-%s-ci" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/%s" % project,
-                    title = "x/%s (against %s, by subrepo commit)" % (project, go_branch_short),
+                    title = console_title,
                     refs = ["refs/heads/master"],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
                 luci.console_view(
                     name = "%s-%s-by-go-ci" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
-                    title = "x/%s (against %s, by go commit)" % (project, go_branch_short),
+                    title = console_title + " (by go commit)",
                     refs = ["refs/heads/" + go_branch],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
