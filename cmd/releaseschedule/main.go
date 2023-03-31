@@ -1,3 +1,11 @@
+// Releaseschedule generates the release schedule diagram used
+// on the release schedule wiki.
+//
+// When this program is updated, regenerate the SVG and replace the old version
+// on the Go Release Cycle wiki page
+//
+// https://go.dev/s/release
+// https://golang.org/wiki/Go-Release-Cycle
 package main
 
 import (
