@@ -316,6 +316,8 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"linux-amd64-androidemu",
+				"linux-amd64",
+				"linux-amd64-race",
 			},
 		},
 		{
@@ -379,6 +381,22 @@ func TestTrybots(t *testing.T) {
 				"windows-amd64-2016",
 			},
 		},
+		{
+			repo:   "vulndb",
+			branch: "master",
+			want: []string{
+				"linux-amd64",
+				"linux-amd64-race",
+			},
+		},
+		{
+			repo:   "website",
+			branch: "master",
+			want: []string{
+				"linux-amd64",
+				"linux-amd64-race",
+			},
+		},
 	}
 	for i, tt := range tests {
 		if tt.branch == "" || tt.repo == "" {
@@ -431,6 +449,18 @@ func TestPostSubmit(t *testing.T) {
 			want: []string{
 				"linux-amd64",
 				"linux-amd64-longtest",
+				"linux-amd64-race",
+				"linux-amd64-longtest-race",
+			},
+		},
+		{
+			repo:   "website",
+			branch: "master",
+			want: []string{
+				"linux-amd64",
+				"linux-amd64-longtest",
+				"linux-amd64-race",
+				"linux-amd64-longtest-race",
 			},
 		},
 	}

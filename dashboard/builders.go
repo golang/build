@@ -1263,9 +1263,7 @@ func buildRepoByDefault(repo string) bool {
 	case "go":
 		// Build the main Go repository by default.
 		return true
-	case "mobile", "exp", "build", "vulndb", "pkgsite-metrics":
-		// Don't build the above repos by default.
-		//
+	case "build", "exp", "mobile", "pkgsite-metrics", "vulndb", "website":
 		// Builders need to explicitly opt-in to build these repos.
 		return false
 	default:
@@ -1275,10 +1273,20 @@ func buildRepoByDefault(repo string) bool {
 }
 
 var (
-	defaultPlusExp            = defaultPlus("exp")
-	defaultPlusExpBuild       = defaultPlus("exp", "build")
-	defaultPlusExpBuildVulnDB = defaultPlus("exp", "build", "vulndb")
+	defaultPlusExp      = defaultPlus("exp")
+	defaultPlusExpBuild = defaultPlus("exp", "build")
 )
+
+// linux-amd64 and linux-amd64-race build all the repos.
+// Many team repos are disabled on other builders because
+// we only run them on servers and don't need to test the
+// many different architectures that Go supports (like ios).
+func linuxAmd64Repos(repo, branch, goBranch string) bool {
+	if repo == "pkgsite-metrics" {
+		return atLeastGo1(goBranch, 20)
+	}
+	return true
+}
 
 // defaultPlus returns a buildsRepo policy function that returns true for all
 // all the repos listed, plus the default repos.
@@ -1560,16 +1568,10 @@ func init() {
 		env:      []string{"GOARCH=386", "GOHOSTARCH=386", "GO386=softfloat"},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64",
-		HostType: "host-linux-amd64-bullseye",
-		tryBot:   defaultTrySet(),
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := defaultPlusExpBuildVulnDB(repo, branch, goBranch)
-			if repo == "pkgsite-metrics" {
-				b = atLeastGo1(goBranch, 20)
-			}
-			return b
-		},
+		Name:       "linux-amd64",
+		HostType:   "host-linux-amd64-bullseye",
+		tryBot:     defaultTrySet(),
+		buildsRepo: linuxAmd64Repos,
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
@@ -1779,7 +1781,7 @@ func init() {
 		Name:              "linux-amd64-race",
 		HostType:          "host-linux-amd64-bullseye",
 		tryBot:            defaultTrySet(),
-		buildsRepo:        defaultPlusExpBuild,
+		buildsRepo:        linuxAmd64Repos,
 		distTestAdjust:    fasterTrybots,
 		numTestHelpers:    1,
 		numTryTestHelpers: 5,
@@ -1916,12 +1918,9 @@ func init() {
 		HostType: "host-linux-amd64-bullseye",
 		Notes:    "Debian Bullseye with the race detector enabled and go test -short=false",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := buildRepoByDefault(repo)
-			if repo != "go" && !(branch == "master" && goBranch == "master") {
-				// For golang.org/x repos, don't test non-latest versions.
-				b = false
-			}
-			return b
+			// Test all repos, ignoring buildRepoByDefault.
+			// For golang.org/x repos, don't test non-latest versions.
+			return repo == "go" || (branch == "master" && goBranch == "master")
 		},
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // Inherited from the longtest builder.
