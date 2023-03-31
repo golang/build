@@ -241,6 +241,16 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     )
     return bucket + "/" + name
 
+luci.builder(
+    name = "tricium",
+    bucket = "try",
+    executable = luci.recipe(
+        name = "tricium_simple",
+    ),
+    service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+    dimensions = HOSTS[host_of("linux-amd64")],
+)
+
 def display_for_builder_type(builder_type):
     """Produces the category and short name for a luci.console_view_entry.
 
@@ -279,6 +289,20 @@ def _define_go_ci():
                     refs = ["refs/heads/%s" % go_branch],
                 ),
                 allow_submit_with_open_deps = True,
+                verifiers = [
+                    luci.cq_tryjob_verifier(
+                        builder = "try/tricium",
+                        location_filters = [
+                            cq.location_filter(
+                                gerrit_host_regexp = "go-review.googlesource.com",
+                                gerrit_project_regexp = filter_project,
+                                path_regexp = ".+",
+                            )
+                            for filter_project in PROJECTS
+                        ],
+                        mode_allowlist = [cq.MODE_ANALYZER_RUN],
+                    ),
+                ],
             )
 
             # Define builders.
@@ -390,41 +414,6 @@ def _define_go_ci():
                     entries = make_console_view_entries(postsubmit_builders),
                 )
 
-def _define_tricium():
-    refsets = []
-    for project in PROJECTS:
-        refsets.append(
-            cq.refset(
-                repo = "https://go.googlesource.com/%s" % project,
-                refs = [
-                    "refs/heads/%s" % go_branch
-                    for go_branch in GO_BRANCHES.values()
-                ],
-            ),
-        )
-    name = "tricium-linux-amd64"
-    luci.builder(
-        name = name,
-        bucket = "try",
-        executable = luci.recipe(
-            name = "tricium_simple",
-        ),
-        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-        dimensions = HOSTS[host_of("linux-amd64")],
-    )
-    luci.cq_group(
-        name = "tricium",
-        watch = refsets,
-        allow_submit_with_open_deps = True,
-        verifiers = [
-            luci.cq_tryjob_verifier(
-                builder = "try/" + name,
-                mode_allowlist = [cq.MODE_ANALYZER_RUN],
-            ),
-        ],
-    )
-
 _define_go_ci()
-_define_tricium()
 
 exec("./recipes.star")

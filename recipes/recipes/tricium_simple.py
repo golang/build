@@ -26,7 +26,7 @@ def RunSteps(api):
   ref = "refs/changes/%d/%d/%d" % (api.tryserver.gerrit_change.change%100,
                                    api.tryserver.gerrit_change.change,
                                    api.tryserver.gerrit_change.patchset)
-  api.git.checkout(url=url, ref=ref, dir_path=repo_path)
+  api.git.checkout(url=url, ref=ref, dir_path=repo_path, submodules=False)
   affected_files = api.tryserver.get_files_affected_by_patch(
       patch_root=project,
       report_files_via_property='affected_files')
