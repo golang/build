@@ -357,7 +357,7 @@ def _define_go_ci():
                         ],
                         "console_groups": [
                             {
-                                "title": {"text": "golang.org/x repos"},
+                                "title": {"text": "golang.org/x repos on " + go_branch_short},
                                 "console_ids": [
                                     # The *-by-go-ci consoles would be more appropriate,
                                     # but because they have the same builder set and these
