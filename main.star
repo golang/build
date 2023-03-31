@@ -56,6 +56,7 @@ luci.project(
         luci.binding(
             roles = "role/buildbucket.triggerer",
             groups = "project-golang-task-accounts",
+            users = "tricium-prod@appspot.gserviceaccount.com",
         ),
     ],
     acls = [
