@@ -9,6 +9,7 @@ DEPS = [
   'depot_tools/git',
   'depot_tools/tryserver',
   'recipe_engine/buildbucket',
+  'recipe_engine/context',
   'recipe_engine/path',
   'recipe_engine/platform',
   'recipe_engine/tricium',
@@ -28,9 +29,10 @@ def RunSteps(api):
                                    api.tryserver.gerrit_change.patchset)
   api.git.checkout(url=url, ref=ref, dir_path=repo_path, submodules=False)
   api.git('reset', 'HEAD~1', '--soft', name='git reset one commit')
-  affected_files = api.tryserver.get_files_affected_by_patch(
-      patch_root='',
-      report_files_via_property='affected_files')
+  with api.context(cwd=repo_path):
+    affected_files = api.tryserver.get_files_affected_by_patch(
+        patch_root=project,
+        report_files_via_property='affected_files')
   analyzers = [
         api.tricium.analyzers.HTTPS_CHECK,
         api.tricium.analyzers.SPELLCHECKER,
