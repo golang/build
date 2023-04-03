@@ -27,7 +27,7 @@ def RunSteps(api):
                                    api.tryserver.gerrit_change.change,
                                    api.tryserver.gerrit_change.patchset)
   api.git.checkout(url=url, ref=ref, dir_path=repo_path, submodules=False)
-  api.git('reset HEAD~1', name='git reset one commit', raise_on_failure=True)
+  api.git('reset', 'HEAD~1', name='git reset one commit')
   affected_files = api.tryserver.get_files_affected_by_patch(
       patch_root=project,
       report_files_via_property='affected_files')
