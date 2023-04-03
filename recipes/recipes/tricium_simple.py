@@ -39,7 +39,7 @@ def RunSteps(api):
         api.tricium.analyzers.INCLUSIVE_LANGUAGE_CHECK,
         api.tricium.analyzers.COPYRIGHT,
   ]
-  api.tricium.run_legacy(analyzers, repo_path, affected_files, commit_message)
+  api.tricium.run_legacy(analyzers, api.path['start_dir'], affected_files, commit_message)
 
 def GenTests(api):
 
