@@ -29,7 +29,7 @@ def RunSteps(api):
   api.git.checkout(url=url, ref=ref, dir_path=repo_path, submodules=False)
   api.git('reset', 'HEAD~1', '--soft', name='git reset one commit')
   affected_files = api.tryserver.get_files_affected_by_patch(
-      patch_root=project,
+      patch_root='',
       report_files_via_property='affected_files')
   analyzers = [
         api.tricium.analyzers.HTTPS_CHECK,
