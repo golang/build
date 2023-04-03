@@ -6,7 +6,9 @@ package relui
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/flate"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -330,8 +332,9 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 	versionFile := wf.Task3(wd, "Generate VERSION file", version.GenerateVersionFile, distpackVal, nextVersion, timestamp)
 	wf.Output(wd, "VERSION file", versionFile)
 	source := wf.Task4(wd, "Build source archive", build.buildSource, distpackVal, branchVal, wf.Const(""), versionFile)
-	artifacts := build.addBuildTasks(wd, major, nextVersion, source)
+	artifacts, mods := build.addBuildTasks(wd, major, nextVersion, timestamp, source)
 	wf.Output(wd, "Artifacts", artifacts)
+	wf.Output(wd, "Modules", mods)
 
 	h.RegisterDefinition(fmt.Sprintf("dry-run (build, test, and sign only): Go 1.%d next beta", major), wd)
 }
@@ -398,7 +401,7 @@ func addSingleReleaseWorkflow(
 	source := wf.Task4(wd, "Build source archive", build.buildSource, distpackVal, startingHead, securityRef, versionFile, wf.After(checked))
 
 	// Build, test, and sign release.
-	signedAndTestedArtifacts := build.addBuildTasks(wd, major, nextVersion, source)
+	signedAndTestedArtifacts, modules := build.addBuildTasks(wd, major, nextVersion, timestamp, source)
 	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
 
 	dlcl := wf.Task3(wd, "Mail DL CL", version.MailDLCL, wf.Slice(nextVersion), coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
@@ -419,8 +422,9 @@ func addSingleReleaseWorkflow(
 	}
 	tagged := wf.Action2(wd, "Tag version", version.TagRelease, nextVersion, tagCommit, wf.After(okayToTagAndPublish))
 	uploaded := wf.Action1(wd, "Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, wf.After(tagged))
+	uploadedMods := wf.Action2(wd, "Upload modules to CDN", build.uploadModules, nextVersion, modules, wf.After(tagged))
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
-	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, pushed))
+	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, uploadedMods, pushed))
 	if kind == task.KindMajor {
 		goimportsCL := wf.Task2(wd, fmt.Sprintf("Mail goimports CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, versionPublished)
 		goimportsCommit := wf.Task2(wd, "Wait for goimports CL submission", version.AwaitCL, goimportsCL, wf.Const(""))
@@ -430,47 +434,68 @@ func addSingleReleaseWorkflow(
 	return versionPublished
 }
 
+type moduleArtifact struct {
+	// The target for this module.
+	Target *releasetargets.Target
+	// The contents of the mod and info files.
+	Mod, Info string
+	// The scratch path of the zip within the scratch directory.
+	ZipScratch string // scratch path
+}
+
 // addBuildTasks registers tasks to build, test, and sign the release onto wd.
 // It returns the output from the last task, a slice of signed and tested artifacts.
-func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, version wf.Value[string], source wf.Value[artifact]) wf.Value[[]artifact] {
+func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, version wf.Value[string], timestamp wf.Value[time.Time], source wf.Value[artifact]) (wf.Value[[]artifact], wf.Value[[]moduleArtifact]) {
 	targets := releasetargets.TargetsForGo1Point(major)
 	skipTests := wf.Param(wd, wf.ParamDef[[]string]{Name: "Targets to skip testing (or 'all') (optional)", ParamType: wf.SliceShort})
 	artifacts := []wf.Value[artifact]{source}
+	var mods []wf.Value[moduleArtifact]
 	// Build, test and sign binary artifacts for all targets.
 	var testsPassed []wf.Dependency
 	for _, target := range targets {
 		targetVal := wf.Const(target)
 		wd := wd.Sub(target.Name)
 
-		// Build release artifacts for the platform.
-		// Also create installers and perform platform-specific signing where applicable.
-		bin := wf.Task3(wd, "Build binary archive", tasks.buildBinary, wf.Const(enableDistpack(major)), targetVal, source)
-		// Windows distpacks are zip files, but we need to pass tarballs to buildlets.
-		var tar wf.Value[artifact]
+		// Build release artifacts for the platform. For 1.21+, use distpacks.
+		// For windows, produce both a tgz and zip -- we need tgzs to run
+		// tests, even though we'll eventually publish the zips.
+		var tar, zip wf.Value[artifact]
+		var mod wf.Value[moduleArtifact]
+		if enableDistpack(major) {
+			distpack := wf.Task2(wd, "Build distpack", tasks.buildDistpack, targetVal, source)
+			if target.GOOS == "windows" {
+				zip = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
+				tar = wf.Task2(wd, "Convert to .tgz", tasks.convertZipToTGZ, targetVal, zip)
+			} else {
+				tar = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
+			}
+			mod = wf.Task1(wd, "Get module files from distpack", tasks.modFilesFromDistpack, distpack)
+		} else {
+			tar = wf.Task2(wd, "Build binary archive", tasks.buildBinary, targetVal, source)
+			if target.GOOS == "windows" {
+				zip = wf.Task2(wd, "Convert to .zip", tasks.convertTGZToZip, targetVal, tar)
+			}
+			mod = wf.Task4(wd, "Convert binary archive to modules", tasks.modFilesFromBinary, targetVal, version, timestamp, tar)
+		}
+
+		// Create installers and perform platform-specific signing where
+		// applicable. For macOS, produce updated tgz and module zips that
+		// include the signed binaries.
 		switch target.GOOS {
 		case "darwin":
-			tar = bin
 			pkg := wf.Task3(wd, "Build PKG installer", tasks.buildDarwinPKG, targetVal, version, tar)
 			signedPKG := wf.Task2(wd, "Sign PKG installer", tasks.signArtifact, pkg, wf.Const(sign.BuildMacOS))
 			signedTGZ := wf.Task2(wd, "Convert to .tgz", tasks.convertPKGToTGZ, targetVal, signedPKG)
+			mod = wf.Task5(wd, "Merge signed files into module zip", tasks.mergeSignedToModule, targetVal, version, timestamp, mod, signedTGZ)
 			artifacts = append(artifacts, signedPKG, signedTGZ)
 		case "windows":
-			var zip wf.Value[artifact]
-			if enableDistpack(major) {
-				zip = bin
-				tar = wf.Task2(wd, "Convert to .tgz", tasks.convertZipToTGZ, targetVal, bin)
-			} else {
-				tar = bin
-				zip = wf.Task2(wd, "Convert to .zip", tasks.convertTGZToZip, targetVal, bin)
-			}
 			msi := wf.Task2(wd, "Build MSI installer", tasks.buildWindowsMSI, targetVal, tar)
 			signedMSI := wf.Task2(wd, "Sign MSI installer", tasks.signArtifact, msi, wf.Const(sign.BuildWindows))
 			artifacts = append(artifacts, signedMSI, zip)
 		default:
-			tar = bin
 			artifacts = append(artifacts, tar)
 		}
-
+		mods = append(mods, mod)
 		if target.BuildOnly {
 			continue
 		}
@@ -502,8 +527,8 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		}
 
 		return artifacts, nil
-	}, signedArtifacts, version, wf.After(testsPassed...), wf.After(tryBotsApproved))
-	return signedAndTested
+	}, signedArtifacts, version, wf.After(testsPassed...), wf.After(tryBotsApproved), wf.After(wf.Slice(mods...)))
+	return signedAndTested, wf.Slice(mods...)
 }
 
 func advisoryTryBots(major int) []*dashboard.BuildConfig {
@@ -617,19 +642,181 @@ func tarballHashes(r io.Reader) (map[string]string, error) {
 	return hashes, nil
 }
 
-func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, distpack bool, target *releasetargets.Target, source artifact) (artifact, error) {
-	if distpack {
-		suffix := "tar.gz"
-		if target.GOOS == "windows" {
-			suffix = "zip"
-		}
-		// Always run distpack builds on Linux.
-		bc := dashboard.Builders["linux-amd64"]
-		return b.runBuildStep(ctx, target, bc, source, suffix, func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-			return bs.BuildBinaryDistpack(ctx, r, w)
-		})
-	}
+func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
+	// Always run distpack builds on Linux.
+	bc := dashboard.Builders["linux-amd64"]
+	return b.runBuildStep(ctx, target, bc, source, ".tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+		return bs.BuildDistpack(ctx, r, w)
+	})
+}
 
+func (b *BuildReleaseTasks) binaryArchiveFromDistpack(ctx *wf.TaskContext, distpack artifact) (artifact, error) {
+	// This must not match the module files, which currently start with v0.0.1.
+	glob := fmt.Sprintf("go*%v-%v.*", distpack.Target.GOOS, distpack.Target.GOARCH)
+	suffix := "tar.gz"
+	if distpack.Target.GOOS == "windows" {
+		suffix = "zip"
+	}
+	return b.runBuildStep(ctx, distpack.Target, nil, distpack, suffix, func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+		return task.ExtractFile(r, w, glob)
+	})
+}
+
+func (b *BuildReleaseTasks) modFilesFromDistpack(ctx *wf.TaskContext, distpack artifact) (moduleArtifact, error) {
+	result := moduleArtifact{Target: distpack.Target}
+	artifact, err := b.runBuildStep(ctx, nil, nil, distpack, "mod.zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+		zr, err := gzip.NewReader(r)
+		if err != nil {
+			return err
+		}
+		tr := tar.NewReader(zr)
+		foundZip := false
+		for {
+			h, err := tr.Next()
+			if err == io.EOF {
+				return io.ErrUnexpectedEOF
+			} else if err != nil {
+				return err
+			}
+			if h.FileInfo().IsDir() || !strings.HasPrefix(h.Name, "v0.0.1") {
+				continue
+			}
+
+			switch {
+			case strings.HasSuffix(h.Name, ".zip"):
+				if _, err := io.Copy(w, tr); err != nil {
+					return err
+				}
+				foundZip = true
+			case strings.HasSuffix(h.Name, ".info"):
+				buf := &bytes.Buffer{}
+				if _, err := io.Copy(buf, tr); err != nil {
+					return err
+				}
+				result.Info = buf.String()
+			case strings.HasSuffix(h.Name, ".mod"):
+				buf := &bytes.Buffer{}
+				if _, err := io.Copy(buf, tr); err != nil {
+					return err
+				}
+				result.Mod = buf.String()
+			}
+
+			if foundZip && result.Mod != "" && result.Info != "" {
+				return nil
+			}
+		}
+	})
+	if err != nil {
+		return moduleArtifact{}, err
+	}
+	result.ZipScratch = artifact.ScratchPath
+	return result, nil
+}
+
+func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, target *releasetargets.Target, version string, t time.Time, tar artifact) (moduleArtifact, error) {
+	result := moduleArtifact{Target: tar.Target}
+	a, err := b.runBuildStep(ctx, nil, nil, tar, "mod.zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+		var err error
+		result.Mod, result.Info, err = task.TarToModFiles(target, version, t, r, w)
+		return err
+	})
+	if err != nil {
+		return moduleArtifact{}, err
+	}
+	result.ZipScratch = a.ScratchPath
+	return result, nil
+}
+
+func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, target *releasetargets.Target, version string, timestamp time.Time, mod moduleArtifact, signed artifact) (moduleArtifact, error) {
+	a, err := b.runBuildStep(ctx, nil, nil, signed, "signedmod.zip", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
+		// Load binaries from the signed tar file.
+		szr, err := gzip.NewReader(signed)
+		if err != nil {
+			return err
+		}
+		defer szr.Close()
+		str := tar.NewReader(szr)
+
+		binaries := map[string][]byte{}
+		for {
+			th, err := str.Next()
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				return err
+			}
+			if !strings.HasPrefix(th.Name, "go/bin/") && !strings.HasPrefix(th.Name, "go/pkg/tool/") {
+				continue
+			}
+			if th.Typeflag != tar.TypeReg || th.Mode&0100 == 0 {
+				continue
+			}
+			contents, err := io.ReadAll(str)
+			if err != nil {
+				return err
+			}
+			binaries[th.Name] = contents
+		}
+
+		// Copy files from the module zip, overwriting with binaries from the signed tar.
+		scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
+		if err != nil {
+			return err
+		}
+		mr, err := scratchFS.Open(mod.ZipScratch)
+		if err != nil {
+			return err
+		}
+		defer mr.Close()
+		mbytes, err := io.ReadAll(mr)
+		if err != nil {
+			return err
+		}
+		mzr, err := zip.NewReader(bytes.NewReader(mbytes), int64(len(mbytes)))
+		if err != nil {
+			return err
+		}
+
+		prefix := task.ToolchainZipPrefix(target, version) + "/"
+		mzw := zip.NewWriter(w)
+		mzw.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
+			return flate.NewWriter(out, flate.BestCompression)
+		})
+		for _, f := range mzr.File {
+			var in io.ReadCloser
+			suffix, ok := cutPrefix(f.Name, prefix)
+			if !ok {
+				continue
+			}
+			if contents, ok := binaries["go/"+suffix]; ok {
+				in = io.NopCloser(bytes.NewReader(contents))
+			} else {
+				in, err = f.Open()
+				if err != nil {
+					return err
+				}
+			}
+
+			hdr := f.FileHeader
+			out, err := mzw.CreateHeader(&hdr)
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(out, in); err != nil {
+				return err
+			}
+		}
+		return mzw.Close()
+	})
+	if err != nil {
+		return moduleArtifact{}, err
+	}
+	mod.ZipScratch = a.ScratchPath
+	return mod, nil
+}
+
+func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
 	bc := dashboard.Builders[target.Builder]
 	return b.runBuildStep(ctx, target, bc, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildBinary(ctx, r, w)
@@ -1015,20 +1202,62 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 		return err
 	}
 
-	todo := map[string]bool{} // URLs we're waiting on becoming available.
+	want := map[string]bool{} // URLs we're waiting on becoming available.
 	for _, a := range artifacts {
-		if err := uploadArtifact(scratchFS, servingFS, a); err != nil {
+		if err := uploadFile(scratchFS, servingFS, a.ScratchPath, a.Filename); err != nil {
 			return err
 		}
-		todo[tasks.DownloadURL+"/"+a.Filename] = true
-		todo[tasks.DownloadURL+"/"+a.Filename+".sha256"] = true
+		want[tasks.DownloadURL+"/"+a.Filename] = true
+
+		if err := gcsfs.WriteFile(servingFS, a.Filename+".sha256", []byte(a.SHA256)); err != nil {
+			return err
+		}
+		want[tasks.DownloadURL+"/"+a.Filename+".sha256"] = true
+
 		if a.GPGSignature != "" {
-			todo[tasks.DownloadURL+"/"+a.Filename+".asc"] = true
+			if err := gcsfs.WriteFile(servingFS, a.Filename+".asc", []byte(a.GPGSignature)); err != nil {
+				return err
+			}
+			want[tasks.DownloadURL+"/"+a.Filename+".asc"] = true
 		}
 	}
+	_, err = task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, want))
+	return err
+}
 
-	check := func() (int, bool, error) {
-		for url := range todo {
+func (tasks *BuildReleaseTasks) uploadModules(ctx *wf.TaskContext, version string, modules []moduleArtifact) error {
+	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
+	if err != nil {
+		return err
+	}
+	servingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ServingURL)
+	if err != nil {
+		return err
+	}
+	want := map[string]bool{} // URLs we're waiting on becoming available.
+	for _, mod := range modules {
+		base := fmt.Sprintf("v0.0.1-%v.%v-%v", version, mod.Target.GOOS, mod.Target.GOARCH)
+		if err := uploadFile(scratchFS, servingFS, mod.ZipScratch, fmt.Sprintf(base+".zip")); err != nil {
+			return err
+		}
+		if err := gcsfs.WriteFile(servingFS, base+".info", []byte(mod.Info)); err != nil {
+			return err
+		}
+		if err := gcsfs.WriteFile(servingFS, base+".mod", []byte(mod.Mod)); err != nil {
+			return err
+		}
+		for _, ext := range []string{".zip", ".info", ".mod"} {
+			want[tasks.DownloadURL+"/"+base+ext] = true
+		}
+	}
+	_, err = task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, want))
+	return err
+}
+
+func checkFiles(ctx context.Context, want map[string]bool) func() (int, bool, error) {
+	found := map[string]bool{}
+	return func() (int, bool, error) {
+		for url := range want {
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			resp, err := ctxhttp.Head(ctx, http.DefaultClient, url)
@@ -1038,25 +1267,22 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 			resp.Body.Close()
 			cancel()
 			if resp.StatusCode == http.StatusOK {
-				delete(todo, url)
+				found[url] = true
 			}
 		}
-		return 0, len(todo) == 0, nil
+		return 0, len(want) == len(found), nil
 	}
-	_, err = task.AwaitCondition(ctx, 30*time.Second, check)
-	return err
 }
 
-// uploadArtifact copies the artifact a and its metadata files
-// from scratchFS to servingFS.
-func uploadArtifact(scratchFS, servingFS fs.FS, a artifact) error {
-	in, err := scratchFS.Open(a.ScratchPath)
+// uploadFile copies a file from scratchFS to servingFS.
+func uploadFile(scratchFS, servingFS fs.FS, scratch, filename string) error {
+	in, err := scratchFS.Open(scratch)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
 
-	out, err := gcsfs.Create(servingFS, a.Filename)
+	out, err := gcsfs.Create(servingFS, filename)
 	if err != nil {
 		return err
 	}
@@ -1067,16 +1293,6 @@ func uploadArtifact(scratchFS, servingFS fs.FS, a artifact) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
-
-	if err := gcsfs.WriteFile(servingFS, a.Filename+".sha256", []byte(a.SHA256)); err != nil {
-		return err
-	}
-	if a.GPGSignature != "" {
-		if err := gcsfs.WriteFile(servingFS, a.Filename+".asc", []byte(a.GPGSignature)); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 

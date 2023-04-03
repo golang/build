@@ -33,7 +33,6 @@ import (
 	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/releasetargets"
-	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
@@ -112,12 +111,12 @@ func newReleaseTestDeps(t *testing.T, previousTag, wantVersion string) *releaseT
 	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
 	t.Cleanup(bootstrapServer.Close)
 	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, map[string]string{
-		"pkgbuild": `#!/bin/bash -eu
+		"pkgbuild": `#!/bin/bash -eux
 case "$@" in
 "--identifier=org.golang.go --version ` + wantVersion + ` --scripts=pkg-scripts --root=pkg-root pkg-intermediate/org.golang.go.pkg")
 	# We're doing an intermediate step in building a PKG.
-	ls pkg-intermediate >/dev/null
-	echo "I'm a intermediate PKG!" > "$6"
+	echo "I'm an intermediate PKG!" > "$6"
+	tar -cz -C pkg-root . >> "$6"
 	;;
 *)
 	echo "unexpected command $@"
@@ -125,12 +124,12 @@ case "$@" in
 	;;
 esac
 `,
-		"productbuild": `#!/bin/bash -eu
+		"productbuild": `#!/bin/bash -eux
 case "$@" in
 "--distribution=pkg-distribution --resources=pkg-resources --package-path=pkg-intermediate pkg-out/` + wantVersion + `.pkg")
 	# We're building a PKG.
 	ls pkg-distribution pkg-resources/bg-light.png pkg-resources/bg-dark.png >/dev/null
-	cat pkg-intermediate/* | sed "s/intermediate //" > "$4"
+	cat pkg-intermediate/* | sed "s/an intermediate PKG/a PKG/" > "$4"
 	;;
 *)
 	echo "unexpected command $@"
@@ -138,12 +137,12 @@ case "$@" in
 	;;
 esac
 `,
-		"pkgutil": `#!/bin/bash -eu
+		"pkgutil": `#!/bin/bash -eux
 case "$@" in
 "--expand-full go.pkg pkg-expanded")
 	# We're expanding a PKG.
-	grep "I'm a PKG!" < "$2"
 	mkdir -p "$3/org.golang.go.pkg/Payload/usr/local/go"
+	tail -n +2 "$2" | tar -xz -C "$3/org.golang.go.pkg/Payload"
 	;;
 *)
 	echo "unexpected command $@"
@@ -216,7 +215,7 @@ esac
 		ScratchURL:       "file://" + filepath.ToSlash(t.TempDir()),
 		ServingURL:       "file://" + filepath.ToSlash(servingDir),
 		CreateBuildlet:   fakeBuildlets.CreateBuildlet,
-		SignService:      &fakeSignService{t: t, completedJobs: make(map[string][]string)},
+		SignService:      task.NewFakeSignService(t),
 		DownloadURL:      dlServer.URL,
 		PublishFile:      publishFile,
 		ApproveAction: func(ctx *workflow.TaskContext) error {
@@ -354,7 +353,13 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		OS:   "darwin",
 		Arch: "amd64",
 		Kind: "installer",
-	}, "I'm a PKG!\n-signed <macOS>")
+	}, "I'm a PKG! -signed <macOS>")
+	modVer := "v0.0.1-" + wantVersion + ".darwin-amd64"
+	checkContents(t, dlURL, nil, modVer+".mod", nil, "module golang.org/toolchain")
+	checkContents(t, dlURL, nil, modVer+".info", nil, fmt.Sprintf(`"Version":"%v"`, modVer))
+	checkZip(t, dlURL, nil, modVer+".zip", nil, map[string]string{
+		"golang.org/toolchain@" + modVer + "/bin/go": "-signed <macOS>",
+	})
 
 	head, err := deps.gerrit.ReadBranchHead(deps.ctx, "dl", "master")
 	if err != nil {
@@ -472,12 +477,13 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 const makeScript = `#!/bin/bash -eu
 
 GO=../
+VERSION=$(head -n 1 $GO/VERSION)
 
 if [[ $# >0 && $1 == "-distpack" ]]; then
 	mkdir -p $GO/pkg/distpack
 	tmp=$(mktemp).tar.gz
 	tar czf $tmp -C $GO/.. go
-	mv $tmp $GO/pkg/distpack/go1.99.src.tar.gz
+	mv $tmp $GO/pkg/distpack/$VERSION.src.tar.gz
 fi
 
 mkdir -p $GO/bin
@@ -516,14 +522,25 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 		tmp=$(mktemp).zip
 		# The zip command isn't installed on our buildlets. Python is.
 		(cd $GO/.. && python3 -m zipfile -c $tmp go/)
-		mv $tmp $GO/pkg/distpack/go1.99.$GOOS-$GOARCH.zip
+		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.zip
 		;;
 	*)
 		tmp=$(mktemp).tar.gz
 		tar czf $tmp -C $GO/.. go
-		mv $tmp $GO/pkg/distpack/go1.99.$GOOS-$GOARCH.tar.gz
+		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.tar.gz
 		;;
 	esac
+
+	MODVER=v0.0.1-$VERSION.$GOOS-$GOARCH
+	echo "module golang.org/toolchain" > $GO/pkg/distpack/$MODVER.mod
+	echo -e "{\"Version\":\"$MODVER\", \"Timestamp\":\"fake timestamp\"}" > $GO/pkg/distpack/$MODVER.info
+	MODTMP=$(mktemp -d)
+	MODDIR=$MODTMP/golang.org/toolchain@$MODVER
+	mkdir -p $MODDIR
+	cp -r $GO $MODDIR
+	tmp=$(mktemp).zip
+	(cd $MODTMP && python3 -m zipfile -c $tmp .)
+	mv $tmp $GO/pkg/distpack/$MODVER.zip
 fi
 `
 
@@ -557,14 +574,18 @@ func serveBootstrap(w http.ResponseWriter, r *http.Request) {
 
 func checkFile(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, check func(*testing.T, []byte)) {
 	t.Run(filename, func(t *testing.T) {
-		f, ok := files[filename]
-		if !ok {
-			t.Fatalf("file %q not published", filename)
+		resolvedName := filename
+		if files != nil {
+			f, ok := files[filename]
+			if !ok {
+				t.Fatalf("file %q not published", filename)
+			}
+			if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(task.WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
+				t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
+			}
+			resolvedName = f.Filename
 		}
-		if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(task.WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
-			t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
-		}
-		body := fetch(t, dlURL+"/"+f.Filename)
+		body := fetch(t, dlURL+"/"+resolvedName)
 		check(t, body)
 	})
 }
@@ -586,7 +607,7 @@ func fetch(t *testing.T, url string) []byte {
 
 func checkContents(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, contents string) {
 	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
-		if got, want := string(b), contents; got != want {
+		if got, want := string(b), contents; !strings.Contains(got, want) {
 			t.Errorf("%v contains %q, want %q", filename, got, want)
 		}
 	})
@@ -616,8 +637,8 @@ func checkTGZ(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, fi
 				t.Fatal(err)
 			}
 			delete(contents, h.Name)
-			if string(b) != want {
-				t.Errorf("contents of %v were %q, want %q", h.Name, string(b), want)
+			if got := string(b); !strings.Contains(got, want) {
+				t.Errorf("%v contains %q, want %q", filename, got, want)
 			}
 		}
 		if len(contents) != 0 {
@@ -646,8 +667,8 @@ func checkZip(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, fi
 				t.Fatal(err)
 			}
 			delete(contents, f.Name)
-			if string(b) != want {
-				t.Errorf("contents of %v were %q, want %q", f.Name, string(b), want)
+			if got := string(b); !strings.Contains(got, want) {
+				t.Errorf("%v contains %q, want %q", filename, got, want)
 			}
 		}
 		if len(contents) != 0 {
@@ -756,75 +777,6 @@ func (l *errorListener) TaskStateChanged(id uuid.UUID, taskID string, st *workfl
 	}
 	l.Listener.TaskStateChanged(id, taskID, st)
 	return nil
-}
-
-type fakeSignService struct {
-	t             *testing.T
-	mu            sync.Mutex
-	completedJobs map[string][]string // Job ID → output objectURIs.
-}
-
-func (s *fakeSignService) SignArtifact(_ context.Context, bt sign.BuildType, in []string) (jobID string, _ error) {
-	s.t.Logf("fakeSignService: doing %s signing of %q", bt, in)
-	var out []string
-	switch bt {
-	case sign.BuildMacOS, sign.BuildWindows:
-		if len(in) != 1 {
-			return "", fmt.Errorf("got %d inputs, want 1", len(in))
-		}
-		out = []string{fakeSignFile(in[0], fmt.Sprintf("-signed <%s>", bt))}
-	case sign.BuildGPG:
-		if len(in) == 0 {
-			return "", fmt.Errorf("got 0 inputs, want 1 or more")
-		}
-		for _, f := range in {
-			out = append(out, fakeGPGFile(f))
-		}
-	default:
-		return "", fmt.Errorf("SignArtifact: not implemented for %v", bt)
-	}
-	jobID = uuid.NewString()
-	s.mu.Lock()
-	s.completedJobs[jobID] = out
-	s.mu.Unlock()
-	return jobID, nil
-}
-func (s *fakeSignService) ArtifactSigningStatus(_ context.Context, jobID string) (_ sign.Status, desc string, out []string, _ error) {
-	s.mu.Lock()
-	out, ok := s.completedJobs[jobID]
-	s.mu.Unlock()
-	if !ok {
-		return sign.StatusNotFound, fmt.Sprintf("job %q not found", jobID), nil, nil
-	}
-	return sign.StatusCompleted, "", out, nil
-}
-func (s *fakeSignService) CancelSigning(_ context.Context, jobID string) error {
-	s.t.Errorf("CancelSigning was called unexpectedly")
-	return fmt.Errorf("intentional fake error")
-}
-func fakeSignFile(f, msg string) string {
-	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
-	if err != nil {
-		panic(fmt.Errorf("fakeSignFile: os.ReadFile: %v", err))
-	}
-	b = append(b, []byte(msg)...)
-	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".signed", b, 0600)
-	if err != nil {
-		panic(fmt.Errorf("fakeSignFile: os.WriteFile: %v", err))
-	}
-	return f + ".signed"
-}
-func fakeGPGFile(f string) string {
-	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
-	if err != nil {
-		panic(fmt.Errorf("fakeGPGFile: os.ReadFile: %v", err))
-	}
-	gpg := fmt.Sprintf("I'm a GPG signature for %x!", sha256.Sum256(b))
-	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".asc", []byte(gpg), 0600)
-	if err != nil {
-		panic(fmt.Errorf("fakeGPGFile: os.WriteFile: %v", err))
-	}
-	return f + ".asc"
 }
 
 func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {

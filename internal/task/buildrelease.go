@@ -242,22 +242,37 @@ func (b *BuildletStep) BuildSourceDistpack(ctx *workflow.TaskContext, client *ht
 	if err := b.Buildlet.Put(ctx, bytes.NewBufferString(versionFile), "go/VERSION", 0666); err != nil {
 		return fmt.Errorf("failed to write VERSION file: %v", err)
 	}
-	return b.buildDistpack(ctx, "*.src.tar.gz", []string{"GOOS=linux", "GOARCH=amd64"}, out)
+	if err := b.buildDistpack(ctx, []string{"GOOS=linux", "GOARCH=amd64"}); err != nil {
+		return err
+	}
+	if err := b.exec(ctx, "bash", []string{"-c", "mkdir fetch && mv go/pkg/distpack/*.src.tar.gz fetch/"}, buildlet.ExecOpts{
+		Dir:         ".",
+		SystemLevel: true,
+	}); err != nil {
+		return err
+	}
+	return fetchFile(ctx, b.Buildlet, out, "fetch")
 }
 
-func (b *BuildletStep) BuildBinaryDistpack(ctx *workflow.TaskContext, sourceArchive io.Reader, out io.Writer) error {
+func (b *BuildletStep) BuildDistpack(ctx *workflow.TaskContext, sourceArchive io.Reader, out io.Writer) error {
 	ctx.Printf("Pushing source to buildlet.")
 	if err := b.Buildlet.PutTar(ctx, sourceArchive, ""); err != nil {
 		return fmt.Errorf("failed to put source tarball: %v", err)
 	}
-	// This must not match the module files, which currently start with v0.0.1.
-	glob := fmt.Sprintf("go*%v-%v.*", b.Target.GOOS, b.Target.GOARCH)
 	makeEnv := b.makeEnv()
 	makeEnv = append(makeEnv, "GOOS="+b.Target.GOOS, "GOARCH="+b.Target.GOARCH)
-	return b.buildDistpack(ctx, glob, makeEnv, out)
+	if err := b.buildDistpack(ctx, makeEnv); err != nil {
+		return err
+	}
+	tar, err := b.Buildlet.GetTar(ctx, "go/pkg/distpack")
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(out, tar)
+	return err
 }
 
-func (b *BuildletStep) buildDistpack(ctx *workflow.TaskContext, packGlob string, makeEnv []string, out io.Writer) error {
+func (b *BuildletStep) buildDistpack(ctx *workflow.TaskContext, makeEnv []string) error {
 	buildEnv := buildenv.Production
 	if u := b.BuildConfig.GoBootstrapURL(buildEnv); u != "" {
 		ctx.Printf("Installing go1.4.")
@@ -267,19 +282,9 @@ func (b *BuildletStep) buildDistpack(ctx *workflow.TaskContext, packGlob string,
 	}
 
 	ctx.Printf("Building (make.bash only) with -distpack.")
-	if err := b.exec(ctx, goDir+"/src/make.bash", []string{"-distpack"}, buildlet.ExecOpts{
+	return b.exec(ctx, goDir+"/src/make.bash", []string{"-distpack"}, buildlet.ExecOpts{
 		ExtraEnv: makeEnv,
-	}); err != nil {
-		return err
-	}
-	distpackGlob := fmt.Sprintf("%v/pkg/distpack/%v", goDir, packGlob)
-	if err := b.exec(ctx, "bash", []string{"-c", "mkdir fetch && mv " + distpackGlob + " fetch/"}, buildlet.ExecOpts{
-		Dir:         ".",
-		SystemLevel: true,
-	}); err != nil {
-		return err
-	}
-	return fetchFile(ctx, b.Buildlet, out, "fetch")
+	})
 }
 
 // BuildBinary builds a binary distribution from sourceArchive and writes it to out.
@@ -523,6 +528,11 @@ func fetchFile(ctx *workflow.TaskContext, client buildlet.RemoteClient, dest io.
 		return err
 	}
 	defer tgz.Close()
+	return ExtractFile(tgz, dest, "*")
+}
+
+// ExtractFile copies the first file in tgz matching glob to dest.
+func ExtractFile(tgz io.Reader, dest io.Writer, glob string) error {
 	zr, err := gzip.NewReader(tgz)
 	if err != nil {
 		return err
@@ -535,7 +545,7 @@ func fetchFile(ctx *workflow.TaskContext, client buildlet.RemoteClient, dest io.
 		} else if err != nil {
 			return err
 		}
-		if !h.FileInfo().IsDir() {
+		if match, _ := path.Match(glob, h.Name); !h.FileInfo().IsDir() && match {
 			break
 		}
 	}
