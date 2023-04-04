@@ -30,6 +30,9 @@ luci.project(
                 "role/scheduler.owner",
                 # Allow owners to trigger and cancel any build.
                 "role/buildbucket.owner",
+                # Allow owners to create/edit ResultDB invocations (for local result_adapter development).
+                # TODO(dmitshur): Remove or move to AOD after it stops being actively used.
+                "role/resultdb.invocationCreator",
             ],
             groups = "mdb/golang-luci-admin",
         ),
