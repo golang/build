@@ -636,7 +636,9 @@ func init() {
 type CosArch string
 
 const (
-	CosArchAMD64 CosArch = "cos-stable"       // COS image for AMD64 architecture
+	// TODO(59418,59419): The kernel in COS release 105 likely breaks ASAN and MSAN for both
+	// gcc and clang. Pin to 101, the previous release.
+	CosArchAMD64 CosArch = "cos-101-lts"      // COS image for AMD64 architecture
 	CosArchARM64         = "cos-arm64-stable" // COS image for ARM64 architecture
 )
 
