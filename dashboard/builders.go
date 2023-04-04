@@ -828,11 +828,6 @@ type BuildConfig struct {
 	// storage.
 	StopAfterMake bool
 
-	// needsGoProxy is whether this builder should have GOPROXY set.
-	// Currently this is only for the longtest builder, which needs
-	// to run cmd/go tests fetching from the network.
-	needsGoProxy bool
-
 	// privateGoProxy for builder has it's own Go proxy instead of
 	// proxy.golang.org, after setting this builder will respect
 	// GOPROXY environment value.
@@ -1150,8 +1145,6 @@ func (c *BuildConfig) AllScript() string {
 }
 
 func (c *BuildConfig) IsTryOnly() bool { return c.tryOnly }
-
-func (c *BuildConfig) NeedsGoProxy() bool { return c.needsGoProxy }
 
 // PrivateGoProxy for builder has it's own Go proxy instead of proxy.golang.org
 func (c *BuildConfig) PrivateGoProxy() bool { return c.privateGoProxy }
@@ -1920,7 +1913,6 @@ func init() {
 			// For golang.org/x repos, don't test non-latest versions.
 			return repo == "go" || (branch == "master" && goBranch == "master")
 		},
-		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
@@ -1938,7 +1930,6 @@ func init() {
 			}
 			return b
 		},
-		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // Inherited from the longtest builder.
 		},
@@ -1960,7 +1951,6 @@ func init() {
 			}
 			return b
 		},
-		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GOARCH=386",
 			"GOHOSTARCH=386",
@@ -2493,7 +2483,6 @@ func init() {
 			}
 			return b
 		},
-		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
@@ -2523,7 +2512,6 @@ func init() {
 			}
 			return b
 		},
-		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
@@ -2641,7 +2629,6 @@ func init() {
 			}
 			return b
 		},
-		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
@@ -2820,7 +2807,6 @@ func init() {
 			}
 			return b
 		},
-		needsGoProxy: true, // for cmd/go module tests
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
