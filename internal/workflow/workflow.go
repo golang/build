@@ -59,7 +59,7 @@ func New() *Definition {
 	return &Definition{
 		definitionState: &definitionState{
 			tasks:   make(map[string]*taskDefinition),
-			outputs: make(map[string]*taskDefinition),
+			outputs: make(map[string]metaValue),
 		},
 	}
 }
@@ -96,7 +96,7 @@ func (d *Definition) shallowClone() *Definition {
 type definitionState struct {
 	parameters []MetaParameter // Ordered according to registration, unique parameter names.
 	tasks      map[string]*taskDefinition
-	outputs    map[string]*taskDefinition
+	outputs    map[string]metaValue
 }
 
 // A TaskOption affects the execution of a task but is not an argument to its function.
@@ -288,11 +288,7 @@ func (s *slice[T]) dependencies() []*taskDefinition {
 // Output registers a Value as a workflow output which will be returned when
 // the workflow finishes.
 func Output[T any](d *Definition, name string, v Value[T]) {
-	tr, ok := v.(*taskResult[T])
-	if !ok {
-		panic(fmt.Errorf("output must be a task result, is %T", v))
-	}
-	d.outputs[d.name(name)] = tr.task
+	d.outputs[d.name(name)] = v
 }
 
 // A Dependency represents a dependency on a prior task.
@@ -609,7 +605,9 @@ func (w *Workflow) validate() error {
 		}
 	}
 	for _, output := range w.def.outputs {
-		used[output] = true
+		for _, dep := range output.dependencies() {
+			used[dep] = true
+		}
 	}
 	for _, task := range w.def.tasks {
 		if !used[task] && !task.isExpansion {
@@ -805,7 +803,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 
 	outs := map[string]interface{}{}
 	for name, def := range w.def.outputs {
-		outs[name] = w.tasks[def].result
+		outs[name] = def.value(w).Interface()
 	}
 	return outs, nil
 }
