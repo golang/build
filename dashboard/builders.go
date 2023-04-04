@@ -347,7 +347,7 @@ var Hosts = map[string]*HostConfig{
 		VMImage:        "ami-07409163bccd5ac4d",
 		ContainerImage: "gobuilder-arm-aws:latest",
 		machineType:    "m6g.xlarge",
-		isEC2:          true,
+		IsEC2:          true,
 		SSHUsername:    "root",
 	},
 	"host-linux-arm64-bullseye": {
@@ -621,7 +621,7 @@ func init() {
 		if c.VMImage != "" {
 			nSet++
 		}
-		if c.ContainerImage != "" && !c.isEC2 {
+		if c.ContainerImage != "" && !c.IsEC2 {
 			nSet++
 		}
 		if c.IsReverse {
@@ -692,7 +692,7 @@ type HostConfig struct {
 	cosArchitecture CosArch // optional. GCE instances which use COS need the architecture set. Default: CosArchAMD64
 
 	// EC2 options
-	isEC2 bool // if true, the instance is configured to run on EC2
+	IsEC2 bool // if true, the instance is configured to run on EC2
 
 	// GCE or EC2 options:
 	//
@@ -830,8 +830,7 @@ type BuildConfig struct {
 	StopAfterMake bool
 
 	// privateGoProxy for builder has it's own Go proxy instead of
-	// proxy.golang.org, after setting this builder will respect
-	// GOPROXY environment value.
+	// proxy.golang.org, pre-set in GOPROXY on the builder.
 	privateGoProxy bool
 
 	// InstallRacePackages controls which packages to "go install
@@ -876,7 +875,7 @@ type BuildConfig struct {
 	makeScriptArgs []string // extra args to pass to the make.bash-equivalent script
 	allScriptArgs  []string // extra args to pass to the all.bash-equivalent script
 
-	testHostConf *HostConfig // override HostConfig for testing, at least for now
+	TestHostConf *HostConfig // override HostConfig for testing, at least for now
 
 	// isRestricted marks if a builder should be restricted to a subset of users.
 	isRestricted bool
@@ -897,27 +896,9 @@ func (c *BuildConfig) Env() []string {
 	return append(env, c.env...)
 }
 
-// ModulesEnv returns the extra module-specific environment variables
-// to append to this builder as a function of the repo being built
-// ("go", "oauth2", "net", etc).
-func (c *BuildConfig) ModulesEnv(repo string) (env []string) {
-	// EC2 and reverse builders should set the public module proxy
-	// address instead of the internal proxy.
-	if (c.HostConfig().isEC2 || c.IsReverse()) && repo != "go" && !c.PrivateGoProxy() {
-		env = append(env, "GOPROXY=https://proxy.golang.org")
-	}
-	switch repo {
-	case "go":
-		if !c.OutboundNetworkAllowed() {
-			env = append(env, "GOPROXY=off")
-		}
-	case "oauth2", "build", "perf", "website":
-		env = append(env, "GO111MODULE=on")
-	}
-	return env
-}
-
 func (c *BuildConfig) IsReverse() bool { return c.HostConfig().IsReverse }
+
+func (c *BuildConfig) IsGCE() bool { return !c.HostConfig().IsReverse && !c.HostConfig().IsEC2 }
 
 func (c *BuildConfig) IsContainer() bool { return c.HostConfig().IsContainer() }
 func (c *HostConfig) IsContainer() bool  { return c.ContainerImage != "" }
@@ -929,7 +910,7 @@ func (c *BuildConfig) IsVM() bool { return c.HostConfig().IsVM() }
 // EC2 instances may be configured to run in containers that are running
 // on custom AMIs.
 func (c *HostConfig) IsVM() bool {
-	if c.isEC2 {
+	if c.IsEC2 {
 		return c.VMImage != "" && c.ContainerImage == ""
 	}
 	return c.VMImage != ""
@@ -1000,8 +981,8 @@ func (c *BuildConfig) GoTestTimeoutScale() int {
 
 // HostConfig returns the host configuration of c.
 func (c *BuildConfig) HostConfig() *HostConfig {
-	if c.testHostConf != nil {
-		return c.testHostConf
+	if c.TestHostConf != nil {
+		return c.TestHostConf
 	}
 	if c, ok := Hosts[c.HostType]; ok {
 		return c
@@ -1333,7 +1314,7 @@ func (c *BuildConfig) GorootFinal() string {
 
 // MachineType returns the AWS or GCE machine type to use for this builder.
 func (c *HostConfig) MachineType() string {
-	if c.IsEC2() {
+	if c.IsEC2 {
 		return c.machineType
 	}
 	typ := c.machineType
@@ -1360,17 +1341,13 @@ func (c *HostConfig) MachineType() string {
 }
 
 // IsEC2 returns true if the machine type is an EC2 arm64 type.
-func (c *HostConfig) IsEC2() bool {
-	return c.isEC2
-}
-
 // PoolName returns a short summary of the builder's host type for the
 // https://farmer.golang.org/builders page.
 func (c *HostConfig) PoolName() string {
 	switch {
 	case c.IsReverse:
 		return "Reverse (dedicated machine/VM)"
-	case c.IsEC2():
+	case c.IsEC2:
 		return "EC2 VM Container"
 	case c.IsVM():
 		return "GCE VM"
@@ -1394,7 +1371,7 @@ func (c *HostConfig) ContainerVMImage() string {
 	if c.NestedVirt {
 		return "debian-bullseye-vmx"
 	}
-	if c.isEC2 && c.ContainerImage != "" {
+	if c.IsEC2 && c.ContainerImage != "" {
 		return fmt.Sprintf("gcr.io/%s/%s", buildenv.Production.ProjectName, c.ContainerImage)
 	}
 	return ""
@@ -1408,7 +1385,7 @@ func (c *HostConfig) IsHermetic() bool {
 	switch {
 	case c.IsReverse:
 		return c.HermeticReverse
-	case c.IsEC2():
+	case c.IsEC2:
 		return true
 	case c.IsVM():
 		return true

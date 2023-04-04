@@ -16,8 +16,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 func TestOSARCHAccessors(t *testing.T) {
@@ -40,21 +38,21 @@ func TestDistTestsExecTimeout(t *testing.T) {
 		{
 			&BuildConfig{
 				env:          []string{},
-				testHostConf: &HostConfig{},
+				TestHostConf: &HostConfig{},
 			},
 			20 * time.Minute,
 		},
 		{
 			&BuildConfig{
 				env:          []string{"GO_TEST_TIMEOUT_SCALE=2"},
-				testHostConf: &HostConfig{},
+				TestHostConf: &HostConfig{},
 			},
 			40 * time.Minute,
 		},
 		{
 			&BuildConfig{
 				env: []string{},
-				testHostConf: &HostConfig{
+				TestHostConf: &HostConfig{
 					env: []string{"GO_TEST_TIMEOUT_SCALE=3"},
 				},
 			},
@@ -64,7 +62,7 @@ func TestDistTestsExecTimeout(t *testing.T) {
 		{
 			&BuildConfig{
 				env: []string{"GO_TEST_TIMEOUT_SCALE=2"},
-				testHostConf: &HostConfig{
+				TestHostConf: &HostConfig{
 					env: []string{"GO_TEST_TIMEOUT_SCALE=3"},
 				},
 			},
@@ -1152,7 +1150,7 @@ func TestHostConfigIsVM(t *testing.T) {
 			config: &HostConfig{
 				VMImage:        "image-x",
 				ContainerImage: "",
-				isEC2:          false,
+				IsEC2:          false,
 			},
 			want: true,
 		},
@@ -1161,7 +1159,7 @@ func TestHostConfigIsVM(t *testing.T) {
 			config: &HostConfig{
 				VMImage:        "",
 				ContainerImage: "container-image-x",
-				isEC2:          false,
+				IsEC2:          false,
 			},
 			want: false,
 		},
@@ -1170,7 +1168,7 @@ func TestHostConfigIsVM(t *testing.T) {
 			config: &HostConfig{
 				VMImage:        "image-x",
 				ContainerImage: "container-image-x",
-				isEC2:          true,
+				IsEC2:          true,
 			},
 			want: false,
 		},
@@ -1179,7 +1177,7 @@ func TestHostConfigIsVM(t *testing.T) {
 			config: &HostConfig{
 				VMImage:        "image-x",
 				ContainerImage: "",
-				isEC2:          true,
+				IsEC2:          true,
 			},
 			want: true,
 		},
@@ -1188,113 +1186,6 @@ func TestHostConfigIsVM(t *testing.T) {
 		t.Run(fmt.Sprintf(tc.desc), func(t *testing.T) {
 			if got := tc.config.IsVM(); got != tc.want {
 				t.Errorf("HostConfig.IsVM() = %t; want %t", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestModulesEnv(t *testing.T) {
-	testCases := []struct {
-		desc        string
-		buildConfig *BuildConfig
-		repo        string
-		want        []string
-	}{
-		{
-			desc: "ec2-builder-repo-non-go",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     true,
-				},
-			},
-			repo: "bar",
-			want: []string{"GOPROXY=https://proxy.golang.org"},
-		},
-		{
-			desc: "reverse-builder-repo-non-go",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: true,
-					isEC2:     false,
-				},
-			},
-			repo: "bar",
-			want: []string{"GOPROXY=https://proxy.golang.org"},
-		},
-		{
-			desc: "reverse-builder-repo-go",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: true,
-					isEC2:     false,
-				},
-			},
-			repo: "go",
-			want: []string{"GOPROXY=off"},
-		},
-		{
-			desc: "builder-repo-go",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     false,
-				},
-			},
-			repo: "go",
-			want: []string{"GOPROXY=off"},
-		},
-		{
-			desc: "builder-repo-go-outbound-network-allowed",
-			buildConfig: &BuildConfig{
-				Name: "test-longtest",
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     false,
-				},
-			},
-			repo: "go",
-			want: nil,
-		},
-		{
-			desc: "builder-repo-special-case",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     false,
-				},
-			},
-			repo: "build",
-			want: []string{"GO111MODULE=on"},
-		},
-		{
-			desc: "reverse-builder-repo-special-case",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: true,
-					isEC2:     false,
-				},
-			},
-			repo: "build",
-			want: []string{"GOPROXY=https://proxy.golang.org", "GO111MODULE=on"},
-		},
-		{
-			desc: "builder-repo-non-special-case",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     false,
-				},
-			},
-			repo: "bar",
-			want: nil,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			got := tc.buildConfig.ModulesEnv(tc.repo)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("BuildConfig.ModulesEnv(%q) mismatch (-want, +got)\n%s", tc.repo, diff)
 			}
 		})
 	}

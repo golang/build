@@ -1042,11 +1042,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
 	)
-	if !st.conf.IsReverse() {
-		// GKE value but will be ignored/overwritten by reverse buildlets
-		env = append(env, "GOPROXY="+moduleProxy())
-	}
-	env = append(env, st.conf.ModulesEnv(st.SubName)...)
+	env = append(env, st.modulesEnv()...)
 
 	args := []string{"test"}
 	if st.conf.CompileOnly {
@@ -1141,24 +1137,17 @@ func (m multiError) Error() string {
 	return b.String()
 }
 
-// moduleProxy returns the GOPROXY environment value to use for module-enabled
-// tests.
+// internalModuleProxy returns the GOPROXY environment value to use for
+// most module-enabled tests.
 //
 // We go through an internal (10.0.0.0/8) proxy that then hits
 // https://proxy.golang.org/ so we're still able to firewall
 // non-internal outbound connections on builder nodes.
 //
-// This moduleProxy func in prod mode (when running on GKE) returns an http
-// URL to the current GKE pod's IP with a Kubernetes NodePort service
-// port that forwards back to the coordinator's 8123. See comment below.
-//
-// In localhost dev mode it just returns the value of GOPROXY.
-func moduleProxy() string {
-	// If we're running on localhost, just use the current environment's value.
-	if pool.NewGCEConfiguration().BuildEnv() == nil || !pool.NewGCEConfiguration().BuildEnv().IsProd {
-		// If empty, use installed VCS tools as usual to fetch modules.
-		return os.Getenv("GOPROXY")
-	}
+// This internalModuleProxy func in prod mode (when running on GKE) returns an
+// http URL to the current GKE pod's IP with a Kubernetes NodePort service port
+// that forwards back to the coordinator's 8123. See comment below.
+func internalModuleProxy() string {
 	// We run a NodePort service on each GKE node
 	// (cmd/coordinator/module-proxy-service.yaml) on port 30157
 	// that maps back the coordinator's port 8123. (We could round
@@ -1169,6 +1158,35 @@ func moduleProxy() string {
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
 	return "http://" + pool.NewGCEConfiguration().GKENodeHostname() + ":30157"
+}
+
+// modulesEnv returns the extra module-specific environment variables
+// to append to tests.
+func (st *buildStatus) modulesEnv() (env []string) {
+	// GOPROXY
+	switch {
+	case st.SubName == "" && !st.conf.OutboundNetworkAllowed():
+		env = append(env, "GOPROXY=off")
+	case st.conf.PrivateGoProxy():
+		// Don't add GOPROXY, the builder is pre-configured.
+	case pool.NewGCEConfiguration().BuildEnv() == nil || !pool.NewGCEConfiguration().BuildEnv().IsProd:
+		// Dev mode; use the system default.
+		env = append(env, "GOPROXY="+os.Getenv("GOPROXY"))
+	case st.conf.IsGCE():
+		// On GCE; the internal proxy is accessible, prefer that.
+		env = append(env, "GOPROXY="+internalModuleProxy())
+	default:
+		// Everything else uses the public proxy.
+		env = append(env, "GOPROXY=https://proxy.golang.org")
+	}
+
+	// GO111MODULE
+	switch st.SubName {
+	case "oauth2", "build", "perf", "website":
+		env = append(env, "GO111MODULE=on")
+	}
+
+	return env
 }
 
 // runBenchmarkTests runs benchmarks from x/benchmarks when RunBench is set.
@@ -1275,10 +1293,9 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		"BENCH_BRANCH="+st.RevBranch,
 		"BENCH_REPOSITORY="+repo,
 		"GOROOT="+goroot,
-		"GOPATH="+gopath,         // For module cache storage
-		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
+		"GOPATH="+gopath, // For module cache storage
 	)
-	env = append(env, st.conf.ModulesEnv("benchmarks")...)
+	env = append(env, st.modulesEnv()...)
 	if repo != "go" {
 		env = append(env, "BENCH_SUBREPO_PATH="+st.conf.FilePathJoin(workDir, subrepoDir))
 		env = append(env, "BENCH_SUBREPO_BASELINE_PATH="+st.conf.FilePathJoin(workDir, subrepoBaselineDir))
@@ -1748,9 +1765,8 @@ func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, g
 	env := append(st.conf.Env(),
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
-		"GOPROXY="+moduleProxy(),
 	)
-	env = append(env, st.conf.ModulesEnv("go")...)
+	env = append(env, st.modulesEnv()...)
 
 	remoteErr, err := bc.Exec(ctx, "./go/bin/go", buildlet.ExecOpts{
 		// We set Dir to "." instead of the default ("go/bin") so when the dist tests

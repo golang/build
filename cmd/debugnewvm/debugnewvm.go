@@ -84,7 +84,7 @@ func main() {
 	if !hconf.IsVM() && !hconf.IsContainer() {
 		log.Fatalf("host type %q is type %q; want a VM or container host type", *hostType, hconf.PoolName())
 	}
-	if hconf.IsEC2() && (*awsKeyID == "" || *awsAccessKey == "") {
+	if hconf.IsEC2 && (*awsKeyID == "" || *awsAccessKey == "") {
 		if !metadata.OnGCE() {
 			log.Fatal("missing -aws-key-id and -aws-access-key params are required for builders on AWS")
 		}
@@ -116,7 +116,7 @@ func main() {
 
 	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
 	var bc buildlet.Client
-	if hconf.IsEC2() {
+	if hconf.IsEC2 {
 		region := env.AWSRegion
 		if *awsRegion != "" {
 			region = *awsRegion

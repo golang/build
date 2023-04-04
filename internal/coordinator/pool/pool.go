@@ -124,7 +124,7 @@ func ForHost(conf *dashboard.HostConfig) Buildlet {
 		panic("nil conf")
 	}
 	switch {
-	case conf.IsEC2():
+	case conf.IsEC2:
 		return EC2BuildetPool()
 	case conf.IsVM(), conf.IsContainer():
 		return NewGCEConfiguration().BuildletPool()

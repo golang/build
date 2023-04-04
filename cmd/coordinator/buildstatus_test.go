@@ -10,6 +10,12 @@ package main
 
 import (
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"golang.org/x/build/buildenv"
+	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/buildgo"
+	"golang.org/x/build/internal/coordinator/pool"
 )
 
 // TestParseOutputAndHeader tests header parsing by parseOutputAndHeader.
@@ -194,6 +200,156 @@ XXXBANNERXXX:Testing packages.`),
 			}
 			if string(gotOut) != string(tc.wantOut) {
 				t.Errorf("parseOutputAndBanner(%q) got out %q want out %q", string(tc.input), string(gotOut), string(tc.wantOut))
+			}
+		})
+	}
+}
+
+func TestModulesEnv(t *testing.T) {
+	// modulesEnv looks at pool.NewGCEConfiguration().BuildEnv().IsProd for
+	// special behavior in dev mode. Temporarily override the environment
+	// to force testing of the prod configuration.
+	old := pool.NewGCEConfiguration().BuildEnv()
+	defer pool.NewGCEConfiguration().SetBuildEnv(old)
+	pool.NewGCEConfiguration().SetBuildEnv(&buildenv.Environment{
+		IsProd: true,
+	})
+
+	// In testing we never initialize
+	// pool.NewGCEConfiguration().GKENodeHostname(), so we get this odd
+	// concatenation back.
+	const gkeModuleProxy = "http://:30157"
+
+	testCases := []struct {
+		desc string
+		st   *buildStatus
+		want []string
+	}{
+		{
+			desc: "ec2-builder-repo-non-go",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: "bar"},
+				conf: &dashboard.BuildConfig{
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: false,
+						IsEC2:     true,
+					},
+				},
+			},
+			want: []string{"GOPROXY=https://proxy.golang.org"},
+		},
+		{
+			desc: "reverse-builder-repo-non-go",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: "bar"},
+				conf: &dashboard.BuildConfig{
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: true,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=https://proxy.golang.org"},
+		},
+		{
+			desc: "reverse-builder-repo-go",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: ""}, // go
+				conf: &dashboard.BuildConfig{
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: true,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=off"},
+		},
+		{
+			desc: "builder-repo-go",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: ""}, // go
+				conf: &dashboard.BuildConfig{
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: false,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=off"},
+		},
+		{
+			desc: "builder-repo-go-outbound-network-allowed",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: ""}, // go
+				conf: &dashboard.BuildConfig{
+					Name: "test-longtest",
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: false,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=" + gkeModuleProxy},
+		},
+		{
+			desc: "reverse-builder-repo-go-outbound-network-allowed",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: ""}, // go
+				conf: &dashboard.BuildConfig{
+					Name: "test-longtest",
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: true,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=https://proxy.golang.org"},
+		},
+		{
+			desc: "builder-repo-special-case",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: "build"},
+				conf: &dashboard.BuildConfig{
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: false,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=" + gkeModuleProxy, "GO111MODULE=on"},
+		},
+		{
+			desc: "reverse-builder-repo-special-case",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: "build"},
+				conf: &dashboard.BuildConfig{
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: true,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=https://proxy.golang.org", "GO111MODULE=on"},
+		},
+		{
+			desc: "builder-repo-non-special-case",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: "bar"},
+				conf: &dashboard.BuildConfig{
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: false,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=" + gkeModuleProxy},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			got := tc.st.modulesEnv()
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("buildStatus.modulesEnv() mismatch (-want, +got)\n%s", diff)
 			}
 		})
 	}
