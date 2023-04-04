@@ -38,6 +38,7 @@ var slowBotAliases = map[string]string{
 	"android-arm64":         "android-arm64-corellium",
 	"arm":                   "linux-arm-aws",
 	"arm64":                 "linux-arm64",
+	"boringcrypto":          "linux-amd64-boringcrypto",
 	"darwin":                "darwin-amd64-13",
 	"darwin-amd64":          "darwin-amd64-13",
 	"darwin-arm64":          "darwin-arm64-12",
