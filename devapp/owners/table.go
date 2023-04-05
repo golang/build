@@ -547,7 +547,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{rsc},
 	},
 	"go/src/net/http/pprof": {
-		Primary: []Owner{cherryyz, rsc},
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{cherryyz, rsc},
 	},
 	"go/src/net/internal/socktest": {
 		Primary: []Owner{},
