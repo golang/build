@@ -239,6 +239,19 @@ func TestModulesEnv(t *testing.T) {
 			want: []string{"GOPROXY=https://proxy.golang.org"},
 		},
 		{
+			desc: "builder-repo-non-go",
+			st: &buildStatus{
+				BuilderRev: buildgo.BuilderRev{SubName: "bar"},
+				conf: &dashboard.BuildConfig{
+					TestHostConf: &dashboard.HostConfig{
+						IsReverse: false,
+						IsEC2:     false,
+					},
+				},
+			},
+			want: []string{"GOPROXY=" + gkeModuleProxy},
+		},
+		{
 			desc: "reverse-builder-repo-non-go",
 			st: &buildStatus{
 				BuilderRev: buildgo.BuilderRev{SubName: "bar"},
@@ -304,45 +317,6 @@ func TestModulesEnv(t *testing.T) {
 				},
 			},
 			want: []string{"GOPROXY=https://proxy.golang.org"},
-		},
-		{
-			desc: "builder-repo-special-case",
-			st: &buildStatus{
-				BuilderRev: buildgo.BuilderRev{SubName: "build"},
-				conf: &dashboard.BuildConfig{
-					TestHostConf: &dashboard.HostConfig{
-						IsReverse: false,
-						IsEC2:     false,
-					},
-				},
-			},
-			want: []string{"GOPROXY=" + gkeModuleProxy, "GO111MODULE=on"},
-		},
-		{
-			desc: "reverse-builder-repo-special-case",
-			st: &buildStatus{
-				BuilderRev: buildgo.BuilderRev{SubName: "build"},
-				conf: &dashboard.BuildConfig{
-					TestHostConf: &dashboard.HostConfig{
-						IsReverse: true,
-						IsEC2:     false,
-					},
-				},
-			},
-			want: []string{"GOPROXY=https://proxy.golang.org", "GO111MODULE=on"},
-		},
-		{
-			desc: "builder-repo-non-special-case",
-			st: &buildStatus{
-				BuilderRev: buildgo.BuilderRev{SubName: "bar"},
-				conf: &dashboard.BuildConfig{
-					TestHostConf: &dashboard.HostConfig{
-						IsReverse: false,
-						IsEC2:     false,
-					},
-				},
-			},
-			want: []string{"GOPROXY=" + gkeModuleProxy},
 		},
 	}
 	for _, tc := range testCases {

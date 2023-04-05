@@ -1180,12 +1180,6 @@ func (st *buildStatus) modulesEnv() (env []string) {
 		env = append(env, "GOPROXY=https://proxy.golang.org")
 	}
 
-	// GO111MODULE
-	switch st.SubName {
-	case "oauth2", "build", "perf", "website":
-		env = append(env, "GO111MODULE=on")
-	}
-
 	return env
 }
 
