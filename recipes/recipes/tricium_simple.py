@@ -31,7 +31,7 @@ def RunSteps(api):
   api.git('reset', 'HEAD~1', '--soft', name='git reset one commit')
   with api.context(cwd=repo_path):
     affected_files = api.tryserver.get_files_affected_by_patch(
-        patch_root=project,
+        patch_root='',
         report_files_via_property='affected_files')
   analyzers = [
         api.tricium.analyzers.HTTPS_CHECK,
@@ -39,7 +39,7 @@ def RunSteps(api):
         api.tricium.analyzers.INCLUSIVE_LANGUAGE_CHECK,
         api.tricium.analyzers.COPYRIGHT,
   ]
-  api.tricium.run_legacy(analyzers, api.path['start_dir'], affected_files, commit_message)
+  api.tricium.run_legacy(analyzers, repo_path, affected_files, commit_message)
 
 def GenTests(api):
 
