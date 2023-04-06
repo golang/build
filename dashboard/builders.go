@@ -2607,6 +2607,7 @@ func init() {
 			}
 			return b
 		},
+		KnownIssues: []int{35678},
 		env: []string{
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
