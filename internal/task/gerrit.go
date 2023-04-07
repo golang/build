@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"golang.org/x/build/gerrit"
+	wf "golang.org/x/build/internal/workflow"
 )
 
 type GerritClient interface {
@@ -17,7 +18,7 @@ type GerritClient interface {
 	// If the requested contents match the state of the repository, no change
 	// is created and the returned change ID will be empty.
 	// Reviewers is the username part of a google.com or golang.org email address.
-	CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error)
+	CreateAutoSubmitChange(ctx *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error)
 	// Submitted checks if the specified change has been submitted or failed
 	// trybots. If the CL is submitted, returns the submitted commit hash.
 	// If parentCommit is non-empty, the submitted CL's parent must match it.
@@ -42,7 +43,14 @@ type RealGerritClient struct {
 	Client *gerrit.Client
 }
 
-func (c *RealGerritClient) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, files map[string]string) (string, error) {
+func (c *RealGerritClient) CreateAutoSubmitChange(ctx *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, files map[string]string) (_ string, err error) {
+	defer func() {
+		// Check if status code is known to be not retryable.
+		if he := (*gerrit.HTTPError)(nil); errors.As(err, &he) && he.Res.StatusCode/100 == 4 {
+			ctx.DisableRetries()
+		}
+	}()
+
 	reviewerEmails, err := coordinatorEmails(reviewers)
 	if err != nil {
 		return "", err

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"golang.org/x/build/gerrit"
+	wf "golang.org/x/build/internal/workflow"
 )
 
 func TestNoOpCL(t *testing.T) {
@@ -14,7 +15,7 @@ func TestNoOpCL(t *testing.T) {
 	cl := gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookiesAuth())
 	gcl := &RealGerritClient{Client: cl}
 
-	ctx := context.Background()
+	ctx := &wf.TaskContext{Context: context.Background()}
 	changeID, err := gcl.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: "scratch",
 		Branch:  "master",

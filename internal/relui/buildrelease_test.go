@@ -630,7 +630,7 @@ type reviewerCheckGerrit struct {
 	*task.FakeGerrit
 }
 
-func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
+func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx *workflow.TaskContext, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
 	if diff := cmp.Diff(g.wantReviewers, reviewers, cmpopts.EquateEmpty()); diff != "" {
 		return "", fmt.Errorf("unexpected reviewers for CL: %v", diff)
 	}

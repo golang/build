@@ -68,9 +68,9 @@ var ErrNotModified = errors.New("gerrit: requested modification resulted in no c
 // HTTPError is the error type returned when a Gerrit API call does not return
 // the expected status.
 type HTTPError struct {
-	Res     *http.Response
-	Body    []byte // 4KB prefix
-	BodyErr error  // any error reading Body
+	Res     *http.Response // non-nil
+	Body    []byte         // 4KB prefix
+	BodyErr error          // any error reading Body
 }
 
 func (e *HTTPError) Error() string {

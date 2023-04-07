@@ -22,6 +22,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/untar"
+	wf "golang.org/x/build/internal/workflow"
 )
 
 // ServeTarball serves files as a .tar.gz to w, only if path contains pathMatch.
@@ -447,7 +448,7 @@ func (g *FakeGerrit) GetTag(ctx context.Context, project string, tag string) (ge
 	}
 }
 
-func (g *FakeGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
+func (g *FakeGerrit) CreateAutoSubmitChange(_ *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
 	repo, err := g.repo(input.Project)
 	if err != nil {
 		return "", err
