@@ -64,6 +64,7 @@ var slowBotAliases = map[string]string{
 	"linux-mips64le":        "linux-mips64le-rtrk",
 	"linux-mipsle":          "linux-mipsle-rtrk",
 	"linux-ppc64":           "linux-ppc64-sid-buildlet",
+	"linux-ppc64-power10":   "linux-ppc64-sid-power10",
 	"linux-ppc64le":         "linux-ppc64le-buildlet",
 	"linux-ppc64le-power9":  "linux-ppc64le-power9osu",
 	"linux-ppc64le-power10": "linux-ppc64le-power10osu",
@@ -92,6 +93,7 @@ var slowBotAliases = map[string]string{
 	"plan9-386":             "plan9-386-0intro",
 	"plan9-amd64":           "plan9-amd64-0intro",
 	"ppc64":                 "linux-ppc64-sid-buildlet",
+	"ppc64p10":              "linux-ppc64-sid-power10",
 	"ppc64le":               "linux-ppc64le-buildlet",
 	"ppc64lep9":             "linux-ppc64le-power9osu",
 	"ppc64lep10":            "linux-ppc64le-power10osu",
@@ -392,6 +394,18 @@ var Hosts = map[string]*HostConfig{
 		Notes:           "Debian sid; run by Go team on osuosl.org",
 		Owners:          []*gophers.Person{gh("pmur")},
 		IsReverse:       true,
+		ExpectNum:       5,
+		SSHUsername:     "root",
+		HermeticReverse: true,
+	},
+	"host-linux-ppc64-sid-power10": {
+		Notes:     "debian sid; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
+		Owners:    []*gophers.Person{gh("pmur")},
+		IsReverse: true,
+		// GOPPC64=power10 is only supported in go1.20 and later. The container provides a 1.20 bootstrap.
+		env: []string{
+			"GOPPC64=power10",
+			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
 		ExpectNum:       5,
 		SSHUsername:     "root",
 		HermeticReverse: true,
@@ -2729,6 +2743,16 @@ func init() {
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
+	})
+	addBuilder(BuildConfig{
+		Name:           "linux-ppc64-sid-power10",
+		HostType:       "host-linux-ppc64-sid-power10",
+		FlakyNet:       true,
+		distTestAdjust: ppc64DistTestPolicy,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64le-buildlet",

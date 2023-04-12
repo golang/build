@@ -15,6 +15,13 @@ Machines:
 
   Linux go-be-debian-1 5.10.0-1-powerpc64 #1 SMP Debian 5.10.4-1 (2020-12-31) ppc64 GNU/Linux
 
+* go-be-p10-1 : (30 GB RAM, 50 GB disk, 20 cores, POWER10)
+
+  ssh -i ~/.ssh/id_ed25519_golang1 debian@go-be-p10-1.osuosl.org
+  (key from go/go-builders-ssh)
+
+  Linux go-be-p10-1 6.1.0-7-powerpc64 #1 SMP Debian 6.1.20-2 (2023-04-08) ppc64 GNU/Linux
+
 # Setting up the debian ppc64 builder for containerized CI
 
 Copy the files and folders inside this directory onto the CI which preserving
@@ -41,10 +48,11 @@ cd golang-defaults
 git am ~/deb-patches/golang-defaults-hack.patch
 debuild -us -uc -tc
 cd ~/debs
-dpkg -i gccgo-go_1.19~1_ppc64.deb
+dpkg -i golang-go_1.19~1_ppc64.deb
 
 # Build docker. Note, the version used is/was the tips of master.
 # One day it will not be, and the git checkout command will need updated.
+# Also, dependencies need to be installed. debuild will indicate those.
 git clone https://salsa.debian.org/docker-team/docker.git
 cd docker
 git am ~/deb-patches/docker-hack.patch
@@ -84,13 +92,13 @@ sudo systemctl restart rundockerbuildlet.service
 
 # Warnings and other notes
 
-- Do not update the kernel (yet), #54547 causes big problems. The docker.io
+- (P9 VM) Do not update the kernel (yet), #54547 causes big problems. The docker.io
   packages need rebuilt when the go1.19 packages are updated to include this
   fix. Likewise, the bootstrap toolchain for CI will need to be updated to
   the latest go1.18 release (the oldest toolchain with this fix).
 
-- Following the above, grub is set to boot from the older kernel. This
+- (P9 VM) Following the above, grub is set to boot from the older kernel. This
   will need updated if new kernel packages are installed or removed.
 
-- Likewise, the kernel should boot with the `systemd.unified_cgroup_hierarchy=0`
-  option. This is needed to run docker (more) reliably on ppc64.
+- (P10 VM) Use Dockerfile.p10 to build the golang testing container. This is
+  needed until the minimum bootstrap version is 1.20 or newer.
