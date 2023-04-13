@@ -164,7 +164,14 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		sha1 string // if regular file
 	}
 	local := map[string]fileInfo{} // keys like "src/make.bash"
-	if err := filepath.Walk(goroot, func(path string, fi os.FileInfo, err error) error {
+
+	// Ensure that the goroot passed to filepath.Walk ends in a trailing slash,
+	// so that if GOROOT is a symlink we walk the underlying directory.
+	walkRoot := goroot
+	if walkRoot != "" && !os.IsPathSeparator(walkRoot[len(walkRoot)-1]) {
+		walkRoot += string(filepath.Separator)
+	}
+	if err := filepath.Walk(walkRoot, func(path string, fi os.FileInfo, err error) error {
 		if isEditorBackup(path) {
 			return nil
 		}
