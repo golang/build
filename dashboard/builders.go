@@ -2088,6 +2088,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "openbsd-ppc64-n2vi",
 		HostType:     "host-openbsd-ppc64-n2vi",
+		KnownIssues:  []int{56001},
 		SkipSnapshot: true,
 		FlakyNet:     true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
