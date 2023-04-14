@@ -50,7 +50,7 @@ func darwinCmd(base string) *exec.Cmd {
 	args := []string{
 		// Discard disk changes on exit.
 		"-snapshot",
-		"-m", "4096",
+		"-m", "10240",
 		"-cpu", "host",
 		"-machine", "q35",
 		"-usb",

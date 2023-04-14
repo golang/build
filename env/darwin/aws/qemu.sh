@@ -19,7 +19,7 @@ OVMF_CODE="$HOME/sysroot-macos-x86_64/share/qemu/edk2-x86_64-code.fd"
 
 # These arguments should be kept in sync with cmd/runqemubuildlet/darwin.go.
 args=(
-  -m 4096
+  -m 10240
   -cpu host
   -machine q35
   -usb -device usb-kbd -device usb-tablet
