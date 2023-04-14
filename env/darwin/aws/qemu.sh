@@ -23,10 +23,9 @@ args=(
   -cpu host
   -machine q35
   -usb -device usb-kbd -device usb-tablet
-  # QEMU scales poorly with CPU count on macOS (see
-  # https://go.dev/issue/48945#issuecomment-1378850381). Increasing CPU count
-  # also increases boot time.
-  -smp cpus=4
+  # macOS only likes a power-of-two number of cores, but odd socket count is
+  # fine.
+  -smp cpus=6,sockets=3,cores=2,threads=1
   -device usb-ehci,id=ehci
   -device nec-usb-xhci,id=xhci
   -global nec-usb-xhci.msi=off
