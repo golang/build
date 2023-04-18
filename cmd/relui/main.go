@@ -207,6 +207,7 @@ func main() {
 	for p, r := range repos.ByGerritProject {
 		ignoreProjects[p] = !r.ShowOnDashboard()
 	}
+	ignoreProjects["vuln"] = true // x/vuln only has manual tagging for now. See issue 59686.
 	tagTasks := &task.TagXReposTasks{
 		IgnoreProjects:   ignoreProjects,
 		Gerrit:           gerritClient,
