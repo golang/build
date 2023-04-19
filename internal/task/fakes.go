@@ -10,6 +10,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -348,67 +349,70 @@ type FakeGerrit struct {
 }
 
 type FakeRepo struct {
-	t       *testing.T
-	name    string
-	seq     int
-	history []string // oldest to newest
-	content map[string]map[string]string
-	tags    map[string]string
+	t    *testing.T
+	name string
+	dir  *GitDir
 }
 
 func NewFakeRepo(t *testing.T, name string) *FakeRepo {
-	return &FakeRepo{
-		t:       t,
-		name:    name,
-		content: map[string]map[string]string{},
-		tags:    map[string]string{},
+	if _, err := exec.LookPath("git"); errors.Is(err, exec.ErrNotFound) {
+		t.Skip("test requires git")
 	}
+
+	r := &FakeRepo{
+		t:    t,
+		name: name,
+		dir:  &GitDir{&Git{}, t.TempDir()},
+	}
+	t.Cleanup(func() { r.dir.Close() })
+	r.runGit("init", "-b", "master")
+	r.runGit("commit", "--allow-empty", "--allow-empty-message", "-m", "")
+	return r
+}
+
+func (repo *FakeRepo) runGit(args ...string) []byte {
+	repo.t.Helper()
+	out, err := repo.dir.RunCommand(context.Background(), args...)
+	if err != nil {
+		repo.t.Fatal(err)
+	}
+	return out
 }
 
 func (repo *FakeRepo) Commit(contents map[string]string) string {
-	rev := fmt.Sprintf("%v~%v", repo.name, repo.seq)
-	repo.seq++
+	return repo.CommitOnBranch("master", contents)
+}
 
-	newContent := map[string]string{}
-	if len(repo.history) != 0 {
-		for k, v := range repo.content[repo.history[len(repo.history)-1]] {
-			newContent[k] = v
+func (repo *FakeRepo) CommitOnBranch(branch string, contents map[string]string) string {
+	repo.runGit("switch", branch)
+	for k, v := range contents {
+		full := filepath.Join(repo.dir.dir, k)
+		if err := os.MkdirAll(filepath.Dir(full), 0777); err != nil {
+			repo.t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(v), 0777); err != nil {
+			repo.t.Fatal(err)
 		}
 	}
-	for k, v := range contents {
-		newContent[k] = v
-	}
-	repo.content[rev] = newContent
-	repo.history = append(repo.history, rev)
-	return rev
+	repo.runGit("add", ".")
+	repo.runGit("commit", "--allow-empty-message", "-m", "")
+	return strings.TrimSpace(string(repo.runGit("rev-parse", "HEAD")))
+}
+
+func (repo *FakeRepo) History() []string {
+	return strings.Split(string(repo.runGit("log", "--format=%H")), "\n")
 }
 
 func (repo *FakeRepo) Tag(tag, commit string) {
-	if _, ok := repo.content[commit]; !ok {
-		repo.t.Fatalf("commit %q does not exist on repo %q", commit, repo.name)
-	}
-	if _, ok := repo.tags[tag]; ok {
-		repo.t.Fatalf("tag %q already exists on repo %q", commit, repo.name)
-	}
-	repo.tags[tag] = commit
+	repo.runGit("tag", tag, commit)
 }
 
-// GetRepoContent returns the content of repo based on the value of commit:
-// - commit is "master": return content of the most recent revision
-// - commit is tag: return content of the repo associating with the commit that the tag maps to
-// - commit is neither "master" or tag: return content of the repo associated with that commit
-func (repo *FakeRepo) GetRepoContent(commit string) (map[string]string, error) {
-	rev := commit
-	if commit == "master" {
-		l := len(repo.history)
-		if l == 0 {
-			return nil, fmt.Errorf("repo %v history is empty", repo.name)
-		}
-		rev = repo.history[l-1]
-	} else if val, ok := repo.tags[commit]; ok {
-		rev = val
-	}
-	return repo.content[rev], nil
+func (repo *FakeRepo) Branch(branch, commit string) {
+	repo.runGit("branch", branch, commit)
+}
+
+func (repo *FakeRepo) ReadFile(commit, file string) ([]byte, error) {
+	return repo.dir.RunCommand(context.Background(), "show", commit+":"+file)
 }
 
 var _ GerritClient = (*FakeGerrit)(nil)
@@ -434,7 +438,8 @@ func (g *FakeGerrit) ReadBranchHead(ctx context.Context, project, branch string)
 	if err != nil {
 		return "", err
 	}
-	return repo.history[len(repo.history)-1], nil
+	out, err := repo.dir.RunCommand(ctx, "rev-parse", "refs/heads/"+branch)
+	return strings.TrimSpace(string(out)), err
 }
 
 func (g *FakeGerrit) ReadFile(ctx context.Context, project string, commit string, file string) ([]byte, error) {
@@ -442,15 +447,7 @@ func (g *FakeGerrit) ReadFile(ctx context.Context, project string, commit string
 	if err != nil {
 		return nil, err
 	}
-	repoContent, err := repo.GetRepoContent(commit)
-	if err != nil {
-		return nil, err
-	}
-	fileContent := repoContent[file]
-	if fileContent == "" {
-		return nil, fmt.Errorf("commit/file not found %v at %v: %w", file, commit, gerrit.ErrResourceNotExist)
-	}
-	return []byte(fileContent), nil
+	return repo.ReadFile(commit, file)
 }
 
 func (g *FakeGerrit) ListTags(ctx context.Context, project string) ([]string, error) {
@@ -458,11 +455,8 @@ func (g *FakeGerrit) ListTags(ctx context.Context, project string) ([]string, er
 	if err != nil {
 		return nil, err
 	}
-	var tags []string
-	for k := range repo.tags {
-		tags = append(tags, k)
-	}
-	return tags, nil
+	out, err := repo.dir.RunCommand(ctx, "tag", "-l")
+	return strings.Split(strings.TrimSpace(string(out)), "\n"), err
 }
 
 func (g *FakeGerrit) GetTag(ctx context.Context, project string, tag string) (gerrit.TagInfo, error) {
@@ -470,11 +464,8 @@ func (g *FakeGerrit) GetTag(ctx context.Context, project string, tag string) (ge
 	if err != nil {
 		return gerrit.TagInfo{}, err
 	}
-	if commit, ok := repo.tags[tag]; ok {
-		return gerrit.TagInfo{Revision: commit}, nil
-	} else {
-		return gerrit.TagInfo{}, fmt.Errorf("tag not found: %w", gerrit.ErrResourceNotExist)
-	}
+	out, err := repo.dir.RunCommand(ctx, "rev-parse", "refs/tags/"+tag)
+	return gerrit.TagInfo{Revision: strings.TrimSpace(string(out))}, err
 }
 
 func (g *FakeGerrit) CreateAutoSubmitChange(_ *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
@@ -482,7 +473,7 @@ func (g *FakeGerrit) CreateAutoSubmitChange(_ *wf.TaskContext, input gerrit.Chan
 	if err != nil {
 		return "", err
 	}
-	commit := repo.Commit(contents)
+	commit := repo.CommitOnBranch(input.Branch, contents)
 	return "cl_" + commit, nil
 }
 
@@ -504,9 +495,23 @@ func (g *FakeGerrit) GetCommitsInRefs(ctx context.Context, project string, commi
 	if err != nil {
 		return nil, err
 	}
+	refSet := map[string]bool{}
+	for _, ref := range refs {
+		refSet[ref] = true
+	}
+
 	result := map[string][]string{}
-	for _, commit := range repo.history {
-		result[commit] = []string{"master"}
+	for _, commit := range commits {
+		out, err := repo.dir.RunCommand(ctx, "branch", "--format=%(refname)", "--contains="+commit)
+		if err != nil {
+			return nil, err
+		}
+		for _, branch := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			branch := strings.TrimSpace(branch)
+			if refSet[branch] {
+				result[commit] = append(result[commit], branch)
+			}
+		}
 	}
 	return result, nil
 }
@@ -527,12 +532,12 @@ func (g *FakeGerrit) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rev := strings.TrimSuffix(parts[3], ".tar.gz")
-	repoContent, err := repo.GetRepoContent(rev)
+	archive, err := repo.dir.RunCommand(r.Context(), "archive", "--format=tgz", rev)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	ServeTarball("", repoContent, w, r)
+	http.ServeContent(w, r, parts[3], time.Now(), bytes.NewReader(archive))
 }
 
 func (*FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.ChangeInfo, error) {
