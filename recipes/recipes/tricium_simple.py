@@ -18,11 +18,10 @@ DEPS = [
 def RunSteps(api):
   """This recipe runs quick analyzers for Go repos.
   """
-  project = api.tryserver.gerrit_change_repo_project
   commit_message = api.gerrit.get_change_description(
       'https://%s' % api.tryserver.gerrit_change.host,
        api.tryserver.gerrit_change.change, api.tryserver.gerrit_change.patchset)
-  repo_path = api.path['start_dir'].join(project)
+  repo_path = api.path['start_dir'].join(api.tryserver.gerrit_change_repo_project)
   url = 'https://%s/%s' % (api.tryserver.gerrit_change.host, api.tryserver.gerrit_change.project)
   ref = "refs/changes/%d/%d/%d" % (api.tryserver.gerrit_change.change%100,
                                    api.tryserver.gerrit_change.change,
