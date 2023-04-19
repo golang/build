@@ -245,6 +245,12 @@ func main() {
 	}
 	dh.RegisterDefinition("Tag a new version of x/telemetry/config (if necessary)", tagTelemetryTasks.NewDefinition())
 
+	privateSyncTask := &task.PrivateMasterSyncTask{
+		PrivateGerritURL: "https://team.googlesource.com/golang/go-private",
+		Ref:              "public",
+	}
+	dh.RegisterDefinition("Sync go-private master branch with public", privateSyncTask.NewDefinition())
+
 	var base *url.URL
 	if *baseURL != "" {
 		base, err = url.Parse(*baseURL)
