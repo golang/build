@@ -45,7 +45,7 @@ func TestWikiPubSub(t *testing.T) {
 }
 
 func TestEmailDiff(t *testing.T) {
-	want := `<p><a href="https://golang.org/wiki/CodeReviewComments">View page</a></p>
+	want := `<p><a href="https://go.dev/wiki/CodeReviewComments">View page</a></p>
 <pre style="font-family: monospace,monospace; white-space: pre-wrap;">Diff
 
 Code</pre>

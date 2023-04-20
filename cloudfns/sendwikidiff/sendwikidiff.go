@@ -81,7 +81,7 @@ func emailBody(page, diff string) (string, error) {
 		PageURL, Diff string
 	}{
 		Diff:    diff,
-		PageURL: fmt.Sprintf("https://golang.org/wiki/%s", page),
+		PageURL: fmt.Sprintf("https://go.dev/wiki/%s", page),
 	}); err != nil {
 		return "", fmt.Errorf("template.Execute: %v", err)
 	}
@@ -90,7 +90,7 @@ func emailBody(page, diff string) (string, error) {
 
 func sendEmailSendGrid(page, diff string) error {
 	from := mail.NewEmail("WikiDiffBot", "nobody@golang.org")
-	subject := fmt.Sprintf("golang.org/wiki/%s was updated", page)
+	subject := fmt.Sprintf("go.dev/wiki/%s was updated", page)
 	to := mail.NewEmail("", "golang-wikichanges@googlegroups.com")
 
 	body, err := emailBody(page, diff)
@@ -103,7 +103,7 @@ func sendEmailSendGrid(page, diff string) error {
 	return err
 }
 
-// sendEmail sends an email that the golang.org/wiki/$page was updated
+// sendEmail sends an email that the go.dev/wiki/$page was updated
 // with the provided diff.
 // Var for testing.
 var sendEmail func(page, diff string) error = sendEmailSendGrid
