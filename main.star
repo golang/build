@@ -49,10 +49,10 @@ luci.project(
             groups = "googlers",
         ),
 
-        # Allow any googler to see bulders.
+        # Allow everyone in the world to see bulders.
         luci.binding(
             roles = "role/buildbucket.reader",
-            groups = "googlers",
+            groups = "authenticated-users",
         ),
 
         # Allow task service accounts to spawn builds.
@@ -60,6 +60,12 @@ luci.project(
             roles = "role/buildbucket.triggerer",
             groups = "project-golang-task-accounts",
             users = "tricium-prod@appspot.gserviceaccount.com",
+        ),
+
+        # Allow external contributions to run try jobs.
+        luci.binding(
+            roles = "role/cq.dryRunner",
+            groups = "project-golang-may-start-trybots",
         ),
     ],
     acls = [
@@ -69,11 +75,11 @@ luci.project(
         ),
         acl.entry(
             roles = acl.CQ_COMMITTER,
-            groups = "authenticated-users",
+            groups = "mdb/golang-luci-admin",
         ),
         acl.entry(
             roles = acl.CQ_DRY_RUNNER,
-            groups = "authenticated-users",
+            groups = "project-golang-may-start-trybots",
         ),
     ],
 )
