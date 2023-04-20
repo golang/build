@@ -13,7 +13,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 
@@ -27,7 +27,7 @@ var (
 )
 
 func GitHubWikiChangeWebHook(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Could not read request body: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

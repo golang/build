@@ -9,11 +9,17 @@ Package sendwikidiff implements a Google Cloud background function that reacts t
 
 ## Deploying
 
+To deploy, run the following command sequence in this directory:
+
 ```sh
+DEPLOYDIR="$(mktemp -d)" && cp -R . ../../go.{mod,sum} "$DEPLOYDIR" && \
+(cd "$DEPLOYDIR" && \
+go mod edit -module golang.org/x/build/cloudfns/sendwikidiff && go mod tidy && go test ./... && \
 gcloud functions deploy HandleWikiChangePubSub \
   --project=symbolic-datum-552 \
-  --runtime go113 \
+  --runtime go120 \
   --trigger-topic github.webhooks.golang.go.wiki \
   --memory 1024 \
-  --set-env-vars="SENDGRID_API_KEY=$(gcloud --project=symbolic-datum-552 secrets versions access latest --secret=sendgrid-sendonly-api-key)"
+  --set-env-vars="SENDGRID_API_KEY=$(gcloud --project=symbolic-datum-552 secrets versions access latest --secret=sendgrid-sendonly-api-key)") && \
+rm -rf "$DEPLOYDIR"
 ```

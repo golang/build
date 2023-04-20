@@ -7,7 +7,7 @@ package wikiwebhook
 import (
 	"bytes"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http/httptest"
 	"testing"
 )
@@ -104,9 +104,9 @@ func TestWebHook(t *testing.T) {
 			GitHubWikiChangeWebHook(w, req)
 
 			resp := w.Result()
-			body, err := ioutil.ReadAll(resp.Body)
+			body, err := io.ReadAll(resp.Body)
 			if err != nil {
-				t.Errorf("ioutil.ReadAll: %v", err)
+				t.Errorf("io.ReadAll: %v", err)
 			}
 			if got, want := resp.StatusCode, tc.statusCode; got != want {
 				t.Errorf("Unexpected status code: got %d; want %d", got, want)

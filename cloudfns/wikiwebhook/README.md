@@ -9,10 +9,16 @@ Package wikiwebhook implements an Google Cloud Function HTTP handler that expect
 
 ## Deploying
 
+To deploy, run the following command sequence in this directory:
+
 ```sh
+DEPLOYDIR="$(mktemp -d)" && cp -R . ../../go.{mod,sum} "$DEPLOYDIR" && \
+(cd "$DEPLOYDIR" && \
+go mod edit -module golang.org/x/build/cloudfns/wikiwebhook && go mod tidy && go test ./... && \
 gcloud functions deploy GitHubWikiChangeWebHook \
   --project=symbolic-datum-552 \
-  --runtime go113 \
+  --runtime go120 \
   --trigger-http \
-  --set-env-vars="PUBSUB_TOPIC=github.webhooks.golang.go.wiki,GCP_PROJECT=symbolic-datum-552,GITHUB_WEBHOOK_SECRET=$(gcloud --project=symbolic-datum-552 secrets versions access latest --secret=github-webhook-secret)"
+  --set-env-vars="PUBSUB_TOPIC=github.webhooks.golang.go.wiki,GCP_PROJECT=symbolic-datum-552,GITHUB_WEBHOOK_SECRET=$(gcloud --project=symbolic-datum-552 secrets versions access latest --secret=github-webhook-secret)") && \
+rm -rf "$DEPLOYDIR"
 ```

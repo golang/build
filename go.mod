@@ -3,12 +3,13 @@ module golang.org/x/build
 go 1.18
 
 require (
-	cloud.google.com/go/bigquery v1.8.0
-	cloud.google.com/go/compute v1.3.0
+	cloud.google.com/go/bigquery v1.42.0
+	cloud.google.com/go/compute v1.10.0
 	cloud.google.com/go/datastore v1.1.0
 	cloud.google.com/go/errorreporting v0.2.0
-	cloud.google.com/go/secretmanager v1.3.0
-	cloud.google.com/go/storage v1.21.0
+	cloud.google.com/go/pubsub v1.26.0
+	cloud.google.com/go/secretmanager v1.6.0
+	cloud.google.com/go/storage v1.23.0
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
 	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20190129172621-c8b1d7a94ddf
@@ -28,8 +29,8 @@ require (
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-github/v48 v48.1.0
 	github.com/google/safehtml v0.0.3-0.20220430015336-00016cfeca15
-	github.com/google/uuid v1.2.0
-	github.com/googleapis/gax-go/v2 v2.1.1
+	github.com/google/uuid v1.3.0
+	github.com/googleapis/gax-go/v2 v2.6.0
 	github.com/googleapis/google-cloud-go-testing v0.0.0-20200911160855-bcd43fbb19e8
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7
 	github.com/grpc-ecosystem/go-grpc-middleware v1.0.1-0.20190118093823-f849b5445de4
@@ -52,25 +53,25 @@ require (
 	golang.org/x/image v0.5.0
 	golang.org/x/mod v0.6.0
 	golang.org/x/net v0.7.0
-	golang.org/x/oauth2 v0.0.0-20220223155221-ee480838109b
+	golang.org/x/oauth2 v0.0.0-20221014153046-6fdb5e3db783
 	golang.org/x/perf v0.0.0-20221222170352-3fd27c239283
-	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
+	golang.org/x/sync v0.0.0-20220929204114-8fcdb60fdcc0
 	golang.org/x/sys v0.5.0
 	golang.org/x/term v0.5.0
-	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
+	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af
 	golang.org/x/tools v0.2.0
-	google.golang.org/api v0.70.0
+	google.golang.org/api v0.99.0
 	google.golang.org/appengine v1.6.7
-	google.golang.org/genproto v0.0.0-20220222213610-43724f9ea8cf
-	google.golang.org/grpc v1.44.0
+	google.golang.org/genproto v0.0.0-20221010155953-15ba04fc1c0e
+	google.golang.org/grpc v1.50.1
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/inf.v0 v0.9.1
 )
 
 require (
-	cloud.google.com/go v0.100.2 // indirect
+	cloud.google.com/go v0.104.0 // indirect
 	cloud.google.com/go/container v1.2.0 // indirect
-	cloud.google.com/go/iam v0.1.1 // indirect
+	cloud.google.com/go/iam v0.5.0 // indirect
 	cloud.google.com/go/monitoring v1.4.0 // indirect
 	cloud.google.com/go/trace v1.2.0 // indirect
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
@@ -88,6 +89,8 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.2.0 // indirect
+	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
@@ -111,7 +114,7 @@ require (
 	github.com/shurcooL/graphql v0.0.0-20220520033453-bdb1221e171e // indirect
 	go.uber.org/atomic v1.6.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gonum.org/v1/plot v0.10.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
