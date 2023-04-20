@@ -102,7 +102,7 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 			haveGo14 = true
 			continue
 		}
-		if strings.HasPrefix(en, "go/") {
+		if strings.HasPrefix(en, "go/") && en != "go/" {
 			remote[en[len("go/"):]] = de
 		}
 	}
@@ -123,11 +123,13 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 	// Invoke 'git check-ignore' and use it to query whether paths have been gitignored.
 	// If anything goes wrong at any point, fall back to assuming that nothing is gitignored.
 	var isGitIgnored func(string) bool
-	gci := exec.Command("git", "check-ignore", "--stdin", "-n", "-v", "-z")
+	gci := exec.Command("git", "-C", goroot, "check-ignore", "--stdin", "-n", "-v", "-z")
 	gci.Env = append(os.Environ(), "GIT_FLUSH=1")
 	gciIn, errIn := gci.StdinPipe()
 	defer gciIn.Close() // allow git process to exit
 	gciOut, errOut := gci.StdoutPipe()
+	gciErr := &bytes.Buffer{}
+	gci.Stderr = gciErr
 	errStart := gci.Start()
 	if errIn != nil || errOut != nil || errStart != nil {
 		isGitIgnored = func(string) bool { return false }
@@ -146,6 +148,8 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 			for i := range resp {
 				b, err := br.ReadBytes(0)
 				if err != nil {
+					gci.Wait()
+					logf("git check-ignore %q exited unexpectedly:\n%v", path, gciErr.String())
 					failed = true
 					return false
 				}
