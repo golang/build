@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!--
+ Copyright 2023 The Go Authors. All rights reserved.
+ Use of this source code is governed by a BSD-style
+ license that can be found in the LICENSE file.
+-->
+
 <installer-gui-script minSpecVersion="1">
   <title>Go</title>
   <background mime-type="image/png" file="bg-light.png" alignment="left" />
