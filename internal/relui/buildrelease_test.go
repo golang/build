@@ -129,7 +129,8 @@ case "$@" in
 "--distribution=pkg-distribution --resources=pkg-resources --package-path=pkg-intermediate pkg-out/` + wantVersion + `.pkg")
 	# We're building a PKG.
 	ls pkg-distribution pkg-resources/bg-light.png pkg-resources/bg-dark.png >/dev/null
-	cat pkg-intermediate/* | sed "s/an intermediate PKG/a PKG/" > "$4"
+	cat pkg-intermediate/* | head -n 1 | sed "s/an intermediate PKG/a PKG/" > "$4"
+	cat pkg-intermediate/* | tail -n +2 >> "$4"
 	;;
 *)
 	echo "unexpected command $@"
