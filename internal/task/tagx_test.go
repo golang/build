@@ -51,16 +51,23 @@ func TestSelectReposLive(t *testing.T) {
 }
 
 func TestCycles(t *testing.T) {
+	deps := func(modPaths ...string) []*TagDep {
+		var deps = make([]*TagDep, len(modPaths))
+		for i, p := range modPaths {
+			deps[i] = &TagDep{p, true}
+		}
+		return deps
+	}
 	tests := []struct {
 		repos []TagRepo
 		want  []string
 	}{
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: []string{"tools"}},
-				{Name: "tools", Deps: []string{"text"}},
+				{Name: "text", Deps: deps("tools")},
+				{Name: "tools", Deps: deps("text")},
 				{Name: "sys"},
-				{Name: "net", Deps: []string{"sys"}},
+				{Name: "net", Deps: deps("sys")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -69,9 +76,9 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: []string{"tools"}},
-				{Name: "tools", Deps: []string{"fake"}},
-				{Name: "fake", Deps: []string{"text"}},
+				{Name: "text", Deps: deps("tools")},
+				{Name: "tools", Deps: deps("fake")},
+				{Name: "fake", Deps: deps("text")},
 			},
 			want: []string{
 				"tools,fake,text,tools",
@@ -81,9 +88,9 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: []string{"tools"}},
-				{Name: "tools", Deps: []string{"fake", "text"}},
-				{Name: "fake", Deps: []string{"tools"}},
+				{Name: "text", Deps: deps("tools")},
+				{Name: "tools", Deps: deps("fake", "text")},
+				{Name: "fake", Deps: deps("tools")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -94,10 +101,10 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: []string{"tools"}},
-				{Name: "tools", Deps: []string{"fake", "text"}},
-				{Name: "fake1", Deps: []string{"fake2"}},
-				{Name: "fake2", Deps: []string{"tools"}},
+				{Name: "text", Deps: deps("tools")},
+				{Name: "tools", Deps: deps("fake", "text")},
+				{Name: "fake1", Deps: deps("fake2")},
+				{Name: "fake2", Deps: deps("tools")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -447,14 +454,19 @@ func TestTagXRepos(t *testing.T) {
 	mod.Tag("v1.0.0", mod1)
 	tools := NewFakeRepo(t, "tools")
 	tools1 := tools.Commit(map[string]string{
-		"go.mod":       "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18 // tagx:compat 1.16\nrequire golang.org/x/sys v0.1.0\n",
+		"go.mod":       "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18 // tagx:compat 1.16\nrequire golang.org/x/sys v0.1.0\nrequire golang.org/x/build v0.0.0\n",
 		"go.sum":       "\n",
 		"gopls/go.mod": "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
 		"gopls/go.sum": "\n",
 	})
 	tools.Tag("v1.1.5", tools1)
+	build := NewFakeRepo(t, "build")
+	build.Commit(map[string]string{
+		"go.mod": "module golang.org/x/build\ngo 1.18\nrequire golang.org/x/tools v1.0.0\nrequire golang.org/x/sys v0.1.0\n",
+		"go.sum": "\n",
+	})
 
-	deps := newTagXTestDeps(t, "ok", sys, mod, tools)
+	deps := newTagXTestDeps(t, "ok", sys, mod, tools, build)
 
 	wd := deps.tagXTasks.NewDefinition()
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -506,6 +518,24 @@ func TestTagXRepos(t *testing.T) {
 	}
 	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "1.16") || strings.Contains(string(goplsMod), "upgraded") {
 		t.Error("gopls go.mod should be tidied with -compat 1.16, but not upgraded")
+	}
+
+	tags, err = deps.gerrit.ListTags(ctx, "build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) != 0 {
+		t.Errorf("build has tags %q, should not have been tagged", tags)
+	}
+	goMod, err = deps.gerrit.ReadFile(ctx, "build", "master", "go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(goMod), "tools@v1.2.0") || !strings.Contains(string(goMod), "sys@v0.2.0") {
+		t.Errorf("build should use tools v1.2.0 and sys v0.2.0. go.mod: %v", string(goMod))
+	}
+	if !strings.Contains(string(goMod), "tidied!") {
+		t.Error("build go.mod should be tidied")
 	}
 }
 

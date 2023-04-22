@@ -27,6 +27,7 @@ import (
 	"golang.org/x/build/internal/releasetargets"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/build/types"
+	"golang.org/x/exp/slices"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/semver"
 	"golang.org/x/net/context/ctxhttp"
@@ -69,14 +70,28 @@ var reviewersParam = wf.ParamDef[[]string]{
 	Check:     CheckCoordinators,
 }
 
-// TagRepo contains information about a repo that can be tagged.
+// TagRepo contains information about a repo that can be updated and possibly tagged.
 type TagRepo struct {
-	Name         string   // Gerrit project name, e.g. "tools".
-	ModPath      string   // Module path, e.g. "golang.org/x/tools".
-	Deps         []string // Dependency module paths.
-	Compat       string   // The Go version to pass to go mod tidy -compat for this repository.
-	StartVersion string   // The version of the module when the workflow started.
-	Version      string   // After a tagging decision has been made, the version dependencies should upgrade to.
+	Name         string    // Gerrit project name, e.g., "tools".
+	ModPath      string    // Module path, e.g., "golang.org/x/tools".
+	Deps         []*TagDep // Dependency modules.
+	Compat       string    // The Go version to pass to go mod tidy -compat for this repository.
+	StartVersion string    // The version of the module when the workflow started. Empty string means repo hasn't begun release version tagging yet.
+	NewerVersion string    // The version of the module that will be tagged, or the empty string when the repo is being updated only and not tagged.
+}
+
+// UpdateOnlyAndNotTag reports whether repo
+// r should be updated only, and not tagged.
+func (r TagRepo) UpdateOnlyAndNotTag() bool {
+	// Consider a repo without an existing tag as one
+	// that hasn't yet opted in for automatic tagging.
+	return r.StartVersion == ""
+}
+
+// TagDep represents a dependency of a repo being updated and possibly tagged.
+type TagDep struct {
+	ModPath string // Module path, e.g., "golang.org/x/sys".
+	Wait    bool   // Wait controls whether to wait for this dependency to be processed first.
 }
 
 func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
@@ -84,77 +99,100 @@ func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
 	if err != nil {
 		return nil, err
 	}
+	projects = slices.DeleteFunc(projects, func(proj string) bool { return proj == "go" })
 
+	// Read the starting state for all relevant repos.
 	ctx.Printf("Examining repositories %v", projects)
 	var repos []TagRepo
+	var updateOnly = make(map[string]bool) // Key is module path.
 	for _, p := range projects {
-		if x.IgnoreProjects[p] {
-			ctx.Printf("Repository %v ignored", p)
-			continue
-		}
-		repo, err := x.readRepo(ctx, p)
+		r, err := x.readRepo(ctx, p)
 		if err != nil {
 			return nil, err
+		} else if r == nil {
+			continue
 		}
-		if repo != nil {
-			repos = append(repos, *repo)
+		repos = append(repos, *r)
+		updateOnly[r.ModPath] = r.UpdateOnlyAndNotTag()
+	}
+	// Now that we know all repos and their deps,
+	// do a second pass to update the Wait field.
+	for _, r := range repos {
+		for _, dep := range r.Deps {
+			if updateOnly[dep.ModPath] {
+				// No need to wait for repos that we don't plan to tag.
+				dep.Wait = false
+			}
 		}
 	}
 
-	if cycles := checkCycles(repos); len(cycles) != 0 {
+	// Check for cycles.
+	var cycleProneRepos []TagRepo
+	for _, r := range repos {
+		if r.UpdateOnlyAndNotTag() {
+			// Cycles in repos we don't plan to tag don't matter.
+			continue
+		}
+		cycleProneRepos = append(cycleProneRepos, r)
+	}
+	if cycles := checkCycles(cycleProneRepos); len(cycles) != 0 {
 		return nil, fmt.Errorf("cycles detected (there may be more): %v", cycles)
 	}
 
 	return repos, nil
 }
 
+// readRepo fetches and returns information about the named project
+// to be updated and possibly tagged, or nil if the project doesn't
+// satisfy some criteria needed to be eligible.
 func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo, error) {
+	if project == "go" {
+		return nil, fmt.Errorf("readRepo: refusing to read the main Go repository, it's out of scope in the context of TagXReposTasks")
+	} else if x.IgnoreProjects[project] {
+		ctx.Printf("ignoring %v: marked as ignored", project)
+		return nil, nil
+	}
+
 	head, err := x.Gerrit.ReadBranchHead(ctx, project, "master")
 	if errors.Is(err, gerrit.ErrResourceNotExist) {
 		ctx.Printf("ignoring %v: no master branch: %v", project, err)
 		return nil, nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return nil, err
 	}
 
-	tag, err := x.latestReleaseTag(ctx, project)
-	if err != nil {
-		return nil, err
-	}
-	if tag == "" {
-		ctx.Printf("ignoring %v: no semver tag", project)
-		return nil, nil
-	}
-
-	gomod, err := x.Gerrit.ReadFile(ctx, project, head, "go.mod")
+	goMod, err := x.Gerrit.ReadFile(ctx, project, head, "go.mod")
 	if errors.Is(err, gerrit.ErrResourceNotExist) {
 		ctx.Printf("ignoring %v: no go.mod: %v", project, err)
 		return nil, nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return nil, err
 	}
-	mf, err := modfile.ParseLax("go.mod", gomod, nil)
+	mf, err := modfile.ParseLax("go.mod", goMod, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	// TODO(heschi): ignoring nested modules for now. We should find and handle
 	// x/exp/event, maybe by reading release tags? But don't tag gopls...
-	isX := func(path string) bool {
+	isXRoot := func(path string) bool {
 		return strings.HasPrefix(path, "golang.org/x/") &&
 			!strings.Contains(strings.TrimPrefix(path, "golang.org/x/"), "/")
 	}
-	if !isX(mf.Module.Mod.Path) {
+	if !isXRoot(mf.Module.Mod.Path) {
 		ctx.Printf("ignoring %v: not golang.org/x", project)
 		return nil, nil
+	}
+
+	currentTag, err := x.latestReleaseTag(ctx, project)
+	if err != nil {
+		return nil, err
 	}
 
 	result := &TagRepo{
 		Name:         project,
 		ModPath:      mf.Module.Mod.Path,
-		StartVersion: tag,
+		StartVersion: currentTag,
 	}
 
 	compatRe := regexp.MustCompile(`tagx:compat\s+([\d.]+)`)
@@ -165,22 +203,27 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 			}
 		}
 	}
-require:
 	for _, req := range mf.Require {
-		if !isX(req.Mod.Path) {
+		if !isXRoot(req.Mod.Path) {
+			continue
+		} else if x.IgnoreProjects[strings.TrimPrefix(req.Mod.Path, "golang.org/x/")] {
+			ctx.Printf("Dependency %v is ignored", req.Mod.Path)
 			continue
 		}
+		wait := true
 		for _, c := range req.Syntax.Comments.Suffix {
 			// We have cycles in the x repo dependency graph. Allow a magic
 			// comment, `// tagx:ignore`, to exclude requirements from
 			// consideration.
 			if strings.Contains(c.Token, "tagx:ignore") {
 				ctx.Printf("ignoring %v's requirement on %v: %q", project, req.Mod, c.Token)
-				continue require
+				wait = false
 			}
 		}
-		result.Deps = append(result.Deps, req.Mod.Path)
-
+		result.Deps = append(result.Deps, &TagDep{
+			ModPath: req.Mod.Path,
+			Wait:    wait,
+		})
 	}
 	return result, nil
 }
@@ -232,36 +275,40 @@ func checkCycles1(reposByModule map[string]TagRepo, repo TagRepo, stack []string
 	}
 
 	for _, dep := range repo.Deps {
-		cycles = append(cycles, checkCycles1(reposByModule, reposByModule[dep], stack)...)
+		if !dep.Wait {
+			// Deps we don't wait for don't matter for cycles.
+			continue
+		}
+		cycles = append(cycles, checkCycles1(reposByModule, reposByModule[dep.ModPath], stack)...)
 	}
 	return cycles
 }
 
 // BuildPlan adds the tasks needed to update repos to wd.
 func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers []string) error {
-	// repo.ModPath to the wf.Value produced by updating it.
-	updated := map[string]wf.Value[TagRepo]{}
+	// repo.ModPath to the wf.Value produced by planning it.
+	planned := map[string]wf.Value[TagRepo]{}
 
 	// Find all repositories whose dependencies are satisfied and update
-	// them, proceeding until all are updated or no progress can be made.
-	for len(updated) != len(repos) {
+	// them, proceeding until all are planned or no progress can be made.
+	for len(planned) != len(repos) {
 		progress := false
 		for _, repo := range repos {
-			if _, ok := updated[repo.ModPath]; ok {
+			if _, ok := planned[repo.ModPath]; ok {
 				continue
 			}
-			dep, ok := x.planRepo(wd, repo, updated, reviewers, false)
+			dep, ok := x.planRepo(wd, repo, planned, reviewers, false)
 			if !ok {
 				continue
 			}
-			updated[repo.ModPath] = dep
+			planned[repo.ModPath] = dep
 			progress = true
 		}
 
 		if !progress {
 			var missing []string
 			for _, r := range repos {
-				if updated[r.ModPath] == nil {
+				if planned[r.ModPath] == nil {
 					missing = append(missing, r.Name)
 				}
 			}
@@ -269,7 +316,7 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers
 		}
 	}
 	var allDeps []wf.Dependency
-	for _, dep := range updated {
+	for _, dep := range planned {
 		allDeps = append(allDeps, dep)
 	}
 	done := wf.Task0(wd, "done", func(_ context.Context) (string, error) { return "done!", nil }, wf.After(allDeps...))
@@ -279,34 +326,40 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers
 
 func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagRepo, name string, skipPostSubmit bool, reviewers []string) error {
 	repos := map[string]TagRepo{}
-	updatedRepos := map[string]wf.Value[TagRepo]{}
+	plannedRepos := map[string]wf.Value[TagRepo]{}
 	for _, r := range repoSlice {
 		repos[r.Name] = r
 
 		// Pretend that we've just tagged version that was live when we started.
-		r.Version = r.StartVersion
-		updatedRepos[r.ModPath] = wf.Const(r)
+		r.NewerVersion = r.StartVersion
+		plannedRepos[r.ModPath] = wf.Const(r)
 	}
 	repo, ok := repos[name]
 	if !ok {
 		return fmt.Errorf("no repository %q", name)
 	}
-	tagged, ok := x.planRepo(wd, repo, updatedRepos, reviewers, skipPostSubmit)
+	tagged, ok := x.planRepo(wd, repo, plannedRepos, reviewers, skipPostSubmit)
 	if !ok {
-		return fmt.Errorf("%q doesn't have all of its dependencies (%q)", repo.Name, repo.Deps)
+		var deps []string
+		for _, d := range repo.Deps {
+			deps = append(deps, d.ModPath)
+		}
+		return fmt.Errorf("%q doesn't have all of its dependencies (%q)", repo.Name, deps)
 	}
 	wf.Output(wd, "tagged repository", tagged)
 	return nil
 }
 
-// planRepo adds tasks to wf to update and tag repo. It returns a Value
-// containing the tagged repository's information, or nil, false if its
-// dependencies haven't been planned yet.
-func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[string]wf.Value[TagRepo], reviewers []string, skipPostSubmit bool) (_ wf.Value[TagRepo], ready bool) {
-	var deps []wf.Value[TagRepo]
-	for _, repoDeps := range repo.Deps {
-		if dep, ok := updated[repoDeps]; ok {
-			deps = append(deps, dep)
+// planRepo adds tasks to wf to update and possibly tag repo. It returns
+// a Value containing the tagged repository's information, or nil, false
+// if the dependencies it's waiting on haven't been planned yet.
+func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, planned map[string]wf.Value[TagRepo], reviewers []string, skipPostSubmit bool) (_ wf.Value[TagRepo], ready bool) {
+	var plannedDeps []wf.Value[TagRepo]
+	for _, dep := range repo.Deps {
+		if !dep.Wait {
+			continue
+		} else if r, ok := planned[dep.ModPath]; ok {
+			plannedDeps = append(plannedDeps, r)
 		} else {
 			return nil, false
 		}
@@ -315,12 +368,16 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[s
 	repoName, branch := wf.Const(repo.Name), wf.Const("master")
 
 	var tagCommit wf.Value[string]
-	if len(deps) == 0 {
+	if len(plannedDeps) == 0 {
 		tagCommit = wf.Task2(wd, "read branch head", x.Gerrit.ReadBranchHead, repoName, branch)
 	} else {
-		gomod := wf.Task3(wd, "generate updated go.mod", x.UpdateGoMod, wf.Const(repo), wf.Slice(deps...), branch)
-		cl := wf.Task3(wd, "mail updated go.mod", x.MailGoMod, repoName, gomod, wf.Const(reviewers))
+		goMod := wf.Task3(wd, "generate go.mod", x.UpdateGoMod, wf.Const(repo), wf.Slice(plannedDeps...), branch)
+		cl := wf.Task4(wd, "mail go.mod", x.MailGoMod, repoName, branch, goMod, wf.Const(reviewers))
 		tagCommit = wf.Task3(wd, "wait for submit", x.AwaitGoMod, cl, repoName, branch)
+	}
+	if repo.UpdateOnlyAndNotTag() {
+		noop := func(_ context.Context, r TagRepo, _ string) (TagRepo, error) { return r, nil }
+		return wf.Task2(wd, "don't tag", noop, wf.Const(repo), tagCommit), true
 	}
 	if !skipPostSubmit {
 		tagCommit = wf.Task2(wd, "wait for green post-submit", x.AwaitGreen, wf.Const(repo), tagCommit)
@@ -359,7 +416,7 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 	// Update the root module to the selected versions.
 	getCmd := []string{"get"}
 	for _, dep := range deps {
-		getCmd = append(getCmd, dep.ModPath+"@"+dep.Version)
+		getCmd = append(getCmd, dep.ModPath+"@"+dep.NewerVersion)
 	}
 	remoteErr, execErr := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
 		Dir:    "repo",
@@ -469,7 +526,7 @@ func LatestGoBinaries(ctx context.Context) (string, error) {
 	}
 	for _, r := range releases {
 		for _, f := range r.Files {
-			if f.Arch == "amd64" && f.OS == "linux" && f.Kind == "archive" {
+			if f.OS == "linux" && f.Arch == "amd64" && f.Kind == "archive" {
 				return "https://go.dev/dl/" + f.Filename, nil
 			}
 		}
@@ -477,17 +534,13 @@ func LatestGoBinaries(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("no linux-amd64??")
 }
 
-func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo string, files map[string]string, reviewers []string) (string, error) {
+func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo, branch string, files map[string]string, reviewers []string) (string, error) {
 	const subject = `go.mod: update golang.org/x dependencies
 
-Update golang.org/x dependencies to their latest tagged versions.
-Once this CL is submitted, and post-submit testing succeeds on all
-first-class ports across all supported Go versions, this repository
-will be tagged with its next minor version.
-`
+Update golang.org/x dependencies to their latest tagged versions.`
 	return x.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: repo,
-		Branch:  "master",
+		Branch:  branch,
 		Subject: subject,
 	}, reviewers, files)
 }
@@ -655,7 +708,7 @@ func (x *TagXReposTasks) getBuildStatus(modPath string) (*types.BuildStatus, err
 }
 
 // MaybeTag tags repo at commit with the next version, unless commit is already
-// the latest tagged version. repo is returned with Version populated.
+// the latest tagged version. repo is returned with NewerVersion populated.
 func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit string) (TagRepo, error) {
 	highestRelease, err := x.latestReleaseTag(ctx, repo.Name)
 	if err != nil {
@@ -670,18 +723,20 @@ func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit stri
 		return TagRepo{}, fmt.Errorf("reading project %v tag %v: %v", repo.Name, highestRelease, err)
 	}
 	if tagInfo.Revision == commit {
-		repo.Version = highestRelease
+		repo.NewerVersion = highestRelease
 		return repo, nil
 	}
-	repo.Version, err = nextMinor(highestRelease)
+	repo.NewerVersion, err = nextMinor(highestRelease)
 	if err != nil {
 		return TagRepo{}, fmt.Errorf("couldn't pick next version for %v: %v", repo.Name, err)
 	}
 
-	ctx.Printf("Tagging %v at %v as %v", repo.Name, commit, repo.Version)
-	return repo, x.Gerrit.Tag(ctx, repo.Name, repo.Version, commit)
+	ctx.Printf("Tagging %v at %v as %v", repo.Name, commit, repo.NewerVersion)
+	return repo, x.Gerrit.Tag(ctx, repo.Name, repo.NewerVersion, commit)
 }
 
+// latestReleaseTag fetches tags for repo and returns the latest release tag,
+// or the empty string if there are no release tags.
 func (x *TagXReposTasks) latestReleaseTag(ctx context.Context, repo string) (string, error) {
 	tags, err := x.Gerrit.ListTags(ctx, repo)
 	if err != nil {
