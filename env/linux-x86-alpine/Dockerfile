@@ -21,6 +21,7 @@ RUN apk add --no-cache \
 	gdb \
 	gfortran \
 	git \
+	git-daemon \
 	go \
 	libc-dev \
 	lsof \
