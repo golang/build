@@ -2679,6 +2679,13 @@ func init() {
 		Notes:    "Android emulator on GCE (GOOS=android GOARCH=386)",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
+			if repo != "go" && !atLeastGo1(goBranch, 20) {
+				// This builder ends up in an awkward state for 'go build' support
+				// because it is cross-compiled: before https://go.dev/cl/451219
+				// (released in Go 1.20), it enables cgo if the host had cgo enabled,
+				// even if the test environment lacks a C toolchain.
+				b = false
+			}
 			switch repo {
 			case "mobile":
 				b = true
@@ -2710,6 +2717,13 @@ func init() {
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
+			if repo != "go" && !atLeastGo1(goBranch, 20) {
+				// This builder ends up in an awkward state for 'go build' support
+				// because it is cross-compiled: before https://go.dev/cl/451219
+				// (released in Go 1.20), it enables cgo if the host had cgo enabled,
+				// even if the test environment lacks a C toolchain.
+				b = false
+			}
 			switch repo {
 			case "mobile":
 				b = true
