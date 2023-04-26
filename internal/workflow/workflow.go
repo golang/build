@@ -460,11 +460,20 @@ func (c *TaskContext) DisableRetries() {
 }
 
 func (c *TaskContext) ResetWatchdog() {
+	c.resetWatchdog(WatchdogDelay)
+}
+
+func (c *TaskContext) DisableWatchdog() {
+	// Resetting with a very long delay is easier than canceling the timer.
+	c.resetWatchdog(365 * 24 * time.Hour)
+}
+
+func (c *TaskContext) resetWatchdog(d time.Duration) {
 	// Should only occur in tests.
 	if c.watchdogTimer == nil {
 		return
 	}
-	c.watchdogTimer.Reset(WatchdogDelay)
+	c.watchdogTimer.Reset(d)
 }
 
 // A Listener is used to notify the workflow host of state changes, for display

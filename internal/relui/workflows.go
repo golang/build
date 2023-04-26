@@ -717,6 +717,7 @@ func (b *BuildReleaseTasks) modFilesFromDistpack(ctx *wf.TaskContext, distpack a
 func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, target *releasetargets.Target, version string, t time.Time, tar artifact) (moduleArtifact, error) {
 	result := moduleArtifact{Target: tar.Target}
 	a, err := b.runBuildStep(ctx, nil, nil, tar, "mod.zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+		ctx.DisableWatchdog() // The zipping process can be time consuming and is unlikely to hang.
 		var err error
 		result.Mod, result.Info, err = task.TarToModFiles(target, version, t, r, w)
 		return err

@@ -59,8 +59,8 @@ spec:
               value: relui
           resources:
             requests:
-              cpu: "2"
-              memory: "4Gi"
+              cpu: "8"
+              memory: "8Gi"
         - name: cloud-sql-proxy
           # It is recommended to use the latest version of the Cloud SQL proxy
           image: gcr.io/cloudsql-docker/gce-proxy:latest
