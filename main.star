@@ -147,6 +147,7 @@ PROJECTS = [
     "build",
     "image",
     "mod",
+    "tools",
 ]
 
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
