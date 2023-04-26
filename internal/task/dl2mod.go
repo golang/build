@@ -25,17 +25,17 @@ const (
 )
 
 func ToolchainZipPrefix(target *releasetargets.Target, version string) string {
-	return modulePath + "@" + toolchainModuleVersion(target, version)
+	return modulePath + "@" + ToolchainModuleVersion(target, version)
 }
 
-func toolchainModuleVersion(target *releasetargets.Target, version string) string {
+func ToolchainModuleVersion(target *releasetargets.Target, version string) string {
 	return fmt.Sprintf("%v-%v.%v-%v", moduleVersion, version, target.GOOS, target.GOARCH)
 }
 
 // TarToModFiles converts the distribution archive with the given name and content
 // to a collection of module files.
 func TarToModFiles(target *releasetargets.Target, version string, t time.Time, tgz io.Reader, w io.Writer) (mod string, info string, _ error) {
-	vers := toolchainModuleVersion(target, version)
+	vers := ToolchainModuleVersion(target, version)
 	zipPrefix := ToolchainZipPrefix(target, version)
 
 	// rename takes the name of a file found in a distribution archive

@@ -177,6 +177,7 @@ func main() {
 		ScratchURL:       *scratchFilesBase,
 		ServingURL:       *servingFilesBase,
 		DownloadURL:      *edgeCacheURL,
+		ProxyPrefix:      "https://proxy.golang.org/golang.org/toolchain/@v",
 		PublishFile: func(f *task.WebsiteFile) error {
 			return publishFile(*websiteUploadURL, userPassAuth, f)
 		},

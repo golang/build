@@ -423,8 +423,9 @@ func addSingleReleaseWorkflow(
 	tagged := wf.Action2(wd, "Tag version", version.TagRelease, nextVersion, tagCommit, wf.After(okayToTagAndPublish))
 	uploaded := wf.Action1(wd, "Upload artifacts to CDN", build.uploadArtifacts, signedAndTestedArtifacts, wf.After(tagged))
 	uploadedMods := wf.Action2(wd, "Upload modules to CDN", build.uploadModules, nextVersion, modules, wf.After(tagged))
+	availableOnProxy := wf.Action2(wd, "Wait for modules on proxy.golang.org", build.awaitProxy, nextVersion, modules, wf.After(uploadedMods))
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
-	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, uploadedMods, pushed))
+	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, availableOnProxy, pushed))
 	if kind == task.KindMajor {
 		goimportsCL := wf.Task2(wd, fmt.Sprintf("Mail goimports CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, versionPublished)
 		goimportsCommit := wf.Task2(wd, "Wait for goimports CL submission", version.AwaitCL, goimportsCL, wf.Const(""))
@@ -559,6 +560,7 @@ type BuildReleaseTasks struct {
 	GCSClient              *storage.Client
 	ScratchURL, ServingURL string // ScratchURL is a gs:// or file:// URL, no trailing slash. E.g., "gs://golang-release-staging/relui-scratch".
 	DownloadURL            string
+	ProxyPrefix            string // ProxyPrefix is the prefix at which module files are published, e.g. https://proxy.golang.org/golang.org/toolchain/@v
 	PublishFile            func(*task.WebsiteFile) error
 	CreateBuildlet         func(context.Context, string) (buildlet.RemoteClient, error)
 	SignService            sign.Service
@@ -1237,7 +1239,7 @@ func (tasks *BuildReleaseTasks) uploadModules(ctx *wf.TaskContext, version strin
 	}
 	want := map[string]bool{} // URLs we're waiting on becoming available.
 	for _, mod := range modules {
-		base := fmt.Sprintf("v0.0.1-%v.%v-%v", version, mod.Target.GOOS, mod.Target.GOARCH)
+		base := task.ToolchainModuleVersion(mod.Target, version)
 		if err := uploadFile(scratchFS, servingFS, mod.ZipScratch, fmt.Sprintf(base+".zip")); err != nil {
 			return err
 		}
@@ -1252,6 +1254,16 @@ func (tasks *BuildReleaseTasks) uploadModules(ctx *wf.TaskContext, version strin
 		}
 	}
 	_, err = task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, want))
+	return err
+}
+
+func (tasks *BuildReleaseTasks) awaitProxy(ctx *wf.TaskContext, version string, modules []moduleArtifact) error {
+	want := map[string]bool{}
+	for _, mod := range modules {
+		url := fmt.Sprintf("%v/%v.info", tasks.ProxyPrefix, task.ToolchainModuleVersion(mod.Target, version))
+		want[url] = true
+	}
+	_, err := task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, want))
 	return err
 }
 

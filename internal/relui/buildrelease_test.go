@@ -220,6 +220,7 @@ esac
 		CreateBuildlet:   fakeBuildlets.CreateBuildlet,
 		SignService:      task.NewFakeSignService(t),
 		DownloadURL:      dlServer.URL,
+		ProxyPrefix:      dlServer.URL,
 		PublishFile:      publishFile,
 		ApproveAction: func(ctx *workflow.TaskContext) error {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
