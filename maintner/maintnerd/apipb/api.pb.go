@@ -965,7 +965,7 @@ type DashCommit struct {
 	// the time of DashCommit.commit_time.
 	GoCommitAtTime string `protobuf:"bytes,6,opt,name=go_commit_at_time,json=goCommitAtTime,proto3" json:"go_commit_at_time,omitempty"`
 	// For non-go repos, go_commit_latest is the most recent Go master commit that's
-	// older than the the following x/foo commit's commit_time.
+	// older than the following x/foo commit's commit_time.
 	// If DashCommit is the current HEAD, go_commit_at_time can continue to update.
 	// go_commit_at_time might be the same as go_commit_at_time.
 	GoCommitLatest string `protobuf:"bytes,8,opt,name=go_commit_latest,json=goCommitLatest,proto3" json:"go_commit_latest,omitempty"`

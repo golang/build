@@ -170,7 +170,7 @@ message DashCommit {
   string go_commit_at_time = 6;
 
   // For non-go repos, go_commit_latest is the most recent Go master commit that's
-  // older than the the following x/foo commit's commit_time.
+  // older than the following x/foo commit's commit_time.
   // If DashCommit is the current HEAD, go_commit_at_time can continue to update.
   // go_commit_at_time might be the same as go_commit_at_time.
   string go_commit_latest = 8;

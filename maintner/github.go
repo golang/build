@@ -116,7 +116,7 @@ type GitHubRepo struct {
 
 func (gr *GitHubRepo) ID() GitHubRepoID { return gr.id }
 
-// Issue returns the the provided issue number, or nil if it's not known.
+// Issue returns the provided issue number, or nil if it's not known.
 func (gr *GitHubRepo) Issue(n int32) *GitHubIssue { return gr.issues[n] }
 
 // ForeachLabel calls fn for each label in the repo, in unsorted order.

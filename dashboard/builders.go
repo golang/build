@@ -3115,7 +3115,7 @@ func init() {
 				//
 				// Limit to running on release branches since
 				// they have far fewer Go commits than tip,
-				// thus reducing the the number of duplicate
+				// thus reducing the number of duplicate
 				// runs.
 				return strings.HasPrefix(goBranch, "release-branch.")
 			}

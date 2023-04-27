@@ -622,7 +622,7 @@ func emailToUser(email string) (string, error) {
 	return email[strings.Index(email, ":")+1 : strings.LastIndex(email, "@")], nil
 }
 
-// onObjectStore returns true if the the url is for an object on GCS.
+// onObjectStore returns true if the url is for an object on GCS.
 func onObjectStore(bucketName, url string) bool {
 	return strings.HasPrefix(url, fmt.Sprintf("https://storage.googleapis.com/%s/", bucketName))
 }

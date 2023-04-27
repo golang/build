@@ -35,7 +35,7 @@ var (
 	keyFile    = flag.String("key", "/etc/gobuild.key", "go build key file")
 	builderEnv = flag.String("env", "", "optional GO_BUILDER_ENV environment variable value to set in the guests")
 	cpu        = flag.Int("cpu", 0, "if non-zero, how many CPUs to assign from the host and pass to docker run --cpuset-cpus")
-	pull       = flag.Bool("pull", false, "whether to pull the the --image before each container starting")
+	pull       = flag.Bool("pull", false, "whether to pull the --image before each container starting")
 )
 
 var (

@@ -2139,7 +2139,7 @@ func latestTryMessage(work *apipb.GerritTryWorkItem) string {
 	return ""
 }
 
-// handlePostSubmitActiveJSON serves JSON with the the info for which builds
+// handlePostSubmitActiveJSON serves JSON with the info for which builds
 // are currently building. The build.golang.org dashboard renders these as little
 // blue gophers that link to the each build's status.
 // TODO: this a transitional step on our way towards merging build.golang.org into
