@@ -282,7 +282,7 @@ func (b *BuildletStep) buildDistpack(ctx *workflow.TaskContext, makeEnv []string
 	}
 
 	ctx.Printf("Building (make.bash only) with -distpack.")
-	return b.exec(ctx, goDir+"/src/make.bash", []string{"-distpack"}, buildlet.ExecOpts{
+	return b.exec(ctx, goDir+"/"+b.BuildConfig.MakeScript(), append(b.BuildConfig.MakeScriptArgs(), "-distpack"), buildlet.ExecOpts{
 		ExtraEnv: makeEnv,
 	})
 }

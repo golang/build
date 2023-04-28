@@ -449,10 +449,13 @@ type moduleArtifact struct {
 func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, version wf.Value[string], timestamp wf.Value[time.Time], source wf.Value[artifact]) (wf.Value[[]artifact], wf.Value[[]moduleArtifact]) {
 	targets := releasetargets.TargetsForGo1Point(major)
 	skipTests := wf.Param(wd, wf.ParamDef[[]string]{Name: "Targets to skip testing (or 'all') (optional)", ParamType: wf.SliceShort})
+
 	artifacts := []wf.Value[artifact]{source}
+	var reproducibilityCheckDistpack wf.Value[artifact]
 	var mods []wf.Value[moduleArtifact]
+	var blockers []wf.Dependency
+
 	// Build, test and sign binary artifacts for all targets.
-	var testsPassed []wf.Dependency
 	for _, target := range targets {
 		targetVal := wf.Const(target)
 		wd := wd.Sub(target.Name)
@@ -463,7 +466,10 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		var tar, zip wf.Value[artifact]
 		var mod wf.Value[moduleArtifact]
 		if enableDistpack(major) {
-			distpack := wf.Task2(wd, "Build distpack", tasks.buildDistpack, targetVal, source)
+			distpack := wf.Task3(wd, "Build distpack", tasks.buildDistpack, wf.Const("linux-amd64"), wf.Const(target), source)
+			if target.Name == "linux-amd64" {
+				reproducibilityCheckDistpack = distpack
+			}
 			if target.GOOS == "windows" {
 				zip = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
 				tar = wf.Task2(wd, "Convert to .tgz", tasks.convertZipToTGZ, targetVal, zip)
@@ -501,11 +507,15 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 			continue
 		}
 		short := wf.Action4(wd, "Run short tests", tasks.runTests, targetVal, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
-		testsPassed = append(testsPassed, short)
+		blockers = append(blockers, short)
 		if target.LongTestBuilder != "" {
 			long := wf.Action4(wd, "Run long tests", tasks.runTests, targetVal, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
-			testsPassed = append(testsPassed, long)
+			blockers = append(blockers, long)
 		}
+	}
+	if enableDistpack(major) {
+		reproducer := wf.Task3(wd, "Reproduce distpack on Windows", tasks.buildDistpack, wf.Const("windows-amd64-2016"), wf.Const(targets["linux-amd64"]), source)
+		blockers = append(blockers, wf.Action2(wd, "Check distpacks match", tasks.checkDistpacksMatch, reproducibilityCheckDistpack, reproducer))
 	}
 	signedArtifacts := wf.Task1(wd, "Compute GPG signature for artifacts", tasks.computeGPG, wf.Slice(artifacts...))
 
@@ -516,6 +526,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		advisoryResults = append(advisoryResults, result)
 	}
 	tryBotsApproved := wf.Action1(wd, "Wait for advisory TryBots", tasks.checkAdvisoryTrybots, wf.Slice(advisoryResults...))
+	blockers = append(blockers, tryBotsApproved)
 
 	signedAndTested := wf.Task2(wd, "Wait for signing and tests", func(ctx *wf.TaskContext, artifacts []artifact, version string) ([]artifact, error) {
 		// Note: Note this needs to happen somewhere, doesn't matter where. Maybe move it to a nicer place later.
@@ -528,7 +539,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		}
 
 		return artifacts, nil
-	}, signedArtifacts, version, wf.After(testsPassed...), wf.After(tryBotsApproved), wf.After(wf.Slice(mods...)))
+	}, signedArtifacts, version, wf.After(blockers...), wf.After(wf.Slice(mods...)))
 	return signedAndTested, wf.Slice(mods...)
 }
 
@@ -589,35 +600,40 @@ func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, distpack bool,
 	if err != nil {
 		return "", err
 	}
-	var bc *dashboard.BuildConfig
-	if distpack {
-		bc = dashboard.Builders["linux-amd64"]
+	branchArchive, err := b.buildSource(ctx, distpack, head, "", versionFile)
+	if err != nil {
+		return "", err
 	}
-	_, err = b.runBuildStep(ctx, nil, bc, source, "", func(bs *task.BuildletStep, r io.Reader, _ io.Writer) error {
-		branchArchive := &bytes.Buffer{}
-		if distpack {
-			if err := bs.BuildSourceDistpack(ctx, b.GerritHTTPClient, b.GerritURL, head, versionFile, branchArchive); err != nil {
-				return err
-			}
-		} else {
-			if err := task.WriteSourceArchive(ctx, b.GerritHTTPClient, b.GerritURL, head, versionFile, branchArchive); err != nil {
-				return err
-			}
-		}
-		branchHashes, err := tarballHashes(branchArchive)
-		if err != nil {
-			return fmt.Errorf("hashing branch tarball: %v", err)
-		}
-		archiveHashes, err := tarballHashes(r)
-		if err != nil {
-			return fmt.Errorf("hashing archive tarball: %v", err)
-		}
-		if diff := cmp.Diff(branchHashes, archiveHashes); diff != "" {
-			return fmt.Errorf("branch state doesn't match source archive (-branch, +archive):\n%v", diff)
-		}
-		return nil
+	diff, err := b.diffArtifacts(ctx, branchArchive, source)
+	if err != nil {
+		return "", err
+	}
+	if diff != "" {
+		return "", fmt.Errorf("branch state doesn't match source archive (-branch, +archive):\n%v", diff)
+	}
+	return head, nil
+}
+
+func (b *BuildReleaseTasks) diffArtifacts(ctx *wf.TaskContext, a1, a2 artifact) (string, error) {
+	h1, err := b.hashArtifact(ctx, a1)
+	if err != nil {
+		return "", fmt.Errorf("hashing first tarball: %v", err)
+	}
+	h2, err := b.hashArtifact(ctx, a2)
+	if err != nil {
+		return "", fmt.Errorf("hashing second tarball: %v", err)
+	}
+	return cmp.Diff(h1, h2), nil
+}
+
+func (b *BuildReleaseTasks) hashArtifact(ctx *wf.TaskContext, a artifact) (map[string]string, error) {
+	var hashes map[string]string
+	_, err := b.runBuildStep(ctx, nil, nil, a, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
+		var err error
+		hashes, err = tarballHashes(r)
+		return err
 	})
-	return head, err
+	return hashes, err
 }
 
 func tarballHashes(r io.Reader) (map[string]string, error) {
@@ -644,12 +660,22 @@ func tarballHashes(r io.Reader) (map[string]string, error) {
 	return hashes, nil
 }
 
-func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
-	// Always run distpack builds on Linux.
-	bc := dashboard.Builders["linux-amd64"]
-	return b.runBuildStep(ctx, target, bc, source, ".tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, builder string, target *releasetargets.Target, source artifact) (artifact, error) {
+	bc := dashboard.Builders[builder]
+	return b.runBuildStep(ctx, target, bc, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildDistpack(ctx, r, w)
 	})
+}
+
+func (b *BuildReleaseTasks) checkDistpacksMatch(ctx *wf.TaskContext, linux, windows artifact) error {
+	diff, err := b.diffArtifacts(ctx, linux, windows)
+	if err != nil {
+		return err
+	}
+	if diff != "" {
+		return fmt.Errorf("distpacks don't match (-linux, +windows): %v", diff)
+	}
+	return nil
 }
 
 func (b *BuildReleaseTasks) binaryArchiveFromDistpack(ctx *wf.TaskContext, distpack artifact) (artifact, error) {

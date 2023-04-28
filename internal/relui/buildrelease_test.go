@@ -486,7 +486,7 @@ VERSION=$(head -n 1 $GO/VERSION)
 if [[ $# >0 && $1 == "-distpack" ]]; then
 	mkdir -p $GO/pkg/distpack
 	tmp=$(mktemp).tar.gz
-	tar czf $tmp -C $GO/.. go
+	tar czf $tmp --mtime 2023-01-01 -C $GO/.. go
 	mv $tmp $GO/pkg/distpack/$VERSION.src.tar.gz
 fi
 
@@ -525,12 +525,12 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 	"windows")
 		tmp=$(mktemp).zip
 		# The zip command isn't installed on our buildlets. Python is.
-		(cd $GO/.. && python3 -m zipfile -c $tmp go/)
+		(cd $GO/.. && find . | xargs touch -d 2023-01-01 && python3 -m zipfile -c $tmp go/)
 		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.zip
 		;;
 	*)
 		tmp=$(mktemp).tar.gz
-		tar czf $tmp -C $GO/.. go
+		tar czf $tmp --mtime 2023-01-01 -C $GO/.. go
 		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.tar.gz
 		;;
 	esac
@@ -543,7 +543,7 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 	mkdir -p $MODDIR
 	cp -r $GO $MODDIR
 	tmp=$(mktemp).zip
-	(cd $MODTMP && python3 -m zipfile -c $tmp .)
+	(cd $MODTMP && find . | xargs touch -d 2023-01-01 && python3 -m zipfile -c $tmp .)
 	mv $tmp $GO/pkg/distpack/$MODVER.zip
 fi
 `
