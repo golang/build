@@ -457,7 +457,6 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 
 	// Build, test and sign binary artifacts for all targets.
 	for _, target := range targets {
-		targetVal := wf.Const(target)
 		wd := wd.Sub(target.Name)
 
 		// Build release artifacts for the platform. For 1.21+, use distpacks.
@@ -472,17 +471,17 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 			}
 			if target.GOOS == "windows" {
 				zip = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
-				tar = wf.Task2(wd, "Convert to .tgz", tasks.convertZipToTGZ, targetVal, zip)
+				tar = wf.Task1(wd, "Convert to .tgz", tasks.convertZipToTGZ, zip)
 			} else {
 				tar = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
 			}
 			mod = wf.Task1(wd, "Get module files from distpack", tasks.modFilesFromDistpack, distpack)
 		} else {
-			tar = wf.Task2(wd, "Build binary archive", tasks.buildBinary, targetVal, source)
+			tar = wf.Task2(wd, "Build binary archive", tasks.buildBinary, wf.Const(target), source)
 			if target.GOOS == "windows" {
-				zip = wf.Task2(wd, "Convert to .zip", tasks.convertTGZToZip, targetVal, tar)
+				zip = wf.Task1(wd, "Convert to .zip", tasks.convertTGZToZip, tar)
 			}
-			mod = wf.Task4(wd, "Convert binary archive to modules", tasks.modFilesFromBinary, targetVal, version, timestamp, tar)
+			mod = wf.Task3(wd, "Convert binary archive to modules", tasks.modFilesFromBinary, version, timestamp, tar)
 		}
 
 		// Create installers and perform platform-specific signing where
@@ -490,13 +489,13 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		// include the signed binaries.
 		switch target.GOOS {
 		case "darwin":
-			pkg := wf.Task3(wd, "Build PKG installer", tasks.buildDarwinPKG, targetVal, version, tar)
+			pkg := wf.Task2(wd, "Build PKG installer", tasks.buildDarwinPKG, version, tar)
 			signedPKG := wf.Task2(wd, "Sign PKG installer", tasks.signArtifact, pkg, wf.Const(sign.BuildMacOS))
-			signedTGZ := wf.Task2(wd, "Convert to .tgz", tasks.convertPKGToTGZ, targetVal, signedPKG)
-			mod = wf.Task5(wd, "Merge signed files into module zip", tasks.mergeSignedToModule, targetVal, version, timestamp, mod, signedTGZ)
+			signedTGZ := wf.Task1(wd, "Convert to .tgz", tasks.convertPKGToTGZ, signedPKG)
+			mod = wf.Task4(wd, "Merge signed files into module zip", tasks.mergeSignedToModule, version, timestamp, mod, signedTGZ)
 			artifacts = append(artifacts, signedPKG, signedTGZ)
 		case "windows":
-			msi := wf.Task2(wd, "Build MSI installer", tasks.buildWindowsMSI, targetVal, tar)
+			msi := wf.Task1(wd, "Build MSI installer", tasks.buildWindowsMSI, tar)
 			signedMSI := wf.Task2(wd, "Sign MSI installer", tasks.signArtifact, msi, wf.Const(sign.BuildWindows))
 			artifacts = append(artifacts, signedMSI, zip)
 		default:
@@ -506,10 +505,10 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		if target.BuildOnly {
 			continue
 		}
-		short := wf.Action4(wd, "Run short tests", tasks.runTests, targetVal, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
+		short := wf.Action3(wd, "Run short tests", tasks.runTests, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
 		blockers = append(blockers, short)
 		if target.LongTestBuilder != "" {
-			long := wf.Action4(wd, "Run long tests", tasks.runTests, targetVal, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
+			long := wf.Action3(wd, "Run long tests", tasks.runTests, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
 			blockers = append(blockers, long)
 		}
 	}
@@ -742,12 +741,12 @@ func (b *BuildReleaseTasks) modFilesFromDistpack(ctx *wf.TaskContext, distpack a
 	return result, nil
 }
 
-func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, target *releasetargets.Target, version string, t time.Time, tar artifact) (moduleArtifact, error) {
+func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, version string, t time.Time, tar artifact) (moduleArtifact, error) {
 	result := moduleArtifact{Target: tar.Target}
 	a, err := b.runBuildStep(ctx, nil, nil, tar, "mod.zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
 		ctx.DisableWatchdog() // The zipping process can be time consuming and is unlikely to hang.
 		var err error
-		result.Mod, result.Info, err = task.TarToModFiles(target, version, t, r, w)
+		result.Mod, result.Info, err = task.TarToModFiles(tar.Target, version, t, r, w)
 		return err
 	})
 	if err != nil {
@@ -757,7 +756,7 @@ func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, target *rele
 	return result, nil
 }
 
-func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, target *releasetargets.Target, version string, timestamp time.Time, mod moduleArtifact, signed artifact) (moduleArtifact, error) {
+func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version string, timestamp time.Time, mod moduleArtifact, signed artifact) (moduleArtifact, error) {
 	a, err := b.runBuildStep(ctx, nil, nil, signed, "signedmod.zip", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
 		// Load binaries from the signed tar file.
 		szr, err := gzip.NewReader(signed)
@@ -807,7 +806,7 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, target *rel
 			return err
 		}
 
-		prefix := task.ToolchainZipPrefix(target, version) + "/"
+		prefix := task.ToolchainZipPrefix(mod.Target, version) + "/"
 		mzw := zip.NewWriter(w)
 		mzw.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
 			return flate.NewWriter(out, flate.BestCompression)
@@ -852,34 +851,34 @@ func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, target *releasetarg
 	})
 }
 
-func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, target *releasetargets.Target, version string, binary artifact) (artifact, error) {
-	bc := dashboard.Builders[target.Builder]
-	return b.runBuildStep(ctx, target, bc, binary, "pkg", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, version string, binary artifact) (artifact, error) {
+	bc := dashboard.Builders[binary.Target.Builder]
+	return b.runBuildStep(ctx, binary.Target, bc, binary, "pkg", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildDarwinPKG(ctx, r, version, w)
 	})
 }
-func (b *BuildReleaseTasks) convertPKGToTGZ(ctx *wf.TaskContext, target *releasetargets.Target, pkg artifact) (tgz artifact, _ error) {
-	bc := dashboard.Builders[target.Builder]
-	return b.runBuildStep(ctx, target, bc, pkg, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+func (b *BuildReleaseTasks) convertPKGToTGZ(ctx *wf.TaskContext, pkg artifact) (tgz artifact, _ error) {
+	bc := dashboard.Builders[pkg.Target.Builder]
+	return b.runBuildStep(ctx, pkg.Target, bc, pkg, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.ConvertPKGToTGZ(ctx, r, w)
 	})
 }
 
-func (b *BuildReleaseTasks) buildWindowsMSI(ctx *wf.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
-	bc := dashboard.Builders[target.Builder]
-	return b.runBuildStep(ctx, target, bc, binary, "msi", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+func (b *BuildReleaseTasks) buildWindowsMSI(ctx *wf.TaskContext, binary artifact) (artifact, error) {
+	bc := dashboard.Builders[binary.Target.Builder]
+	return b.runBuildStep(ctx, binary.Target, bc, binary, "msi", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildWindowsMSI(ctx, r, w)
 	})
 }
 
-func (b *BuildReleaseTasks) convertTGZToZip(ctx *wf.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, nil, binary, "zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+func (b *BuildReleaseTasks) convertTGZToZip(ctx *wf.TaskContext, binary artifact) (artifact, error) {
+	return b.runBuildStep(ctx, binary.Target, nil, binary, "zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return task.ConvertTGZToZIP(r, w)
 	})
 }
 
-func (b *BuildReleaseTasks) convertZipToTGZ(ctx *wf.TaskContext, target *releasetargets.Target, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, nil, binary, "tar.gz", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+func (b *BuildReleaseTasks) convertZipToTGZ(ctx *wf.TaskContext, binary artifact) (artifact, error) {
+	return b.runBuildStep(ctx, binary.Target, nil, binary, "tar.gz", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
 		// Reading the whole file isn't ideal, but we need a ReaderAt, and
 		// don't have access to the lower-level file (which would support
 		// seeking) here.
@@ -1037,14 +1036,14 @@ func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType
 	return outURLs, nil
 }
 
-func (b *BuildReleaseTasks) runTests(ctx *wf.TaskContext, target *releasetargets.Target, build *dashboard.BuildConfig, skipTests []string, binary artifact) error {
+func (b *BuildReleaseTasks) runTests(ctx *wf.TaskContext, build *dashboard.BuildConfig, skipTests []string, binary artifact) error {
 	for _, skip := range skipTests {
-		if skip == "all" || target.Name == skip {
+		if skip == "all" || binary.Target.Name == skip {
 			ctx.Printf("Skipping test")
 			return nil
 		}
 	}
-	_, err := b.runBuildStep(ctx, target, build, binary, "", func(bs *task.BuildletStep, r io.Reader, _ io.Writer) error {
+	_, err := b.runBuildStep(ctx, binary.Target, build, binary, "", func(bs *task.BuildletStep, r io.Reader, _ io.Writer) error {
 		return bs.TestTarget(ctx, r)
 	})
 	return err
