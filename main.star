@@ -52,7 +52,7 @@ luci.project(
         # Allow everyone in the world to see bulders.
         luci.binding(
             roles = "role/buildbucket.reader",
-            groups = "authenticated-users",
+            groups = "all",
         ),
 
         # Allow task service accounts to spawn builds.
