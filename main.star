@@ -71,7 +71,7 @@ luci.project(
     acls = [
         acl.entry(
             roles = acl.PROJECT_CONFIGS_READER,
-            groups = "googlers",
+            groups = "all",
         ),
         acl.entry(
             roles = acl.CQ_COMMITTER,
