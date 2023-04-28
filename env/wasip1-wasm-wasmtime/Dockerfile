@@ -12,7 +12,7 @@ RUN apt-get update && apt-get -y install curl xz-utils
 # A copy of https://wasmtime.dev/install.sh.
 COPY install.sh install.sh
 
-RUN bash install.sh --version v7.0.0
+RUN bash install.sh --version v8.0.1
 
 FROM ${REPO}/linux-x86-sid:20221109
 
