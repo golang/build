@@ -65,7 +65,7 @@ luci.project(
         # Allow external contributions to run try jobs.
         luci.binding(
             roles = "role/cq.dryRunner",
-            groups = "project-golang-may-start-trybots",
+            groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
         ),
     ],
     acls = [
@@ -79,7 +79,7 @@ luci.project(
         ),
         acl.entry(
             roles = acl.CQ_DRY_RUNNER,
-            groups = "project-golang-may-start-trybots",
+            groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
         ),
     ],
 )
