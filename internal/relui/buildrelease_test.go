@@ -113,7 +113,7 @@ func newReleaseTestDeps(t *testing.T, previousTag, wantVersion string) *releaseT
 	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
 	t.Cleanup(bootstrapServer.Close)
 	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, map[string]string{
-		"pkgbuild": `#!/bin/bash -eux
+		"pkgbuild": `#!/bin/bash -eu
 case "$@" in
 "--identifier=org.golang.go --version ` + wantVersion + ` --scripts=pkg-scripts --root=pkg-root pkg-intermediate/org.golang.go.pkg")
 	# We're doing an intermediate step in building a PKG.
@@ -126,7 +126,7 @@ case "$@" in
 	;;
 esac
 `,
-		"productbuild": `#!/bin/bash -eux
+		"productbuild": `#!/bin/bash -eu
 case "$@" in
 "--distribution=pkg-distribution --resources=pkg-resources --package-path=pkg-intermediate pkg-out/` + wantVersion + `.pkg")
 	# We're building a PKG.
@@ -140,7 +140,7 @@ case "$@" in
 	;;
 esac
 `,
-		"pkgutil": `#!/bin/bash -eux
+		"pkgutil": `#!/bin/bash -eu
 case "$@" in
 "--expand-full go.pkg pkg-expanded")
 	# We're expanding a PKG.
@@ -485,9 +485,11 @@ VERSION=$(head -n 1 $GO/VERSION)
 
 if [[ $# >0 && $1 == "-distpack" ]]; then
 	mkdir -p $GO/pkg/distpack
-	tmp=$(mktemp).tar.gz
-	tar czf $tmp --mtime 2023-01-01 -C $GO/.. go
-	mv $tmp $GO/pkg/distpack/$VERSION.src.tar.gz
+	tmp=$(mktemp).tar
+	(cd $GO/.. && find . | xargs touch -t 202301010000 && tar cf $tmp go)
+	# On macOS, tar -czf puts a timestamp in the gzip header. Do it ourselves with --no-name to suppress it.
+	gzip --no-name $tmp
+	mv $tmp.gz $GO/pkg/distpack/$VERSION.src.tar.gz
 fi
 
 mkdir -p $GO/bin
@@ -525,13 +527,15 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 	"windows")
 		tmp=$(mktemp).zip
 		# The zip command isn't installed on our buildlets. Python is.
-		(cd $GO/.. && find . | xargs touch -d 2023-01-01 && python3 -m zipfile -c $tmp go/)
+		(cd $GO/.. && find . | xargs touch -t 202301010000 && python3 -m zipfile -c $tmp go/)
 		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.zip
 		;;
 	*)
-		tmp=$(mktemp).tar.gz
-		tar czf $tmp --mtime 2023-01-01 -C $GO/.. go
-		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.tar.gz
+		tmp=$(mktemp).tar
+		(cd $GO/.. && find . | xargs touch -t 202301010000 && tar cf $tmp go)
+		# On macOS, tar -czf puts a timestamp in the gzip header. Do it ourselves with --no-name to suppress it.
+		gzip --no-name $tmp
+		mv $tmp.gz $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.tar.gz
 		;;
 	esac
 
@@ -543,7 +547,7 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 	mkdir -p $MODDIR
 	cp -r $GO $MODDIR
 	tmp=$(mktemp).zip
-	(cd $MODTMP && find . | xargs touch -d 2023-01-01 && python3 -m zipfile -c $tmp .)
+	(cd $MODTMP && find . | xargs touch -t 202301010000 && python3 -m zipfile -c $tmp .)
 	mv $tmp $GO/pkg/distpack/$MODVER.zip
 fi
 `
