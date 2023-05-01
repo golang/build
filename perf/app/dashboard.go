@@ -176,23 +176,27 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end tim
 	// assumed by the JS.
 	benchmarks := []struct{ name, unit string }{
 		{
-			name: "Tile38WithinCircle100kmRequest",
+			name: "Tile38QueryLoad",
 			unit: "sec/op",
 		},
 		{
-			name: "Tile38WithinCircle100kmRequest",
+			name: "Tile38QueryLoad",
 			unit: "p50-latency-sec",
 		},
 		{
-			name: "Tile38WithinCircle100kmRequest",
+			name: "Tile38QueryLoad",
 			unit: "p90-latency-sec",
 		},
 		{
-			name: "Tile38WithinCircle100kmRequest",
+			name: "Tile38QueryLoad",
+			unit: "p99-latency-sec",
+		},
+		{
+			name: "Tile38QueryLoad",
 			unit: "average-RSS-bytes",
 		},
 		{
-			name: "Tile38WithinCircle100kmRequest",
+			name: "Tile38QueryLoad",
 			unit: "peak-RSS-bytes",
 		},
 		{
