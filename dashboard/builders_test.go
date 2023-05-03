@@ -193,6 +193,7 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-longtest",
 				"linux-arm64-longtest",
 				"windows-amd64-longtest",
+				"darwin-amd64-longtest", // Builder added during Go 1.21 dev cycle.
 			},
 		},
 		{
@@ -707,6 +708,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest", "net"), onlyPost},
 		{b("linux-amd64-longtest@go1.99", "go"), both},
 		{b("linux-amd64-longtest@go1.99", "net"), none},
+		{b("darwin-amd64-longtest", "go"), onlyPost},
+		{b("darwin-amd64-longtest", "net"), onlyPost},
+		{b("darwin-amd64-longtest@go1.99", "go"), both},
+		{b("darwin-amd64-longtest@go1.99", "net"), none},
 		{b("windows-amd64-longtest", "go"), onlyPost},
 		{b("windows-amd64-longtest@go1.99", "go"), both},
 		{b("windows-amd64-longtest", "net"), onlyPost},
@@ -771,6 +776,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("darwin-amd64-10_14", "net"), none},
 		{b("darwin-amd64-10_14@go1.21", "net"), none},
 		{b("darwin-amd64-10_14@go1.20", "net"), onlyPost},
+
+		// The darwin longtest builder added during the Go 1.21 dev cycle:
+		{b("darwin-amd64-longtest@go1.21", "go"), both},
+		{b("darwin-amd64-longtest@go1.20", "go"), none},
 
 		// plan9 only lived at master. We didn't support any past releases.
 		// But it's off for now as it's always failing.

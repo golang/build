@@ -2458,17 +2458,15 @@ func init() {
 		Notes:    "Windows Server 2016 with go test -short=false",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
-			// This builder has legacy C compilers installed, suitable
-			// for versions of Go prior to 1.20, hence the atMostGo1
-			// call below. Newer (1.20 and later) will use the
-			// non-oldcc variant instead. See issue 35006 for more
-			// details.
-			return atMostGo1(goBranch, 19) &&
-				repo == "go" && onReleaseBranch // See issue 37827.
+			return repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// See comment above about the atMostGo1 call below.
 			b := defaultPlusExpBuild(repo, branch, goBranch) &&
+				// This builder has legacy C compilers installed, suitable
+				// for versions of Go prior to 1.20, hence the atMostGo1
+				// call below. Newer (1.20 and later) will use the
+				// non-oldcc variant instead. See issue 35006 for more
+				// details.
 				atMostGo1(goBranch, 19)
 			if repo != "go" && !(branch == "master" && goBranch == "master") {
 				// For golang.org/x repos, don't test non-latest versions.
@@ -2487,18 +2485,16 @@ func init() {
 		Notes:    "Windows Server 2016 with go test -short=false",
 		tryBot: func(repo, branch, goBranch string) bool {
 			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
-			// This builder has modern/recent C compilers installed,
-			// meaning that we only want to use it with 1.20+ versions
-			// of Go, hence the atLeastGo1 call below; versions of Go
-			// prior to 1.20 will use the *-oldcc variant instead. See
-			// issue 35006 for more details.
-			return atLeastGo1(goBranch, 20) &&
-				repo == "go" && onReleaseBranch // See issue 37827.
+			return repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// See comment above about the atMostGo1 call below.
-			b := atLeastGo1(goBranch, 20) &&
-				defaultPlusExpBuild(repo, branch, goBranch)
+			b := defaultPlusExpBuild(repo, branch, goBranch) &&
+				// This builder has modern/recent C compilers installed,
+				// meaning that we only want to use it with 1.20+ versions
+				// of Go, hence the atLeastGo1 call below; versions of Go
+				// prior to 1.20 will use the *-oldcc variant instead. See
+				// issue 35006 for more details.
+				atLeastGo1(goBranch, 20)
 			if repo != "go" && !(branch == "master" && goBranch == "master") {
 				// For golang.org/x repos, don't test non-latest versions.
 				b = false
@@ -2614,8 +2610,20 @@ func init() {
 		Name:     "darwin-amd64-longtest",
 		HostType: "host-darwin-amd64-13-aws",
 		Notes:    "macOS 13 with go test -short=false",
+		tryBot: func(repo, branch, goBranch string) bool {
+			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
+			return repo == "go" && onReleaseBranch // See issue 37827.
+		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
+			if repo == "go" && !atLeastGo1(goBranch, 21) {
+				// The builder was added during Go 1.21 dev cycle.
+				// It uncovered some tests that weren't passing and needed to be fixed.
+				// Disable the builder on older release branches unless/until it's decided
+				// that we should backport the needed fixes (and that the older releases
+				// don't have even more that needs fixing before the builder passes fully).
+				b = false
+			}
 			if repo != "go" && !(branch == "master" && goBranch == "master") {
 				// For golang.org/x repos, don't test non-latest versions.
 				b = false
