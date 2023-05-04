@@ -56,10 +56,11 @@ var ByGerritProject = map[string]*Repo{ /* initialized below */ }
 var ByImportPath = map[string]*Repo{ /* initialized below */ }
 
 func init() {
-	addMirrored("go", coordinatorCanBuild, noDash, enableCSR("golang-org"))
 	addMirrored("dl", importPath("golang.org/dl"), coordinatorCanBuild)
 	addMirrored("gddo", importPath("github.com/golang/gddo"), archivedOnGitHub)
+	addMirrored("go", coordinatorCanBuild, noDash, enableCSR("golang-org"))
 	addMirrored("gofrontend")
+	addMirrored("govulncheck-action")
 	addMirrored("proposal")
 	addMirrored("sublime-build")
 	addMirrored("sublime-config")
