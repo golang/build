@@ -88,6 +88,7 @@ func init() {
 	x("sync", desc("additional concurrency primitives"))
 	x("sys", desc("packages for making system calls"))
 	x("talks", noDash)
+	x("telemetry", desc("telemetry server code and libraries"), enableCSR("go-telemetry"))
 	x("term")
 	x("text", desc("packages for working with text"))
 	x("time", desc("additional time packages"))
