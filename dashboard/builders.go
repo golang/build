@@ -2968,6 +2968,15 @@ func init() {
 		FlakyNet:       true,
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-s390x-ibm-race",
+		HostType: "host-linux-s390x",
+		Notes:    "Only runs -race tests (./race.bash)",
+		FlakyNet: true,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && goBranch == "master"
+		},
+	})
+	addBuilder(BuildConfig{
 		Name:        "linux-s390x-crosscompile",
 		HostType:    "host-linux-amd64-s390x-cross",
 		Notes:       "s390x cross-compile builder for releases; doesn't run tests",
