@@ -113,9 +113,10 @@ func main() {
 	gerritClient := &task.RealGerritClient{
 		Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
+	mailFunc := task.NewSendGridMailClient(*sendgridAPIKey).SendMail
 	commTasks := task.CommunicationTasks{
 		AnnounceMailTasks: task.AnnounceMailTasks{
-			SendMail:           task.NewSendGridMailClient(*sendgridAPIKey).SendMail,
+			SendMail:           mailFunc,
 			AnnounceMailHeader: annMail,
 		},
 		TweetTasks: task.TweetTasks{
@@ -231,7 +232,7 @@ func main() {
 		DB:                        dbPool,
 		BaseURL:                   base,
 		ScheduleFailureMailHeader: schedMail,
-		SendMail:                  relui.LogOnlyMailer,
+		SendMail:                  mailFunc,
 	}
 	w := relui.NewWorker(dh, dbPool, l)
 	go w.Run(ctx)
