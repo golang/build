@@ -1486,7 +1486,9 @@ func crossCompileBuildSet(goos, goarch string) func(proj, branch, goBranch strin
 		}
 		switch proj {
 		case "benchmarks":
-			return goarch != "loong64" // #58306
+			// Failure to build because of a dependency not supported on plan9.
+			// #58306 for loong64.
+			return goos != "plan9" && goarch != "loong64"
 		case "build":
 			return goarch != "riscv64" // #58307
 		case "exp":
@@ -3392,6 +3394,9 @@ func onlyMasterDefault(repo, branch, goBranch string) bool {
 // both filesystem-intensive and unlikely to be relevant to plan9 users.
 func plan9Default(repo, branch, goBranch string) bool {
 	switch repo {
+	case "benchmarks":
+		// Failure to build because of a dependency not supported on plan9.
+		return false
 	case "review":
 		// The x/review repo tests a Git hook, but the plan9 "git" doesn't have the
 		// same command-line API as "git" everywhere else.
