@@ -146,12 +146,11 @@ func tryWorkItem(
 		// from matching patchset-level comments. They
 		// are posted on the magic "/PATCHSET_LEVEL" path, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#file-id.
 		for _, c := range comments["/PATCHSET_LEVEL"] {
-			// It should be sufficient to match by equal time only.
-			// But check that author and patch set match too in order to be more strict.
-			if !c.Updated.Equal(m.Time) || c.Author.NumericID != m.Author.NumericID || c.PatchSet != m.RevisionNumber {
+			if !c.Updated.Equal(m.Time) || c.Author.NumericID != m.Author.NumericID {
+				// Not a matching time or author ID.
 				continue
 			}
-			if len(w.TryMessage) > 0 && c.PatchSet < int(w.TryMessage[len(w.TryMessage)-1].Version) {
+			if len(w.TryMessage) > 0 && m.RevisionNumber < int(w.TryMessage[len(w.TryMessage)-1].Version) {
 				// Don't include try messages older than the latest we've seen. They're obsolete.
 				continue
 			}
@@ -162,7 +161,7 @@ func tryWorkItem(
 			w.TryMessage = append(w.TryMessage, &apipb.TryVoteMessage{
 				Message:  tm[1],
 				AuthorId: c.Author.NumericID,
-				Version:  int32(c.PatchSet),
+				Version:  int32(m.RevisionNumber),
 			})
 		}
 	}

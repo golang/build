@@ -374,6 +374,53 @@ func TestTryWorkItem(t *testing.T) {
 				},
 			},
 		},
+
+		// Test that TRY= request messages with an older patchset-level comment are included.
+		// See https://go-review.googlesource.com/c/go/+/493535/comments/c72580be_773332cb where
+		// a Run-TryBot+1 request is posted on PS 2 with a patchset-level comment left on PS 1.
+		{
+			proj:  "go",
+			clnum: 493535,
+			ci: &gerrit.ChangeInfo{
+				CurrentRevision: "f8aa751e53d7019eb1114da68754c77cc0830163",
+				Revisions: map[string]gerrit.RevisionInfo{
+					"a2afb09fc37fcff8ff43d895def78274d6ec4d74": {PatchSetNumber: 1},
+					"f8aa751e53d7019eb1114da68754c77cc0830163": {PatchSetNumber: 2},
+				},
+				Messages: []gerrit.ChangeMessageInfo{
+					// A message posted a minute after PS 2 was uploaded.
+					{
+						Author:         &gerrit.AccountInfo{NumericID: 1234},
+						Message:        "Patch Set 2: Code-Review+2 Run-TryBot+1\n\n(1 comment)",
+						Time:           gerrit.TimeStamp(time.Date(2023, 5, 8, 16, 14, 3, 0, time.UTC)),
+						RevisionNumber: 2,
+					},
+				},
+			},
+			comments: map[string][]gerrit.CommentInfo{
+				"/PATCHSET_LEVEL": {
+					// Its patchset-level comment is associated with PS 1.
+					{
+						PatchSet: 1,
+						Message:  "TRY\u003dplan9\n\nThanks!",
+						Updated:  gerrit.TimeStamp(time.Date(2023, 5, 8, 16, 14, 3, 0, time.UTC)),
+						Author:   &gerrit.AccountInfo{NumericID: 1234},
+					},
+				},
+			},
+			want: &apipb.GerritTryWorkItem{
+				Project:     "go",
+				Branch:      "master",
+				ChangeId:    "Ia30f51307cc6d07a7e3ada6bf9d60bf9951982ff",
+				Commit:      "f8aa751e53d7019eb1114da68754c77cc0830163",
+				AuthorEmail: "millerresearch@gmail.com",
+				Version:     2,
+				GoVersion:   []*apipb.MajorMinor{{Major: 1, Minor: 17}},
+				TryMessage: []*apipb.TryVoteMessage{
+					{Message: "plan9", AuthorId: 1234, Version: 2},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(strconv.Itoa(int(tt.clnum)), func(t *testing.T) {
