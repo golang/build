@@ -215,13 +215,13 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     }
 
     run_mods = run_mods_of(builder_type)
-    if "race" in run_mods:
-        properties["race_mode"] = True
     if "longtest" in run_mods:
+        properties["long_test"] = True
         properties["env"] = {
-            "GO_TEST_SHORT": "0",
             "GO_TEST_TIMEOUT_SCALE": "5",
         }
+    if "race" in run_mods:
+        properties["race_mode"] = True
     if project == "go" and bucket == "ci":
         # The main repo builder also triggers subrepo builders of the same builder type.
         #
