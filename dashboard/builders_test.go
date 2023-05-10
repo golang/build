@@ -668,6 +668,9 @@ func TestBuilderConfig(t *testing.T) {
 		{b("wasip1-wasm-wasmer", "go"), onlyPost},
 		{b("wasip1-wasm-wasmer@go1.21", "go"), onlyPost},
 		{b("wasip1-wasm-wasmer@go1.20", "go"), none},
+		{b("wasip1-wasm-wasmedge", "go"), onlyPost},
+		{b("wasip1-wasm-wasmedge@go1.21", "go"), onlyPost},
+		{b("wasip1-wasm-wasmedge@go1.20", "go"), none},
 		// Test wasip1/wasm on a subset of golang.org/x repos:
 		{b("wasip1-wasm-wazero", "arch"), onlyPost},
 		{b("wasip1-wasm-wazero", "crypto"), onlyPost},
@@ -705,6 +708,18 @@ func TestBuilderConfig(t *testing.T) {
 		{b("wasip1-wasm-wasmer", "tools"), none},
 		{b("wasip1-wasm-wasmer", "tour"), none},
 		{b("wasip1-wasm-wasmer", "website"), none},
+		{b("wasip1-wasm-wasmedge", "arch"), onlyPost},
+		{b("wasip1-wasm-wasmedge", "crypto"), onlyPost},
+		{b("wasip1-wasm-wasmedge", "sys"), onlyPost},
+		{b("wasip1-wasm-wasmedge", "net"), onlyPost},
+		{b("wasip1-wasm-wasmedge", "benchmarks"), none},
+		{b("wasip1-wasm-wasmedge", "debug"), none},
+		{b("wasip1-wasm-wasmedge", "mobile"), none},
+		{b("wasip1-wasm-wasmedge", "perf"), none},
+		{b("wasip1-wasm-wasmedge", "talks"), none},
+		{b("wasip1-wasm-wasmedge", "tools"), none},
+		{b("wasip1-wasm-wasmedge", "tour"), none},
+		{b("wasip1-wasm-wasmedge", "website"), none},
 
 		// Race builders. Linux for all, GCE builders for
 		// post-submit, and only post-submit for "go" for
@@ -752,6 +767,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("wasip1-wasm-wazero", "exp"), none},
 		{b("wasip1-wasm-wasmtime", "exp"), none},
 		{b("wasip1-wasm-wasmer", "exp"), none},
+		{b("wasip1-wasm-wasmedge", "exp"), none},
 
 		// exp is experimental; it doesn't test against release branches.
 		{b("linux-amd64@go1.99", "exp"), none},
@@ -781,6 +797,7 @@ func TestBuilderConfig(t *testing.T) {
 		{b("wasip1-wasm-wazero", "build"), none},
 		{b("wasip1-wasm-wasmtime", "build"), none},
 		{b("wasip1-wasm-wasmer", "build"), none},
+		{b("wasip1-wasm-wasmedge", "build"), none},
 		{b("android-386-emu", "build"), none},
 		{b("android-amd64-emu", "build"), none},
 

@@ -102,6 +102,7 @@ var slowBotAliases = map[string]string{
 	"solaris":               "solaris-amd64-oraclerel",
 	"solaris-amd64":         "solaris-amd64-oraclerel",
 	"wasm":                  "js-wasm-node18",
+	"wasmedge":              "wasip1-wasm-wasmedge",
 	"wasmer":                "wasip1-wasm-wasmer",
 	"wasmtime":              "wasip1-wasm-wasmtime",
 	"wazero":                "wasip1-wasm-wazero",
@@ -328,6 +329,11 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-amd64-stretch": {
 		Notes:          "Debian Stretch",
 		ContainerImage: "linux-x86-stretch:latest",
+		SSHUsername:    "root",
+	},
+	"host-linux-amd64-wasip1-wasm-wasmedge": {
+		Notes:          "Container with wasmedge for testing wasip1/wasm.",
+		ContainerImage: "wasip1-wasm-wasmedge:latest",
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-wasip1-wasm-wasmer": {
@@ -3240,6 +3246,37 @@ func init() {
 			"GOOS=wasip1", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1", "GOWASIRUNTIME=wasmer",
+		},
+	})
+	addBuilder(BuildConfig{
+		Name:        "wasip1-wasm-wasmedge",
+		HostType:    "host-linux-amd64-wasip1-wasm-wasmedge",
+		KnownIssues: []int{60097},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
+			switch repo {
+			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
+				// Don't test these golang.org/x repos.
+				b = false
+			}
+			if repo != "go" && !(branch == "master" && goBranch == "master") {
+				// For golang.org/x repos, don't test non-latest versions.
+				b = false
+			}
+			return b
+		},
+		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
+			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
+				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
+				run = false
+			}
+			return run
+		},
+		numTryTestHelpers: 3,
+		env: []string{
+			"GOOS=wasip1", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
+			"GO_DISABLE_OUTBOUND_NETWORK=1", "GOWASIRUNTIME=wasmedge",
 		},
 	})
 }
