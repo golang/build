@@ -83,7 +83,8 @@ var (
 //	24: removeAllIncludingReadonly
 //	25: use removeAllIncludingReadonly for all work area cleanup
 //	26: clean up path validation and normalization
-const buildletVersion = 26
+//	27: export GOPLSCACHE=$workdir/goplscache
+const buildletVersion = 27
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -110,11 +111,12 @@ var (
 	setOSRlimit              func() error
 )
 
-// If non-empty, the $TMPDIR and $GOCACHE environment variables to use
-// for child processes.
+// If non-empty, the $TMPDIR, $GOCACHE, and $GOPLSCACHE environment
+// variables to use for child processes.
 var (
-	processTmpDirEnv  string
-	processGoCacheEnv string
+	processTmpDirEnv     string
+	processGoCacheEnv    string
+	processGoplsCacheEnv string
 )
 
 const (
@@ -210,9 +212,13 @@ func main() {
 	// Set up and clean $TMPDIR and $GOCACHE directories.
 	if runtime.GOOS != "plan9" { // go.dev/cl/207283 seems to indicate plan9 should work, but someone needs to test it.
 		processTmpDirEnv = filepath.Join(*workDir, "tmp")
-		processGoCacheEnv = filepath.Join(*workDir, "gocache")
 		removeAllAndMkdir(processTmpDirEnv)
+
+		processGoCacheEnv = filepath.Join(*workDir, "gocache")
 		removeAllAndMkdir(processGoCacheEnv)
+
+		processGoplsCacheEnv = filepath.Join(*workDir, "goplscache")
+		removeAllAndMkdir(processGoplsCacheEnv)
 	}
 
 	http.HandleFunc("/", handleRoot)
@@ -856,11 +862,11 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "HTTP/1.1 or higher required", http.StatusBadRequest)
 		return
 	}
-	// Create *workDir and (if needed) tmp and gocache.
+	// Create *workDir and any needed temporary subdirectories.
 	if !mkdirAllWorkdirOr500(w) {
 		return
 	}
-	for _, dir := range []string{processTmpDirEnv, processGoCacheEnv} {
+	for _, dir := range []string{processTmpDirEnv, processGoCacheEnv, processGoplsCacheEnv} {
 		if dir == "" {
 			continue
 		}
@@ -911,6 +917,9 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := processGoCacheEnv; v != "" {
 		env = append(env, "GOCACHE="+v)
+	}
+	if v := processGoplsCacheEnv; v != "" {
+		env = append(env, "GOPLSCACHE="+v)
 	}
 	if path := r.PostForm["path"]; len(path) > 0 {
 		if kv, ok := pathEnv(runtime.GOOS, env, path, *workDir); ok {
