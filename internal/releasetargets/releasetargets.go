@@ -172,6 +172,13 @@ var allReleases = map[int]ReleaseTargets{
 		},
 		"linux-s390x":   nil,
 		"linux-ppc64le": nil,
+		"windows-386": &Target{
+			Builder: "windows-386-2016",
+		},
+		"windows-amd64": &Target{
+			Builder:         "windows-amd64-2016",
+			LongTestBuilder: "windows-amd64-longtest",
+		},
 		"windows-arm": &Target{
 			Builder:     "windows-arm64-11", // Windows builds need a builder to create their MSIs.
 			SecondClass: true,

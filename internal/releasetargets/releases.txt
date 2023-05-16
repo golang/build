@@ -235,10 +235,10 @@ plan9-arm       plan9      arm        (cross-compiled, no tests)
 
 solaris-amd64   solaris    amd64      (cross-compiled, no tests)
 
-windows-386     windows    386        windows-386-2008
+windows-386     windows    386        windows-386-2016
 	Running on GCP
 
-windows-amd64   windows    amd64      windows-amd64-2008
+windows-amd64   windows    amd64      windows-amd64-2016
 	Long tests on windows-amd64-longtest
 	Running on GCP
 
