@@ -1294,7 +1294,7 @@ var (
 // we only run them on servers and don't need to test the
 // many different architectures that Go supports (like ios).
 func linuxAmd64Repos(repo, branch, goBranch string) bool {
-	if repo == "pkgsite-metrics" || repo == "telemetry" {
+	if repo == "pkgsite-metrics" {
 		return atLeastGo1(goBranch, 20)
 	}
 	return true
@@ -3469,7 +3469,7 @@ func onlyMasterDefault(repo, branch, goBranch string) bool {
 // both filesystem-intensive and unlikely to be relevant to plan9 users.
 func plan9Default(repo, branch, goBranch string) bool {
 	switch repo {
-	case "benchmarks", "telemetry":
+	case "benchmarks":
 		// Failure to build because of a dependency not supported on plan9.
 		return false
 	case "review":
