@@ -2989,6 +2989,7 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return repo == "go" && goBranch == "master"
 		},
+		env: []string{"GO_TEST_TIMEOUT_SCALE=2"},
 	})
 	addBuilder(BuildConfig{
 		Name:        "linux-s390x-crosscompile",
