@@ -867,7 +867,13 @@ func (st *buildStatus) reportErr(err error) {
 	gceErrsClient.ReportSync(ctx, errorreporting.Entry{Error: err})
 }
 
-func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
+// distTestList uses 'go tool dist test -list' to get a list of dist test names.
+//
+// As of Go 1.21, the dist test naming pattern has changed to always be in the
+// form of "<pkg>[:<variant>]", where "<pkg>" means what used to be previously
+// named "go_test:<pkg>". distTestList maps those new dist test names back to
+// that previous format, a combination of "go_test[_bench]:<pkg>" and others.
+func (st *buildStatus) distTestList() (names []distTestName, remoteErr, err error) {
 	workDir, err := st.bc.WorkDir(st.ctx)
 	if err != nil {
 		err = fmt.Errorf("distTestList, WorkDir: %v", err)
@@ -899,9 +905,12 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		err = fmt.Errorf("Exec error: %v, %s", err, buf.Bytes())
 		return
 	}
-	for _, test := range strings.Fields(buf.String()) {
+	// To avoid needing to update all the existing dist test adjust policies,
+	// it's easier to remap new dist test names in "<pkg>[:<variant>]" format
+	// to ones used in Go 1.20 and prior. Do that for now.
+	for _, test := range go120DistTestNames(strings.Fields(buf.String())) {
 		isNormalTry := st.isTry() && !st.isSlowBot()
-		if !st.conf.ShouldRunDistTest(test, isNormalTry) {
+		if !st.conf.ShouldRunDistTest(test.Old, isNormalTry) {
 			continue
 		}
 		names = append(names, test)
@@ -909,20 +918,81 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 	return names, nil, nil
 }
 
+// go120DistTestNames converts a list of dist test names from
+// an arbitrary Go distribution to the format used in Go 1.20
+// and prior versions. (Go 1.21 introduces a simpler format.)
+//
+// This exists only to avoid rewriting current dist adjust policies.
+// We wish to avoid new dist adjust policies, but if they're truly needed,
+// they can choose to start using new dist test names instead.
+func go120DistTestNames(names []string) []distTestName {
+	if len(names) == 0 {
+		// Only happens if there's a problem, but no need to panic.
+		return nil
+	} else if strings.HasPrefix(names[0], "go_test:") {
+		// In Go 1.21 and newer no dist tests have a "go_test:" prefix.
+		// In Go 1.20 and older, go tool dist test -list always returns
+		// at least one "go_test:*" test first.
+		// So if we see it, the list is already in Go 1.20 format.
+		var s []distTestName
+		for _, old := range names {
+			s = append(s, distTestName{old, old})
+		}
+		return s
+	}
+	// Remap the new Go 1.21+ dist test names to old ones.
+	var s []distTestName
+	for _, new := range names {
+		var old string
+		switch pkg, variant, _ := strings.Cut(new, ":"); {
+		// Special cases. Enough to cover what's used by old dist
+		// adjust policies. Not much use in going far beyond that.
+		case variant == "nolibgcc":
+			old = "nolibgcc:" + pkg
+		case variant == "race":
+			old = "race"
+		case variant == "moved_goroot":
+			old = "moved_goroot"
+		case pkg == "cmd/internal/testdir":
+			if variant == "" {
+				// Handle this too for when we stop doing special-case sharding only for testdir inside dist.
+				variant = "0_1"
+			}
+			old = "test:" + variant
+		case pkg == "cmd/api" && variant == "check":
+			old = "api"
+		case pkg == "cmd/internal/bootstrap_test":
+			old = "reboot"
+
+		// Easy regular cases.
+		case variant == "":
+			old = "go_test:" + pkg
+		case variant == "racebench":
+			old = "go_test_bench:" + pkg
+
+		// Neither a known special case nor a regular case.
+		default:
+			old = new // Less bad than leaving it empty.
+		}
+		s = append(s, distTestName{Old: old, Raw: new})
+	}
+	return s
+}
+
 type token struct{}
 
-// newTestSet returns a new testSet given the dist test names (strings from "go tool dist test -list")
+// newTestSet returns a new testSet given the dist test names (from "go tool dist test -list")
 // and benchmark items.
-func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, distTestNames []string) (*testSet, error) {
+func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, names []distTestName) (*testSet, error) {
 	set := &testSet{
 		st:        st,
 		testStats: testStats,
 	}
-	for _, name := range distTestNames {
+	for _, name := range names {
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
-			duration: testStats.Duration(st.BuilderRev.Name, name),
+			duration: testStats.Duration(st.BuilderRev.Name, name.Old),
 			take:     make(chan token, 1),
 			done:     make(chan token),
 		})
@@ -1593,7 +1663,7 @@ func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err 
 				timer.Stop()
 				break AwaitDone
 			case <-timer.C:
-				st.LogEventTime("still_waiting_on_test", ti.name)
+				st.LogEventTime("still_waiting_on_test", ti.name.Old)
 			case <-buildletsGone:
 				set.cancelAll()
 				return nil, errBuildletsGone
@@ -1720,10 +1790,10 @@ const maxTestExecErrors = 3
 
 // runTestsOnBuildlet runs tis on bc, using the optional goroot & gopath environment variables.
 func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, goroot, gopath string) {
-	names := make([]string, len(tis))
+	names, rawNames := make([]string, len(tis)), make([]string, len(tis))
 	for i, ti := range tis {
-		names[i] = ti.name
-		if i > 0 && (!strings.HasPrefix(ti.name, "go_test:") || !strings.HasPrefix(names[0], "go_test:")) {
+		names[i], rawNames[i] = ti.name.Old, ti.name.Raw
+		if i > 0 && (!strings.HasPrefix(ti.name.Old, "go_test:") || !strings.HasPrefix(names[0], "go_test:")) {
 			panic("only go_test:* tests may be merged")
 		}
 	}
@@ -1748,7 +1818,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, g
 	if st.useKeepGoingFlag() {
 		args = append(args, "-k")
 	}
-	args = append(args, names...)
+	args = append(args, rawNames...)
 	var buf bytes.Buffer
 	t0 := time.Now()
 	timeout := st.conf.DistTestsExecTimeout(names)

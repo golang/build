@@ -9,6 +9,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -324,6 +325,56 @@ func TestModulesEnv(t *testing.T) {
 			got := tc.st.modulesEnv()
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("buildStatus.modulesEnv() mismatch (-want, +got)\n%s", diff)
+			}
+		})
+	}
+}
+
+// Test that go120DistTestNames remaps both 1.20 (old) and 1.21 (new)
+// dist test names to old, and doesn't forget the original name (raw).
+func TestGo120DistTestNames(t *testing.T) {
+	for _, tc := range [...]struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "empty",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "old to old",
+			in:   "go_test:archive/tar go_test:cmd/go api reboot test:0_2 test:1_2",
+			want: "go_test:archive/tar go_test:cmd/go api reboot test:0_2 test:1_2",
+		},
+		{
+			name: "new to old",
+			in:   "        archive/tar         cmd/go cmd/api:check cmd/internal/bootstrap_test cmd/internal/testdir:0_2 cmd/internal/testdir:1_2",
+			want: "go_test:archive/tar go_test:cmd/go     api                  reboot                        test:0_2                 test:1_2",
+		},
+		{
+			name: "more special cases",
+			in:   "crypto/x509:nolibgcc fmt:moved_goroot flag:race net:race os:race",
+			want: "nolibgcc:crypto/x509     moved_goroot      race     race    race",
+		},
+		{
+			name: "unhandled special case",
+			in:   "something:something",
+			want: "something:something",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := go120DistTestNames(strings.Fields(tc.in))
+			var want []distTestName
+			for _, old := range strings.Fields(tc.want) {
+				want = append(want, distTestName{Old: old})
+			}
+			for i, raw := range strings.Fields(tc.in) {
+				want[i].Raw = raw
+			}
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("go120DistTestNames mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

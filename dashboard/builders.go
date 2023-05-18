@@ -889,6 +889,9 @@ type BuildConfig struct {
 	// 		return run
 	// 	}
 	//
+	// distTestAdjust works with dist test names expressed in the Go 1.20 format.
+	// See ShouldRunDistTest for details.
+	//
 	distTestAdjust func(run bool, distTest string, isNormalTry bool) bool
 
 	// numTestHelpers is the number of _additional_ buildlets
@@ -976,6 +979,9 @@ func (c *BuildConfig) IsRestricted() bool {
 
 // DistTestsExecTimeout returns how long the coordinator should wait
 // for a cmd/dist test execution to run the provided dist test names.
+//
+// The dist test names are expressed in the Go 1.20 format, even for
+// newer Go versions. See go120DistTestNames.
 func (c *BuildConfig) DistTestsExecTimeout(distTests []string) time.Duration {
 	// TODO: consider using distTests? We never did before, but
 	// now we have the TestStats in the coordinator. Pass in a
@@ -1177,13 +1183,20 @@ func (c *BuildConfig) BuildsRepoTryBot(repo, branch, goBranch string) bool {
 }
 
 // ShouldRunDistTest reports whether the named cmd/dist test should be
-// run for this build config. The isNormalTry parameter is whether this
-// is for a normal TryBot (non-SlowBot) run.
+// run for this build config. The dist test name is expressed in the
+// Go 1.20 format, even for newer Go versions. See go120DistTestNames.
+//
+// The isNormalTry parameter specifies whether this is for a normal
+// TryBot build. It's false for SlowBot and post-submit builds.
 //
 // In general, this returns true. When in normal trybot mode,
 // some slow portable tests are only run on the fastest builder.
 //
-// Individual builders can adjust this policy to fit their needs.
+// It's possible for individual builders to adjust this policy for their needs,
+// though it is preferable to handle that by adjusting test skips in the tests
+// instead of here. That has the advantage of being easier to maintain over time
+// since both the test and its skips would be in one repository rather than two,
+// and having effect when tests are run locally by developers.
 func (c *BuildConfig) ShouldRunDistTest(distTest string, isNormalTry bool) bool {
 	run := true
 
@@ -1198,7 +1211,8 @@ func (c *BuildConfig) ShouldRunDistTest(distTest string, isNormalTry bool) bool 
 		}
 	}
 
-	// Let individual builders adjust the cmd/dist test policy.
+	// Individual builders have historically sometimes adjusted the cmd/dist test policy.
+	// Over time these can migrate to better ways of doing platform-based or speed-based test skips.
 	if c.distTestAdjust != nil {
 		run = c.distTestAdjust(run, distTest, isNormalTry)
 	}

@@ -1842,8 +1842,8 @@ func (s *testSet) initInOrder() {
 	names := make([]string, len(s.items))
 	namedItem := map[string]*testItem{}
 	for i, ti := range s.items {
-		names[i] = ti.name
-		namedItem[ti.name] = ti
+		names[i] = ti.name.Old
+		namedItem[ti.name.Old] = ti
 	}
 
 	// First do the go_test:* ones. partitionGoTests
@@ -1860,7 +1860,7 @@ func (s *testSet) initInOrder() {
 	// Then do the misc tests, which are always by themselves.
 	// (No benefit to merging them)
 	for _, ti := range s.items {
-		if !strings.HasPrefix(ti.name, "go_test:") {
+		if !strings.HasPrefix(ti.name.Old, "go_test:") {
 			s.inOrder = append(s.inOrder, []*testItem{ti})
 		}
 	}
@@ -1915,7 +1915,7 @@ func (s *testSet) initBiggestFirst() {
 
 type testItem struct {
 	set      *testSet
-	name     string        // "go_test:sort"
+	name     distTestName
 	duration time.Duration // optional approximate size
 
 	take chan token // buffered size 1: sending takes ownership of rest of fields:
@@ -1957,6 +1957,12 @@ func (ti *testItem) failf(format string, args ...interface{}) {
 	ti.output = []byte(msg)
 	ti.remoteErr = errors.New(msg)
 	close(ti.done)
+}
+
+// distTestName is the name of a dist test as discovered from 'go tool dist test -list'.
+type distTestName struct {
+	Old string // Old is dist test name converted to Go 1.20 format, like "go_test:sort" or "reboot".
+	Raw string // Raw is unmodified name from dist, suitable as an argument back to 'go tool dist test'.
 }
 
 type byTestDuration []*testItem
