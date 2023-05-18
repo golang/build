@@ -17,5 +17,8 @@ RUN python3 install.py --version 0.12.0
 FROM ${REPO}/linux-x86-sid:20221109
 
 COPY --from=builder /root/.wasmedge/bin/wasmedge /usr/local/bin/wasmedge
+COPY --from=builder /root/.wasmedge/lib/* /usr/local/lib
+
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 CMD ["/usr/local/bin/stage0"]
