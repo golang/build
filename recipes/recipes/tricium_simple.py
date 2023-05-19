@@ -23,9 +23,9 @@ def RunSteps(api):
        api.tryserver.gerrit_change.change, api.tryserver.gerrit_change.patchset)
   repo_path = api.path['start_dir'].join(api.tryserver.gerrit_change_repo_project)
   url = 'https://%s/%s' % (api.tryserver.gerrit_change.host, api.tryserver.gerrit_change.project)
-  ref = "refs/changes/%d/%d/%d" % (api.tryserver.gerrit_change.change%100,
-                                   api.tryserver.gerrit_change.change,
-                                   api.tryserver.gerrit_change.patchset)
+  ref = "refs/changes/{0:02d}/{1:d}/{2:d}".format(api.tryserver.gerrit_change.change%100,
+                                                  api.tryserver.gerrit_change.change,
+                                                  api.tryserver.gerrit_change.patchset)
   api.git.checkout(url=url, ref=ref, dir_path=repo_path, submodules=False)
   api.git('reset', 'HEAD~1', '--soft', name='git reset one commit')
   with api.context(cwd=repo_path):
