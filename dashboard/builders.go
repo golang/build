@@ -315,7 +315,7 @@ var Hosts = map[string]*HostConfig{
 		machineType:         "c2-standard-8", // C2 has precisely defined, consistent server architecture.
 		ContainerImage:      "linux-x86-bullseye:latest",
 		SSHUsername:         "root",
-		CustomDeleteTimeout: 8 * time.Hour,
+		CustomDeleteTimeout: 12 * time.Hour,
 	},
 	"host-linux-amd64-s390x-cross": {
 		Notes:          "Container with s390x cross-compiler.",

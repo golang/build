@@ -5,8 +5,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -238,16 +240,78 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 	if err != nil {
 		return err
 	}
-	defer s.Close()
-	r := benchfmt.NewReader(s, u.UploadID)
 
+	// We need to read the upload multiple times via benchfmt.Reader, so
+	// copy to a buffer we can seek back to the beginning.
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, s); err != nil {
+		return fmt.Errorf("error reading upload: %w", err)
+	}
+	if err := s.Close(); err != nil {
+		return fmt.Errorf("error closing upload: %w", err)
+	}
+
+	comparisons := []struct{
+		suffix      string
+		compare     string
+		numerator   string
+		denominator string
+		filter      string
+	}{
+		{
+			// Default: toolchain:baseline vs experiment without PGO
+			compare:     "toolchain",
+			numerator:   "experiment",
+			denominator: "baseline",
+			filter:      "-pgo:on",  // "off" or unset (bent doesn't set pgo).
+		},
+		{
+			// toolchain:baseline vs experiment with PGO
+			suffix:      "/pgo=on,toolchain:baseline-vs-experiment",
+			compare:     "toolchain",
+			numerator:   "experiment",
+			denominator: "baseline",
+			filter:      "pgo:on",
+		},
+		{
+			// pgo:off vs on with experiment toolchain (impact of enabling PGO)
+			suffix:      "/toolchain:experiment,pgo=off-vs-on",
+			compare:     "pgo",
+			numerator:   "on",
+			denominator: "off",
+			filter:      "toolchain:experiment",
+		},
+	}
+	for _, c := range comparisons {
+		r := bytes.NewReader(buf.Bytes())
+		fmtr := benchfmt.NewReader(r, u.UploadID)
+
+		// Use the default comparisons. Namely:
+		// 1. Build a series out of commit dates (in our case, this is length 1).
+		// 2. Split out comparisons by benchmark name (unit we get for free).
+		//
+		// Copy the options for mutation.
+		opts := *benchseries.DefaultBuilderOptions()
+		opts.Compare = c.compare
+		opts.Numerator = c.numerator
+		opts.Denominator = c.denominator
+		if opts.Filter == "" {
+			opts.Filter = c.filter
+		} else {
+			opts.Filter += " " + c.filter
+		}
+
+		if err := a.compareAndPush(ctx, ifxc, fmtr, &opts, c.suffix); err != nil {
+			return fmt.Errorf("error in compareAndPush(%s): %w", c.suffix, err)
+		}
+	}
+
+	return nil
+}
+
+func (a *App) compareAndPush(ctx context.Context, ifxc influxdb2.Client, r *benchfmt.Reader, opts *benchseries.BuilderOptions, suffix string) error {
 	// Scan the results into a benchseries builder.
-	//
-	// Use the default comparisons. Namely:
-	// 1. Compare across "toolchain," specifically "baseline" vs. "experiment."
-	// 2. Build a series out of commit dates (in our case, this is length 1).
-	// 3. Split out comparisons by benchmark name (unit we get for free).
-	builder, err := benchseries.NewBuilder(benchseries.DefaultBuilderOptions())
+	builder, err := benchseries.NewBuilder(opts)
 	if err != nil {
 		return fmt.Errorf("failed to create benchseries builder: %v", err)
 	}
@@ -315,7 +379,7 @@ comparisonLoop:
 				}
 
 				measurement := "benchmark-result"                  // measurement
-				benchmarkName = benchmarkName                      // tag
+				benchmarkName = benchmarkName + suffix             // tag
 				series = series                                    // time
 				center, low, high := sum.Center, sum.Low, sum.High // fields
 				unit := cs.Unit                                    // tag
