@@ -54,8 +54,8 @@ var slowBotAliases = map[string]string{
 	"illumos":               "illumos-amd64",
 	"ios":                   "ios-arm64-corellium",
 	"js":                    "js-wasm-node18",
-	"wasip1":                "wasip1-wasm-wazero",
-	"wasip1-wasm":           "wasip1-wasm-wazero",
+	"wasip1":                "wasip1-wasm-wasmtime",
+	"wasip1-wasm":           "wasip1-wasm-wasmtime",
 	"linux":                 "linux-amd64",
 	"linux-arm":             "linux-arm-aws",
 	"linux-loong64":         "linux-loong64-3a5000",
@@ -3173,7 +3173,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "wasip1-wasm-wazero",
 		HostType: "host-linux-amd64-wasip1-wasm-wazero",
-		tryBot:   explicitTrySet("go"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
 			switch repo {
@@ -3204,6 +3203,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "wasip1-wasm-wasmtime",
 		HostType: "host-linux-amd64-wasip1-wasm-wasmtime",
+		tryBot:   explicitTrySet("go"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
 			switch repo {

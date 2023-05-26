@@ -93,7 +93,7 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"freebsd-amd64-12_3",
 				"js-wasm-node18",
-				"wasip1-wasm-wazero",
+				"wasip1-wasm-wasmtime",
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-boringcrypto",
@@ -144,7 +144,7 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"freebsd-amd64-12_3",
 				"js-wasm-node18",
-				"wasip1-wasm-wazero",
+				"wasip1-wasm-wasmtime",
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-boringcrypto",
@@ -659,11 +659,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("js-wasm-node18", "tour"), none},
 		{b("js-wasm-node18", "website"), none},
 
-		{b("wasip1-wasm-wazero", "go"), both},
-		{b("wasip1-wasm-wazero@go1.21", "go"), both},
+		{b("wasip1-wasm-wazero", "go"), onlyPost},
+		{b("wasip1-wasm-wazero@go1.21", "go"), onlyPost},
 		{b("wasip1-wasm-wazero@go1.20", "go"), none},
-		{b("wasip1-wasm-wasmtime", "go"), onlyPost},
-		{b("wasip1-wasm-wasmtime@go1.21", "go"), onlyPost},
+		{b("wasip1-wasm-wasmtime", "go"), both},
+		{b("wasip1-wasm-wasmtime@go1.21", "go"), both},
 		{b("wasip1-wasm-wasmtime@go1.20", "go"), none},
 		{b("wasip1-wasm-wasmer", "go"), onlyPost},
 		{b("wasip1-wasm-wasmer@go1.21", "go"), onlyPost},
