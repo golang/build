@@ -3202,9 +3202,8 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:        "wasip1-wasm-wasmtime",
-		HostType:    "host-linux-amd64-wasip1-wasm-wasmtime",
-		KnownIssues: []int{59583},
+		Name:     "wasip1-wasm-wasmtime",
+		HostType: "host-linux-amd64-wasip1-wasm-wasmtime",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
 			switch repo {
