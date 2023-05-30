@@ -67,6 +67,7 @@ var (
 	neild        = gh("neild")
 	nigeltao     = gh("nigeltao")
 	prattmic     = gh("prattmic")
+	pjw          = gh("pjweinb")
 	r            = gh("robpike")
 	rakoczy      = gh("toothrot")
 	roland       = gh("rolandshoemaker")
@@ -798,6 +799,10 @@ var entries = map[string]*Entry{
 	},
 	"text": {
 		Primary: []Owner{mpvl},
+	},
+	"telemetry": {
+		Primary:   []Owner{jamalc, pjw, hyangah},
+		Secondary: []Owner{toolsTeam},
 	},
 	// default owners of x/tools/...
 	"tools": {
