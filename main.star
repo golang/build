@@ -251,10 +251,6 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         ),
         experiments = {
             "golang.build_result_sharing": 100,
-
-            # For go.dev/issue/59990.
-            "golang.structured_allbash_tests": 100,
-            "golang.structured_std_cmd_tests": 100,
         },
     )
     return bucket + "/" + name
