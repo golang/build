@@ -166,7 +166,7 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, kind Relea
 	// Before sending, check to see if this announcement already exists.
 	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
 		// Proceeding would risk sending a duplicate email, so error out instead.
-		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %v", err)
+		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %w", err)
 	} else if threadURL != "" {
 		// This should never happen since this task runs once per release.
 		// It can happen under unusual circumstances, for example if the task crashes after
@@ -241,7 +241,7 @@ func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, version
 
 	// Before sending, check to see if this pre-announcement already exists.
 	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
-		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %v", err)
+		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %w", err)
 	} else if threadURL != "" {
 		ctx.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
 		return SentMail{m.Subject}, nil
@@ -486,6 +486,10 @@ func (t AnnounceMailTasks) AwaitAnnounceMail(ctx *workflow.TaskContext, m SentMa
 // findGoogleGroupsThread fetches the first page of threads from the golang-announce
 // Google Groups mailing list, and looks for a thread with the matching subject line.
 // It returns its URL if found or the empty string if not found.
+//
+// findGoogleGroupsThread returns an error that matches fetchError with
+// PossiblyRetryable set to true when it has signal that repeating the
+// same call after some time may succeed.
 func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadURL string, _ error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://groups.google.com/g/golang-announce", nil)
 	if err != nil {
@@ -493,12 +497,13 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", fetchError{Err: err, PossiblyRetryable: true}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		possiblyRetryable := resp.StatusCode/100 == 5 // Consider a 5xx server response to possibly succeed later.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return "", fmt.Errorf("did not get acceptable status code: %v body: %q", resp.Status, body)
+		return "", fetchError{fmt.Errorf("did not get acceptable status code: %v body: %q", resp.Status, body), possiblyRetryable}
 	}
 	if ct, want := resp.Header.Get("Content-Type"), "text/html; charset=utf-8"; ct != want {
 		ctx.Printf("findGoogleGroupsThread: got response with non-'text/html; charset=utf-8' Content-Type header %q\n", ct)
@@ -508,7 +513,11 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 			return "", fmt.Errorf("got media type %q, want %q", mediaType, "text/html")
 		}
 	}
-	doc, err := html.Parse(io.LimitReader(resp.Body, 5<<20))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
+	if err != nil {
+		return "", fetchError{Err: err, PossiblyRetryable: true}
+	}
+	doc, err := html.Parse(bytes.NewReader(b))
 	if err != nil {
 		return "", err
 	}
@@ -559,6 +568,19 @@ func href(n *html.Node) string {
 	}
 	return ""
 }
+
+// fetchError records an error during a fetch operation over an unreliable network.
+type fetchError struct {
+	Err error // Non-nil.
+
+	// PossiblyRetryable indicates whether Err is believed to be possibly caused by a
+	// non-terminal network error, such that the caller can expect it may not happen
+	// again if it simply tries the same fetch operation again after waiting a bit.
+	PossiblyRetryable bool
+}
+
+func (e fetchError) Error() string { return e.Err.Error() }
+func (e fetchError) Unwrap() error { return e.Err }
 
 // renderMarkdown parses Markdown source
 // and renders it to HTML and plain text.

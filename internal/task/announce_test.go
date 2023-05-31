@@ -7,6 +7,7 @@ package task
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/mail"
 	"os"
 	"path/filepath"
@@ -265,6 +266,9 @@ Heschi and Dmitri for the Go team` + "\n",
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
 			sentMail, err := tasks.AnnounceRelease(ctx, tc.kind, tc.versions, tc.security, tc.coordinators)
 			if err != nil {
+				if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
+					t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
+				}
 				t.Fatal("task function returned non-nil error:", err)
 			}
 			if diff := cmp.Diff(tc.want, sentMail); diff != "" {
@@ -342,6 +346,9 @@ Tatiana for the Go team` + "\n",
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
 			sentMail, err := tasks.PreAnnounceRelease(ctx, tc.versions, tc.target, tc.security, tc.cves, tc.coordinators)
 			if err != nil {
+				if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
+					t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
+				}
 				t.Fatal("task function returned non-nil error:", err)
 			}
 			if diff := cmp.Diff(tc.want, sentMail); diff != "" {
@@ -363,8 +370,9 @@ func TestFindGoogleGroupsThread(t *testing.T) {
 		Context: context.Background(),
 	}, "[security] Go 1.18.3 and Go 1.17.11 are released")
 	if err != nil {
-		// Note: These test failures are only actionable if the error is not
-		// a transient network one.
+		if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
+			t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
+		}
 		t.Fatalf("findGoogleGroupsThread returned a non-nil error: %v", err)
 	}
 	// Just log the threadURL since we can't rely on stable output.
