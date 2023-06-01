@@ -14,10 +14,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
-	"net/url"
 	"os"
 	"os/exec"
-	"path"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/sendgrid/sendgrid-go"
@@ -25,6 +25,8 @@ import (
 )
 
 const repoURL = "https://github.com/golang/go.wiki.git"
+
+var tempRepoDir = filepath.Join(os.TempDir(), strings.NewReplacer("://", "-", "/", "-").Replace(repoURL))
 
 var sendgridAPIKey = os.Getenv("SENDGRID_API_KEY")
 
@@ -48,7 +50,7 @@ func HandleWikiChangePubSub(ctx context.Context, m pubsubMessage) error {
 		return err
 	}
 
-	repo := newGitRepo(repoURL, tempRepoDir(repoURL))
+	repo := newGitRepo(repoURL, tempRepoDir)
 	if err := repo.update(); err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to update repo: %v", err)
 		return err
@@ -65,10 +67,6 @@ func HandleWikiChangePubSub(ctx context.Context, m pubsubMessage) error {
 		}
 	}
 	return nil
-}
-
-func tempRepoDir(repoURL string) string {
-	return path.Join(os.TempDir(), url.PathEscape(repoURL))
 }
 
 var htmlTmpl = template.Must(template.New("email").Parse(`<p><a href="{{.PageURL}}">View page</a></p>

@@ -27,9 +27,8 @@ func TestWikiPubSub(t *testing.T) {
 	defer func() {
 		sendgridAPIKey = oldSendgridKey
 		sendEmail = oldSendEmail
-		dir := tempRepoDir(repoURL)
-		if err := os.RemoveAll(dir); err != nil {
-			t.Errorf("Could not remove temp repo dir %q: %v", dir, err)
+		if err := os.RemoveAll(tempRepoDir); err != nil {
+			t.Errorf("Could not remove temp repo dir %q: %v", tempRepoDir, err)
 		}
 	}()
 	m := pubsubMessage{Data: []byte(`{
