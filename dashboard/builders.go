@@ -2679,6 +2679,16 @@ func init() {
 		HostType:       "host-darwin-amd64-12-aws",
 		distTestAdjust: macTestPolicy,
 		buildsRepo:     onlyGo,
+		env: []string{
+			// Increase the timeout scale for this builder: it was observed to be
+			// timing out frequently in
+			// https://go.dev/issue/55311#issuecomment-1571986012.
+			///
+			// TODO(bcmills): The darwin-amd64-longtest builder was running extremely
+			// slowly because it was hitting swap. Race-enabled builds are also
+			// memory-hungry — is it possible that the -race builder is also swapping?
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "ios-arm64-corellium",
