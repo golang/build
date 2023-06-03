@@ -73,6 +73,15 @@ func TestClientGet(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			desc: "nil key",
+			db: map[string]map[string][]byte{
+				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
+			},
+			key:     nil,
+			dst:     new(author),
+			wantErr: true,
+		},
+		{
 			desc: "nil dst errors",
 			db: map[string]map[string][]byte{
 				"Author": {datastore.NameKey("Author", "The Trial", nil).Encode(): gobEncode(t, &author{Name: "Kafka"})},
