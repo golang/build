@@ -513,11 +513,7 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 			return "", fmt.Errorf("got media type %q, want %q", mediaType, "text/html")
 		}
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 5<<20))
-	if err != nil {
-		return "", fetchError{Err: err, PossiblyRetryable: true}
-	}
-	doc, err := html.Parse(bytes.NewReader(b))
+	doc, err := html.Parse(retryableReader{io.LimitReader(resp.Body, 5<<20)})
 	if err != nil {
 		return "", err
 	}
@@ -567,6 +563,18 @@ func href(n *html.Node) string {
 		}
 	}
 	return ""
+}
+
+// retryableReader annotates errors from
+// RetryableReader as possibly retryable.
+type retryableReader struct{ RetryableReader io.Reader }
+
+func (r retryableReader) Read(p []byte) (n int, err error) {
+	n, err = r.RetryableReader.Read(p)
+	if err != nil && err != io.EOF {
+		err = fetchError{Err: err, PossiblyRetryable: true}
+	}
+	return n, err
 }
 
 // fetchError records an error during a fetch operation over an unreliable network.
