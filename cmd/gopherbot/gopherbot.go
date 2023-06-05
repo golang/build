@@ -447,6 +447,7 @@ var tasks = []struct {
 	{"label vulncheck or vulndb issues", (*gopherbot).labelVulnIssues},
 	{"label proposals", (*gopherbot).labelProposals},
 	{"handle gopls issues", (*gopherbot).handleGoplsIssues},
+	{"handle telemetry issues", (*gopherbot).handleTelemetryIssues},
 	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
 	{"close cherry pick issues", (*gopherbot).closeCherryPickIssues},
 	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
@@ -1259,6 +1260,15 @@ func (b *gopherbot) handleGoplsIssues(ctx context.Context) error {
 			return nil
 		}
 		return b.addLabel(ctx, b.gorepo.ID(), gi, "gopls")
+	})
+}
+
+func (b *gopherbot) handleTelemetryIssues(ctx context.Context) error {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !strings.HasPrefix(gi.Title, "x/telemetry") || gi.HasLabel("telemetry") || gi.HasEvent("unlabeled") {
+			return nil
+		}
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "telemetry")
 	})
 }
 
