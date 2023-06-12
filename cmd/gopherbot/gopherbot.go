@@ -29,7 +29,7 @@ import (
 	"unicode"
 
 	"cloud.google.com/go/compute/metadata"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"go4.org/strutil"
 	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/gerrit"
@@ -653,10 +653,11 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, repo *maintner.GitHubR
 	}
 	// See if there is a dup comment from when gopherbot last got
 	// its data from maintner.
-	ics, resp, err := b.ghc.Issues.ListComments(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueListCommentsOptions{
-		Since:       since,
-		ListOptions: github.ListOptions{PerPage: 1000},
-	})
+	opt := &github.IssueListCommentsOptions{ListOptions: github.ListOptions{PerPage: 1000}}
+	if !since.IsZero() {
+		opt.Since = &since
+	}
+	ics, resp, err := b.ghc.Issues.ListComments(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), opt)
 	if err != nil {
 		// TODO(golang/go#40640) - This issue was transferred or otherwise is gone. We should permanently skip it. This
 		// is a temporary fix to keep gopherbot working.
@@ -740,12 +741,30 @@ func (b *gopherbot) createGitHubIssue(ctx context.Context, title, msg string, la
 	return i.GetNumber(), err
 }
 
-func (b *gopherbot) closeGitHubIssue(ctx context.Context, repoID maintner.GitHubRepoID, number int32) error {
+// issueCloseReason is a reason given when closing an issue on GitHub.
+// See https://docs.github.com/en/issues/tracking-your-work-with-issues/closing-an-issue.
+type issueCloseReason *string
+
+var (
+	completed  issueCloseReason = github.String("completed")   // Done, closed, fixed, resolved.
+	notPlanned issueCloseReason = github.String("not_planned") // Won't fix, can't repro, duplicate, stale.
+)
+
+// closeGitHubIssue closes a GitHub issue.
+// reason specifies why it's being closed. (GitHub's default reason on 2023-06-12 is "completed".)
+func (b *gopherbot) closeGitHubIssue(ctx context.Context, repoID maintner.GitHubRepoID, number int32, reason issueCloseReason) error {
 	if *dryRun {
-		log.Printf("[dry-run] would close golang.org/issue/%v", number)
+		var suffix string
+		if reason != nil {
+			suffix = " as " + *reason
+		}
+		log.Printf("[dry-run] would close go.dev/issue/%v%s", number, suffix)
 		return nil
 	}
-	_, _, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(number), &github.IssueRequest{State: github.String("closed")})
+	_, _, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(number), &github.IssueRequest{
+		State:       github.String("closed"),
+		StateReason: reason,
+	})
 	return err
 }
 
@@ -1330,7 +1349,7 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 				"Timed out in state WaitingForInfo. Closing.\n\n(I am just a bot, though. Please speak up if this is a mistake or you have the requested information.)"); err != nil {
 				return fmt.Errorf("b.addGitHubComment(_, %v, %v) = %w", repo.ID(), gi.Number, err)
 			}
-			return b.closeGitHubIssue(ctx, repo.ID(), gi.Number)
+			return b.closeGitHubIssue(ctx, repo.ID(), gi.Number, notPlanned)
 		})
 	})
 }
@@ -1877,7 +1896,7 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 					"Closed by merging %s to %s.", cl.Commit.Hash, cl.Branch())); err != nil {
 					return err
 				}
-				return b.closeGitHubIssue(ctx, ref.Repo.ID(), gi.Number)
+				return b.closeGitHubIssue(ctx, ref.Repo.ID(), gi.Number, completed)
 			}
 			return nil
 		})
