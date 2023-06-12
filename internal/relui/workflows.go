@@ -451,7 +451,6 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 	skipTests := wf.Param(wd, wf.ParamDef[[]string]{Name: "Targets to skip testing (or 'all') (optional)", ParamType: wf.SliceShort})
 
 	artifacts := []wf.Value[artifact]{source}
-	var reproducibilityCheckDistpack wf.Value[artifact]
 	var mods []wf.Value[moduleArtifact]
 	var blockers []wf.Dependency
 
@@ -466,9 +465,9 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		var mod wf.Value[moduleArtifact]
 		if enableDistpack(major) {
 			distpack := wf.Task3(wd, "Build distpack", tasks.buildDistpack, wf.Const("linux-amd64"), wf.Const(target), source)
-			if target.Name == "linux-amd64" {
-				reproducibilityCheckDistpack = distpack
-			}
+			reproducer := wf.Task3(wd, "Reproduce distpack on Windows", tasks.buildDistpack, wf.Const("windows-amd64-2016"), wf.Const(target), source)
+			match := wf.Action2(wd, "Check distpacks match", tasks.checkDistpacksMatch, distpack, reproducer)
+			blockers = append(blockers, match)
 			if target.GOOS == "windows" {
 				zip = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
 				tar = wf.Task1(wd, "Convert to .tgz", tasks.convertZipToTGZ, zip)
@@ -511,10 +510,6 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 			long := wf.Action3(wd, "Run long tests", tasks.runTests, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
 			blockers = append(blockers, long)
 		}
-	}
-	if enableDistpack(major) {
-		reproducer := wf.Task3(wd, "Reproduce distpack on Windows", tasks.buildDistpack, wf.Const("windows-amd64-2016"), wf.Const(targets["linux-amd64"]), source)
-		blockers = append(blockers, wf.Action2(wd, "Check distpacks match", tasks.checkDistpacksMatch, reproducibilityCheckDistpack, reproducer))
 	}
 	signedArtifacts := wf.Task1(wd, "Compute GPG signature for artifacts", tasks.computeGPG, wf.Slice(artifacts...))
 
