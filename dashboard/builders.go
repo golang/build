@@ -268,6 +268,11 @@ var Hosts = map[string]*HostConfig{
 		NestedVirt:     true,
 		SSHUsername:    "root",
 	},
+	"host-linux-amd64-bookworm": {
+		Notes:          "Debian Bookworm",
+		ContainerImage: "linux-x86-bookworm:latest",
+		SSHUsername:    "root",
+	},
 	"host-linux-amd64-bullseye": {
 		Notes:          "Debian Bullseye",
 		ContainerImage: "linux-x86-bullseye:latest",
@@ -1873,6 +1878,15 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			return atMostGo1(goBranch, 19) && buildRepoByDefault(repo) // Stretch was EOL at the start of the 1.20 cycle.
 		},
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-amd64-bookworm",
+		HostType: "host-linux-amd64-bookworm",
+		Notes:    "Debian Bookworm.",
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+		},
+		KnownIssues: []int{60787},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-bullseye",
