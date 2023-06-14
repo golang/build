@@ -7,7 +7,7 @@ ARG REPO
 FROM golang:latest as builder
 LABEL maintainer="golang-dev@googlegroups.com"
 
-RUN go install github.com/tetratelabs/wazero/cmd/wazero@v1.0.1
+RUN go install github.com/tetratelabs/wazero/cmd/wazero@v1.2.1
 
 FROM ${REPO}/linux-x86-sid:20221109
 
