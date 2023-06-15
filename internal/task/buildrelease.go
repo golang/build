@@ -273,8 +273,7 @@ func (b *BuildletStep) BuildDistpack(ctx *workflow.TaskContext, sourceArchive io
 }
 
 func (b *BuildletStep) buildDistpack(ctx *workflow.TaskContext, makeEnv []string) error {
-	buildEnv := buildenv.Production
-	if u := b.BuildConfig.GoBootstrapURL(buildEnv); u != "" {
+	if u := b.BuildConfig.GoBootstrapURL(buildenv.Production); u != "" {
 		ctx.Printf("Installing go1.4.")
 		if err := b.Buildlet.PutTarFromURL(ctx, u, go14); err != nil {
 			return err
@@ -289,14 +288,13 @@ func (b *BuildletStep) buildDistpack(ctx *workflow.TaskContext, makeEnv []string
 
 // BuildBinary builds a binary distribution from sourceArchive and writes it to out.
 func (b *BuildletStep) BuildBinary(ctx *workflow.TaskContext, sourceArchive io.Reader, out io.Writer) error {
-	buildEnv := buildenv.Production
 	// Push source to buildlet.
 	ctx.Printf("Pushing source to buildlet.")
 	if err := b.Buildlet.PutTar(ctx, sourceArchive, ""); err != nil {
 		return fmt.Errorf("failed to put generated source tarball: %v", err)
 	}
 
-	if u := b.BuildConfig.GoBootstrapURL(buildEnv); u != "" {
+	if u := b.BuildConfig.GoBootstrapURL(buildenv.Production); u != "" {
 		ctx.Printf("Installing go1.4.")
 		if err := b.Buildlet.PutTarFromURL(ctx, u, go14); err != nil {
 			return err
@@ -554,11 +552,10 @@ func ExtractFile(tgz io.Reader, dest io.Writer, glob string) error {
 }
 
 func (b *BuildletStep) TestTarget(ctx *workflow.TaskContext, binaryArchive io.Reader) error {
-	buildEnv := buildenv.Production
 	if err := b.Buildlet.PutTar(ctx, binaryArchive, ""); err != nil {
 		return err
 	}
-	if u := b.BuildConfig.GoBootstrapURL(buildEnv); u != "" {
+	if u := b.BuildConfig.GoBootstrapURL(buildenv.Production); u != "" {
 		ctx.Printf("Installing go1.4 (second time, for all.bash).")
 		if err := b.Buildlet.PutTarFromURL(ctx, u, go14); err != nil {
 			return err
@@ -583,7 +580,7 @@ func (b *BuildletStep) RunTryBot(ctx *workflow.TaskContext, sourceArchive io.Rea
 		}
 	}
 
-	ctx.Printf("Testing")
+	ctx.Printf("Testing (all.bash).")
 	err := b.exec(ctx, goDir+"/"+b.BuildConfig.AllScript(), b.BuildConfig.AllScriptArgs(), buildlet.ExecOpts{})
 	if err != nil {
 		ctx.Printf("testing failed: %v", err)
@@ -606,6 +603,7 @@ func (b *BuildletStep) exec(ctx context.Context, cmd string, args []string, opts
 	opts.Output = b.LogWriter
 	opts.ExtraEnv = env
 	opts.Args = args
+	opts.Debug = true // Print debug info.
 	remoteErr, execErr := b.Buildlet.Exec(ctx, cmd, opts)
 	if execErr != nil {
 		return execErr
@@ -617,12 +615,12 @@ func (b *BuildletStep) exec(ctx context.Context, cmd string, args []string, opts
 	return nil
 }
 
+// runGo runs the go command with args using BuildletStep.exec.
 func (b *BuildletStep) runGo(ctx context.Context, args []string, execOpts buildlet.ExecOpts) error {
 	goCmd := goDir + "/bin/go"
 	if b.Target.GOOS == "windows" {
 		goCmd += ".exe"
 	}
-	execOpts.Args = args
 	return b.exec(ctx, goCmd, args, execOpts)
 }
 

@@ -552,7 +552,8 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 fi
 `
 
-// allScript pretends to be all.bash. It is hardcoded to pass.
+// allScript pretends to be all.bash. It's hardcoded
+// to fail on js-wasm and pass on all other builders.
 const allScript = `#!/bin/bash -eu
 
 echo "I'm a test! :D"
@@ -565,13 +566,21 @@ fi
 exit 0
 `
 
+// raceScript pretends to be race.bash.
+const raceScript = `#!/bin/bash -eu
+
+echo "I'm a race test. Zoom zoom!"
+
+exit 0
+`
+
 var goFiles = map[string]string{
 	"src/make.bash": makeScript,
 	"src/make.bat":  makeScript,
 	"src/all.bash":  allScript,
 	"src/all.bat":   allScript,
-	"src/race.bash": allScript,
-	"src/race.bat":  allScript,
+	"src/race.bash": raceScript,
+	"src/race.bat":  raceScript,
 }
 
 func serveBootstrap(w http.ResponseWriter, r *http.Request) {
