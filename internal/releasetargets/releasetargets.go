@@ -58,7 +58,7 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
 var allReleases = map[int]ReleaseTargets{
-	18: {
+	19: {
 		"darwin-amd64": &Target{
 			Builder:         "darwin-amd64-12_0",
 			Race:            true,
@@ -80,7 +80,7 @@ var allReleases = map[int]ReleaseTargets{
 			Race:        true,
 		},
 		"linux-386": &Target{
-			Builder:         "linux-386-stretch",
+			Builder:         "linux-386-buster",
 			LongTestBuilder: "linux-386-longtest",
 		},
 		"linux-armv6l": &Target{
@@ -91,7 +91,7 @@ var allReleases = map[int]ReleaseTargets{
 			Builder: "linux-arm64",
 		},
 		"linux-amd64": &Target{
-			Builder:         "linux-amd64-stretch",
+			Builder:         "linux-amd64-buster",
 			LongTestBuilder: "linux-amd64-longtest",
 			Race:            true,
 		},
@@ -117,17 +117,6 @@ var allReleases = map[int]ReleaseTargets{
 		"windows-arm64": &Target{
 			SecondClass: true,
 			Builder:     "windows-arm64-11",
-		},
-	},
-	19: {
-		"linux-386": &Target{
-			Builder:         "linux-386-buster",
-			LongTestBuilder: "linux-386-longtest",
-		},
-		"linux-amd64": &Target{
-			Builder:         "linux-amd64-buster",
-			LongTestBuilder: "linux-amd64-longtest",
-			Race:            true,
 		},
 	},
 	20: {
