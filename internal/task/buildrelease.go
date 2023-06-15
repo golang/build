@@ -580,6 +580,20 @@ func (b *BuildletStep) RunTryBot(ctx *workflow.TaskContext, sourceArchive io.Rea
 		}
 	}
 
+	if b.BuildConfig.CompileOnly {
+		ctx.Printf("Building toolchain (make.bash).")
+		if err := b.exec(ctx, goDir+"/"+b.BuildConfig.MakeScript(), b.BuildConfig.MakeScriptArgs(), buildlet.ExecOpts{}); err != nil {
+			ctx.Printf("building toolchain failed: %v", err)
+			return false, nil
+		}
+		ctx.Printf("Compiling-only tests (via BuildConfig.CompileOnly).")
+		if err := b.runGo(ctx, []string{"tool", "dist", "test", "-compile-only"}, buildlet.ExecOpts{}); err != nil {
+			ctx.Printf("building tests failed: %v", err)
+			return false, nil
+		}
+		return true, nil
+	}
+
 	ctx.Printf("Testing (all.bash).")
 	err := b.exec(ctx, goDir+"/"+b.BuildConfig.AllScript(), b.BuildConfig.AllScriptArgs(), buildlet.ExecOpts{})
 	if err != nil {
@@ -617,11 +631,7 @@ func (b *BuildletStep) exec(ctx context.Context, cmd string, args []string, opts
 
 // runGo runs the go command with args using BuildletStep.exec.
 func (b *BuildletStep) runGo(ctx context.Context, args []string, execOpts buildlet.ExecOpts) error {
-	goCmd := goDir + "/bin/go"
-	if b.Target.GOOS == "windows" {
-		goCmd += ".exe"
-	}
-	return b.exec(ctx, goCmd, args, execOpts)
+	return b.exec(ctx, goDir+"/bin/go", args, execOpts)
 }
 
 func ConvertTGZToZIP(r io.Reader, w io.Writer) error {

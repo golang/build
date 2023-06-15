@@ -497,7 +497,7 @@ mkdir -p $GO/bin
 
 cat <<'EOF' >$GO/bin/go
 #!/bin/bash -eu
-case "$1 $2" in
+case "$@" in
 "run releaselet.go")
     # We're building an MSI. The command should be run in the gomote work dir.
 	ls go/src/make.bash >/dev/null
@@ -509,6 +509,10 @@ case "$1 $2" in
 	mkdir -p $(dirname $0)/../pkg/something_orother/
 	touch $(dirname $0)/../pkg/something_orother/race.a
 	;;
+"tool dist test -compile-only")
+	# Testing with -compile-only flag set.
+	exit 0
+	;;
 *)
 	echo "unexpected command $@"
 	exit 1
@@ -517,7 +521,6 @@ esac
 EOF
 chmod 0755 $GO/bin/go
 
-cp $GO/bin/go $GO/bin/go.exe
 # We don't know what GOOS_GOARCH we're "building" for, write some junk for
 # versimilitude.
 mkdir -p $GO/tool/something_orother/
