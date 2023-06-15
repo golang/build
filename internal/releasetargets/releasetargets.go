@@ -237,6 +237,7 @@ var unbuildableOSs = map[string]bool{
 	"android": true,
 	"ios":     true,
 	"js":      true,
+	"wasip1":  true,
 }
 
 // TargetsForGo1Point returns the ReleaseTargets that apply to the given
