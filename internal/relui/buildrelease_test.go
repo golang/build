@@ -750,6 +750,10 @@ type testLogger struct {
 }
 
 func (l *testLogger) Printf(format string, v ...interface{}) {
+	if l.task == "linux-amd64: Run long tests" && fmt.Sprintf(format, v...) == "Creating buildlet linux-amd64-bullseye." {
+		// TODO: This is very brittle; replace with a better way to test this property hasn't regressed.
+		l.t.Errorf("task %q logged creation of a non-longtest buildlet", l.task)
+	}
 	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
 }
 

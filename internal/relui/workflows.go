@@ -507,7 +507,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		short := wf.Action3(wd, "Run short tests", tasks.runTests, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
 		blockers = append(blockers, short)
 		if target.LongTestBuilder != "" {
-			long := wf.Action3(wd, "Run long tests", tasks.runTests, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
+			long := wf.Action3(wd, "Run long tests", tasks.runTests, wf.Const(dashboard.Builders[target.LongTestBuilder]), skipTests, tar)
 			blockers = append(blockers, long)
 		}
 	}
