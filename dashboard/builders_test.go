@@ -6,16 +6,18 @@ package dashboard
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/build/internal/envutil"
 )
 
 func TestOSARCHAccessors(t *testing.T) {
@@ -980,11 +982,10 @@ func TestSlowBotAliases(t *testing.T) {
 		}
 	}
 
-	out, err := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "tool", "dist", "list").Output()
+	ports, err := listPorts()
 	if err != nil {
-		t.Errorf("dist list: %v", err)
+		t.Fatal("listPorts:", err)
 	}
-	ports := strings.Fields(string(out))
 
 	done := map[string]bool{}
 
@@ -1018,11 +1019,10 @@ func TestSlowBotAliases(t *testing.T) {
 	}
 
 	for _, port := range ports {
-		slash := strings.IndexByte(port, '/')
-		if slash == -1 {
+		goos, goarch, ok := strings.Cut(port, "/")
+		if !ok {
 			t.Fatalf("unexpected port %q", port)
 		}
-		goos, goarch := port[:slash], port[slash+1:]
 		check(goos+"-"+goarch, false)
 		check(goos, false)
 		check(goarch, true)
@@ -1050,11 +1050,10 @@ func TestCrossCompileOnlyBuilders(t *testing.T) {
 //
 // The special pseudo-port 'linux-arm-arm5' is tested in TestMiscCompileLinuxGOARM5.
 func TestTryBotsCompileAllPorts(t *testing.T) {
-	out, err := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "tool", "dist", "list").Output()
+	ports, err := listPorts()
 	if err != nil {
-		t.Errorf("dist list: %v", err)
+		t.Fatal("listPorts:", err)
 	}
-	ports := strings.Fields(string(out))
 
 	// knownMissing tracks Go ports that that are known to be
 	// completely missing TryBot (pre-submit) test coverage.
@@ -1126,11 +1125,11 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	}
 
 	for _, port := range ports {
-		slash := strings.IndexByte(port, '/')
-		if slash == -1 {
+		goos, goarch, ok := strings.Cut(port, "/")
+		if !ok {
 			t.Fatalf("unexpected port %q", port)
 		}
-		check(port[:slash], port[slash+1:])
+		check(goos, goarch)
 	}
 }
 
@@ -1402,4 +1401,25 @@ func TestWindowsCCSetup(t *testing.T) {
 		})
 
 	}
+}
+
+// listPorts lists supported Go ports
+// found by running go tool dist list.
+func listPorts() ([]string, error) {
+	var env struct{ GOROOT string }
+	if out, err := exec.Command("go", "env", "-json", "GOROOT").Output(); err != nil {
+		return nil, err
+	} else if err := json.Unmarshal(out, &env); err != nil {
+		return nil, err
+	}
+	cmd := exec.Command("go", "run", "cmd/dist", "list")
+	envutil.SetEnv(cmd, "GOROOT="+env.GOROOT)
+	out, err := cmd.Output()
+	if err != nil {
+		if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
+			out = append(out, ee.Stderr...)
+		}
+		return nil, fmt.Errorf("%q failed: %s\n%s", cmd, err, out)
+	}
+	return strings.Fields(string(out)), nil
 }
