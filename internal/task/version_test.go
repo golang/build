@@ -102,7 +102,7 @@ func TestVersion(t *testing.T) {
 		Logger:  &testLogger{t, ""},
 	}
 
-	changeID, err := tasks.CreateAutoSubmitVersionCL(ctx, "master", nil, "version string")
+	changeID, err := tasks.CreateAutoSubmitVersionCL(ctx, "master", "go1.2.3", nil, "VERSION file content")
 	if err != nil {
 		t.Fatal(err)
 	}

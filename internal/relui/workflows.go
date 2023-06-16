@@ -417,7 +417,7 @@ func addSingleReleaseWorkflow(
 	tagCommit := startingHead
 	if branch != "master" {
 		publishingHead := wf.Task4(wd, "Check branch state matches source archive", build.checkSourceMatch, distpackVal, branchVal, versionFile, source, wf.After(okayToTagAndPublish))
-		versionCL := wf.Task3(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, coordinators, versionFile, wf.After(publishingHead))
+		versionCL := wf.Task4(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, coordinators, versionFile, wf.After(publishingHead))
 		tagCommit = wf.Task2(wd, "Wait for version CL submission", version.AwaitCL, versionCL, publishingHead)
 	}
 	tagged := wf.Action2(wd, "Tag version", version.TagRelease, nextVersion, tagCommit, wf.After(okayToTagAndPublish))

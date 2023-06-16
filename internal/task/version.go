@@ -128,12 +128,12 @@ func (t *VersionTasks) GenerateVersionFile(_ *workflow.TaskContext, distpack boo
 	return fmt.Sprintf("%v\ntime %v\n", version, timestamp.Format(time.RFC3339)), nil
 }
 
-// CreateAutoSubmitVersionCL mails an auto-submit change to update VERSION on branch.
-func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch string, reviewers []string, versionFile string) (string, error) {
+// CreateAutoSubmitVersionCL mails an auto-submit change to update VERSION file on branch.
+func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch, version string, reviewers []string, versionFile string) (string, error) {
 	return t.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: t.GoProject,
 		Branch:  branch,
-		Subject: fmt.Sprintf("[%v] %v", branch, versionFile),
+		Subject: fmt.Sprintf("[%v] %v", branch, version),
 	}, reviewers, map[string]string{
 		"VERSION": versionFile,
 	})
