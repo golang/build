@@ -5,7 +5,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -96,6 +95,7 @@ func TestMirrorInitiallyEmpty(t *testing.T) {
 }
 
 type testMirror struct {
+	// Local paths to the copies of the build repo.
 	gerrit, github, csr string
 	m                   *gitMirror
 	server              *httptest.Server
@@ -112,14 +112,26 @@ func newTestMirror(t *testing.T) *testMirror {
 		t.Skip("skipping; git not in PATH")
 	}
 
+	goBase := t.TempDir()
+	gerrit := filepath.Join(goBase, "build")
+	if err := os.Mkdir(gerrit, 0755); err != nil {
+		t.Fatalf("error creating gerrit build directory: %v", err)
+	}
+
 	tm := &testMirror{
-		gerrit: t.TempDir(),
+		gerrit: gerrit,
 		github: t.TempDir(),
 		csr:    t.TempDir(),
 		m: &gitMirror{
-			mux:          http.NewServeMux(),
-			cacheDir:     t.TempDir(),
-			homeDir:      t.TempDir(),
+			mux:      http.NewServeMux(),
+			cacheDir: t.TempDir(),
+			homeDir:  t.TempDir(),
+			// gitMirror generally expects goBase to be a URL, not
+			// a path, but git handles local paths just fine. As a
+			// result, gitMirror uses standard string concatenation
+			// rather than path.Join. Ensure the path ends in / to
+			// make sure concatenation is OK.
+			goBase:       goBase + "/",
 			repos:        map[string]*repo{},
 			mirrorGitHub: true,
 			mirrorCSR:    true,
@@ -131,11 +143,9 @@ func newTestMirror(t *testing.T) *testMirror {
 	tm.server = httptest.NewServer(tm.m.mux)
 	t.Cleanup(tm.server.Close)
 
-	// Write a git config with each of the relevant repositories replaced by a
-	// local version. The origin is non-bare so we can commit to it; the
-	// destinations are bare so we can push to them.
-	gitConfig := &bytes.Buffer{}
-	overrideRepo := func(fromURL, toDir string, bare bool) {
+	// The origin is non-bare so we can commit to it; the destinations are
+	// bare so we can push to them.
+	initRepo := func(dir string, bare bool) {
 		initArgs := []string{"init"}
 		if bare {
 			initArgs = append(initArgs, "--bare")
@@ -146,24 +156,16 @@ func newTestMirror(t *testing.T) *testMirror {
 			{"config", "user.email", "gopher@golang.org"},
 		} {
 			cmd := exec.Command("git", args...)
-			envutil.SetDir(cmd, toDir)
+			envutil.SetDir(cmd, dir)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("%s: %v\n%s", strings.Join(cmd.Args, " "), err, out)
 			}
 		}
+	}
+	initRepo(tm.gerrit, false)
+	initRepo(tm.github, true)
+	initRepo(tm.csr, true)
 
-		fmt.Fprintf(gitConfig, "[url %q]\n  insteadOf = %v\n", toDir, fromURL)
-	}
-	overrideRepo("https://go.googlesource.com/build", tm.gerrit, false)
-	overrideRepo("git@github.com:golang/build.git", tm.github, true)
-	overrideRepo("https://source.developers.google.com/p/golang-org/r/build", tm.csr, true)
-
-	if err := os.MkdirAll(filepath.Join(tm.m.homeDir, ".config/git"), 0777); err != nil {
-		t.Fatal(err)
-	}
-	if err := ioutil.WriteFile(filepath.Join(tm.m.homeDir, ".config/git/config"), gitConfig.Bytes(), 0777); err != nil {
-		t.Fatal(err)
-	}
 	tm.buildRepo = tm.m.addRepo(&repospkg.Repo{
 		GoGerritProject:    "build",
 		ImportPath:         "golang.org/x/build",
@@ -174,9 +176,13 @@ func newTestMirror(t *testing.T) *testMirror {
 	if err := tm.buildRepo.init(); err != nil {
 		t.Fatal(err)
 	}
-	if err := tm.m.addMirrors(); err != nil {
-		t.Fatal(err)
-	}
+
+	// Manually add mirror repos. We can't use tm.m.addMirrors, as they
+	// hard-codes the real remotes, but we need to use local test
+	// directories.
+	tm.buildRepo.addRemote("github", tm.github)
+	tm.buildRepo.addRemote("csr", tm.csr)
+
 	return tm
 }
 

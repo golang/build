@@ -37,10 +37,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	goBase = "https://go.googlesource.com/"
-)
-
 var (
 	flagHTTPAddr     = flag.String("http", "", "If non-empty, the listen address to run an HTTP server on")
 	flagCacheDir     = flag.String("cachedir", "", "git cache directory. If empty a temp directory is made.")
@@ -82,6 +78,7 @@ func main() {
 		repos:        map[string]*repo{},
 		cacheDir:     cacheDir,
 		homeDir:      credsDir,
+		goBase:       "https://go.googlesource.com/",
 		gerritClient: gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
 		mirrorGitHub: *flagMirrorGitHub,
 		mirrorCSR:    *flagMirrorCSR,
@@ -203,6 +200,7 @@ type gitMirror struct {
 	cacheDir string
 	// homeDir is used as $HOME for all commands, allowing easy configuration overrides.
 	homeDir                 string
+	goBase                  string // Base URL/path for Go upstream repos.
 	gerritClient            *gerrit.Client
 	mirrorGitHub, mirrorCSR bool
 	timeoutScale            int
@@ -212,7 +210,7 @@ func (m *gitMirror) addRepo(meta *repospkg.Repo) *repo {
 	name := meta.GoGerritProject
 	r := &repo{
 		name:    name,
-		url:     goBase + name,
+		url:     m.goBase + name,
 		meta:    meta,
 		root:    filepath.Join(m.cacheDir, name),
 		changed: make(chan bool, 1),
