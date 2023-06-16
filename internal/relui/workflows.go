@@ -1294,7 +1294,11 @@ func checkFiles(ctx context.Context, want map[string]bool) func() (int, bool, er
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			resp, err := ctxhttp.Head(ctx, http.DefaultClient, url)
-			if err != nil && err != context.DeadlineExceeded {
+			if err == context.DeadlineExceeded {
+				cancel()
+				continue
+			}
+			if err != nil {
 				return 0, false, err
 			}
 			resp.Body.Close()
