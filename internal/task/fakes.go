@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -646,4 +647,30 @@ func fakeGPGFile(f string) string {
 		panic(fmt.Errorf("fakeGPGFile: os.WriteFile: %v", err))
 	}
 	return f + ".asc"
+}
+
+var _ CloudBuildClient = (*FakeCloudBuild)(nil)
+
+type FakeCloudBuild struct {
+	Project       string
+	AllowedBuilds map[string]map[string]string
+}
+
+const fakeBuildID = "build-12345"
+
+func (cb *FakeCloudBuild) RunBuildTrigger(ctx context.Context, project string, trigger string, substitutions map[string]string) (string, error) {
+	if project != cb.Project {
+		return "", fmt.Errorf("unexpected project %v, want %v", project, cb.Project)
+	}
+	if allowedSubs, ok := cb.AllowedBuilds[trigger]; !ok || !reflect.DeepEqual(allowedSubs, substitutions) {
+		return "", fmt.Errorf("unexpected trigger %v: got params %#v, want %#v", trigger, substitutions, allowedSubs)
+	}
+	return fakeBuildID, nil
+}
+
+func (cb *FakeCloudBuild) Completed(ctx context.Context, project string, id string) (string, bool, error) {
+	if project != cb.Project || id != fakeBuildID {
+		return "", false, fmt.Errorf("unexpected build project/id: got %v %v, want %v %v", project, id, cb.Project, fakeBuildID)
+	}
+	return "here's some build detail", true, nil
 }

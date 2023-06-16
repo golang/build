@@ -211,18 +211,26 @@ esac
 		},
 	}
 
+	const boringProject, boringTrigger = "boring-build-project", "boring-build-trigger"
+
 	buildTasks := &BuildReleaseTasks{
-		GerritClient:     gerrit,
-		GerritHTTPClient: http.DefaultClient,
-		GerritURL:        fakeGerrit.GerritURL() + "/go",
-		GCSClient:        nil,
-		ScratchURL:       "file://" + filepath.ToSlash(t.TempDir()),
-		ServingURL:       "file://" + filepath.ToSlash(servingDir),
-		CreateBuildlet:   fakeBuildlets.CreateBuildlet,
-		SignService:      task.NewFakeSignService(t),
-		DownloadURL:      dlServer.URL,
-		ProxyPrefix:      dlServer.URL,
-		PublishFile:      publishFile,
+		GerritClient:       gerrit,
+		GerritHTTPClient:   http.DefaultClient,
+		GerritURL:          fakeGerrit.GerritURL() + "/go",
+		GCSClient:          nil,
+		ScratchURL:         "file://" + filepath.ToSlash(t.TempDir()),
+		ServingURL:         "file://" + filepath.ToSlash(servingDir),
+		CreateBuildlet:     fakeBuildlets.CreateBuildlet,
+		SignService:        task.NewFakeSignService(t),
+		DownloadURL:        dlServer.URL,
+		ProxyPrefix:        dlServer.URL,
+		PublishFile:        publishFile,
+		BoringBuildProject: boringProject,
+		BoringBuildTrigger: boringTrigger,
+		CloudBuildClient: &task.FakeCloudBuild{
+			Project:       boringProject,
+			AllowedBuilds: map[string]map[string]string{boringTrigger: {"_GO_VERSION": wantVersion}},
+		},
 		ApproveAction: func(ctx *workflow.TaskContext) error {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
 				return nil

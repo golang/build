@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	cloudbuild "cloud.google.com/go/cloudbuild/apiv1/v2"
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
 	"github.com/google/go-github/github"
@@ -142,6 +143,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not connect to GCS: %v", err)
 	}
+	cloudbuildClient, err := cloudbuild.NewClient(ctx)
+	if err != nil {
+		log.Fatalf("Could not connect to Cloud Build: %v", err)
+	}
 	var dbPool db.PGDBTX
 	dbPool, err = pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
@@ -168,17 +173,20 @@ func main() {
 	signServer := sign.NewServer()
 	protos.RegisterReleaseServiceServer(grpcServer, signServer)
 	buildTasks := &relui.BuildReleaseTasks{
-		GerritClient:     gerritClient,
-		GerritHTTPClient: oauth2.NewClient(ctx, creds.TokenSource),
-		GerritURL:        "https://go.googlesource.com/go",
-		PrivateGerritURL: "https://team.googlesource.com/golang/go-private",
-		CreateBuildlet:   coordinator.CreateBuildlet,
-		SignService:      signServer,
-		GCSClient:        gcsClient,
-		ScratchURL:       *scratchFilesBase,
-		ServingURL:       *servingFilesBase,
-		DownloadURL:      *edgeCacheURL,
-		ProxyPrefix:      "https://proxy.golang.org/golang.org/toolchain/@v",
+		GerritClient:       gerritClient,
+		GerritHTTPClient:   oauth2.NewClient(ctx, creds.TokenSource),
+		GerritURL:          "https://go.googlesource.com/go",
+		PrivateGerritURL:   "https://team.googlesource.com/golang/go-private",
+		CreateBuildlet:     coordinator.CreateBuildlet,
+		SignService:        signServer,
+		GCSClient:          gcsClient,
+		ScratchURL:         *scratchFilesBase,
+		ServingURL:         *servingFilesBase,
+		DownloadURL:        *edgeCacheURL,
+		ProxyPrefix:        "https://proxy.golang.org/golang.org/toolchain/@v",
+		CloudBuildClient:   &task.RealCloudBuildClient{Client: cloudbuildClient},
+		BoringBuildProject: "symbolic-datum-552",
+		BoringBuildTrigger: "golang-publish-internal-boringcrypto",
 		PublishFile: func(f task.WebsiteFile) error {
 			return publishFile(*websiteUploadURL, userPassAuth, f)
 		},

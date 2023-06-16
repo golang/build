@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	cloud.google.com/go/bigquery v1.50.0
+	cloud.google.com/go/cloudbuild v1.9.0
 	cloud.google.com/go/compute/metadata v0.2.3
 	cloud.google.com/go/datastore v1.11.0
 	cloud.google.com/go/errorreporting v0.3.0

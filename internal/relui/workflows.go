@@ -431,6 +431,11 @@ func addSingleReleaseWorkflow(
 		goimportsCommit := wf.Task2(wd, "Wait for goimports CL submission", version.AwaitCL, goimportsCL, wf.Const(""))
 		wf.Output(wd, "goimports CL submitted", goimportsCommit)
 	}
+
+	boringBuild := wf.Task1(wd, "Start boringcrypto build", build.runBoringCryptoBuild, nextVersion, wf.After(uploaded))
+	boringResult := wf.Task1(wd, "Await boringcrypto build", build.awaitCloudBuild, boringBuild)
+	wf.Output(wd, "BoringCrypto Docker image status", boringResult)
+
 	wf.Output(wd, "Published to website", published)
 	return published
 }
@@ -569,6 +574,9 @@ type BuildReleaseTasks struct {
 	PublishFile            func(task.WebsiteFile) error
 	CreateBuildlet         func(context.Context, string) (buildlet.RemoteClient, error)
 	SignService            sign.Service
+	BoringBuildProject     string
+	BoringBuildTrigger     string
+	CloudBuildClient       task.CloudBuildClient
 	ApproveAction          func(*wf.TaskContext) error
 }
 
@@ -1371,6 +1379,17 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 	}
 	ctx.Printf("Published all %d files for %s.", len(files), version)
 	return task.Published{Version: version, Files: files}, nil
+}
+
+func (b *BuildReleaseTasks) runBoringCryptoBuild(ctx context.Context, version string) (string, error) {
+	return b.CloudBuildClient.RunBuildTrigger(ctx, b.BoringBuildProject, b.BoringBuildTrigger, map[string]string{"_GO_VERSION": version})
+}
+
+func (b *BuildReleaseTasks) awaitCloudBuild(ctx *wf.TaskContext, id string) (string, error) {
+	detail, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
+		return b.CloudBuildClient.Completed(ctx, b.BoringBuildProject, id)
+	})
+	return detail, err
 }
 
 // cutPrefix returns s without the provided leading prefix string
