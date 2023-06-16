@@ -566,7 +566,7 @@ type BuildReleaseTasks struct {
 	ScratchURL, ServingURL string // ScratchURL is a gs:// or file:// URL, no trailing slash. E.g., "gs://golang-release-staging/relui-scratch".
 	DownloadURL            string
 	ProxyPrefix            string // ProxyPrefix is the prefix at which module files are published, e.g. https://proxy.golang.org/golang.org/toolchain/@v
-	PublishFile            func(*task.WebsiteFile) error
+	PublishFile            func(task.WebsiteFile) error
 	CreateBuildlet         func(context.Context, string) (buildlet.RemoteClient, error)
 	SignService            sign.Service
 	ApproveAction          func(*wf.TaskContext) error
@@ -1339,7 +1339,7 @@ func uploadFile(scratchFS, servingFS fs.FS, scratch, filename string) error {
 // The version string uses the same format as Go tags. For example, "go1.19rc1".
 func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version string, artifacts []artifact) (publishedVersion string, _ error) {
 	for _, a := range artifacts {
-		f := &task.WebsiteFile{
+		f := task.WebsiteFile{
 			Filename:       a.Filename,
 			Version:        version,
 			ChecksumSHA256: a.SHA256,

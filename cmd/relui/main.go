@@ -179,7 +179,7 @@ func main() {
 		ServingURL:       *servingFilesBase,
 		DownloadURL:      *edgeCacheURL,
 		ProxyPrefix:      "https://proxy.golang.org/golang.org/toolchain/@v",
-		PublishFile: func(f *task.WebsiteFile) error {
+		PublishFile: func(f task.WebsiteFile) error {
 			return publishFile(*websiteUploadURL, userPassAuth, f)
 		},
 		ApproveAction: relui.ApproveActionDep(dbPool),
@@ -278,7 +278,7 @@ func key(masterKey, principal string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func publishFile(uploadURL string, auth buildlet.UserPass, f *task.WebsiteFile) error {
+func publishFile(uploadURL string, auth buildlet.UserPass, f task.WebsiteFile) error {
 	req, err := json.Marshal(f)
 	if err != nil {
 		return err
