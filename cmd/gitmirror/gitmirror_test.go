@@ -180,8 +180,8 @@ func newTestMirror(t *testing.T) *testMirror {
 	// Manually add mirror repos. We can't use tm.m.addMirrors, as they
 	// hard-codes the real remotes, but we need to use local test
 	// directories.
-	tm.buildRepo.addRemote("github", tm.github)
-	tm.buildRepo.addRemote("csr", tm.csr)
+	tm.buildRepo.addRemote("github", tm.github, "")
+	tm.buildRepo.addRemote("csr", tm.csr, "")
 
 	return tm
 }

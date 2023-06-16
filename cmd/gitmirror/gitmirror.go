@@ -226,12 +226,14 @@ func (m *gitMirror) addRepo(meta *repospkg.Repo) *repo {
 func (m *gitMirror) addMirrors() error {
 	for _, repo := range m.repos {
 		if m.mirrorGitHub && repo.meta.MirrorToGitHub {
-			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git"); err != nil {
+			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git", ""); err != nil {
 				return fmt.Errorf("adding GitHub remote: %v", err)
 			}
 		}
 		if m.mirrorCSR && repo.meta.MirrorToCSRProject != "" {
-			if err := repo.addRemote("csr", "https://source.developers.google.com/p/"+repo.meta.MirrorToCSRProject+"/r/"+repo.name); err != nil {
+			// Option "nokeycheck" skips Cloud Source Repositories' private
+			// key checking. We have dummy keys checked in as test data.
+			if err := repo.addRemote("csr", "https://source.developers.google.com/p/"+repo.meta.MirrorToCSRProject+"/r/"+repo.name, "nokeycheck"); err != nil {
 				return fmt.Errorf("adding CSR remote: %v", err)
 			}
 		}
@@ -318,6 +320,11 @@ func (r *statusRing) foreachDesc(fn func(statusEntry)) {
 	}
 }
 
+type remote struct {
+	name       string // name as configured in the repo.
+	pushOption string // optional extra push option (--push-option).
+}
+
 // repo represents a repository to be watched.
 type repo struct {
 	name    string
@@ -326,7 +333,7 @@ type repo struct {
 	meta    *repospkg.Repo
 	changed chan bool // sent to when a change comes in
 	status  statusRing
-	dests   []string // destination remotes to mirror to
+	dests   []remote // destination remotes to mirror to
 	mirror  *gitMirror
 
 	mu        sync.Mutex
@@ -444,8 +451,11 @@ func (r *repo) setStatus(status string) {
 	r.status.add(status)
 }
 
-func (r *repo) addRemote(name, url string) error {
-	r.dests = append(r.dests, name)
+func (r *repo) addRemote(name, url, pushOption string) error {
+	r.dests = append(r.dests, remote{
+		name:       name,
+		pushOption: pushOption,
+	})
 	if err := os.MkdirAll(filepath.Join(r.root, "remotes"), 0777); err != nil {
 		return err
 	}
@@ -524,18 +534,23 @@ func (r *repo) fetch() error {
 
 // push runs "git push -f --mirror dest" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
-func (r *repo) push(dest string) error {
+func (r *repo) push(dest remote) error {
 	err := r.try(3, func(attempt int) error {
 		r.setStatus(fmt.Sprintf("syncing to %v, attempt %d", dest, attempt))
-		if _, stderr, err := r.runGitLogged("push", "-f", "--mirror", dest); err != nil {
+		args := []string{"push", "-f", "--mirror"}
+		if dest.pushOption != "" {
+			args = append(args, "--push-option", dest.pushOption)
+		}
+		args = append(args, dest.name)
+		if _, stderr, err := r.runGitLogged(args...); err != nil {
 			return fmt.Errorf("%v\n\n%s", err, stderr)
 		}
 		return nil
 	})
 	if err != nil {
-		r.setStatus("sync to " + dest + " failed")
+		r.setStatus("sync to " + dest.name + " failed")
 	} else {
-		r.setStatus("did sync to " + dest)
+		r.setStatus("did sync to " + dest.name)
 	}
 	return err
 }
