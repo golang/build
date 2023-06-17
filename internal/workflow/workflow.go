@@ -451,6 +451,9 @@ type TaskContext struct {
 }
 
 func (c *TaskContext) Printf(format string, v ...interface{}) {
+	if false {
+		_ = fmt.Sprintf(format, v...) // enable printf checker
+	}
 	c.ResetWatchdog()
 	c.Logger.Printf(format, v...)
 }
