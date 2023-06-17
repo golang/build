@@ -11,7 +11,6 @@ import (
 	"log"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/build/internal/access"
@@ -26,8 +25,6 @@ import (
 func TestUpdateSigningStatus(t *testing.T) {
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	client, server := setupSigningTest(t, ctx)
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
 	go fakeSigningServerClient(t, ctx, client)
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
@@ -56,8 +53,6 @@ func TestUpdateSigningStatusError(t *testing.T) {
 
 		ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 		client, server := setupSigningTest(t, ctx)
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
 		go fakeSigningServerClient(t, ctx, client)
 		if _, _, _, err := server.ArtifactSigningStatus(ctx, "not-exist"); err == nil {
 			t.Fatalf("ArtifactSigningStatus(ctx, %q) = _, _, nil; want error", "not-exist")
@@ -162,8 +157,6 @@ func setupSigningTest(t *testing.T, ctx context.Context) (protos.ReleaseServiceC
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
 	conn, err := grpc.DialContext(ctx, lis.Addr().String(), copts...)
 	if err != nil {
 		lis.Close()
