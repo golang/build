@@ -84,20 +84,20 @@ type TweetTasks struct {
 	RandomSeed int64
 }
 
-// TweetRelease posts a tweet announcing a Go release.
+// TweetRelease posts a tweet announcing that a Go release has been published.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, versions []string, security string, announcement string) (tweetURL string, _ error) {
-	if err := oneOrTwoGoVersions(versions); err != nil {
-		return "", err
+func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, published []Published, security string, announcement string) (tweetURL string, _ error) {
+	if len(published) < 1 || len(published) > 2 {
+		return "", fmt.Errorf("got %d published Go releases, TweetRelease supports only 1 or 2 at once", len(published))
 	}
 
 	r := releaseTweet{
-		Version:      versions[0],
+		Version:      published[0].Version,
 		Security:     security,
 		Announcement: announcement,
 	}
-	if len(versions) == 2 {
-		r.SecondaryVersion = versions[1]
+	if len(published) == 2 {
+		r.SecondaryVersion = published[1].Version
 	}
 
 	seed := t.RandomSeed
@@ -114,7 +114,7 @@ func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, versions []string, s
 	ctx.Printf("tweet text:\n%s\n", tweetText)
 
 	// Generate tweet image.
-	imagePNG, imageText, err := tweetImage(r.Version, rnd)
+	imagePNG, imageText, err := tweetImage(published[0], rnd)
 	if err != nil {
 		return "", err
 	}
@@ -320,19 +320,18 @@ var emoji = map[string][]string{
 }
 
 // tweetImage generates an image to use in the announcement
-// tweet for goVersion. It returns the image encoded as PNG,
+// tweet for published. It returns the image encoded as PNG,
 // and the text displayed in the image.
 //
-// tweetImage makes an HTTP GET request to the go.dev/dl/?mode=json
-// read-only API to select a random release archive to highlight.
-func tweetImage(goVersion string, rnd *rand.Rand) (imagePNG []byte, imageText string, _ error) {
-	a, err := fetchRandomArchive(goVersion, rnd)
+// tweetImage selects a random release archive to highlight.
+func tweetImage(published Published, rnd *rand.Rand) (imagePNG []byte, imageText string, _ error) {
+	a, err := pickRandomArchive(published, rnd)
 	if err != nil {
 		return nil, "", err
 	}
 	var buf bytes.Buffer
 	if err := goCmdTmpl.Execute(&buf, map[string]string{
-		"GoVer":    goVersion,
+		"GoVer":    published.Version,
 		"GOOS":     a.OS,
 		"GOARCH":   a.GOARCH(),
 		"Filename": a.Filename,
@@ -375,57 +374,22 @@ func digits(i int64) int {
 	return n
 }
 
-// fetchRandomArchive downloads all release archives for Go version goVer,
-// and selects a random archive to showcase in the image that displays
-// sample output from the 'go install golang.org/dl/...@latest' command.
-func fetchRandomArchive(goVer string, rnd *rand.Rand) (archive WebsiteFile, _ error) {
-	archives, err := fetchReleaseArchives(goVer)
-	if err != nil {
-		return WebsiteFile{}, err
-	}
-	return archives[rnd.Intn(len(archives))], nil
-}
-
-func fetchReleaseArchives(goVer string) (archives []WebsiteFile, _ error) {
-	url := "https://go.dev/dl/?mode=json"
-	if strings.Contains(goVer, "beta") || strings.Contains(goVer, "rc") ||
-		goVer == "go1.17" || goVer == "go1.17.1" || goVer == "go1.11.1" /* For TestTweetRelease. */ {
-
-		url += "&include=all"
-	}
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("non-200 OK status code: %v", resp.Status)
-	} else if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
-		return nil, fmt.Errorf("got Content-Type %q, want %q", ct, "application/json")
-	}
-	var releases []WebsiteRelease
-	err = json.NewDecoder(resp.Body).Decode(&releases)
-	if err != nil {
-		return nil, err
-	}
-	for _, r := range releases {
-		if r.Version != goVer {
+// pickRandomArchive picks one random release archive
+// to showcase in an image showing sample output from
+// 'go install golang.org/dl/...@latest'.
+func pickRandomArchive(published Published, rnd *rand.Rand) (archive WebsiteFile, _ error) {
+	var archives []WebsiteFile
+	for _, f := range published.Files {
+		if f.Kind != "archive" {
+			// Not an archive type of file, skip. The golang.org/dl commands use archives only.
 			continue
 		}
-		var archives []WebsiteFile
-		for _, f := range r.Files {
-			if f.Kind != "archive" {
-				continue
-			}
-			archives = append(archives, f)
-		}
-		if len(archives) == 0 {
-			return nil, fmt.Errorf("release version %q has 0 archive files", goVer)
-		}
-		// Return archives.
-		return archives, nil
+		archives = append(archives, f)
 	}
-	return nil, fmt.Errorf("release version %q not found", goVer)
+	if len(archives) == 0 {
+		return WebsiteFile{}, fmt.Errorf("release version %q has 0 archive files", published.Version)
+	}
+	return archives[rnd.Intn(len(archives))], nil
 }
 
 // drawTerminal draws an image of a terminal window

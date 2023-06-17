@@ -7,6 +7,7 @@ package task
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"image"
@@ -24,22 +25,46 @@ import (
 func TestTweetRelease(t *testing.T) {
 	if testing.Short() {
 		// This test is useful when modifying the tweet text and image templates,
-		// but don't run it in -short mode since tweetImage involves making some
-		// HTTP GET requests to the internet.
+		// but don't run it in -short mode since—for a New York minute only—this
+		// test involves making some HTTP GET requests to the internet.
 		t.Skip("skipping test that hits go.dev/dl/?mode=json read-only API in -short mode")
+	}
+
+	// Fetch real Go release file metadata for use in test cases below.
+	resp, err := http.Get("https://go.dev/dl/?mode=json&include=all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("non-200 OK status code: %v", resp.Status)
+	} else if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("got Content-Type %q, want %q", ct, "application/json")
+	}
+	var releases []WebsiteRelease
+	err = json.NewDecoder(resp.Body).Decode(&releases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var filesByVersion = make(map[string][]WebsiteFile)
+	for _, r := range releases {
+		filesByVersion[r.Version] = r.Files
 	}
 
 	tests := [...]struct {
 		name         string
-		versions     []string
+		published    []Published
 		security     string
 		announcement string
 		randomSeed   int64
 		wantLog      string
 	}{
 		{
-			name:         "minor",
-			versions:     []string{"go1.17.1", "go1.16.8"},
+			name: "minor",
+			published: []Published{
+				{Version: "go1.17.1", Files: filesByVersion["go1.17.1"]},
+				{Version: "go1.16.8", Files: filesByVersion["go1.16.8"]},
+			},
 			security:     "Includes security fixes for A and B.",
 			announcement: "https://groups.google.com/g/golang-announce/c/dx9d7IOseHw/m/KNH37k37AAAJ",
 			randomSeed:   234,
@@ -66,7 +91,7 @@ go version go1.17.1 linux/arm64` + "\n",
 		},
 		{
 			name:         "minor-solo",
-			versions:     []string{"go1.11.1"},
+			published:    []Published{{Version: "go1.11.1", Files: filesByVersion["go1.11.1"]}},
 			announcement: "https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw",
 			randomSeed:   23,
 			wantLog: `tweet text:
@@ -90,7 +115,7 @@ go version go1.11.1 darwin/amd64` + "\n",
 		},
 		{
 			name:         "beta",
-			versions:     []string{"go1.17beta1"},
+			published:    []Published{{Version: "go1.17beta1", Files: filesByVersion["go1.17beta1"]}},
 			announcement: "https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ",
 			randomSeed:   678,
 			wantLog: `tweet text:
@@ -116,7 +141,7 @@ go version go1.17beta1 darwin/amd64` + "\n",
 		},
 		{
 			name:         "rc",
-			versions:     []string{"go1.17rc2"},
+			published:    []Published{{Version: "go1.17rc2", Files: filesByVersion["go1.17rc2"]}},
 			announcement: "https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ",
 			randomSeed:   456,
 			wantLog: `tweet text:
@@ -142,7 +167,7 @@ go version go1.17rc2 windows/arm64` + "\n",
 		},
 		{
 			name:       "major",
-			versions:   []string{"go1.17"},
+			published:  []Published{{Version: "go1.17", Files: filesByVersion["go1.17"]}},
 			security:   "Includes a super duper security fix (CVE-123).",
 			randomSeed: 123,
 			wantLog: `tweet text:
@@ -173,7 +198,7 @@ go version go1.17 freebsd/amd64` + "\n",
 			// doesn't actually try to tweet, but capture its log.
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			tweetURL, err := (TweetTasks{RandomSeed: tc.randomSeed}).TweetRelease(ctx, tc.versions, tc.security, tc.announcement)
+			tweetURL, err := (TweetTasks{RandomSeed: tc.randomSeed}).TweetRelease(ctx, tc.published, tc.security, tc.announcement)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}

@@ -24,7 +24,7 @@ import (
 func TestAnnounceReleaseShortContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, KindCurrentMinor, []string{"go1.18.1", "go1.17.8"}, nil, nil)
+	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, KindCurrentMinor, []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, nil, nil)
 	if err == nil {
 		t.Errorf("want non-nil error")
 	} else if !strings.HasPrefix(err.Error(), "insufficient time") {
@@ -195,7 +195,7 @@ func TestAnnounceRelease(t *testing.T) {
 	tests := [...]struct {
 		name         string
 		kind         ReleaseKind
-		versions     []string
+		published    []Published
 		security     []string
 		coordinators []string
 		want         SentMail
@@ -204,7 +204,7 @@ func TestAnnounceRelease(t *testing.T) {
 		{
 			name:         "minor",
 			kind:         KindCurrentMinor,
-			versions:     []string{"go1.18.1", "go1.17.8"}, // Intentionally not 1.17.9 so the real email doesn't get in the way.
+			published:    []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, // Intentionally not 1.17.9 so the real email doesn't get in the way.
 			coordinators: []string{"heschi", "dmitshur"},
 			want:         SentMail{Subject: "Go 1.18.1 and Go 1.17.8 are released"},
 			wantLog: `announcement subject: Go 1.18.1 and Go 1.17.8 are released
@@ -264,7 +264,7 @@ Heschi and Dmitri for the Go team` + "\n",
 			}
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			sentMail, err := tasks.AnnounceRelease(ctx, tc.kind, tc.versions, tc.security, tc.coordinators)
+			sentMail, err := tasks.AnnounceRelease(ctx, tc.kind, tc.published, tc.security, tc.coordinators)
 			if err != nil {
 				if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
 					t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.

@@ -131,13 +131,14 @@ type SentMail struct {
 	Subject string // Subject of the email. Expected to be unique so it can be used to identify the email.
 }
 
-// AnnounceRelease sends an email announcing a Go release to Google Groups.
-func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, kind ReleaseKind, versions []string, security []string, users []string) (SentMail, error) {
+// AnnounceRelease sends an email to Google Groups
+// announcing that a Go release has been published.
+func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security []string, users []string) (SentMail, error) {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for announce release task; a minimum of a minute left on context is required")
 	}
-	if err := oneOrTwoGoVersions(versions); err != nil {
-		return SentMail{}, err
+	if len(published) < 1 || len(published) > 2 {
+		return SentMail{}, fmt.Errorf("got %d published Go releases, AnnounceRelease supports only 1 or 2 at once", len(published))
 	}
 	names, err := coordinatorFirstNames(users)
 	if err != nil {
@@ -146,12 +147,12 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, kind Relea
 
 	r := releaseAnnouncement{
 		Kind:     kind,
-		Version:  versions[0],
+		Version:  published[0].Version,
 		Security: security,
 		Names:    names,
 	}
-	if len(versions) == 2 {
-		r.SecondaryVersion = versions[1]
+	if len(published) == 2 {
+		r.SecondaryVersion = published[1].Version
 	}
 
 	// Generate the announcement email.
@@ -198,8 +199,8 @@ func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, version
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for pre-announce release task; a minimum of a minute left on context is required")
 	}
-	if err := oneOrTwoGoVersions(versions); err != nil {
-		return SentMail{}, err
+	if len(versions) < 1 || len(versions) > 2 {
+		return SentMail{}, fmt.Errorf("got %d planned Go releases, PreAnnounceRelease supports only 1 or 2 at once", len(versions))
 	}
 	now := time.Now().UTC()
 	if t.testHookNow != nil {

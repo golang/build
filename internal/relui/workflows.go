@@ -296,7 +296,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 
 		coordinators := wf.Param(wd, releaseCoordinators)
 
-		versionPublished := addSingleReleaseWorkflow(build, milestone, version, wd, r.major, r.kind, coordinators)
+		published := addSingleReleaseWorkflow(build, milestone, version, wd, r.major, r.kind, coordinators)
 
 		securitySummary := wf.Const("")
 		securityFixes := wf.Slice[string]()
@@ -304,7 +304,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 			securitySummary = wf.Param(wd, securitySummaryParameter)
 			securityFixes = wf.Param(wd, securityFixesParameter)
 		}
-		addCommTasks(wd, build, comm, r.kind, wf.Slice(versionPublished), securitySummary, securityFixes, coordinators)
+		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators)
 
 		h.RegisterDefinition(fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
 	}
@@ -343,26 +343,26 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	wd := wf.New()
 
 	coordinators := wf.Param(wd, releaseCoordinators)
-	v1Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor, coordinators)
-	v2Published := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor, coordinators)
+	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor, coordinators)
+	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor, coordinators)
 
 	securitySummary := wf.Param(wd, securitySummaryParameter)
 	securityFixes := wf.Param(wd, securityFixesParameter)
-	addCommTasks(wd, build, comm, task.KindCurrentMinor, wf.Slice(v1Published, v2Published), securitySummary, securityFixes, coordinators)
+	addCommTasks(wd, build, comm, task.KindCurrentMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators)
 
 	return wd, nil
 }
 
 func addCommTasks(
 	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
-	kind task.ReleaseKind, versions wf.Value[[]string], securitySummary wf.Value[string], securityFixes, coordinators wf.Value[[]string],
+	kind task.ReleaseKind, published wf.Value[[]task.Published], securitySummary wf.Value[string], securityFixes, coordinators wf.Value[[]string],
 ) {
-	okayToAnnounceAndTweet := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(versions))
+	okayToAnnounceAndTweet := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(published))
 
 	// Announce that a new Go release has been published.
-	sentMail := wf.Task4(wd, "mail-announcement", comm.AnnounceRelease, wf.Const(kind), versions, securityFixes, coordinators, wf.After(okayToAnnounceAndTweet))
+	sentMail := wf.Task4(wd, "mail-announcement", comm.AnnounceRelease, wf.Const(kind), published, securityFixes, coordinators, wf.After(okayToAnnounceAndTweet))
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
-	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, versions, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
+	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, published, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)
@@ -379,7 +379,7 @@ func now(_ context.Context) (time.Time, error) {
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
 	wd *wf.Definition, major int, kind task.ReleaseKind, coordinators wf.Value[[]string],
-) (versionPublished wf.Value[string]) {
+) wf.Value[task.Published] {
 	kindVal := wf.Const(kind)
 	branch := fmt.Sprintf("release-branch.go1.%d", major)
 	if kind == task.KindBeta {
@@ -425,14 +425,14 @@ func addSingleReleaseWorkflow(
 	uploadedMods := wf.Action2(wd, "Upload modules to CDN", build.uploadModules, nextVersion, modules, wf.After(tagged))
 	availableOnProxy := wf.Action2(wd, "Wait for modules on proxy.golang.org", build.awaitProxy, nextVersion, modules, wf.After(uploadedMods))
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
-	versionPublished = wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, availableOnProxy, pushed))
+	published := wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, availableOnProxy, pushed))
 	if kind == task.KindMajor {
-		goimportsCL := wf.Task2(wd, fmt.Sprintf("Mail goimports CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, versionPublished)
+		goimportsCL := wf.Task2(wd, fmt.Sprintf("Mail goimports CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, nextVersion, wf.After(published))
 		goimportsCommit := wf.Task2(wd, "Wait for goimports CL submission", version.AwaitCL, goimportsCL, wf.Const(""))
 		wf.Output(wd, "goimports CL submitted", goimportsCommit)
 	}
-	wf.Output(wd, "Released version", versionPublished)
-	return versionPublished
+	wf.Output(wd, "Published to website", published)
+	return published
 }
 
 type moduleArtifact struct {
@@ -1334,11 +1334,12 @@ func uploadFile(scratchFS, servingFS fs.FS, scratch, filename string) error {
 }
 
 // publishArtifacts publishes artifacts for version (typically so they appear at https://go.dev/dl/).
-// It returns version, the Go version that has been successfully published.
-//
-// The version string uses the same format as Go tags. For example, "go1.19rc1".
-func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version string, artifacts []artifact) (publishedVersion string, _ error) {
-	for _, a := range artifacts {
+// It returns the Go version and files that have been successfully published.
+func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version string, artifacts []artifact) (task.Published, error) {
+	// Each release artifact corresponds to a single website file.
+	var files = make([]task.WebsiteFile, len(artifacts))
+	for i, a := range artifacts {
+		// Define website file metadata.
 		f := task.WebsiteFile{
 			Filename:       a.Filename,
 			Version:        version,
@@ -1360,12 +1361,16 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 		case "msi", "pkg":
 			f.Kind = "installer"
 		}
+
+		// Publish it.
 		if err := tasks.PublishFile(f); err != nil {
-			return "", err
+			return task.Published{}, err
 		}
+		ctx.Printf("Published %q.", f.Filename)
+		files[i] = f
 	}
-	ctx.Printf("Published %v artifacts for %v", len(artifacts), version)
-	return version, nil
+	ctx.Printf("Published all %d files for %s.", len(files), version)
+	return task.Published{Version: version, Files: files}, nil
 }
 
 // cutPrefix returns s without the provided leading prefix string

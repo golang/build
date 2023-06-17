@@ -63,24 +63,6 @@ func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, major int, kind Relea
 	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
 }
 
-// oneOrTwoGoVersions returns true iff len(versions) is exactly 1 or 2
-// and each version passes some lightweight checks that catch problems.
-func oneOrTwoGoVersions(versions []string) error {
-	if len(versions) < 1 || len(versions) > 2 {
-		return fmt.Errorf("got %d Go versions, want 1 or 2", len(versions))
-	}
-	for _, ver := range versions {
-		if ver != strings.ToLower(ver) {
-			return fmt.Errorf("version %q is not lowercase", ver)
-		} else if strings.Contains(ver, " ") {
-			return fmt.Errorf("version %q contains a space", ver)
-		} else if !strings.HasPrefix(ver, "go") {
-			return fmt.Errorf("version %q doesn't have the 'go' prefix", ver)
-		}
-	}
-	return nil
-}
-
 func docLink(major int, kind ReleaseKind, ver string) string {
 	if kind == KindCurrentMinor || kind == KindPrevMinor {
 		return fmt.Sprintf("https://go.dev/doc/devel/release#%v", ver)
