@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -35,18 +34,17 @@ func main() {
 	}
 }
 
-func environ() (cwd, version string, err error) {
-	cwd, err = os.Getwd()
+func environ() (cwd, version string, _ error) {
+	cwd, err := os.Getwd()
 	if err != nil {
-		return
+		return "", "", err
 	}
-	var versionBytes []byte
-	versionBytes, err = ioutil.ReadFile("go/VERSION")
+	versionFile, err := os.ReadFile("go/VERSION")
 	if err != nil {
-		return
+		return "", "", err
 	}
-	version = string(bytes.TrimSpace(versionBytes))
-	return
+	version, _, _ = strings.Cut(string(versionFile), "\n")
+	return cwd, version, nil
 }
 
 func windowsMSI() error {
@@ -186,12 +184,12 @@ func installWix(wix wixRelease, path string) error {
 		if err != nil {
 			return err
 		}
-		b, err := ioutil.ReadAll(rc)
+		b, err := io.ReadAll(rc)
 		rc.Close()
 		if err != nil {
 			return err
 		}
-		err = ioutil.WriteFile(filepath.Join(path, name), b, 0644)
+		err = os.WriteFile(filepath.Join(path, name), b, 0644)
 		if err != nil {
 			return err
 		}
@@ -205,7 +203,7 @@ func httpGet(url string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	r.Body.Close()
 	if err != nil {
 		return nil, err
@@ -316,7 +314,7 @@ func writeDataFiles(data map[string]string, base string) error {
 		}
 		// (We really mean 0755 on the next line; some of these files
 		// are executable, and there's no harm in making them all so.)
-		if err := ioutil.WriteFile(dst, b, 0755); err != nil {
+		if err := os.WriteFile(dst, b, 0755); err != nil {
 			return err
 		}
 	}

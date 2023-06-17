@@ -5,7 +5,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 )
@@ -29,7 +29,7 @@ func TestSplitVersion(t *testing.T) {
 }
 
 func TestSingleFile(t *testing.T) {
-	files, err := ioutil.ReadDir(".")
+	files, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
