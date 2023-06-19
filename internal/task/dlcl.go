@@ -32,15 +32,13 @@ func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, major int, kind Relea
 	// Generate main.go files for versions from the template.
 	var buf bytes.Buffer
 	if err := dlTmpl.Execute(&buf, struct {
-		Year                int
-		Version             string // "go1.5.3rc2"
-		DocLink             string // "https://go.dev/doc/go1.5"
-		CapitalSpaceVersion string // "Go 1.5.0"
+		Year    int
+		Version string // "go1.21rc2"
+		DocLink string // "https://go.dev/doc/go1.21"
 	}{
-		Year:                time.Now().UTC().Year(),
-		Version:             version,
-		DocLink:             docLink(major, kind, version),
-		CapitalSpaceVersion: strings.Replace(version, "go", "Go ", 1),
+		Year:    time.Now().UTC().Year(),
+		Version: version,
+		DocLink: docLink(major, kind, version),
 	}); err != nil {
 		return "", fmt.Errorf("dlTmpl.Execute: %v", err)
 	}
@@ -75,11 +73,13 @@ func docLink(major int, kind ReleaseKind, ver string) string {
 	return fmt.Sprintf("https://%v/doc/go1.%d", host, major)
 }
 
-var dlTmpl = template.Must(template.New("").Parse(`// Copyright {{.Year}} The Go Authors. All rights reserved.
+var dlTmpl = template.Must(template.New("").Funcs(template.FuncMap{
+	"short": func(v string) string { return strings.TrimPrefix(v, "go") },
+}).Parse(`// Copyright {{.Year}} The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// The {{.Version}} command runs the go command from {{.CapitalSpaceVersion}}.
+// The {{.Version}} command runs the go command from Go {{.Version|short}}.
 //
 // To install, run:
 //

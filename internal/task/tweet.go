@@ -27,6 +27,7 @@ import (
 	"github.com/esimov/stackblur-go"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/opentype"
@@ -146,66 +147,45 @@ func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
 			}
 			return es[rnd.Intn(len(es))], nil
 		},
+
+		// short and helpers below manipulate valid Go version strings
+		// for the current needs of the tweet templates.
+		"short": func(v string) string { return strings.TrimPrefix(v, "go") },
+		// major extracts the major prefix of a valid Go version.
+		// For example, major("go1.18.4") == "1.18".
+		"major": func(v string) (string, error) {
+			x, ok := version.Go1PointX(v)
+			if !ok {
+				return "", fmt.Errorf("internal error: version.Go1PointX(%q) is not ok", v)
+			}
+			return fmt.Sprintf("1.%d", x), nil
+		},
+		// build extracts the pre-release build number of a valid Go version.
+		// For example, build("go1.19beta2") == "2".
+		"build": func(v string) (string, error) {
+			if i := strings.Index(v, "beta"); i != -1 {
+				return v[i+len("beta"):], nil
+			} else if i := strings.Index(v, "rc"); i != -1 {
+				return v[i+len("rc"):], nil
+			}
+			return "", fmt.Errorf("internal error: unhandled pre-release Go version %q", v)
+		},
 	}).Parse(tweetTextTmpl)
 	if err != nil {
 		return "", err
 	}
 
-	// Pick a template name and populate template data
-	// for this type of release.
-	var (
-		name string
-		data interface{}
-	)
+	// Select the appropriate template name.
+	var name string
 	switch r.Kind {
 	case KindBeta:
-		maj, beta, ok := strings.Cut(r.Version, "beta")
-		if !ok {
-			return "", fmt.Errorf("no 'beta' substring in beta version %q", r.Version)
-		}
-		name, data = "beta", struct {
-			Maj, Beta string
-			releaseTweet
-		}{
-			Maj:          maj[len("go"):],
-			Beta:         beta,
-			releaseTweet: r,
-		}
+		name = "beta"
 	case KindRC:
-		maj, rc, ok := strings.Cut(r.Version, "rc")
-		if !ok {
-			return "", fmt.Errorf("no 'rc' substring in RC version %q", r.Version)
-		}
-		name, data = "rc", struct {
-			Maj, RC string
-			releaseTweet
-		}{
-			Maj:          maj[len("go"):],
-			RC:           rc,
-			releaseTweet: r,
-		}
+		name = "rc"
 	case KindMajor:
-		if !strings.HasSuffix(r.Version, ".0") {
-			return "", fmt.Errorf("no '.0' suffix in major version %q", r.Version)
-		}
-		name, data = "major", struct {
-			Maj                 string
-			CapitalSpaceVersion string // "Go 1.5.0"
-			releaseTweet
-		}{
-			Maj:                 r.Version[len("go") : len(r.Version)-len(".0")],
-			CapitalSpaceVersion: strings.Replace(r.Version, "go", "Go ", 1),
-			releaseTweet:        r,
-		}
+		name = "major"
 	case KindCurrentMinor, KindPrevMinor:
-		name, data = "minor", struct {
-			Curr, Prev string
-			releaseTweet
-		}{
-			Curr:         r.Version[len("go"):],
-			Prev:         strings.TrimPrefix(r.SecondaryVersion, "go"),
-			releaseTweet: r,
-		}
+		name = "minor"
 	default:
 		return "", fmt.Errorf("unknown release kind: %v", r.Kind)
 	}
@@ -214,14 +194,14 @@ func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, name, data); err != nil {
+	if err := t.ExecuteTemplate(&buf, name, r); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
 }
 
 const tweetTextTmpl = `{{define "minor" -}}
-{{emoji "release"}} Go {{.Curr}} {{with .Prev}}and {{.}} are{{else}}is{{end}} released!
+{{emoji "release"}} Go {{.Version|short}} {{with .SecondaryVersion}}and {{.|short}} are{{else}}is{{end}} released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
@@ -233,7 +213,7 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 
 {{define "beta" -}}
-{{emoji "beta-release"}} Go {{.Maj}} Beta {{.Beta}} is released!
+{{emoji "beta-release"}} Go {{.Version|major}} Beta {{.Version|build}} is released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
@@ -247,7 +227,7 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 
 {{define "rc" -}}
-{{emoji "rc-release"}} Go {{.Maj}} Release Candidate {{.RC}} is released!
+{{emoji "rc-release"}} Go {{.Version|major}} Release Candidate {{.Version|build}} is released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
@@ -261,11 +241,11 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 
 {{define "major" -}}
-{{emoji "release"}} {{.CapitalSpaceVersion}} is released!
+{{emoji "release"}} Go {{.Version|short}} is released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
-{{emoji "notes"}} Release notes: https://go.dev/doc/go{{.Maj}}
+{{emoji "notes"}} Release notes: https://go.dev/doc/go{{.Version|major}}
 
 {{emoji "download"}} Download: https://go.dev/dl/#{{.Version}}
 
