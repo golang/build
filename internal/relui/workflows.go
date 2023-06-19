@@ -362,7 +362,7 @@ func addCommTasks(
 	// Announce that a new Go release has been published.
 	sentMail := wf.Task4(wd, "mail-announcement", comm.AnnounceRelease, wf.Const(kind), published, securityFixes, coordinators, wf.After(okayToAnnounceAndTweet))
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
-	tweetURL := wf.Task3(wd, "post-tweet", comm.TweetRelease, published, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
+	tweetURL := wf.Task4(wd, "post-tweet", comm.TweetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)

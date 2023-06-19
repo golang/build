@@ -20,10 +20,10 @@ import (
 // MailDLCL mails a golang.org/dl CL that adds commands for the
 // specified Go version.
 //
-// The version must use the same format as Go tags. For example:
-//   - "go1.17.2" and "go1.16.9" for a minor Go release
+// The version string must use the same format as Go tags. For example:
+//   - "go1.21rc2" for a pre-release
 //   - "go1.21.0" for a major Go release
-//   - "go1.18beta1" or "go1.18rc1" for a pre-release
+//   - "go1.21.1" for a minor Go release
 //
 // On success, the ID of the change is returned, like "dl~1234".
 func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, major int, kind ReleaseKind, version string, reviewers []string, dryRun bool) (changeID string, _ error) {

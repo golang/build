@@ -163,8 +163,8 @@ func main() {
 			if got, want := changeID, "(dry-run)"; got != want {
 				t.Errorf("unexpected changeID: got = %q, want %q", got, want)
 			}
-			if diff := cmp.Diff(buf.String(), tc.wantLog); diff != "" {
-				t.Errorf("unexpected log:\n%s", diff)
+			if diff := cmp.Diff(tc.wantLog, buf.String()); diff != "" {
+				t.Errorf("log mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

@@ -39,13 +39,13 @@ type releaseAnnouncement struct {
 	// Version is the Go version that has been released.
 	//
 	// The version string must use the same format as Go tags. For example:
-	// 	• "go1.17.2" for a minor Go release
-	// 	• "go1.21.0" for a major Go release
-	// 	• "go1.21beta1" or "go1.21rc1" for a pre-release
+	//   - "go1.21rc2" for a pre-release
+	//   - "go1.21.0" for a major Go release
+	//   - "go1.21.1" for a minor Go release
 	Version string
 	// SecondaryVersion is an older Go version that was also released.
 	// This only applies to minor releases when two releases are made.
-	// For example, "go1.16.10".
+	// For example, "go1.20.9".
 	SecondaryVersion string
 
 	// Security is a list of descriptions, one for each distinct
@@ -407,7 +407,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 	// short and helpers below manipulate valid Go version strings
 	// for the current needs of the announcement templates.
 	"short": func(v string) string { return strings.TrimPrefix(v, "go") },
-	// major extracts the major part of a valid Go version.
+	// major extracts the major prefix of a valid Go version.
 	// For example, major("go1.18.4") == "1.18".
 	"major": func(v string) (string, error) {
 		x, ok := version.Go1PointX(v)

@@ -35,16 +35,19 @@ import (
 
 // releaseTweet describes a tweet that announces a Go release.
 type releaseTweet struct {
+	// Kind is the kind of release being announced.
+	Kind ReleaseKind
+
 	// Version is the Go version that has been released.
 	//
 	// The version string must use the same format as Go tags. For example:
-	// 	• "go1.17.2" for a minor Go release
-	// 	• "go1.18" for a major Go release
-	// 	• "go1.18beta1" or "go1.18rc1" for a pre-release
+	//   - "go1.21rc2" for a pre-release
+	//   - "go1.21.0" for a major Go release
+	//   - "go1.21.1" for a minor Go release
 	Version string
 	// SecondaryVersion is an older Go version that was also released.
 	// This only applies to minor releases when two releases are made.
-	// For example, "go1.16.10".
+	// For example, "go1.20.9".
 	SecondaryVersion string
 
 	// Security is an optional sentence describing security fixes
@@ -52,10 +55,10 @@ type releaseTweet struct {
 	//
 	// The empty string means there are no security fixes to highlight.
 	// Past examples:
-	// 	• "Includes a security fix for the Wasm port (CVE-2021-38297)."
-	// 	• "Includes a security fix for archive/zip (CVE-2021-39293)."
-	// 	• "Includes a security fix for crypto/tls (CVE-2021-34558)."
-	// 	• "Includes security fixes for archive/zip, net, net/http/httputil, and math/big packages."
+	//   - "Includes a security fix for the Wasm port (CVE-2021-38297)."
+	//   - "Includes a security fix for archive/zip (CVE-2021-39293)."
+	//   - "Includes a security fix for crypto/tls (CVE-2021-34558)."
+	//   - "Includes security fixes for archive/zip, net, net/http/httputil, and math/big packages."
 	Security string
 
 	// Announcement is the announcement URL.
@@ -86,12 +89,13 @@ type TweetTasks struct {
 
 // TweetRelease posts a tweet announcing that a Go release has been published.
 // ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, published []Published, security string, announcement string) (tweetURL string, _ error) {
+func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (tweetURL string, _ error) {
 	if len(published) < 1 || len(published) > 2 {
 		return "", fmt.Errorf("got %d published Go releases, TweetRelease supports only 1 or 2 at once", len(published))
 	}
 
 	r := releaseTweet{
+		Kind:         kind,
 		Version:      published[0].Version,
 		Security:     security,
 		Announcement: announcement,
@@ -153,33 +157,47 @@ func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
 		name string
 		data interface{}
 	)
-	if i := strings.Index(r.Version, "beta"); i != -1 { // A beta release.
+	switch r.Kind {
+	case KindBeta:
+		maj, beta, ok := strings.Cut(r.Version, "beta")
+		if !ok {
+			return "", fmt.Errorf("no 'beta' substring in beta version %q", r.Version)
+		}
 		name, data = "beta", struct {
 			Maj, Beta string
 			releaseTweet
 		}{
-			Maj:          r.Version[len("go"):i],
-			Beta:         r.Version[i+len("beta"):],
+			Maj:          maj[len("go"):],
+			Beta:         beta,
 			releaseTweet: r,
 		}
-	} else if i := strings.Index(r.Version, "rc"); i != -1 { // Release Candidate.
+	case KindRC:
+		maj, rc, ok := strings.Cut(r.Version, "rc")
+		if !ok {
+			return "", fmt.Errorf("no 'rc' substring in RC version %q", r.Version)
+		}
 		name, data = "rc", struct {
 			Maj, RC string
 			releaseTweet
 		}{
-			Maj:          r.Version[len("go"):i],
-			RC:           r.Version[i+len("rc"):],
+			Maj:          maj[len("go"):],
+			RC:           rc,
 			releaseTweet: r,
 		}
-	} else if strings.Count(r.Version, ".") == 1 { // Major release like "go1.X".
+	case KindMajor:
+		if !strings.HasSuffix(r.Version, ".0") {
+			return "", fmt.Errorf("no '.0' suffix in major version %q", r.Version)
+		}
 		name, data = "major", struct {
-			Maj string
+			Maj                 string
+			CapitalSpaceVersion string // "Go 1.5.0"
 			releaseTweet
 		}{
-			Maj:          r.Version[len("go"):],
-			releaseTweet: r,
+			Maj:                 r.Version[len("go") : len(r.Version)-len(".0")],
+			CapitalSpaceVersion: strings.Replace(r.Version, "go", "Go ", 1),
+			releaseTweet:        r,
 		}
-	} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
+	case KindCurrentMinor, KindPrevMinor:
 		name, data = "minor", struct {
 			Curr, Prev string
 			releaseTweet
@@ -188,10 +206,9 @@ func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
 			Prev:         strings.TrimPrefix(r.SecondaryVersion, "go"),
 			releaseTweet: r,
 		}
-	} else {
-		return "", fmt.Errorf("unknown version format: %q", r.Version)
+	default:
+		return "", fmt.Errorf("unknown release kind: %v", r.Kind)
 	}
-
 	if r.SecondaryVersion != "" && name != "minor" {
 		return "", fmt.Errorf("tweet template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
 	}
@@ -244,11 +261,11 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 
 {{define "major" -}}
-{{emoji "release"}} Go {{.Maj}} is released!
+{{emoji "release"}} {{.CapitalSpaceVersion}} is released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
-{{emoji "notes"}} Release notes: https://go.dev/doc/{{.Version}}
+{{emoji "notes"}} Release notes: https://go.dev/doc/go{{.Maj}}
 
 {{emoji "download"}} Download: https://go.dev/dl/#{{.Version}}
 

@@ -18,12 +18,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/internal/workflow"
 )
 
 func TestTweetRelease(t *testing.T) {
 	tests := [...]struct {
 		name         string
+		kind         ReleaseKind
 		published    []Published
 		security     string
 		announcement string
@@ -32,6 +34,7 @@ func TestTweetRelease(t *testing.T) {
 	}{
 		{
 			name: "minor",
+			kind: KindCurrentMinor,
 			published: []Published{
 				{Version: "go1.17.1", Files: []WebsiteFile{{
 					OS: "linux", Arch: "arm64",
@@ -65,6 +68,7 @@ go version go1.17.1 linux/arm64` + "\n",
 		},
 		{
 			name: "minor-solo",
+			kind: KindCurrentMinor,
 			published: []Published{{Version: "go1.11.1", Files: []WebsiteFile{{
 				OS: "darwin", Arch: "amd64",
 				Filename: "go1.11.1.darwin-amd64.tar.gz", Size: 124181190, Kind: "archive"}},
@@ -92,6 +96,7 @@ go version go1.11.1 darwin/amd64` + "\n",
 		},
 		{
 			name: "beta",
+			kind: KindBeta,
 			published: []Published{{Version: "go1.17beta1", Files: []WebsiteFile{{
 				OS: "darwin", Arch: "amd64",
 				Filename: "go1.17beta1.darwin-amd64.tar.gz", Size: 135610703, Kind: "archive"}},
@@ -121,6 +126,7 @@ go version go1.17beta1 darwin/amd64` + "\n",
 		},
 		{
 			name: "rc",
+			kind: KindRC,
 			published: []Published{{Version: "go1.17rc2", Files: []WebsiteFile{{
 				OS: "windows", Arch: "arm64",
 				Filename: "go1.17rc2.windows-arm64.zip", Size: 116660997, Kind: "archive"}},
@@ -150,32 +156,33 @@ go version go1.17rc2 windows/arm64` + "\n",
 		},
 		{
 			name: "major",
-			published: []Published{{Version: "go1.17", Files: []WebsiteFile{{
+			kind: KindMajor,
+			published: []Published{{Version: "go1.21.0", Files: []WebsiteFile{{
 				OS: "freebsd", Arch: "amd64",
-				Filename: "go1.17.freebsd-amd64.tar.gz", Size: 133579378, Kind: "archive"}},
+				Filename: "go1.21.0.freebsd-amd64.tar.gz", Size: 133579378, Kind: "archive"}},
 			}},
 			security:   "Includes a super duper security fix (CVE-123).",
 			randomSeed: 123,
 			wantLog: `tweet text:
-🥳 Go 1.17 is released!
+🥳 Go 1.21.0 is released!
 
 🔐 Security: Includes a super duper security fix (CVE-123).
 
-📝 Release notes: https://go.dev/doc/go1.17
+📝 Release notes: https://go.dev/doc/go1.21
 
-📦 Download: https://go.dev/dl/#go1.17
+📦 Download: https://go.dev/dl/#go1.21.0
 
 #golang
 tweet image:
-$ go install golang.org/dl/go1.17@latest
-$ go1.17 download
+$ go install golang.org/dl/go1.21.0@latest
+$ go1.21.0 download
 Downloaded   0.0% (        0 / 133579378 bytes) ...
 Downloaded  50.0% ( 66789689 / 133579378 bytes) ...
 Downloaded 100.0% (133579378 / 133579378 bytes)
-Unpacking go1.17.freebsd-amd64.tar.gz ...
-Success. You may now run 'go1.17'
-$ go1.17 version
-go version go1.17 freebsd/amd64` + "\n",
+Unpacking go1.21.0.freebsd-amd64.tar.gz ...
+Success. You may now run 'go1.21.0'
+$ go1.21.0 version
+go version go1.21.0 freebsd/amd64` + "\n",
 		},
 	}
 	for _, tc := range tests {
@@ -184,15 +191,15 @@ go version go1.17 freebsd/amd64` + "\n",
 			// doesn't actually try to tweet, but capture its log.
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			tweetURL, err := (TweetTasks{RandomSeed: tc.randomSeed}).TweetRelease(ctx, tc.published, tc.security, tc.announcement)
+			tweetURL, err := (TweetTasks{RandomSeed: tc.randomSeed}).TweetRelease(ctx, tc.kind, tc.published, tc.security, tc.announcement)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}
 			if got, want := tweetURL, "(dry-run)"; got != want {
 				t.Errorf("unexpected tweetURL: got = %q, want %q", got, want)
 			}
-			if got, want := buf.String(), tc.wantLog; got != want {
-				t.Errorf("unexpected log:\n got: %q\nwant: %q", got, want)
+			if diff := cmp.Diff(tc.wantLog, buf.String()); diff != "" {
+				t.Errorf("log mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
