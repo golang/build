@@ -255,7 +255,12 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
+		"Targets to skip testing (or 'all') (optional)": []string{
+			// allScript is intentionally hardcoded to fail on GOOS=js
+			// and we confirm here that it's possible to skip that.
+			"js-wasm-node18", // Builder used on 1.21 and newer.
+			"js-wasm",        // Builder used on 1.20 and older.
+		},
 		"Ref from the private repository to build from (optional)": "",
 	})
 	if err != nil {
@@ -557,13 +562,13 @@ fi
 `
 
 // allScript pretends to be all.bash. It's hardcoded
-// to fail on js-wasm and pass on all other builders.
+// to fail on GOOS=js and pass on all other builders.
 const allScript = `#!/bin/bash -eu
 
 echo "I'm a test! :D"
 
-if [[ $GO_BUILDER_NAME = "js-wasm" ]]; then
-  echo "Oh no, WASM is broken"
+if [[ ${GOOS:-} = "js" ]]; then
+  echo "Oh no, JavaScript is broken."
   exit 1
 fi
 
