@@ -562,6 +562,7 @@ func (b *BuildletStep) TestTarget(ctx *workflow.TaskContext, binaryArchive io.Re
 		}
 	}
 	ctx.Printf("Building (all.bash to ensure tests pass).")
+	ctx.SetWatchdogScale(b.BuildConfig.GoTestTimeoutScale())
 	return b.exec(ctx, goDir+"/"+b.BuildConfig.AllScript(), b.BuildConfig.AllScriptArgs(), buildlet.ExecOpts{
 		ExtraEnv: b.makeEnv(),
 	})
@@ -595,6 +596,7 @@ func (b *BuildletStep) RunTryBot(ctx *workflow.TaskContext, sourceArchive io.Rea
 	}
 
 	ctx.Printf("Testing (all.bash).")
+	ctx.SetWatchdogScale(b.BuildConfig.GoTestTimeoutScale())
 	err := b.exec(ctx, goDir+"/"+b.BuildConfig.AllScript(), b.BuildConfig.AllScriptArgs(), buildlet.ExecOpts{})
 	if err != nil {
 		ctx.Printf("testing failed: %v", err)

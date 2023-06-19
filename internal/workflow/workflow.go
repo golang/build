@@ -448,6 +448,7 @@ type TaskContext struct {
 	WorkflowID uuid.UUID
 
 	watchdogTimer *time.Timer
+	watchdogScale int
 }
 
 func (c *TaskContext) Printf(format string, v ...interface{}) {
@@ -463,7 +464,17 @@ func (c *TaskContext) DisableRetries() {
 }
 
 func (c *TaskContext) ResetWatchdog() {
-	c.resetWatchdog(WatchdogDelay)
+	c.resetWatchdog(WatchdogDelay * time.Duration(c.watchdogScale))
+}
+
+// SetWatchdogScale sets the watchdog delay scale factor to max(v, 1),
+// and resets the watchdog with the new scale.
+func (c *TaskContext) SetWatchdogScale(v int) {
+	if v < 1 {
+		v = 1
+	}
+	c.watchdogScale = v
+	c.ResetWatchdog()
 }
 
 func (c *TaskContext) DisableWatchdog() {
@@ -836,7 +847,7 @@ func (w *Workflow) taskArgs(def *taskDefinition) ([]reflect.Value, bool) {
 // Maximum number of retries. This could be a workflow property.
 var MaxRetries = 3
 
-var WatchdogDelay = 10 * time.Minute
+var WatchdogDelay = 11 * time.Minute // A little over go test -timeout's default value of 10 minutes.
 
 func runTask(ctx context.Context, workflowID uuid.UUID, listener Listener, state taskState, args []reflect.Value) taskState {
 	ctx, cancel := context.WithCancel(ctx)
@@ -848,6 +859,7 @@ func runTask(ctx context.Context, workflowID uuid.UUID, listener Listener, state
 		TaskName:      state.def.name,
 		WorkflowID:    workflowID,
 		watchdogTimer: time.AfterFunc(WatchdogDelay, cancel),
+		watchdogScale: 1,
 	}
 
 	in := append([]reflect.Value{reflect.ValueOf(tctx)}, args...)
