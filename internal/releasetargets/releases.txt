@@ -105,6 +105,7 @@ Targets for release 1.21
 aix-ppc64       aix        ppc64      (cross-compiled, no tests)
 
 darwin-amd64    darwin     amd64      darwin-amd64-13
+	Long tests on darwin-amd64-longtest
 	Running on reverse builder: AWS macOS Ventura (13) VM under QEMU
 
 darwin-arm64    darwin     arm64      darwin-arm64-12

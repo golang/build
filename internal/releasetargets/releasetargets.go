@@ -164,6 +164,7 @@ var allReleases = map[int]ReleaseTargets{
 	21: {
 		"darwin-amd64": &Target{
 			Builder:         "darwin-amd64-13",
+			LongTestBuilder: "darwin-amd64-longtest",
 			MinMacOSVersion: "10.15", // go.dev/issue/57125
 		},
 		"linux-s390x":   nil,
