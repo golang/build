@@ -74,6 +74,7 @@ linux-amd64     linux      amd64      linux-amd64-bullseye
 	Running on GCP
 
 linux-arm64     linux      arm64      linux-arm64
+	Long tests on linux-arm64-longtest
 	Running on GCP
 
 linux-armv6l    linux      arm        linux-arm-aws
@@ -134,6 +135,7 @@ linux-amd64     linux      amd64      linux-amd64-bullseye
 	Running on GCP
 
 linux-arm64     linux      arm64      linux-arm64
+	Long tests on linux-arm64-longtest
 	Running on GCP
 
 linux-armv6l    linux      arm        linux-arm-aws

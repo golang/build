@@ -145,6 +145,10 @@ var allReleases = map[int]ReleaseTargets{
 			Builder:         "linux-386-bullseye",
 			LongTestBuilder: "linux-386-longtest",
 		},
+		"linux-arm64": &Target{
+			Builder:         "linux-arm64",
+			LongTestBuilder: "linux-arm64-longtest",
+		},
 		"linux-amd64": &Target{
 			Builder:         "linux-amd64-bullseye",
 			LongTestBuilder: "linux-amd64-longtest",
