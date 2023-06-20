@@ -22,6 +22,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -447,10 +448,10 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 func TestAdvisoryTrybotFail(t *testing.T) {
 	deps := newReleaseTestDeps(t, "go1.17", "go1.18rc1")
 	defaultApprove := deps.buildTasks.ApproveAction
-	approvedTrybots := false
+	var trybotApprovals atomic.Int32
 	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
 		if strings.Contains(ctx.TaskName, "Run advisory TryBot") {
-			approvedTrybots = true
+			trybotApprovals.Add(1)
 			return nil
 		}
 		return defaultApprove(ctx)
@@ -471,7 +472,7 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	if _, err := w.Run(deps.ctx, &verboseListener{t: t}); err != nil {
 		t.Fatal(err)
 	}
-	if !approvedTrybots {
+	if trybotApprovals.Load() == 0 {
 		t.Errorf("advisory trybots didn't need approval")
 	}
 }
