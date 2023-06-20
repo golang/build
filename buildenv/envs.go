@@ -294,6 +294,12 @@ var Production = &Environment{
 	GomoteTransferBucket: "gomote-transfer",
 }
 
+var LUCIProduction = &Environment{
+	ProjectName:   "golang-ci-luci",
+	ProjectNumber: 257595674695,
+	IsProd:        true,
+}
+
 var Development = &Environment{
 	GoProjectName: "golang-org",
 	IsProd:        false,
