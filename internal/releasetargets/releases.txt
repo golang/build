@@ -133,8 +133,6 @@ linux-amd64     linux      amd64      linux-amd64-bullseye
 	Long tests on linux-amd64-longtest
 	Running on GCP
 
-linux-arm       linux      arm        (cross-compiled, no tests)
-
 linux-arm64     linux      arm64      linux-arm64
 	Running on GCP
 

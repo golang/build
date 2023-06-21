@@ -5,6 +5,8 @@
 package gcsfs
 
 import (
+	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -72,6 +74,9 @@ func (dir dirFS) Create(name string) (WriterFile, error) {
 		return nil, err
 	}
 	finalize := func() error {
+		if _, err := os.Stat(fullName); !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("file exists and cannot be overwritten: %v", name)
+		}
 		return os.Rename(temp.Name(), fullName)
 	}
 	return &atomicWriteFile{temp, finalize}, nil

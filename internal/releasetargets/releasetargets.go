@@ -38,6 +38,9 @@ type OSArch struct {
 }
 
 func (o OSArch) String() string {
+	if o.OS == "linux" && o.Arch == "arm" {
+		return "linux-armv6l"
+	}
 	return o.OS + "-" + o.Arch
 }
 
