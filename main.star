@@ -150,9 +150,14 @@ RUN_MODS = [
 # TODO(mknyszek): This likely needs some form of classification.
 PROJECTS = [
     "go",
+    "arch",
     "build",
+    "crypto",
     "image",
     "mod",
+    "net",
+    "sys",
+    "time",
     "tools",
 ]
 
