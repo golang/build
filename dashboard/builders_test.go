@@ -6,7 +6,6 @@ package dashboard
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -16,8 +15,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/build/internal/envutil"
 )
 
 func TestOSARCHAccessors(t *testing.T) {
@@ -1406,14 +1403,7 @@ func TestWindowsCCSetup(t *testing.T) {
 // listPorts lists supported Go ports
 // found by running go tool dist list.
 func listPorts() ([]string, error) {
-	var env struct{ GOROOT string }
-	if out, err := exec.Command("go", "env", "-json", "GOROOT").Output(); err != nil {
-		return nil, err
-	} else if err := json.Unmarshal(out, &env); err != nil {
-		return nil, err
-	}
-	cmd := exec.Command("go", "run", "cmd/dist", "list")
-	envutil.SetEnv(cmd, "GOROOT="+env.GOROOT)
+	cmd := exec.Command("go", "tool", "dist", "list")
 	out, err := cmd.Output()
 	if err != nil {
 		if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
