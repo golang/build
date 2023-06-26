@@ -7,6 +7,7 @@ package task
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"image"
@@ -16,6 +17,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -288,38 +290,53 @@ func TestPostTweet(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("upload.twitter.com/1.1/media/upload.json", func(w http.ResponseWriter, req *http.Request) {
 		if got, want := req.Method, http.MethodPost; got != want {
-			t.Errorf("media/upload: got method %s, want %s", got, want)
+			t.Errorf("/1.1/media/upload.json: got method %s, want %s", got, want)
 			return
 		}
 		if got, want := req.FormValue("media_category"), "tweet_image"; got != want {
-			t.Errorf("media/upload: got media_category=%q, want %q", got, want)
+			t.Errorf("/1.1/media/upload.json: got media_category=%q, want %q", got, want)
 		}
 		f, hdr, err := req.FormFile("media")
 		if err != nil {
-			t.Errorf("media/upload: error getting image file: %v", err)
+			t.Errorf("/1.1/media/upload.json: error getting image file: %v", err)
 			return
 		}
 		if got, want := hdr.Filename, "image.png"; got != want {
-			t.Errorf("media/upload: got file name=%q, want %q", got, want)
+			t.Errorf("/1.1/media/upload.json: got file name=%q, want %q", got, want)
 		}
 		if got, want := mustRead(f), "image-png-bytes"; got != want {
-			t.Errorf("media/upload: got file content=%q, want %q", got, want)
+			t.Errorf("/1.1/media/upload.json: got file content=%q, want %q", got, want)
 			return
 		}
 		mustWrite(w, `{"media_id_string": "media-123"}`)
 	})
-	mux.HandleFunc("api.twitter.com/1.1/statuses/update.json", func(w http.ResponseWriter, req *http.Request) {
+	mux.HandleFunc("api.twitter.com/2/tweets", func(w http.ResponseWriter, req *http.Request) {
 		if got, want := req.Method, http.MethodPost; got != want {
-			t.Errorf("statuses/update: got method %s, want %s", got, want)
+			t.Errorf("/2/tweets: got method %s, want %s", got, want)
 			return
 		}
-		if got, want := req.FormValue("status"), "tweet-text"; got != want {
-			t.Errorf("statuses/update: got status=%q, want %q", got, want)
+		if got, want := req.Header.Get("Content-Type"), "application/json"; got != want {
+			t.Errorf("/2/tweets: got Content-Type=%q, want %q", got, want)
+			return
 		}
-		if got, want := req.FormValue("media_ids"), "media-123"; got != want {
-			t.Errorf("statuses/update: got media_ids=%q, want %q", got, want)
+		var v struct {
+			Text  string `json:"text"`
+			Media struct {
+				MediaIDs []string `json:"media_ids"`
+			} `json:"media"`
 		}
-		mustWrite(w, `{"id_str": "tweet-123", "user": {"screen_name": "golang"}}`)
+		if err := json.NewDecoder(req.Body).Decode(&v); err != nil {
+			t.Errorf("/2/tweets: decode JSON error: %v", err)
+			return
+		}
+		if got, want := v.Text, "tweet-text"; got != want {
+			t.Errorf("/2/tweets: got status=%q, want %q", got, want)
+		}
+		if got, want := v.Media.MediaIDs, []string{"media-123"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("/2/tweets: got media_ids=%q, want %q", got, want)
+		}
+		w.WriteHeader(http.StatusCreated)
+		mustWrite(w, `{"data": {"id": "tweet-123"}}`)
 	})
 	cl := realTwitterClient{twitterAPI: &http.Client{Transport: localRoundTripper{mux}}}
 
@@ -327,7 +344,7 @@ func TestPostTweet(t *testing.T) {
 	if err != nil {
 		t.Fatal("PostTweet:", err)
 	}
-	if got, want := tweetURL, "https://twitter.com/golang/status/tweet-123"; got != want {
+	if got, want := tweetURL, "https://twitter.com/username/status/tweet-123"; got != want {
 		t.Errorf("got tweetURL=%q, want %q", got, want)
 	}
 }

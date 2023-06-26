@@ -18,7 +18,6 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"strings"
 	"text/template"
 	"time"
@@ -518,7 +517,7 @@ func (c realTwitterClient) PostTweet(text string, imagePNG []byte) (tweetURL str
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return "", fmt.Errorf("POST media/upload: non-200 OK status code: %v body: %q", resp.Status, body)
+		return "", fmt.Errorf("POST /1.1/media/upload.json: non-200 OK status code: %v body: %q", resp.Status, body)
 	}
 	var media struct {
 		ID string `json:"media_id_string"`
@@ -527,34 +526,43 @@ func (c realTwitterClient) PostTweet(text string, imagePNG []byte) (tweetURL str
 		return "", err
 	}
 
-	// Make a Twitter API call to update status with uploaded image.
-	// See https://developer.twitter.com/en/docs/twitter-api/v1/tweets/post-and-engage/api-reference/post-statuses-update.
-	resp, err = c.twitterAPI.PostForm("https://api.twitter.com/1.1/statuses/update.json", url.Values{
-		"status":    []string{text},
-		"media_ids": []string{media.ID},
-	})
+	// Make a Twitter API call to post a tweet with the uploaded image.
+	// See https://developer.twitter.com/en/docs/twitter-api/tweets/manage-tweets/api-reference/post-tweets.
+	var tweetReq struct {
+		Text  string `json:"text"`
+		Media struct {
+			MediaIDs []string `json:"media_ids"`
+		} `json:"media"`
+	}
+	tweetReq.Text, tweetReq.Media.MediaIDs = text, []string{media.ID}
+	buf.Reset()
+	if err := json.NewEncoder(&buf).Encode(tweetReq); err != nil {
+		return "", err
+	}
+	resp, err = c.twitterAPI.Post("https://api.twitter.com/2/tweets", "application/json", &buf)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 		if isTweetTooLong(resp, body) {
 			// A friendlier error for a common error type.
 			return "", ErrTweetTooLong
 		}
-		return "", fmt.Errorf("POST statuses/update: non-200 OK status code: %v body: %q", resp.Status, body)
+		return "", fmt.Errorf("POST /2/tweets: non-201 Created status code: %v body: %q", resp.Status, body)
 	}
-	var tweet struct {
-		ID   string `json:"id_str"`
-		User struct {
-			ScreenName string `json:"screen_name"`
+	var tweetResp struct {
+		Data struct {
+			ID string
 		}
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&tweet); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&tweetResp); err != nil {
 		return "", err
 	}
-	return "https://twitter.com/" + tweet.User.ScreenName + "/status/" + tweet.ID, nil
+	// Use a generic "username" in the URL since finding it needs another API call.
+	// As long as the URL has this format, it will redirect to the canonical username.
+	return "https://twitter.com/username/status/" + tweetResp.Data.ID, nil
 }
 
 // ErrTweetTooLong is the error when a tweet is too long.
