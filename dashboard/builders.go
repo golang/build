@@ -1886,7 +1886,6 @@ func init() {
 		env: []string{
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
-		KnownIssues: []int{60787},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-bullseye",
