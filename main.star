@@ -359,11 +359,22 @@ def _define_go_ci():
 
             # Create the gitiles_poller last because we need the full set of builders to
             # trigger at the point of definition.
+            #
+            # N.B. A gitiles poller is only necessary for the subrepo itself.
+            # Builds against go on different branches will be triggered by the
+            # corresponding main Go repo builders (e.g. go1.20-linux-amd64 will
+            # trigger x_build-go1.20-linux-amd64 against the same go1.20 branch commit).
+            # This is controlled by the "builders_to_trigger" property on those
+            # builders.
+            if project == "go":
+                poller_branch = go_branch
+            else:
+                poller_branch = "master"
             luci.gitiles_poller(
                 name = "%s-%s-trigger" % (project, go_branch_short),
                 bucket = "ci",
                 repo = "https://go.googlesource.com/%s" % project,
-                refs = ["refs/heads/" + go_branch],
+                refs = ["refs/heads/" + poller_branch],
                 triggers = postsubmit_builders.keys(),
             )
 
