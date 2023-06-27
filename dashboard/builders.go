@@ -2861,6 +2861,10 @@ func init() {
 		numTryTestHelpers: 1,
 	})
 	addBuilder(BuildConfig{
+		Name:     "linux-arm64-race",
+		HostType: "host-linux-arm64-bullseye",
+	})
+	addBuilder(BuildConfig{
 		Name:     "linux-arm64-boringcrypto",
 		HostType: "host-linux-arm64-bullseye",
 		env: []string{
