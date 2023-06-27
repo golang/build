@@ -2672,7 +2672,11 @@ func init() {
 			return b
 		},
 		env: []string{
-			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
+			// We use a timeout scale value of 5 for most longtest builders
+			// to give them lots of time. This particular builder is not as fast
+			// as the rest, so we give it 2x headroom for a scale value of 10.
+			// See go.dev/issue/60919.
+			"GO_TEST_TIMEOUT_SCALE=10",
 		},
 	})
 	addBuilder(BuildConfig{
@@ -2696,7 +2700,7 @@ func init() {
 			// Increase the timeout scale for this builder: it was observed to be
 			// timing out frequently in
 			// https://go.dev/issue/55311#issuecomment-1571986012.
-			///
+			//
 			// TODO(bcmills): The darwin-amd64-longtest builder was running extremely
 			// slowly because it was hitting swap. Race-enabled builds are also
 			// memory-hungry — is it possible that the -race builder is also swapping?
