@@ -87,6 +87,6 @@ RUN echo no | /android/sdk/tools/bin/avdmanager create avd --force --name androi
 RUN mkdir /android/openal-headers
 RUN cp -a /usr/include/AL /android/openal-headers/
 
-COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/* /usr/local/bin/
 
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]

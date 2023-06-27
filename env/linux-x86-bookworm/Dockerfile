@@ -60,6 +60,6 @@ RUN apt-get update && apt-get install -y \
 	swig \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/* /usr/local/bin/
 
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]
