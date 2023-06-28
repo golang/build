@@ -587,11 +587,11 @@ var Hosts = map[string]*HostConfig{
 		SSHUsername: "gopher",
 	},
 	"host-windows-amd64-2016": {
-		VMImage:     "windows-amd64-server-2016-v8",
+		VMImage:     "windows-amd64-server-2016-v9",
 		SSHUsername: "gopher",
 	},
 	"host-windows-amd64-2016-big": {
-		VMImage:     "windows-amd64-server-2016-v8",
+		VMImage:     "windows-amd64-server-2016-v9",
 		machineType: "e2-standard-16",
 		SSHUsername: "gopher",
 	},
