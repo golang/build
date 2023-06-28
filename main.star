@@ -89,7 +89,10 @@ luci.logdog(gs_bucket = "logdog-golang-archive")
 
 # Realms with ACLs for corresponding Swarming pools.
 luci.realm(name = "pools/ci")
+luci.realm(name = "pools/ci-workers")
 luci.realm(name = "pools/try")
+luci.realm(name = "pools/try-workers")
+luci.realm(name = "pools/shared-workers")
 luci.realm(name = "pools/prod")
 
 # This is the cipd package name and version where the recipe bundler will put
