@@ -80,7 +80,7 @@ func init() {
 	x("net", desc("additional networking packages"))
 	x("oauth2")
 	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
-	x("pkgsite", desc("home of the pkg.go.dev website"), noBuildAndNoDash, enableCSR("go-discovery"))
+	x("pkgsite", desc("home of the pkg.go.dev website"), enableCSR("go-discovery"))
 	x("pkgsite-metrics", desc("code for serving pkg.go.dev/metrics"), enableCSR("go-ecosystem"))
 	x("playground", noDash, enableCSR("golang-org"))
 	x("review", desc("a tool for working with Gerrit code reviews"))
@@ -124,8 +124,6 @@ type modifyRepo func(*Repo)
 // noDash is an option to the x func that marks the repo as hidden on
 // the https://build.golang.org/ dashboard.
 func noDash(r *Repo) { r.showOnDashboard = false }
-
-func noBuildAndNoDash(r *Repo) { r.CoordinatorCanBuild, r.showOnDashboard = false, false }
 
 func coordinatorCanBuild(r *Repo) { r.CoordinatorCanBuild = true }
 
