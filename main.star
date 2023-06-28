@@ -162,6 +162,7 @@ PROJECTS = [
     "net",
     "oauth2",
     "perf",
+    "pkgsite",
     "pkgsite-metrics",
     "review",
     "sync",
