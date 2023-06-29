@@ -42,6 +42,7 @@ RUN apt-get update && apt-get install -y \
 	netbase \
 	openssh-server \
 	make \
+	sudo \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Otherwise we get "Missing privilege separation directory: /run/sshd" ...

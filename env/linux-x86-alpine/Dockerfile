@@ -28,7 +28,8 @@ RUN apk add --no-cache \
 	make \
 	openssh \
 	procps \
-	strace
+	strace \
+	sudo
 
 RUN ssh-keygen -A
 RUN bash -c "(echo ChallengeResponseAuthentication no; echo PasswordAuthentication no; echo PermitRootLogin yes) > /etc/ssh/sshd_config"

@@ -39,6 +39,7 @@ RUN apt-get update && apt-get install -y \
 	openssh-server \
 	iptables \
 	make \
+	sudo \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \

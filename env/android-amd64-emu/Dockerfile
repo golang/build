@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y \
 	openjdk-8-jdk \
 	python \
 	lib32z1 \
+	sudo \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \

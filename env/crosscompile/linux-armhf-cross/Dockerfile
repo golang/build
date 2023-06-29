@@ -30,6 +30,7 @@ RUN dpkg --add-architecture armhf \
 	procps \
 	lsof \
 	psmisc \
+	sudo \
 	--no-install-recommends \
 	&& rm -rf /var/lib/apt/lists/*
 

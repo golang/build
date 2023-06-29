@@ -57,6 +57,7 @@ RUN apt-get update && apt-get install -y \
 	psmisc \
 	strace \
 	subversion \
+	sudo \
 	swig \
 	&& rm -rf /var/lib/apt/lists/*
 

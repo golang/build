@@ -17,6 +17,7 @@ RUN yum -y update && yum -y install \
     which \
     openssh-server \
     make \
+    sudo \
     && true
 
 RUN ssh-keygen -A
