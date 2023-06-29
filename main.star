@@ -200,7 +200,7 @@ GO_BRANCHES = {
 HOSTS = {
     "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
     "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
-    "darwin-amd64": {"os":"Mac", "cpu": "x86-64"},
+    "darwin-amd64": {"os": "Mac", "cpu": "x86-64"},
 }
 
 # Return the host type for the given builder type.
@@ -356,10 +356,11 @@ def _define_go_ci():
                         builder = "try/tricium",
                         location_filters = [
                             cq.location_filter(
-                                gerrit_host_regexp = "go-review.googlesource.com",
+                                gerrit_host_regexp = "%s-review.googlesource.com" % host,
                                 gerrit_project_regexp = filter_project,
                                 path_regexp = ".+",
                             )
+                            for host in ["go", "go-internal"]
                             for filter_project in PROJECTS
                         ],
                         mode_allowlist = [cq.MODE_ANALYZER_RUN],
@@ -487,6 +488,49 @@ def _define_go_ci():
                     entries = make_console_view_entries(postsubmit_builders),
                 )
 
+def _define_go_internal_ci():
+    for go_branch_short, go_branch in GO_BRANCHES.items():
+        # TODO(yifany): Simplify cq.location_filter once Tricium to CV
+        # migration (go/luci/tricium) is done.
+        cq_group_name = ("go-internal_%s" % go_branch_short).replace(".", "-")
+        luci.cq_group(
+            name = cq_group_name,
+            watch = cq.refset(
+                repo = "https://go-internal.googlesource.com/go",
+                refs = ["refs/heads/%s" % go_branch],
+            ),
+            allow_submit_with_open_deps = True,
+            verifiers = [
+                luci.cq_tryjob_verifier(
+                    builder = "try/tricium",
+                    location_filters = [
+                        cq.location_filter(
+                            gerrit_host_regexp = "%s-review.googlesource.com" % host,
+                            gerrit_project_regexp = filter_project,
+                            path_regexp = ".+",
+                        )
+                        for host in ["go", "go-internal"]
+                        for filter_project in PROJECTS
+                    ],
+                    mode_allowlist = [cq.MODE_ANALYZER_RUN],
+                ),
+            ],
+        )
+
+        for builder_type in BUILDER_TYPES:
+            presubmit, _ = enabled("go", go_branch_short, builder_type)
+
+            # Define presubmit builders.
+            name = define_builder("try", "go-internal", go_branch_short, builder_type)
+            luci.cq_tryjob_verifier(
+                builder = name,
+                cq_group = cq_group_name,
+                includable_only = not presubmit,
+            )
+
+            # TODO(yifany): Define postsubmit builders if needed.
+
 _define_go_ci()
+_define_go_internal_ci()
 
 exec("./recipes.star")
