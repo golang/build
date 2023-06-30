@@ -200,8 +200,7 @@ func (w Work) UpdateModule(dir string) error {
 // It returns the main module and other modules separately
 // for convenience to the UpdateModule caller.
 //
-// See https://golang.org/cmd/go/#hdr-The_main_module_and_the_build_list
-// and https://golang.org/ref/mod#glos-build-list.
+// See https://go.dev/ref/mod#go-list-m and https://go.dev/ref/mod#glos-build-list.
 func buildList(dir string) (main module, deps []module) {
 	out := runner{dir}.runOut(goCmd, "list", "-mod=readonly", "-m", "-json", "all")
 	for dec := json.NewDecoder(bytes.NewReader(out)); ; {
