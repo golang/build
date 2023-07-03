@@ -954,6 +954,7 @@ func init() {
 	addPerson("Eldar Rakhimberdin", "ibeono@gmail.com")
 	addPerson("Elen Eisendle", "elen@eisendle.ee")
 	addPerson("Elena Grahovac", "elena@grahovac.me")
+	addPerson("Eli Bendersky", "eliben@golang.org", "@eliben", "52648@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Elias Naur", "mail@eliasnaur.com", "@eliasnaur")
 	addPerson("Elias Naur", "mail@eliasnaur.com", "elias.naur@gmail.com", "@eliasnaur", "7435@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Elliot Morrison-Reed", "elliotmr@gmail.com", "@elliotmr")

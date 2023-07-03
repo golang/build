@@ -37,6 +37,7 @@ var (
 	danderson    = gh("danderson")
 	drchase      = gh("dr2chase")
 	dvyukov      = gh("dvyukov")
+	eliben       = gh("eliben")
 	filippo      = gh("FiloSottile")
 	findleyr     = gh("findleyr")
 	gri          = gh("griesemer")
@@ -266,6 +267,10 @@ var entries = map[string]*Entry{
 	"go/src/cmd/vet": {
 		Primary:   []Owner{matloob},
 		Secondary: []Owner{taking},
+	},
+	"go/src/cmp": {
+		Primary:   []Owner{iant},
+		Secondary: []Owner{eliben},
 	},
 	"go/src/compress/bzip2": {
 		Primary:   []Owner{joetsai},
@@ -516,6 +521,12 @@ var entries = map[string]*Entry{
 	"go/src/log": {
 		Primary: []Owner{r},
 	},
+	"go/src/log/slog": {
+		Primary: []Owner{jba},
+	},
+	"go/src/maps": {
+		Primary: []Owner{iant},
+	},
 	"go/src/math": {
 		Primary: []Owner{gri, rsc},
 	},
@@ -648,6 +659,10 @@ var entries = map[string]*Entry{
 	"go/src/runtime/trace": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{mknyszek, prattmic, dvyukov},
+	},
+	"go/src/slices": {
+		Primary:   []Owner{iant},
+		Secondary: []Owner{eliben},
 	},
 	"go/src/sort": {
 		Primary: []Owner{rsc, gri, iant, bradfitz},
