@@ -273,6 +273,10 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         resultdb_settings = resultdb.settings(
             enable = True,
         ),
+        caches = [
+            # Required for golang.cache_tools_root.
+            swarming.cache("tools"),
+        ],
         experiments = {
             "golang.build_result_sharing": 100,
         },
