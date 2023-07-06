@@ -258,6 +258,11 @@ def define_builder(bucket, project, go_branch_short, builder_type):
             if project != "go"
         ]
 
+    # Named cache for cipd tools root, required for golang.cache_tools_roots.
+    tools_cache = "tools"
+    caches = [swarming.cache(tools_cache)]
+    properties["tools_cache"] = tools_cache
+
     luci.builder(
         name = name,
         bucket = bucket,
@@ -273,10 +278,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         resultdb_settings = resultdb.settings(
             enable = True,
         ),
-        caches = [
-            # Required for golang.cache_tools_root.
-            swarming.cache("tools"),
-        ],
+        caches = caches,
         experiments = {
             "golang.build_result_sharing": 100,
         },
