@@ -180,6 +180,12 @@ PROJECTS = [
     "website",
 ]
 
+# NO_NETWORK_PROJECTS lists go.googlesource.com/<project> projects that
+# have no-network check enabled. TODO(dmitshur): Turn up in all repos.
+NO_NETWORK_PROJECTS = [
+    "build",
+]
+
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
@@ -263,6 +269,10 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     caches = [swarming.cache(tools_cache)]
     properties["tools_cache"] = tools_cache
 
+    no_network_experiment = 0
+    if project in NO_NETWORK_PROJECTS:
+        no_network_experiment = 100
+
     luci.builder(
         name = name,
         bucket = bucket,
@@ -281,6 +291,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         caches = caches,
         experiments = {
             "golang.build_result_sharing": 100,
+            "golang.no_network_in_short_test_mode": no_network_experiment,
         },
     )
     return bucket + "/" + name
