@@ -749,11 +749,21 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	repo := pr.GetBase().GetRepo()
 	msg := fmt.Sprintf(`This PR (HEAD: %v) has been imported to Gerrit for code review.
 
-Please visit %s to see it.
+Please visit Gerrit at %s.
 
-Tip: You can toggle comments from me using the %s slash command (e.g. %s)
-See the [Wiki page](https://golang.org/wiki/GerritBot) for more info`,
-		pr.Head.GetSHA(), changeURL, "`comments`", "`/comments off`")
+**Important tips**:
+
+* Don't comment on this PR. All discussion takes place in Gerrit.
+* You need a Google account to [register for Gerrit](https://go-review.googlesource.com/login/).
+* To change your code in response to feedback:
+  * Push a new commit to the branch used by your GitHub PR.
+  * **Critical**: as you address feedback, mark the corresponding comments as **Done** in Gerrit and [hit **Reply**](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it).
+  * Multiple commits in the PR are tracked as separate "patch sets" in Gerrit and squashed when merged.
+* The title and description of the GitHub PR are used to construct the final commit message.
+   * Edit these as needed via the GitHub user interface.
+   * The PR description should be word-wrapped around ~76 characters unless you need longer lines (e.g., for tables or URLs).
+* See the [Contribution Guide](https://go.dev/doc/contribute#sending_a_change_github) and [FAQ](https://github.com/golang/go/wiki/GerritBot/#frequently-asked-questions) for details.`,
+		pr.Head.GetSHA(), changeURL)
 	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
 }
 
