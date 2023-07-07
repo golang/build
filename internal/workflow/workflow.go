@@ -122,6 +122,13 @@ type metaValue interface {
 type MetaParameter interface {
 	// RequireNonZero reports whether parameter p is required to have a non-zero value.
 	RequireNonZero() bool
+	// Valid reports whether the given parameter value is valid.
+	//
+	// A value is considered to be valid if:
+	//   - the type of v is the parameter type
+	//   - if RequireNonZero is true, the value v is non-zero
+	//   - if Check is set, it reports value v to be okay
+	Valid(v any) error
 	Name() string
 	Type() reflect.Type
 	HTMLElement() string
@@ -139,6 +146,9 @@ type ParamDef[T any] struct {
 	ParamType[T]        // Parameter type. For strings, defaults to BasicString if not specified.
 	Doc          string // Doc documents the parameter. Optional.
 	Example      string // Example is an example value. Optional.
+
+	// Check reports whether the given parameter value is okay. Optional.
+	Check func(T) error
 }
 
 // parameter adds Value methods to ParamDef, so that users can't accidentally
@@ -156,6 +166,19 @@ func (p parameter[T]) Doc() string                 { return p.d.Doc }
 func (p parameter[T]) Example() string             { return p.d.Example }
 func (p parameter[T]) RequireNonZero() bool {
 	return !strings.HasSuffix(p.d.Name, " (optional)")
+}
+func (p parameter[T]) Valid(v any) error {
+	vv, ok := v.(T)
+	if !ok {
+		var zero T
+		return fmt.Errorf("parameter %q must have a value of type %T, value %[3]v type is %[3]T", p.d.Name, zero, v)
+	} else if p.RequireNonZero() && reflect.ValueOf(vv).IsZero() {
+		return fmt.Errorf("parameter %q must have non-zero value", p.d.Name)
+	}
+	if p.d.Check == nil {
+		return nil
+	}
+	return p.d.Check(vv)
 }
 
 func (p parameter[T]) valueType(T) {}
@@ -218,6 +241,12 @@ func Param[T any](d *Definition, p ParamDef[T]) Value[T] {
 			p.HTMLElement = "input"
 		default:
 			panic(fmt.Errorf("must specify ParamType for %T", zero))
+		}
+	}
+	if !(parameter[T]{p}).RequireNonZero() && p.Check != nil {
+		var zero T
+		if err := p.Check(zero); err != nil {
+			panic(fmt.Errorf("parameter %q is optional yet its check on zero value reports a non-nil error: %v", p.Name, err))
 		}
 	}
 	for _, old := range d.parameters {

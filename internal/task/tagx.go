@@ -63,6 +63,7 @@ var reviewersParam = wf.ParamDef[[]string]{
 	ParamType: wf.SliceShort,
 	Doc:       `Send code reviews to these users.`,
 	Example:   "heschi",
+	Check:     CheckCoordinators,
 }
 
 // TagRepo contains information about a repo that can be tagged.

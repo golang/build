@@ -347,28 +347,30 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		switch p.Type().String() {
 		case "string":
 			v := r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name()))
-			if p.RequireNonZero() && v == "" {
-				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
+			if err := p.Valid(v); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 			params[p.Name()] = v
 		case "[]string":
 			v := r.Form[fmt.Sprintf("workflow.params.%s", p.Name())]
-			if p.RequireNonZero() && len(v) == 0 {
-				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
+			if err := p.Valid(v); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 			params[p.Name()] = v
 		case "task.Date":
-			v, err := time.Parse("2006-01-02", r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name())))
+			t, err := time.Parse("2006-01-02", r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name())))
 			if err != nil {
 				http.Error(w, fmt.Sprintf("parameter %q parsing error: %v", p.Name(), err), http.StatusBadRequest)
 				return
-			} else if p.RequireNonZero() && v.IsZero() {
-				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
+			}
+			v := task.Date{Year: t.Year(), Month: t.Month(), Day: t.Day()}
+			if err := p.Valid(v); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			params[p.Name()] = task.Date{Year: v.Year(), Month: v.Month(), Day: v.Day()}
+			params[p.Name()] = v
 		default:
 			http.Error(w, fmt.Sprintf("parameter %q has an unsupported type %q", p.Name(), p.Type()), http.StatusInternalServerError)
 			return

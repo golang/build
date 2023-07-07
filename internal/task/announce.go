@@ -277,16 +277,41 @@ func coordinatorEmails(users []string) ([]string, error) {
 func mapCoordinators(users []string, f func(*gophers.Person) string) ([]string, error) {
 	var outs []string
 	for _, user := range users {
-		person := gophers.GetPerson(user + "@golang.org")
-		if person == nil {
-			person = gophers.GetPerson(user + "@google.com")
-		}
-		if person == nil {
-			return nil, fmt.Errorf("unknown username %q: no @golang or @google account", user)
+		person, err := lookupCoordinator(user)
+		if err != nil {
+			return nil, err
 		}
 		outs = append(outs, f(person))
 	}
 	return outs, nil
+}
+
+// CheckCoordinators checks that all users are known
+// and have required information (name, Gerrit email).
+func CheckCoordinators(users []string) error {
+	var report strings.Builder
+	for _, user := range users {
+		if _, err := lookupCoordinator(user); err != nil {
+			fmt.Fprintln(&report, err)
+		}
+	}
+	if report.Len() != 0 {
+		return errors.New(report.String())
+	}
+	return nil
+}
+
+func lookupCoordinator(user string) (*gophers.Person, error) {
+	person := gophers.GetPerson(user + "@golang.org")
+	if person == nil {
+		person = gophers.GetPerson(user + "@google.com")
+	}
+	if person == nil {
+		return nil, fmt.Errorf("unknown username %q: no @golang or @google account", user)
+	} else if person.Name == "" {
+		return nil, fmt.Errorf("release coordinator %q is missing a name", person.Gerrit)
+	}
+	return person, nil
 }
 
 // A MailHeader is an email header.

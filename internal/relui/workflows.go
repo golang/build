@@ -173,6 +173,7 @@ This is CVE-2022-24675 and Go issue https://go.dev/issue/51853.`,
 
 Their first names will be included at the end of the release announcement, and CLs will be mailed to them.`,
 		Example: "heschi",
+		Check:   task.CheckCoordinators,
 	}
 )
 
