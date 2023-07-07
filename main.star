@@ -293,6 +293,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         caches = caches,
         experiments = {
             "golang.build_result_sharing": 100,
+            "golang.cache_tools_root": 100,
             "golang.no_network_in_short_test_mode": no_network_experiment,
         },
     )
