@@ -139,6 +139,7 @@ BUILDER_TYPES = [
     "windows-amd64",
     "windows-amd64-longtest",
     "windows-amd64-race",
+    "darwin-amd64",
 ]
 
 # RUN_MODS is a list of valid run-time modifications to the way we
@@ -199,6 +200,7 @@ GO_BRANCHES = {
 HOSTS = {
     "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
     "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
+    "darwin-amd64": {"os":"Mac", "cpu": "x86-64"},
 }
 
 # Return the host type for the given builder type.
