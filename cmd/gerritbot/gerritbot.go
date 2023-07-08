@@ -754,16 +754,17 @@ Please visit Gerrit at %s.
 **Important tips**:
 
 * Don't comment on this PR. All discussion takes place in Gerrit.
-* You need a Google account to [register for Gerrit](https://go-review.googlesource.com/login/).
+* You need a Gmail or other Google account to [register for Gerrit](https://go-review.googlesource.com/login/).
 * To change your code in response to feedback:
   * Push a new commit to the branch used by your GitHub PR.
   * A new "patch set" will then appear in Gerrit.
-  * **Critical**: as you address feedback, mark the corresponding comments as **Done** in Gerrit and [hit **Reply**](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it).
-  * Multiple commits in the PR will result in a single commit in master.
+  * Mark each comment as **Done** in Gerrit if implemented as suggested. You can also give a longer reply.
+  * **Critical**: you must click the [blue **Reply** button](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) near the top to publish your Gerrit responses.
+  * Multiple commits in the PR will be squashed by GerritBot.
 * The title and description of the GitHub PR are used to construct the final commit message.
-   * Edit these as needed via the GitHub user interface.
-   * The PR description should be word-wrapped around ~76 characters unless you need longer lines (e.g., for tables or URLs).
-* See the [Contribution Guide](https://go.dev/doc/contribute#sending_a_change_github) and [FAQ](https://github.com/golang/go/wiki/GerritBot/#frequently-asked-questions) for details.`,
+  * Edit these as needed via the GitHub user interface.
+  * You should word wrap the PR description at ~76 characters unless you need longer lines (e.g., for tables or URLs).
+* See the [Sending a change via GitHub](https://go.dev/doc/contribute#sending_a_change_github) and [Reviews](https://go.dev/doc/contribute#reviews) sections of the Contribution Guide as well as the [FAQ](https://github.com/golang/go/wiki/GerritBot/#frequently-asked-questions) for details.`,
 		pr.Head.GetSHA(), changeURL)
 	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
 }
