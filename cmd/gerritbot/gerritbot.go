@@ -758,7 +758,7 @@ Please visit Gerrit at %s.
 * To change your code in response to feedback:
   * Push a new commit to the branch used by your GitHub PR.
   * A new "patch set" will then appear in Gerrit.
-  * Mark each comment as **Done** in Gerrit if implemented as suggested. You can also give a longer response.
+  * Mark each comment as **Done** in Gerrit if implemented as suggested. You can alternatively give a longer response.
   * **Critical**: you must click the [blue **Reply** button](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) near the top to publish your Gerrit responses.
   * Multiple commits in the PR will be squashed by GerritBot.
 * The title and description of the GitHub PR are used to construct the final commit message.
