@@ -246,6 +246,10 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         "go_branch": GO_BRANCHES[go_branch_short],
     }
 
+    # TODO(heschi): Select the version based on the macOS version or builder type
+    if dimensions["os"] == "Mac":
+        properties["xcode_version"] = "12e5244e"
+
     run_mods = run_mods_of(builder_type)
     if "longtest" in run_mods:
         properties["long_test"] = True
