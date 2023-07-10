@@ -499,7 +499,7 @@ VERSION=$(head -n 1 $GO/VERSION)
 
 if [[ $# >0 && $1 == "-distpack" ]]; then
 	mkdir -p $GO/pkg/distpack
-	tmp=$(mktemp).tar
+	tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).tar
 	(cd $GO/.. && find . | xargs touch -t 202301010000 && tar cf $tmp go)
 	# On macOS, tar -czf puts a timestamp in the gzip header. Do it ourselves with --no-name to suppress it.
 	gzip --no-name $tmp
@@ -542,13 +542,13 @@ touch $GO/tool/something_orother/compile
 if [[ $# >0 && $1 == "-distpack" ]]; then
 	case $GOOS in
 	"windows")
-		tmp=$(mktemp).zip
+		tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).zip
 		# The zip command isn't installed on our buildlets. Python is.
 		(cd $GO/.. && find . | xargs touch -t 202301010000 && python3 -m zipfile -c $tmp go/)
 		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.zip
 		;;
 	*)
-		tmp=$(mktemp).tar
+		tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).tar
 		(cd $GO/.. && find . | xargs touch -t 202301010000 && tar cf $tmp go)
 		# On macOS, tar -czf puts a timestamp in the gzip header. Do it ourselves with --no-name to suppress it.
 		gzip --no-name $tmp
@@ -559,11 +559,11 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 	MODVER=v0.0.1-$VERSION.$GOOS-$GOARCH
 	echo "module golang.org/toolchain" > $GO/pkg/distpack/$MODVER.mod
 	echo -e "{\"Version\":\"$MODVER\", \"Timestamp\":\"fake timestamp\"}" > $GO/pkg/distpack/$MODVER.info
-	MODTMP=$(mktemp -d)
+	MODTMP=$(mktemp -d $TMPDIR/buildrel.XXXXXXXX)
 	MODDIR=$MODTMP/golang.org/toolchain@$MODVER
 	mkdir -p $MODDIR
 	cp -r $GO $MODDIR
-	tmp=$(mktemp).zip
+	tmp=$(mktemp -d $TMPDIR/buildrel.XXXXXXXX).zip
 	(cd $MODTMP && find . | xargs touch -t 202301010000 && python3 -m zipfile -c $tmp .)
 	mv $tmp $GO/pkg/distpack/$MODVER.zip
 fi

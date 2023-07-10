@@ -118,8 +118,12 @@ type FakeBuildlets struct {
 
 func (b *FakeBuildlets) CreateBuildlet(_ context.Context, kind string) (buildlet.RemoteClient, error) {
 	b.mu.Lock()
-	buildletDir := filepath.Join(b.dir, kind, fmt.Sprint(b.nextID))
+	buildletDir := filepath.Join(b.dir, kind, fmt.Sprint(b.nextID), "work")
 	if err := os.MkdirAll(buildletDir, 0700); err != nil {
+		return nil, err
+	}
+	tempDir := filepath.Join(b.dir, kind, fmt.Sprint(b.nextID), "tmp")
+	if err := os.MkdirAll(tempDir, 0700); err != nil {
 		return nil, err
 	}
 	logs := &[]string{}
@@ -136,7 +140,8 @@ func (b *FakeBuildlets) CreateBuildlet(_ context.Context, kind string) (buildlet
 	return &fakeBuildlet{
 		t:       b.t,
 		kind:    kind,
-		dir:     buildletDir,
+		workDir: buildletDir,
+		tempDir: tempDir,
 		sys:     b.sys,
 		httpURL: b.httpURL,
 		logf:    logf,
@@ -158,7 +163,8 @@ type fakeBuildlet struct {
 	buildlet.Client
 	t       *testing.T
 	kind    string
-	dir     string
+	workDir string
+	tempDir string
 	sys     map[string]string // System command name → absolute path.
 	httpURL string
 	logf    func(string, ...interface{})
@@ -183,11 +189,12 @@ func (b *fakeBuildlet) Exec(ctx context.Context, cmd string, opts buildlet.ExecO
 	if absPath, ok := b.sys[cmd]; ok && opts.SystemLevel {
 		cmd = absPath
 	} else if !strings.HasPrefix(cmd, "/") && !opts.SystemLevel {
-		cmd = filepath.Join(b.dir, cmd)
+		cmd = filepath.Join(b.workDir, cmd)
 	}
 retry:
 	c := exec.CommandContext(ctx, cmd, opts.Args...)
 	c.Env = append(os.Environ(), opts.ExtraEnv...)
+	c.Env = append(c.Env, "TEMP="+b.tempDir, "TMP="+b.tempDir, "TEMPDIR="+b.tempDir, "TMPDIR="+b.tempDir)
 	buf := &bytes.Buffer{}
 	var w io.Writer = buf
 	if opts.Output != nil {
@@ -196,11 +203,11 @@ retry:
 	c.Stdout = w
 	c.Stderr = w
 	if opts.Dir == "" && opts.SystemLevel {
-		c.Dir = b.dir
+		c.Dir = b.workDir
 	} else if opts.Dir == "" && !opts.SystemLevel {
 		c.Dir = filepath.Dir(cmd)
 	} else {
-		c.Dir = filepath.Join(b.dir, opts.Dir)
+		c.Dir = filepath.Join(b.workDir, opts.Dir)
 	}
 	err := c.Run()
 	// Work around Unix foolishness. See go.dev/issue/22315.
@@ -219,7 +226,7 @@ func (b *fakeBuildlet) GetTar(ctx context.Context, dir string) (io.ReadCloser, e
 	buf := &bytes.Buffer{}
 	zw := gzip.NewWriter(buf)
 	tw := tar.NewWriter(zw)
-	base := filepath.Join(b.dir, filepath.FromSlash(dir))
+	base := filepath.Join(b.workDir, filepath.FromSlash(dir))
 	// Copied pretty much wholesale from buildlet.go.
 	err := filepath.Walk(base, func(path string, fi os.FileInfo, err error) error {
 		if err != nil {
@@ -275,10 +282,10 @@ func (b *fakeBuildlet) ListDir(ctx context.Context, dir string, opts buildlet.Li
 
 func (b *fakeBuildlet) Put(ctx context.Context, r io.Reader, path string, mode os.FileMode) error {
 	b.logf("write file %q with mode %0o", path, mode)
-	if err := os.MkdirAll(filepath.Dir(filepath.Join(b.dir, path)), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(b.workDir, path)), 0755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(filepath.Join(b.dir, path), os.O_CREATE|os.O_RDWR, mode)
+	f, err := os.OpenFile(filepath.Join(b.workDir, path), os.O_CREATE|os.O_RDWR, mode)
 	if err != nil {
 		return err
 	}
@@ -292,7 +299,7 @@ func (b *fakeBuildlet) Put(ctx context.Context, r io.Reader, path string, mode o
 
 func (b *fakeBuildlet) PutTar(ctx context.Context, r io.Reader, dir string) error {
 	b.logf("put tar to %q", dir)
-	return untar.Untar(r, filepath.Join(b.dir, dir))
+	return untar.Untar(r, filepath.Join(b.workDir, dir))
 }
 
 func (b *fakeBuildlet) PutTarFromURL(ctx context.Context, tarURL string, dir string) error {
@@ -314,11 +321,11 @@ func (b *fakeBuildlet) PutTarFromURL(ctx context.Context, tarURL string, dir str
 		return fmt.Errorf("unexpected status for %q: %v", tarURL, resp.Status)
 	}
 	defer resp.Body.Close()
-	return untar.Untar(resp.Body, filepath.Join(b.dir, dir))
+	return untar.Untar(resp.Body, filepath.Join(b.workDir, dir))
 }
 
 func (b *fakeBuildlet) WorkDir(ctx context.Context) (string, error) {
-	return b.dir, nil
+	return b.workDir, nil
 }
 
 func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
