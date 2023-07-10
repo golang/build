@@ -3154,10 +3154,9 @@ func init() {
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
-			case "vulndb", "vuln":
-				// vulndb currently uses a dependency which does not build cleanly
-				// on aix-ppc64. Until that issue is resolved, skip vulndb on
-				// this builder.
+			case "vulndb", "vuln", "pkgsite":
+				// vulndb and pkgsite currently use a dependency which does not build cleanly
+				// on aix-ppc64. Until that issue is resolved, skip vulndb on this builder.
 				// (https://go.dev/issue/49218).
 				return false
 			}
