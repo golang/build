@@ -15,7 +15,7 @@ COPY . /app
 
 RUN go build golang.org/x/build/cmd/relui
 
-FROM marketplace.gcr.io/google/debian11:latest
+FROM debian:bookworm
 
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
