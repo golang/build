@@ -432,9 +432,9 @@ func addSingleReleaseWorkflow(
 		wf.Output(wd, "goimports CL submitted", goimportsCommit)
 	}
 
-	boringBuild := wf.Task1(wd, "Start boringcrypto build", build.runBoringCryptoBuild, nextVersion, wf.After(uploaded))
-	boringResult := wf.Task1(wd, "Await boringcrypto build", build.awaitCloudBuild, boringBuild)
-	wf.Output(wd, "BoringCrypto Docker image status", boringResult)
+	dockerBuild := wf.Task1(wd, "Start Google Docker build", build.runGoogleDockerBuild, nextVersion, wf.After(uploaded))
+	dockerResult := wf.Task1(wd, "Await Google Docker build", build.awaitCloudBuild, dockerBuild)
+	wf.Output(wd, "Google Docker image status", dockerResult)
 
 	wf.Output(wd, "Published to website", published)
 	return published
@@ -563,21 +563,21 @@ func advisoryTryBots(major int) []*dashboard.BuildConfig {
 
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
-	GerritClient           task.GerritClient
-	GerritHTTPClient       *http.Client
-	GerritURL              string
-	PrivateGerritURL       string
-	GCSClient              *storage.Client
-	ScratchURL, ServingURL string // ScratchURL is a gs:// or file:// URL, no trailing slash. E.g., "gs://golang-release-staging/relui-scratch".
-	DownloadURL            string
-	ProxyPrefix            string // ProxyPrefix is the prefix at which module files are published, e.g. https://proxy.golang.org/golang.org/toolchain/@v
-	PublishFile            func(task.WebsiteFile) error
-	CreateBuildlet         func(context.Context, string) (buildlet.RemoteClient, error)
-	SignService            sign.Service
-	BoringBuildProject     string
-	BoringBuildTrigger     string
-	CloudBuildClient       task.CloudBuildClient
-	ApproveAction          func(*wf.TaskContext) error
+	GerritClient             task.GerritClient
+	GerritHTTPClient         *http.Client
+	GerritURL                string
+	PrivateGerritURL         string
+	GCSClient                *storage.Client
+	ScratchURL, ServingURL   string // ScratchURL is a gs:// or file:// URL, no trailing slash. E.g., "gs://golang-release-staging/relui-scratch".
+	DownloadURL              string
+	ProxyPrefix              string // ProxyPrefix is the prefix at which module files are published, e.g. https://proxy.golang.org/golang.org/toolchain/@v
+	PublishFile              func(task.WebsiteFile) error
+	CreateBuildlet           func(context.Context, string) (buildlet.RemoteClient, error)
+	SignService              sign.Service
+	GoogleDockerBuildProject string
+	GoogleDockerBuildTrigger string
+	CloudBuildClient         task.CloudBuildClient
+	ApproveAction            func(*wf.TaskContext) error
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, distpack bool, revision, securityRevision, versionFile string) (artifact, error) {
@@ -1381,15 +1381,15 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 	return task.Published{Version: version, Files: files}, nil
 }
 
-func (b *BuildReleaseTasks) runBoringCryptoBuild(ctx context.Context, version string) (string, error) {
+func (b *BuildReleaseTasks) runGoogleDockerBuild(ctx context.Context, version string) (string, error) {
 	// Because we want to publish versions without the leading "go", it's easiest to strip it here.
 	v := strings.TrimPrefix(version, "go")
-	return b.CloudBuildClient.RunBuildTrigger(ctx, b.BoringBuildProject, b.BoringBuildTrigger, map[string]string{"_GO_VERSION": v})
+	return b.CloudBuildClient.RunBuildTrigger(ctx, b.GoogleDockerBuildProject, b.GoogleDockerBuildTrigger, map[string]string{"_GO_VERSION": v})
 }
 
 func (b *BuildReleaseTasks) awaitCloudBuild(ctx *wf.TaskContext, id string) (string, error) {
 	detail, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
-		return b.CloudBuildClient.Completed(ctx, b.BoringBuildProject, id)
+		return b.CloudBuildClient.Completed(ctx, b.GoogleDockerBuildProject, id)
 	})
 	return detail, err
 }

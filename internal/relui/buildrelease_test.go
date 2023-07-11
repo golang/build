@@ -211,25 +211,25 @@ esac
 		},
 	}
 
-	const boringProject, boringTrigger = "boring-build-project", "boring-build-trigger"
+	const dockerProject, dockerTrigger = "docker-build-project", "docker-build-trigger"
 
 	buildTasks := &BuildReleaseTasks{
-		GerritClient:       gerrit,
-		GerritHTTPClient:   http.DefaultClient,
-		GerritURL:          fakeGerrit.GerritURL() + "/go",
-		GCSClient:          nil,
-		ScratchURL:         "file://" + filepath.ToSlash(t.TempDir()),
-		ServingURL:         "file://" + filepath.ToSlash(servingDir),
-		CreateBuildlet:     fakeBuildlets.CreateBuildlet,
-		SignService:        task.NewFakeSignService(t),
-		DownloadURL:        dlServer.URL,
-		ProxyPrefix:        dlServer.URL,
-		PublishFile:        publishFile,
-		BoringBuildProject: boringProject,
-		BoringBuildTrigger: boringTrigger,
+		GerritClient:             gerrit,
+		GerritHTTPClient:         http.DefaultClient,
+		GerritURL:                fakeGerrit.GerritURL() + "/go",
+		GCSClient:                nil,
+		ScratchURL:               "file://" + filepath.ToSlash(t.TempDir()),
+		ServingURL:               "file://" + filepath.ToSlash(servingDir),
+		CreateBuildlet:           fakeBuildlets.CreateBuildlet,
+		SignService:              task.NewFakeSignService(t),
+		DownloadURL:              dlServer.URL,
+		ProxyPrefix:              dlServer.URL,
+		PublishFile:              publishFile,
+		GoogleDockerBuildProject: dockerProject,
+		GoogleDockerBuildTrigger: dockerTrigger,
 		CloudBuildClient: &task.FakeCloudBuild{
-			Project:       boringProject,
-			AllowedBuilds: map[string]map[string]string{boringTrigger: {"_GO_VERSION": wantVersion[2:]}},
+			Project:       dockerProject,
+			AllowedBuilds: map[string]map[string]string{dockerTrigger: {"_GO_VERSION": wantVersion[2:]}},
 		},
 		ApproveAction: func(ctx *workflow.TaskContext) error {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
