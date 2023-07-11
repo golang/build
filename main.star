@@ -223,6 +223,14 @@ def builder_name(project, go_branch_short, builder_type):
     # we're testing a golang.org/x/* repository.
     return "x_%s-%s-%s" % (project, go_branch_short, builder_type)
 
+# Enum values for golangbuild's "mode" property.
+GOLANGBUILD_MODES = {
+    "ALL": 0,
+    "COORDINATOR": 1,
+    "BUILD": 2,
+    "TEST": 3,
+}
+
 def define_builder(bucket, project, go_branch_short, builder_type):
     """Creates a builder definition.
 
@@ -296,6 +304,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         "golang.cache_tools_root": 100,
         "golang.no_network_in_short_test_mode": 100,
     }
+
     # TODO(dmitshur): Make no-network work for the main Go repo. See https://ci.chromium.org/b/8776274213581709009.
     if project == "go":
         experiments.pop("golang.no_network_in_short_test_mode")
@@ -321,6 +330,96 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         caches = caches,
         experiments = experiments,
     )
+
+    # Create experimental builders for sharding tests, but only for a limited
+    # set of configurations.
+    if project == "go" and go_branch_short == "gotip" and \
+       (host_of(builder_type) == "linux-amd64" or host_of(builder_type) == "windows-amd64"):
+        coord_name = name + "-coordinator"
+        build_name = name + "-build_go"
+        test_name = name + "-test_only"
+
+        # Coordinator builder.
+        coord_dims = dict(HOSTS["linux-amd64"])
+        coord_dims.update({
+            "pool": "luci.golang." + bucket,
+        })
+        coord_props = dict(properties)
+        coord_props.update({
+            "mode": GOLANGBUILD_MODES["COORDINATOR"],
+            "coord_mode": {
+                "build_builder": "golang/" + bucket + "/" + build_name,
+                "test_builder": "golang/" + bucket + "/" + test_name,
+                "num_test_shards": 2,
+            },
+            "builders_to_trigger": [],  # Don't try to trigger anything for now.
+        })
+        luci.builder(
+            name = coord_name,
+            bucket = bucket,
+            executable = executable,
+            dimensions = coord_dims,
+            properties = coord_props,
+            service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+            resultdb_settings = resultdb.settings(
+                enable = True,
+            ),
+            caches = caches,
+            experiments = experiments,
+        )
+
+        # Build builder.
+        build_dims = dict(dimensions)
+        build_dims.update({
+            "pool": "luci.golang." + bucket + "-workers",
+        })
+        build_props = dict(properties)
+        build_props.update({
+            "mode": GOLANGBUILD_MODES["BUILD"],
+            "build_mode": {},
+            "builders_to_trigger": [],  # Don't try to trigger anything.
+        })
+        luci.builder(
+            name = build_name,
+            bucket = bucket,
+            executable = executable,
+            dimensions = build_dims,
+            properties = build_props,
+            service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+            resultdb_settings = resultdb.settings(
+                enable = True,
+            ),
+            caches = caches,
+            experiments = experiments,
+        )
+
+        # Test builder.
+        test_dims = dict(dimensions)
+        test_dims.update({
+            "pool": "luci.golang." + bucket + "-workers",
+        })
+        test_props = dict(properties)
+        test_props.update({
+            "mode": GOLANGBUILD_MODES["TEST"],
+            "test_mode": {},
+            "test_shard": {},
+            "builders_to_trigger": [],  # Don't try to trigger anything.
+        })
+        luci.builder(
+            name = test_name,
+            bucket = bucket,
+            executable = executable,
+            dimensions = test_dims,
+            properties = test_props,
+            allowed_property_overrides = ["test_shard"],
+            service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+            resultdb_settings = resultdb.settings(
+                enable = True,
+            ),
+            caches = caches,
+            experiments = experiments,
+        )
+
     return bucket + "/" + name
 
 luci.builder(
