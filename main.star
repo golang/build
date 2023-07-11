@@ -235,7 +235,11 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     Returns:
         The full name including a bucket prefix.
     """
-    dimensions = HOSTS[host_of(builder_type)]
+
+    # Copy the dimensions and set the pool, which aligns with the bucket names.
+    dimensions = dict(HOSTS[host_of(builder_type)])
+    dimensions["pool"] = "luci.golang." + bucket
+
     name = builder_name(project, go_branch_short, builder_type)
     properties = {
         "project": project,
