@@ -1382,7 +1382,9 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 }
 
 func (b *BuildReleaseTasks) runBoringCryptoBuild(ctx context.Context, version string) (string, error) {
-	return b.CloudBuildClient.RunBuildTrigger(ctx, b.BoringBuildProject, b.BoringBuildTrigger, map[string]string{"_GO_VERSION": version})
+	// Because we want to publish versions without the leading "go", it's easiest to strip it here.
+	v := strings.TrimPrefix(version, "go")
+	return b.CloudBuildClient.RunBuildTrigger(ctx, b.BoringBuildProject, b.BoringBuildTrigger, map[string]string{"_GO_VERSION": v})
 }
 
 func (b *BuildReleaseTasks) awaitCloudBuild(ctx *wf.TaskContext, id string) (string, error) {

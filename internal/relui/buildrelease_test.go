@@ -229,7 +229,7 @@ esac
 		BoringBuildTrigger: boringTrigger,
 		CloudBuildClient: &task.FakeCloudBuild{
 			Project:       boringProject,
-			AllowedBuilds: map[string]map[string]string{boringTrigger: {"_GO_VERSION": wantVersion}},
+			AllowedBuilds: map[string]map[string]string{boringTrigger: {"_GO_VERSION": wantVersion[2:]}},
 		},
 		ApproveAction: func(ctx *workflow.TaskContext) error {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
