@@ -1477,6 +1477,7 @@ func init() {
 	addPerson("Joe Tsai", "joetsai@digital-static.net", "thebrokentoaster@gmail.com", "joetsai@golang.org", "@dsnet")
 	addPerson("Joe Tsai", "joetsai@digital-static.net", "8495@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Joe Tsai", "thebrokentoaster@gmail.com", "9735@62eb7196-b449-3ce5-99f1-c037f21e1705")
+	addPerson("Joedian Reid", "joedian@golang.org", "57718@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Joel Sing", "joel@sing.id.au", "13640@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Joel Sing", "joel@sing.id.au", "jsing@google.com", "@4a6f656c")
 	addPerson("Joel Sing", "jsing@google.com", "5770@62eb7196-b449-3ce5-99f1-c037f21e1705")
