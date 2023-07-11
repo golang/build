@@ -282,19 +282,25 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     caches = [swarming.cache(tools_cache)]
     properties["tools_cache"] = tools_cache
 
-    no_network_experiment = 0
+    # Determine which experiments to apply.
+    experiments = {
+        "golang.cache_tools_root": 100,
+    }
     if project in NO_NETWORK_PROJECTS:
-        no_network_experiment = 100
+        experiments["golang.no_network_in_short_test_mode"] = 100
+
+    # Construct the executable reference.
+    executable = luci.executable(
+        name = "golangbuild",
+        cipd_package = "infra/experimental/golangbuild/${platform}",
+        cipd_version = "latest",
+        cmd = ["golangbuild"],
+    )
 
     luci.builder(
         name = name,
         bucket = bucket,
-        executable = luci.executable(
-            name = "golangbuild",
-            cipd_package = "infra/experimental/golangbuild/${platform}",
-            cipd_version = "latest",
-            cmd = ["golangbuild"],
-        ),
+        executable = executable,
         dimensions = dimensions,
         properties = properties,
         service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
@@ -302,10 +308,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
             enable = True,
         ),
         caches = caches,
-        experiments = {
-            "golang.cache_tools_root": 100,
-            "golang.no_network_in_short_test_mode": no_network_experiment,
-        },
+        experiments = experiments,
     )
     return bucket + "/" + name
 
