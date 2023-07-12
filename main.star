@@ -316,7 +316,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
     # Named cache for git clones, required for golang.cache_git_clone.
     properties["git_cache"] = "git"
 
-    # Named cache for cipd tools root, required for golang.cache_tools_root.
+    # Named cache for cipd tools root.
     properties["tools_cache"] = "tools"
 
     caches = [
@@ -326,7 +326,6 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Determine which experiments to apply.
     experiments = {
-        "golang.cache_tools_root": 100,
         "golang.no_network_in_short_test_mode": 100,
     }
 
