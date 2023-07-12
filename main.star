@@ -239,6 +239,9 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     # Copy the dimensions and set the pool, which aligns with the bucket names.
     dimensions = dict(HOSTS[host_of(builder_type)])
     dimensions["pool"] = "luci.golang." + bucket
+    if dimensions["os"] == "Mac":
+        # Macs are currently relatively scarce, so they live in the shared-workers pool.
+        dimensions["pool"] = "luci.golang.shared-workers"
 
     name = builder_name(project, go_branch_short, builder_type)
     properties = {
