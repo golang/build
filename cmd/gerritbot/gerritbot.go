@@ -729,7 +729,8 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		pushOpts = "%ready"
 	}
 
-	if cl == nil {
+	newCL := cl == nil
+	if newCL {
 		// Add this informational message only on CL creation.
 		msg := fmt.Sprintf("This Gerrit CL corresponds to GitHub PR %s.\n\nAuthor: %s", prShortLink(pr), author)
 		pushOpts += ",m=" + url.QueryEscape(msg)
@@ -754,7 +755,49 @@ Please visit %s to see it.
 Tip: You can toggle comments from me using the %s slash command (e.g. %s)
 See the [Wiki page](https://golang.org/wiki/GerritBot) for more info`,
 		pr.Head.GetSHA(), changeURL, "`comments`", "`/comments off`")
-	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
+
+	err = b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
+	if err != nil {
+		return err
+	}
+
+	if newCL {
+		// Add an unresolved welcome comment to Gerrit to provide some context to the PR author
+		// but also to help a reviewer see the author has registered for a Gerrit account,
+		// knows how to reply in Gerrit, and thinks the CL is ready for review.
+		// TODO: consider a reminder comment with reply hints if they don't reply after something like 7 days.
+		// TODO: consider abandoning the CL if no reply after something like 30 days.
+		gcl, err := b.gerritChangeForPR(pr)
+		if err != nil {
+			return fmt.Errorf("could not look up CL after creation: %v", err)
+		}
+		question := fmt.Sprintf(`Hello %v, is this CL ready for review?
+
+If so, please mark this comment as 'Done'. If not, please write a reply to this comment.
+
+(In Gerrit code reviews, the CL author is expected to close out each piece of feedback by
+marking it as 'Done' if implemented as suggested or otherwise reply to each review comment.
+See the [Review](https://go.dev/doc/contribute#review) section of the Contributing Guide for details.)`,
+			author)
+
+		unresolved := true
+		ri := gerrit.ReviewInput{
+			Comments: map[string][]gerrit.CommentInput{
+				"/PATCHSET_LEVEL": {{Message: question, Unresolved: &unresolved}},
+			},
+		}
+		// TODO: might be able to use gcl.ID instead of genChangeTriple? Note gcl.ID says it is URL encoded.
+		revision, err := genChangeTriple(gcl)
+		if err != nil {
+			return fmt.Errorf("cannot add welcome comment to CL: %v", err)
+		}
+		err = b.gerritClient.SetReview(ctx, gcl.ChangeID, revision, ri)
+		if err != nil {
+			return fmt.Errorf("could not add welcome comment to CL: %v", err)
+		}
+	}
+
+	return nil
 }
 
 var changeIdentRE = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-fA-F]{40})\n?`)
@@ -812,6 +855,17 @@ func genChangeID(pr *github.PullRequest) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "golang_github_pull_request_id_%d", pr.GetID())
 	return fmt.Sprintf("I%x", sha1.Sum(buf.Bytes()))
+}
+
+// genChangeTriple returns the Gerrit (project, branch, change-ID) triple
+// uniquely identifying this change.
+func genChangeTriple(gcl *gerrit.ChangeInfo) (string, error) {
+	// TODO: this is modified from cmd/coordinator. Consider consolidating.
+	if gcl.Project == "" || gcl.Branch == "" || gcl.ChangeID == "" {
+		return "", fmt.Errorf("cannot generate change triple: gcl.Project: %q, gcl.Branch: %q, gcl.ChangeID: %q",
+			gcl.Project, gcl.Branch, gcl.ChangeID)
+	}
+	return fmt.Sprintf("%s~%s~%s", gcl.Project, gcl.Branch, gcl.ChangeID), nil
 }
 
 func cmdOut(cmd *exec.Cmd) (string, error) {
