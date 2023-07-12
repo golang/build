@@ -35,7 +35,6 @@ def RunSteps(api):
   analyzers = [
         api.tricium.analyzers.HTTPS_CHECK,
         api.tricium.analyzers.SPELLCHECKER,
-        api.tricium.analyzers.COPYRIGHT,
   ]
   api.tricium.run_legacy(analyzers, repo_path, affected_files, commit_message)
 
