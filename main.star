@@ -313,10 +313,16 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
             if project != "go"
         ]
 
-    # Named cache for cipd tools root, required for golang.cache_tools_roots.
-    tools_cache = "tools"
-    caches = [swarming.cache(tools_cache)]
-    properties["tools_cache"] = tools_cache
+    # Named cache for git clones, required for golang.cache_git_clone.
+    properties["git_cache"] = "git"
+
+    # Named cache for cipd tools root, required for golang.cache_tools_root.
+    properties["tools_cache"] = "tools"
+
+    caches = [
+         swarming.cache(properties["git_cache"]),
+         swarming.cache(properties["tools_cache"]),
+    ]
 
     # Determine which experiments to apply.
     experiments = {
