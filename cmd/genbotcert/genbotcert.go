@@ -112,7 +112,7 @@ func generateCert(ctx context.Context, hostname, csrPath string) error {
 	if cr.Subject.CommonName != fmt.Sprintf("%s.bots.golang.org", hostname) {
 		return fmt.Errorf("certificate signing request does not match hostname: want %q, got %q", hostname, cr.Subject.CommonName)
 	}
-	certId := fmt.Sprintf("%s-%d", hostname, time.Now().Unix()) // A unique name for the certificate.
+	certID := fmt.Sprintf("%s-%d", hostname, time.Now().Unix()) // A unique name for the certificate.
 	caClient, err := privateca.NewCertificateAuthorityClient(ctx)
 	if err != nil {
 		return fmt.Errorf("NewCertificateAuthorityClient creation failed: %w", err)
@@ -123,7 +123,7 @@ func generateCert(ctx context.Context, hostname, csrPath string) error {
 	// See https://pkg.go.dev/cloud.google.com/go/security/privateca/apiv1/privatecapb#CreateCertificateRequest.
 	req := &privatecapb.CreateCertificateRequest{
 		Parent:        fullCaPoolName,
-		CertificateId: certId,
+		CertificateId: certID,
 		Certificate: &privatecapb.Certificate{
 			CertificateConfig: &privatecapb.Certificate_PemCsr{
 				PemCsr: string(csr),
@@ -138,10 +138,10 @@ func generateCert(ctx context.Context, hostname, csrPath string) error {
 	if err != nil {
 		return fmt.Errorf("CreateCertificate failed: %w", err)
 	}
-	log.Printf("Certificate %s created", certId)
-	if err := os.WriteFile(hostname+".cert", []byte(resp.PemCertificate), 0600); err != nil {
+	log.Printf("Certificate %s created", certID)
+	if err := os.WriteFile(certID+".cert", []byte(resp.PemCertificate), 0600); err != nil {
 		return fmt.Errorf("unable to write certificate to disk: %s", err)
 	}
-	fmt.Printf("Wrote certificate to %s.cert\n", certId)
+	fmt.Printf("Wrote certificate to %s.cert\n", certID)
 	return nil
 }
