@@ -3527,6 +3527,9 @@ func plan9Default(repo, branch, goBranch string) bool {
 	case "vulndb", "vuln":
 		// vulncheck can't read plan9 binaries.
 		return false
+	case "pkgsite":
+		// pkgsite has a dependency (github.com/lib/pq) that is broken on Plan 9.
+		return false
 	default:
 		return onlyMasterDefault(repo, branch, goBranch)
 	}
