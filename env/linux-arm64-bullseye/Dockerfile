@@ -2,6 +2,28 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+FROM arm64v8/golang:1.19 AS build
+LABEL maintainer="golang-dev@googlegroups.com"
+
+RUN mkdir /gocache
+ENV GOCACHE /gocache
+
+COPY ./go.mod /go/src/golang.org/x/build/go.mod
+COPY ./go.sum /go/src/golang.org/x/build/go.sum
+
+WORKDIR /go/src/golang.org/x/build
+
+# Optimization for iterative docker build speed, not necessary for correctness:
+# TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
+RUN go install cloud.google.com/go/compute/metadata
+
+COPY . /go/src/golang.org/x/build/
+
+# Install binary to /go/bin/stage0
+ENV CGO_ENABLED=0
+RUN go install golang.org/x/build/cmd/buildlet/stage0
+RUN go install golang.org/x/build/cmd/bootstrapswarm
+
 FROM arm64v8/debian:bullseye
 LABEL org.opencontainers.image.authors="golang-dev@googlegroups.com"
 
@@ -38,6 +60,7 @@ RUN apt-get update && apt-get install -y \
 	gfortran \
 	git \
 	iptables \
+	iproute2 \
 	libc6-dev \
 	libgles2-mesa-dev \
 	libopenal-dev \
@@ -50,14 +73,11 @@ RUN apt-get update && apt-get install -y \
 	psmisc \
 	strace \
 	subversion \
+	sudo \
 	swig \
 	&& rm -rf /var/lib/apt/lists/*
 
-RUN mkdir /usr/local/go-bootstrap && \
-	curl --silent https://storage.googleapis.com/go-builder-data/gobootstrap-linux-arm64.tar.gz | \
-	tar -C /usr/local/go-bootstrap -zx
+COPY --from=build /go/bin/* /usr/local/bin/
+COPY cmd/buildlet/stage0/run-worker.sh /usr/local/bin/
 
-RUN curl -o  /usr/local/bin/stage0 https://storage.googleapis.com/go-builder-data/buildlet-stage0.linux-arm64 && \
-	chmod +x /usr/local/bin/stage0
-
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]
