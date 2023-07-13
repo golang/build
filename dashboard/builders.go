@@ -1508,9 +1508,9 @@ func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 	}
 }
 
-// crossCompileBuildSet returns a policy function that reports whether a project
+// miscCompileBuildSet returns a policy function that reports whether a project
 // should use trybots based on the platform.
-func crossCompileBuildSet(goos, goarch string) func(proj, branch, goBranch string) bool {
+func miscCompileBuildSet(goos, goarch string) func(proj, branch, goBranch string) bool {
 	return func(proj, branch, goBranch string) bool {
 		if proj != "go" && branch != "master" {
 			return false // #58311
@@ -1529,6 +1529,8 @@ func crossCompileBuildSet(goos, goarch string) func(proj, branch, goBranch strin
 			// mobile fails to build on all cross-compile platforms. This is somewhat expected
 			// given the nature of the repository. Leave this as a blanket policy for now.
 			return false
+		case "pkgsite": // #61341
+			return goos != "plan9" && goos != "aix" && goos != "wasip1"
 		case "vuln":
 			// Failure to build because of a dependency not supported on plan9.
 			return goos != "plan9"
@@ -1653,7 +1655,7 @@ func init() {
 		addBuilder(BuildConfig{
 			Name:             "misc-compile-" + platform,
 			HostType:         "host-linux-amd64-bullseye",
-			tryBot:           crossCompileBuildSet(goos, goarch),
+			tryBot:           miscCompileBuildSet(goos, goarch),
 			env:              append(extraEnv, "GO_DISABLE_OUTBOUND_NETWORK=1", "GOOS="+goos, "GOARCH="+goarch),
 			tryOnly:          true,
 			MinimumGoVersion: v,
@@ -3204,19 +3206,7 @@ func init() {
 		Name:        "wasip1-wasm-wazero",
 		HostType:    "host-linux-amd64-wasip1-wasm-wazero",
 		KnownIssues: []int{61043},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
-			switch repo {
-			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
-				// Don't test these golang.org/x repos.
-				b = false
-			}
-			if repo != "go" && !(branch == "master" && goBranch == "master") {
-				// For golang.org/x repos, don't test non-latest versions.
-				b = false
-			}
-			return b
-		},
+		buildsRepo:  wasip1Default,
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
 				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
@@ -3232,22 +3222,10 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "wasip1-wasm-wasmtime",
-		HostType: "host-linux-amd64-wasip1-wasm-wasmtime",
-		tryBot:   explicitTrySet("go"),
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
-			switch repo {
-			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
-				// Don't test these golang.org/x repos.
-				b = false
-			}
-			if repo != "go" && !(branch == "master" && goBranch == "master") {
-				// For golang.org/x repos, don't test non-latest versions.
-				b = false
-			}
-			return b
-		},
+		Name:       "wasip1-wasm-wasmtime",
+		HostType:   "host-linux-amd64-wasip1-wasm-wasmtime",
+		tryBot:     explicitTrySet("go"),
+		buildsRepo: wasip1Default,
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
 				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
@@ -3266,19 +3244,7 @@ func init() {
 		Name:        "wasip1-wasm-wasmer",
 		HostType:    "host-linux-amd64-wasip1-wasm-wasmer",
 		KnownIssues: []int{59907},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
-			switch repo {
-			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
-				// Don't test these golang.org/x repos.
-				b = false
-			}
-			if repo != "go" && !(branch == "master" && goBranch == "master") {
-				// For golang.org/x repos, don't test non-latest versions.
-				b = false
-			}
-			return b
-		},
+		buildsRepo:  wasip1Default,
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
 				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
@@ -3297,19 +3263,7 @@ func init() {
 		Name:        "wasip1-wasm-wasmedge",
 		HostType:    "host-linux-amd64-wasip1-wasm-wasmedge",
 		KnownIssues: []int{60097},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
-			switch repo {
-			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
-				// Don't test these golang.org/x repos.
-				b = false
-			}
-			if repo != "go" && !(branch == "master" && goBranch == "master") {
-				// For golang.org/x repos, don't test non-latest versions.
-				b = false
-			}
-			return b
-		},
+		buildsRepo:  wasip1Default,
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
 				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
@@ -3378,7 +3332,7 @@ func tryNewMiscCompile(goos, goarch, extraSuffix string, knownIssue int, goDeps 
 	addBuilder(BuildConfig{
 		Name:         "misc-compile-" + platform,
 		HostType:     "host-linux-amd64-bullseye",
-		buildsRepo:   crossCompileBuildSet(goos, goarch),
+		buildsRepo:   miscCompileBuildSet(goos, goarch),
 		KnownIssues:  []int{knownIssue},
 		GoDeps:       goDeps,
 		env:          append(extraEnv, "GOOS="+goos, "GOARCH="+goarch, "GO_DISABLE_OUTBOUND_NETWORK=1"),
@@ -3533,6 +3487,21 @@ func plan9Default(repo, branch, goBranch string) bool {
 	default:
 		return onlyMasterDefault(repo, branch, goBranch)
 	}
+}
+
+// wasip1Default returns whether we should build the repo and branch on wasip1.
+func wasip1Default(repo, branch, goBranch string) bool {
+	b := buildRepoByDefault(repo) && atLeastGo1(goBranch, 21)
+	switch repo {
+	case "benchmarks", "debug", "perf", "pkgsite", "talks", "tools", "tour", "website":
+		// Don't test these golang.org/x repos.
+		b = false
+	}
+	if repo != "go" && !(branch == "master" && goBranch == "master") {
+		// For golang.org/x repos, don't test non-latest versions.
+		b = false
+	}
+	return b
 }
 
 // disabledBuilder is a buildsRepo policy function that always return false.
