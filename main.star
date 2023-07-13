@@ -136,6 +136,7 @@ BUILDER_TYPES = [
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-race",
+    "linux-arm64",
     "windows-amd64",
     "windows-amd64-longtest",
     "windows-amd64-race",
@@ -199,6 +200,7 @@ GO_BRANCHES = {
 # The format of each host is $GOOS-$GOARCH(-$HOST_SPECIFIER)?.
 HOSTS = {
     "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
+    "linux-arm64": {"os": "Linux", "cpu": "arm64"},
     "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
     "darwin-amd64": {"os": "Mac", "cpu": "x86-64"},
 }
