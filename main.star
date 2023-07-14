@@ -133,6 +133,7 @@ luci.list_view(
 # The format of a builder type is thus $HOST(-$RUN_MOD)*.
 BUILDER_TYPES = [
     "linux-amd64",
+    "linux-amd64-boringcrypto",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-race",
@@ -148,6 +149,7 @@ BUILDER_TYPES = [
 RUN_MODS = [
     "longtest",
     "race",
+    "boringcrypto",
 ]
 
 # PROJECTS lists the go.googlesource.com/<project> projects we build and test for.
@@ -253,6 +255,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         # However, we pass it to all builds for consistency and
         # convenience.
         "go_branch": GO_BRANCHES[go_branch_short],
+        "env": {},
     }
 
     # TODO(heschi): Select the version based on the macOS version or builder type
@@ -262,11 +265,11 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     run_mods = run_mods_of(builder_type)
     if "longtest" in run_mods:
         properties["long_test"] = True
-        properties["env"] = {
-            "GO_TEST_TIMEOUT_SCALE": "5",
-        }
+        properties["env"]["GO_TEST_TIMEOUT_SCALE"] = "5"
     if "race" in run_mods:
         properties["race_mode"] = True
+    if "boringcrypto" in run_mods:
+        properties["env"]["GOEXPERIMENT"]="boringcrypto"
     if project == "go" and bucket == "ci":
         # The main repo builder also triggers subrepo builders of the same builder type.
         #
