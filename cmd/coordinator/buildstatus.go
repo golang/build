@@ -809,12 +809,33 @@ func (st *buildStatus) toolchainBaselineCommit() (baseline string, err error) {
 	return "", fmt.Errorf("cannot find latest release for %s", st.RevBranch)
 }
 
+// Temporarily hard-code the subrepo baseline commits to use.
+//
+// TODO(rfindley): in the future, we should use the latestRelease method to
+// automatically choose the latest patch release of the previous minor version
+// (e.g. v0.11.x while we're working on v0.12.y).
+var subrepoBaselines = map[string]string{
+	"tools": "6ce74ceaddcc4ff081d22ae134f4264a667d394f", // gopls@v0.11.0, with additional instrumentation for memory and CPU usage
+}
+
 // subrepoBaselineCommit determines the baseline commit for this subrepo benchmark run.
 func (st *buildStatus) subrepoBaselineCommit() (baseline string, err error) {
-	if st.SubName != "tools" {
+	commit, ok := subrepoBaselines[st.SubName]
+	if !ok {
 		return "", fmt.Errorf("unknown subrepo for benchmarking %q", st.SubName)
 	}
+	return commit, nil
+}
 
+// latestRelease returns the latest release version for a module in subrepo. If
+// submodule is non-empty, it is the path to a subdirectory containing the
+// submodule of interest (for example submodule is "gopls" if we are
+// considering the module golang.org/x/tools/gopls). Otherwise the module is
+// assumed to be at repo root.
+//
+// It is currently unused, but preserved for future use by the
+// subrepoBaselineCommit method.
+func (st *buildStatus) latestRelease(submodule string) (string, error) {
 	// Baseline is the latest gopls release tag (but not prerelease).
 	gerritClient := pool.NewGCEConfiguration().GerritClient()
 	tags, err := gerritClient.GetProjectTags(st.ctx, st.SubName)
@@ -822,34 +843,36 @@ func (st *buildStatus) subrepoBaselineCommit() (baseline string, err error) {
 		return "", fmt.Errorf("error fetching tags for %q: %w", st.SubName, err)
 	}
 
-	goplsVersions := make([]string, 0)
-	goplsRevisions := make(map[string]string)
+	var versions []string
+	revisions := make(map[string]string)
+	prefix := "refs/tags"
+	if submodule != "" {
+		prefix += "/" + submodule // e.g. gopls tags are "gopls/vX.Y.Z"
+	}
 	for ref, ti := range tags {
-		// gopls tags are "gopls/vX.Y.Z". Ignore non-gopls tags.
-		const prefix = "refs/tags/gopls/"
 		if !strings.HasPrefix(ref, prefix) {
 			continue
 		}
 		version := ref[len(prefix):]
-		goplsVersions = append(goplsVersions, version)
-		goplsRevisions[version] = ti.Revision
+		versions = append(versions, version)
+		revisions[version] = ti.Revision
 	}
 
-	semver.Sort(goplsVersions)
+	semver.Sort(versions)
 
 	// Return latest non-prerelease version.
-	for i := len(goplsVersions) - 1; i >= 0; i-- {
-		ver := goplsVersions[i]
+	for i := len(versions) - 1; i >= 0; i-- {
+		ver := versions[i]
 		if !semver.IsValid(ver) {
 			continue
 		}
 		if semver.Prerelease(ver) != "" {
 			continue
 		}
-		return goplsRevisions[ver], nil
+		return revisions[ver], nil
 	}
 
-	return "", fmt.Errorf("no valid versions found in %+v", goplsVersions)
+	return "", fmt.Errorf("no valid versions found in %+v", versions)
 }
 
 // reportErr reports an error to Stackdriver.
