@@ -132,6 +132,8 @@ luci.list_view(
 #
 # The format of a builder type is thus $HOST(-$RUN_MOD)*.
 BUILDER_TYPES = [
+    "linux-386",
+    "linux-386-longtest",
     "linux-amd64",
     "linux-amd64-boringcrypto",
     "linux-amd64-longtest",
@@ -240,14 +242,6 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         The full name including a bucket prefix.
     """
 
-    # Copy the dimensions and set the pool, which aligns with the bucket names.
-    dimensions = dict(HOSTS[host_of(builder_type)])
-    dimensions["pool"] = "luci.golang." + bucket
-    if dimensions["os"] == "Mac":
-        # Macs are currently relatively scarce, so they live in the shared-workers pool.
-        dimensions["pool"] = "luci.golang.shared-workers"
-
-    name = builder_name(project, go_branch_short, builder_type)
     properties = {
         "project": project,
         # NOTE: LUCI will pass in the commit information. This is
@@ -257,6 +251,22 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         "go_branch": GO_BRANCHES[go_branch_short],
         "env": {},
     }
+
+    # We run 386 builds on amd64 with GO[HOST]ARCH set.
+    host = host_of(builder_type)
+    if builder_type.split("-")[1] == "386":
+        host = host.replace("386", "amd64")
+        properties["env"]["GOARCH"] = "386"
+        properties["env"]["GOHOSTARCH"] = "386"
+
+    # Copy the dimensions and set the pool, which aligns with the bucket names.
+    dimensions = dict(HOSTS[host])
+    dimensions["pool"] = "luci.golang." + bucket
+    if dimensions["os"] == "Mac":
+        # Macs are currently relatively scarce, so they live in the shared-workers pool.
+        dimensions["pool"] = "luci.golang.shared-workers"
+
+    name = builder_name(project, go_branch_short, builder_type)
 
     # TODO(heschi): Select the version based on the macOS version or builder type
     if dimensions["os"] == "Mac":
@@ -269,7 +279,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
     if "race" in run_mods:
         properties["race_mode"] = True
     if "boringcrypto" in run_mods:
-        properties["env"]["GOEXPERIMENT"]="boringcrypto"
+        properties["env"]["GOEXPERIMENT"] = "boringcrypto"
     if project == "go" and bucket == "ci":
         # The main repo builder also triggers subrepo builders of the same builder type.
         #
