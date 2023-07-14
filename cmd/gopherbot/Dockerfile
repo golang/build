@@ -22,7 +22,7 @@ COPY . /go/src/golang.org/x/build/
 RUN go install golang.org/x/build/cmd/gopherbot
 
 
-FROM debian:stretch
+FROM debian:bookworm
 LABEL maintainer="golang-dev@googlegroups.com"
 
 # netbase and ca-certificates are needed for dialing TLS.
