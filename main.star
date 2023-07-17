@@ -144,10 +144,11 @@ luci.list_view(
 
 # BUILDER_TYPES lists possible builder types.
 #
-# A builder type is a combination of a host and a series of run-time
-# modifications, listed in RUN_MODS.
+# A builder type is a combination of a GOOS and GOARCH, an optional suffix that
+# specifies the OS version, and a series of run-time modifications
+# (listed in RUN_MODS).
 #
-# The format of a builder type is thus $HOST(-$RUN_MOD)*.
+# The format of a builder type is thus $GOOS-$GOARCH(_osversion)?(-$RUN_MOD)*.
 BUILDER_TYPES = [
     "darwin-amd64",
     "linux-386",
@@ -222,24 +223,54 @@ GO_BRANCHES = {
     "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
 }
 
-# HOSTS is a mapping of host types to Swarming dimensions.
-#
-# The format of each host is $GOOS-$GOARCH(-$HOST_SPECIFIER)?.
-HOSTS = {
-    "darwin-amd64": struct(scarce = True, dimensions = {"os": "Mac", "cpu": "x86-64"}),
-    "linux-amd64": struct(scarce = False, dimensions = {"os": "Linux", "cpu": "x86-64"}),
-    "linux-arm64": struct(scarce = False, dimensions = {"os": "Linux", "cpu": "arm64"}),
-    "linux-ppc64le": struct(scarce = True, dimensions = {"os": "Linux", "cpu": "ppc64le"}),
-    "windows-amd64": struct(scarce = False, dimensions = {"os": "Windows", "cpu": "x86-64"}),
-}
+# LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
+# They need to match the builder type, excluding any run mods.
+LOW_CAPACITY_HOSTS = [
+    "darwin-amd64",
+    "linux-ppc64le",
+]
 
-# Return the host type for the given builder type.
-def host_of(builder_type):
-    return "-".join(builder_type.split("-")[:2])
+def split_builder_type(builder_type):
+    """split_builder_type splits a builder type into its pieces.
 
-# Return a list of run-time modifications enabled in the given builder type.
-def run_mods_of(builder_type):
-    return [x for x in builder_type.split("-") if x in RUN_MODS]
+    Args:
+        builder_type: the builder type.
+
+    Returns:
+        The builder type's GOOS, GOARCH, OS version, and run mods.
+    """
+    parts = builder_type.split("-")
+    os, arch = parts[0], parts[1]
+    suffix = ""
+    if "_" in arch:
+        arch, suffix = arch.split("_", 2)
+    return os, arch, suffix, parts[2:]
+
+def dimensions_of(builder_type):
+    """dimensions_of returns the bot dimensions for a builder type."""
+    os, arch, suffix, _ = split_builder_type(builder_type)
+
+    # LUCI uses Mac to refer to macOS.
+    os = os.replace("darwin", "mac").capitalize()
+
+    # We run 386 builds on AMD64.
+    arch = arch.replace("386", "amd64")
+
+    # LUCI calls amd64 x86-64.
+    arch = arch.replace("amd64", "x86-64")
+
+    if os == "Linux" and suffix != "":
+        # linux-amd64_debian11 -> Debian-11
+        os = suffix.replace("debian", "Debian-")
+    elif os == "Mac" and suffix != "":
+        # darwin-amd64_12.6 -> Mac-12.6
+        os = "Mac-" + suffix
+
+    return {"os": os, "cpu": arch}
+
+def is_capacity_constrained(builder_type):
+    dims = dimensions_of(builder_type)
+    return any([dimensions_of(x) == dims for x in LOW_CAPACITY_HOSTS])
 
 # builder_name produces the final builder name.
 def builder_name(project, go_branch_short, builder_type, gerrit_host = "go"):
@@ -304,24 +335,23 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
         "env": {},
     }
 
+    os, arch, _, run_mods = split_builder_type(builder_type)
     # We run 386 builds on amd64 with GO[HOST]ARCH set.
-    host = host_of(builder_type)
-    if builder_type.split("-")[1] == "386":
-        host = host.replace("386", "amd64")
+    if arch == "386":
         base_props["env"]["GOARCH"] = "386"
         base_props["env"]["GOHOSTARCH"] = "386"
 
     # Construct the basic dimensions for the build/test running part of the build.
     #
     # Note that these should generally live in the worker pools.
-    base_dims = dict(HOSTS[host].dimensions)
+    base_dims = dimensions_of(builder_type)
     base_dims["pool"] = "luci.golang." + bucket + "-workers"
-    if HOSTS[host].scarce:
+    if is_capacity_constrained(builder_type):
         # Scarce resources live in the shared-workers pool.
         base_dims["pool"] = "luci.golang.shared-workers"
 
     # TODO(heschi): Select the version based on the macOS version or builder type
-    if base_dims["os"] == "Mac":
+    if os == "darwin":
         base_props["xcode_version"] = "12e5244e"
 
     # Turn on the no-network check.
@@ -333,7 +363,6 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
         if project == "go" and (go_branch_short == "go1.21" or go_branch_short == "go1.20"):
             base_props.pop("no_network")
 
-    run_mods = run_mods_of(builder_type)
     if "longtest" in run_mods:
         base_props["long_test"] = True
         base_props["env"]["GO_TEST_TIMEOUT_SCALE"] = "5"
@@ -392,13 +421,13 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Emit the builder definitions.
     if project == "go":
-        define_go_builder(name, bucket, host, go_branch_short, builder_type, base_props, base_dims, emit_builder)
+        define_go_builder(name, bucket, go_branch_short, builder_type, base_props, base_dims, emit_builder)
     else:
         define_subrepo_builder(name, base_props, base_dims, emit_builder)
 
     return bucket + "/" + name
 
-def define_go_builder(name, bucket, host, go_branch_short, builder_type, base_props, base_dims, emit_builder):
+def define_go_builder(name, bucket, go_branch_short, builder_type, base_props, base_dims, emit_builder):
     # Create 3 builders: the main entrypoint/coordinator builder,
     # a builder just to run make.bash, and a builder to run tests.
     #
@@ -418,7 +447,7 @@ def define_go_builder(name, bucket, host, go_branch_short, builder_type, base_pr
     # TODO(mknyszek): Remove the exception for the go1.20 branch once it
     # is no longer supported.
     test_shards = 1
-    if not HOSTS[host].scarce and go_branch_short != "go1.20":
+    if not is_capacity_constrained(builder_type) and go_branch_short != "go1.20":
         test_shards = 4
 
     # The main repo builder also triggers subrepo builders of the same builder type.
@@ -435,7 +464,7 @@ def define_go_builder(name, bucket, host, go_branch_short, builder_type, base_pr
         ]
 
     # Coordinator builder.
-    coord_dims = dict(HOSTS["linux-amd64"].dimensions)
+    coord_dims = dimensions_of("linux-amd64")
     coord_dims.update({
         "pool": "luci.golang." + bucket,
     })
@@ -514,7 +543,7 @@ luci.builder(
         name = "tricium_simple",
     ),
     service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-    dimensions = HOSTS[host_of("linux-amd64")].dimensions,
+    dimensions = dimensions_of("linux-amd64"),
 )
 
 def display_for_builder_type(builder_type):
@@ -536,8 +565,9 @@ def display_for_builder_type(builder_type):
 # if this builder_type should run in postsubmit for the given project and branch.
 # buildifier: disable=unused-variable
 def enabled(project, go_branch_short, builder_type):
-    run_mods = run_mods_of(builder_type)
-    presubmit = not any(["longtest" in run_mods, "race" in run_mods, "misccompile" in run_mods])
+    _, _, _, run_mods = split_builder_type(builder_type)
+    presubmit = not any([x in run_mods for x in ["longtest", "race", "misccompile"]])
+    presubmit = presubmit and not is_capacity_constrained(builder_type)
     postsubmit = True
     return presubmit, postsubmit
 
