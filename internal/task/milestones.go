@@ -121,9 +121,11 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 	if err != nil {
 		return err
 	}
+	ctx.Printf("Processing %d open issues in milestone %d.", len(issues), milestones.Current)
 	for issueNumber, labels := range issues {
 		var newLabels *[]string
 		var newMilestone *int
+		var actions []string // A short description of actions taken, for the log line.
 		removeLabel := func(name string) {
 			if !labels[name] {
 				return
@@ -135,6 +137,7 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 				}
 				*newLabels = append(*newLabels, label)
 			}
+			actions = append(actions, fmt.Sprintf("removed label %q", name))
 		}
 		if kind == KindBeta && strings.HasSuffix(version, "beta1") {
 			removeLabel("okay-after-beta1")
@@ -142,6 +145,11 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 			removeLabel("okay-after-rc1")
 		} else if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
 			newMilestone = &milestones.Next
+			actions = append(actions, fmt.Sprintf("pushed to milestone %d", milestones.Next))
+		}
+		if newMilestone == nil && newLabels == nil {
+			ctx.Printf("Nothing to do for issue %d.", issueNumber)
+			continue
 		}
 		_, _, err := m.Client.EditIssue(ctx, m.RepoOwner, m.RepoName, issueNumber, &github.IssueRequest{
 			Milestone: newMilestone,
@@ -150,6 +158,7 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 		if err != nil {
 			return err
 		}
+		ctx.Printf("Updated issue %d: %s.", issueNumber, strings.Join(actions, ", "))
 	}
 	if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
 		_, _, err := m.Client.EditMilestone(ctx, m.RepoOwner, m.RepoName, milestones.Current, &github.Milestone{
@@ -158,6 +167,7 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 		if err != nil {
 			return err
 		}
+		ctx.Printf("Closed milestone %d.", milestones.Current)
 	}
 	return nil
 }
