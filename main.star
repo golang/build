@@ -186,19 +186,6 @@ PROJECTS = [
     "website",
 ]
 
-# NO_NETWORK_PROJECTS_OPT_OUT lists go.googlesource.com/<project> projects that
-# have opted out of no-network check. TODO(dmitshur): Turn up the remaining repos.
-NO_NETWORK_PROJECTS_OPT_OUT = [
-    "go",       # needs investigation: 20 failing tests in https://ci.chromium.org/b/8776274213581709009
-    "mobile",   # fails due to a pre-existing issue (not related to no-network)
-    "pkgsite",  # TestDirectoryModuleGetterEmpty failed; haven't looked further
-    "pkgsite-metrics",  # build error: /internal/log/cloud_handler.go:20:3: slog.HandlerOptions{…}.NewJSONHandler undefined; unsure, need to look more
-    "tools",    # TestWeb/GOPATH and something more failed; need to look closer
-    "vuln",     # "binary built using unsupported Go version: "go1.21rc2" errors; unsure why but might not be related to no-network
-    "vulndb",   # x/vulndb failed with "unable to retrieve canonical module path from proxy: Get "https://proxy.golang.org/..."; probably needs testing.Short skip
-    "website",  # x/website/internal/screentest fails with net::ERR_INTERNET_DISCONNECTED errors; probably missing testing.Short skip
-]
-
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
@@ -309,7 +296,8 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         "golang.cache_tools_root": 100,
         "golang.no_network_in_short_test_mode": 100,
     }
-    if project in NO_NETWORK_PROJECTS_OPT_OUT:
+    # TODO(dmitshur): Make no-network work for the main Go repo. See https://ci.chromium.org/b/8776274213581709009.
+    if project == "go":
         experiments.pop("golang.no_network_in_short_test_mode")
 
     # Construct the executable reference.
