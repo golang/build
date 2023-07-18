@@ -2653,10 +2653,6 @@ func init() {
 		Name:     "darwin-amd64-longtest",
 		HostType: "host-darwin-amd64-13-aws",
 		Notes:    "macOS 13 with go test -short=false",
-		tryBot: func(repo, branch, goBranch string) bool {
-			onReleaseBranch := strings.HasPrefix(branch, "release-branch.")
-			return repo == "go" && onReleaseBranch // See issue 37827.
-		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
 			if repo == "go" && !atLeastGo1(goBranch, 21) {
