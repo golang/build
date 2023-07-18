@@ -9,10 +9,10 @@ import "testing"
 var go119Unsupported = false
 
 var turndownMsg = `
-Since Go 1.19 is not longer supported, vcs-test.golang.org is no
-longer needed for testing any release branch and should be turned
-down, and x/build/vcs-test/... should be deleted.
-(See https://go.dev/issue/27494.)`
+Since Go 1.19 is definitely not longer supported by now,
+vcs-test.golang.org is no longer needed for testing any release branch and should have been turned
+down, and x/build/vcs-test/... should have been deleted.
+(See https://go.dev/issue/61425.)`
 
 func TestTurnDownVCSTest(t *testing.T) {
 	if !go119Unsupported {
