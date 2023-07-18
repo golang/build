@@ -481,6 +481,33 @@ def enabled(project, go_branch_short, builder_type):
     postsubmit = True
     return presubmit, postsubmit
 
+# Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
+#
+# TODO(prattmic): Switch to TryBot-Result once we are ready to use these for
+# submit enforcement.
+POST_ACTIONS = [
+    cq.post_action_gerrit_label_votes(
+        name = "trybot-success",
+        conditions = [
+            cq.post_action_triggering_condition(
+                mode = cq.MODE_DRY_RUN,
+                statuses = [cq.STATUS_SUCCEEDED],
+            ),
+        ],
+        labels = {"LUCI-TryBot-Result": 1},
+    ),
+    cq.post_action_gerrit_label_votes(
+        name = "trybot-failure",
+        conditions = [
+            cq.post_action_triggering_condition(
+                mode = cq.MODE_DRY_RUN,
+                statuses = [cq.STATUS_FAILED, cq.STATUS_CANCELLED],
+            ),
+        ],
+        labels = {"LUCI-TryBot-Result": -1},
+    ),
+]
+
 def _define_go_ci():
     for project in PROJECTS:
         for go_branch_short, branch_props in GO_BRANCHES.items():
@@ -510,6 +537,7 @@ def _define_go_ci():
                         mode_allowlist = [cq.MODE_ANALYZER_RUN],
                     ),
                 ],
+                post_actions = POST_ACTIONS,
             )
 
             # Define builders.
@@ -659,6 +687,7 @@ def _define_go_internal_ci():
                     mode_allowlist = [cq.MODE_ANALYZER_RUN],
                 ),
             ],
+            # TODO(prattmic): Set post_actions to apply TryBot-Result labels.
         )
 
         for builder_type in BUILDER_TYPES:
