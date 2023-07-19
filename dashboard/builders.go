@@ -122,7 +122,7 @@ var Builders = map[string]*BuildConfig{}
 // GoBootstrap is the bootstrap Go version.
 // Bootstrap Go builds with this name must be in the bucket,
 // usually uploaded by 'genbootstrap -upload all'.
-const GoBootstrap = "go1.17.13"
+const GoBootstrap = "go1.20.6"
 
 // Hosts contains the names and configs of all the types of
 // buildlets. They can be VMs, containers, or dedicated machines.
@@ -477,58 +477,49 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "NetBSD 9.3; GCE VM is built from script in build/env/netbsd-386",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		SSHUsername: "root",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-netbsd-amd64-9_3": {
 		VMImage:     "netbsd-amd64-9-3-202211120320v2",
 		Notes:       "NetBSD 9.3; GCE VM is built from script in build/env/netbsd-amd64",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		SSHUsername: "root",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-netbsd-arm-bsiegert": {
-		IsReverse:   true,
-		ExpectNum:   1,
-		Owners:      []*gophers.Person{gh("bsiegert")},
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
+		IsReverse: true,
+		ExpectNum: 1,
+		Owners:    []*gophers.Person{gh("bsiegert")},
 	},
 	"host-netbsd-arm64-bsiegert": {
-		IsReverse:   true,
-		ExpectNum:   1,
-		Owners:      []*gophers.Person{gh("bsiegert")},
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
+		IsReverse: true,
+		ExpectNum: 1,
+		Owners:    []*gophers.Person{gh("bsiegert")},
 	},
 	"host-openbsd-386-72": {
 		VMImage:     "openbsd-386-72",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		Notes:       "OpenBSD 7.2; GCE VM, built from build/env/openbsd-386",
 		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-amd64-72": {
 		VMImage:     "openbsd-amd64-72",
 		machineType: "n2", // force Intel; see go.dev/issue/49209
 		Notes:       "OpenBSD 7.2; GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername: "gopher",
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
 	},
 	"host-openbsd-arm-joelsing": {
-		IsReverse:   true,
-		ExpectNum:   1,
-		Owners:      []*gophers.Person{gh("4a6f656c")},
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
+		IsReverse: true,
+		ExpectNum: 1,
+		Owners:    []*gophers.Person{gh("4a6f656c")},
 	},
 	"host-openbsd-arm64-joelsing": {
-		IsReverse:   true,
-		ExpectNum:   1,
-		Owners:      []*gophers.Person{gh("4a6f656c")},
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
+		IsReverse: true,
+		ExpectNum: 1,
+		Owners:    []*gophers.Person{gh("4a6f656c")},
 	},
 	"host-openbsd-mips64-joelsing": {
-		IsReverse:   true,
-		ExpectNum:   1,
-		Owners:      []*gophers.Person{gh("4a6f656c")},
-		GoBootstrap: "go1.19.2", // Go 1.17 is too old; see go.dev/issue/42422
+		IsReverse: true,
+		ExpectNum: 1,
+		Owners:    []*gophers.Person{gh("4a6f656c")},
 	},
 	"host-openbsd-ppc64-n2vi": {
 		IsReverse:   true,
