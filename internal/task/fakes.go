@@ -535,8 +535,12 @@ func (g *FakeGerrit) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	ServeTarball("", repoContent, w, r)
 }
 
-func (g *FakeGerrit) QueryChanges(ctx context.Context, query string) ([]string, error) {
+func (*FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.ChangeInfo, error) {
 	return nil, nil
+}
+
+func (*FakeGerrit) SetHashtags(_ context.Context, changeID string, _ gerrit.HashtagsInput) error {
+	return fmt.Errorf("pretend that SetHashtags failed")
 }
 
 // NewFakeSignService returns a fake signing service that can sign PKGs, MSIs,

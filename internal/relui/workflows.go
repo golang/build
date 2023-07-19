@@ -286,6 +286,13 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		wf.Output(wd, "pinged", pinged)
 		h.RegisterDefinition("ping early-in-cycle issues in development milestone", wd)
 	}
+	{
+		// Register an "unwait wait-release CLs" workflow.
+		wd := wf.New()
+		unwaited := wf.Task0(wd, "Unwait wait-release CLs", version.UnwaitWaitReleaseCLs)
+		wf.Output(wd, "unwaited", unwaited)
+		h.RegisterDefinition("unwait wait-release CLs", wd)
+	}
 
 	// Register dry-run release workflows.
 	registerBuildTestSignOnlyWorkflow(h, version, build, currentMajor+1, task.KindBeta)

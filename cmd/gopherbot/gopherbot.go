@@ -439,7 +439,6 @@ var tasks = []struct {
 }{
 	// Tasks that are specific to the golang/go repo.
 	{"kicktrain", (*gopherbot).getOffKickTrain},
-	{"unwait-release", (*gopherbot).unwaitRelease},
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label compiler/runtime issues", (*gopherbot).labelCompilerRuntimeIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
@@ -894,38 +893,6 @@ func (b *gopherbot) getOffKickTrain(ctx context.Context) error {
 			if err := b.setMilestone(ctx, b.gorepo.ID(), m.gi, unplanned); err != nil {
 				return err
 			}
-		}
-	}
-	return nil
-}
-
-// unwaitRelease changes any Gerrit CL with hashtag "wait-release"
-// into "ex-wait-release". This is run manually (with --only-run)
-// at the opening of a release cycle.
-func (b *gopherbot) unwaitRelease(ctx context.Context) error {
-	// We only run this task if it was explicitly requested via
-	// the --only-run flag.
-	if *onlyRun == "" {
-		return nil
-	}
-	cis, err := b.gerrit.QueryChanges(ctx, "hashtag:wait-release status:open")
-	if err != nil {
-		return nil
-	}
-	for _, ci := range cis {
-		if *dryRun {
-			log.Printf("[dry run] would remove hashtag 'wait-release' from CL %d", ci.ChangeNumber)
-			continue
-		}
-		log.Printf("https://go.dev/cl/%d: removing wait-release", ci.ChangeNumber)
-		time.Sleep(3 * time.Second) // Take a moment between updating CLs, since a human will be running this task manually.
-		_, err := b.gerrit.SetHashtags(ctx, ci.ID, gerrit.HashtagsInput{
-			Add:    []string{"ex-wait-release"},
-			Remove: []string{"wait-release"},
-		})
-		if err != nil {
-			log.Printf("https://go.dev/cl/%d: modifying hash tags: %v", ci.ChangeNumber, err)
-			return err
 		}
 	}
 	return nil
