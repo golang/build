@@ -190,6 +190,7 @@ PROJECTS = [
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
     "gotip": struct(branch="master", bootstrap="go1.20.6"),
+    "go1.21": struct(branch="release-branch.go1.21", bootstrap="go1.19.3"),
     "go1.20": struct(branch="release-branch.go1.20", bootstrap="go1.17.6"),
 }
 
