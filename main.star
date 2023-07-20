@@ -189,9 +189,9 @@ PROJECTS = [
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
-    "gotip": struct(branch="master", bootstrap="go1.20.6"),
-    "go1.21": struct(branch="release-branch.go1.21", bootstrap="go1.17.13"),
-    "go1.20": struct(branch="release-branch.go1.20", bootstrap="go1.17.13"),
+    "gotip": struct(branch="master", bootstrap="1.20.6"),
+    "go1.21": struct(branch="release-branch.go1.21", bootstrap="1.17.13"),
+    "go1.20": struct(branch="release-branch.go1.20", bootstrap="1.17.13"),
 }
 
 # HOSTS is a mapping of host types to Swarming dimensions.
