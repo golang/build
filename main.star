@@ -189,8 +189,8 @@ PROJECTS = [
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
-    "gotip": "master",
-    "go1.20": "release-branch.go1.20",
+    "gotip": struct(branch="master", bootstrap="go1.20.6"),
+    "go1.20": struct(branch="release-branch.go1.20", bootstrap="go1.17.6"),
 }
 
 # HOSTS is a mapping of host types to Swarming dimensions.
@@ -250,7 +250,8 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         # extra information that's only necessary for x/ repos.
         # However, we pass it to all builds for consistency and
         # convenience.
-        "go_branch": GO_BRANCHES[go_branch_short],
+        "go_branch": GO_BRANCHES[go_branch_short].branch,
+        "bootstrap_version": GO_BRANCHES[go_branch_short].bootstrap,
         "env": {},
     }
 
@@ -458,7 +459,7 @@ def enabled(project, go_branch_short, builder_type):
 
 def _define_go_ci():
     for project in PROJECTS:
-        for go_branch_short, go_branch in GO_BRANCHES.items():
+        for go_branch_short, branch_props in GO_BRANCHES.items():
             # Set up a CQ group for the builder definitions below.
             #
             # cq group names must match "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"
@@ -467,7 +468,7 @@ def _define_go_ci():
                 name = cq_group_name,
                 watch = cq.refset(
                     repo = "https://go.googlesource.com/%s" % project,
-                    refs = ["refs/heads/%s" % go_branch],
+                    refs = ["refs/heads/%s" % branch_props.branch],
                 ),
                 allow_submit_with_open_deps = True,
                 verifiers = [
@@ -515,7 +516,7 @@ def _define_go_ci():
             # This is controlled by the "builders_to_trigger" property on those
             # builders.
             if project == "go":
-                poller_branch = go_branch
+                poller_branch = branch_props.branch
             else:
                 poller_branch = "master"
             luci.gitiles_poller(
@@ -542,7 +543,7 @@ def _define_go_ci():
                     name = "%s-%s-ci" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
                     title = go_branch_short,
-                    refs = ["refs/heads/" + go_branch],
+                    refs = ["refs/heads/" + branch_props.branch],
                     entries = make_console_view_entries(postsubmit_builders),
                     header = {
                         "links": [
@@ -603,12 +604,12 @@ def _define_go_ci():
                     name = "%s-%s-by-go-ci" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
                     title = console_title + " (by go commit)",
-                    refs = ["refs/heads/" + go_branch],
+                    refs = ["refs/heads/" + branch_props.branch],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
 
 def _define_go_internal_ci():
-    for go_branch_short, go_branch in GO_BRANCHES.items():
+    for go_branch_short, branch_props in GO_BRANCHES.items():
         # TODO(yifany): Simplify cq.location_filter once Tricium to CV
         # migration (go/luci/tricium) is done.
         cq_group_name = ("go-internal_%s" % go_branch_short).replace(".", "-")
@@ -616,7 +617,7 @@ def _define_go_internal_ci():
             name = cq_group_name,
             watch = cq.refset(
                 repo = "https://go-internal.googlesource.com/go",
-                refs = ["refs/heads/%s" % go_branch],
+                refs = ["refs/heads/%s" % branch_props.branch],
             ),
             allow_submit_with_open_deps = True,
             verifiers = [
