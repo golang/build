@@ -189,9 +189,9 @@ PROJECTS = [
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
-    "gotip": struct(branch="master", bootstrap="1.20.6"),
-    "go1.21": struct(branch="release-branch.go1.21", bootstrap="1.17.13"),
-    "go1.20": struct(branch="release-branch.go1.20", bootstrap="1.17.13"),
+    "gotip": struct(branch = "master", bootstrap = "1.20.6"),
+    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
+    "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
 }
 
 # HOSTS is a mapping of host types to Swarming dimensions.
@@ -213,15 +213,31 @@ def run_mods_of(builder_type):
     return [x for x in builder_type.split("-") if x in RUN_MODS]
 
 # builder_name produces the final builder name.
-def builder_name(project, go_branch_short, builder_type):
+def builder_name(project, go_branch_short, builder_type, gerrit_host = "go"):
+    """Derives the name for a certain builder.
+
+    Args:
+        project: A go project defined in `PROJECTS`.
+        go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
+        builder_type: A name defined in `BUILDER_TYPES`.
+        gerrit_host: The gerrit host name, either `go` or `go-internal`.
+
+    Returns:
+        The full name for the builder with the given specs.
+    """
+
     if project == "go":
         # Omit the project name for the main Go repository.
         # The branch short name already has a "go" prefix so
         # it's clear what the builder is building and testing.
-        return "%s-%s" % (go_branch_short, builder_type)
+        if gerrit_host == "go-internal":
+            return "%s-internal-%s" % (go_branch_short, builder_type)
+        else:
+            return "%s-%s" % (go_branch_short, builder_type)
 
     # Add an x_ prefix to the project to help make it clear that
-    # we're testing a golang.org/x/* repository.
+    # we're testing a golang.org/x/* repository. These repositories
+    # do not have an "internal" counterpart.
     return "x_%s-%s-%s" % (project, go_branch_short, builder_type)
 
 # Enum values for golangbuild's "mode" property.
@@ -232,7 +248,7 @@ GOLANGBUILD_MODES = {
     "TEST": 3,
 }
 
-def define_builder(bucket, project, go_branch_short, builder_type):
+def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host = "go"):
     """Creates a builder definition.
 
     Args:
@@ -240,6 +256,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         project: A go project defined in `PROJECTS`.
         go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
+        gerrit_host: The gerrit host name, either `go` or `go-internal`.
 
     Returns:
         The full name including a bucket prefix.
@@ -270,7 +287,7 @@ def define_builder(bucket, project, go_branch_short, builder_type):
         # Macs are currently relatively scarce, so they live in the shared-workers pool.
         dimensions["pool"] = "luci.golang.shared-workers"
 
-    name = builder_name(project, go_branch_short, builder_type)
+    name = builder_name(project, go_branch_short, builder_type, gerrit_host)
 
     # TODO(heschi): Select the version based on the macOS version or builder type
     if dimensions["os"] == "Mac":
@@ -642,7 +659,7 @@ def _define_go_internal_ci():
             presubmit, _ = enabled("go", go_branch_short, builder_type)
 
             # Define presubmit builders.
-            name = define_builder("try", "go-internal", go_branch_short, builder_type)
+            name = define_builder("try", "go", go_branch_short, builder_type, "go-internal")
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
