@@ -1699,11 +1699,13 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 		if backportComment == nil {
 			return nil
 		}
+
+		// Figure out releases to open backport issues for.
+		var selectedReleases []string
 		majorReleases, _, err := b.fetchReleases(ctx)
 		if err != nil {
 			return err
 		}
-		var selectedReleases []string
 		for _, r := range majorReleases {
 			if strings.Contains(backportComment.Body, r) {
 				selectedReleases = append(selectedReleases, r)
@@ -1714,6 +1716,20 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 			// asked to backport to the upcoming release.
 			selectedReleases = majorReleases[:len(majorReleases)-1]
 		}
+
+		// Figure out extra labels to include from the main issue.
+		// Only copy a subset that's relevant to backport issue management.
+		var extraLabels []string
+		for _, l := range [...]string{
+			"Security",
+			"GoCommand",
+		} {
+			if gi.HasLabel(l) {
+				extraLabels = append(extraLabels, l)
+			}
+		}
+
+		// Open backport issues.
 		var openedIssues []string
 		for _, rel := range selectedReleases {
 			printIssue("open-backport-issue-"+rel, b.gorepo.ID(), gi)
@@ -1721,7 +1737,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 				fmt.Sprintf("%s [%s backport]", gi.Title, rel),
 				fmt.Sprintf("@%s requested issue #%d to be considered for backport to the next %s minor release.\n\n%s\n",
 					backportComment.User.Login, gi.Number, rel, blockqoute(backportComment.Body)),
-				[]string{"CherryPickCandidate"}, backportComment.Created)
+				append([]string{"CherryPickCandidate"}, extraLabels...), backportComment.Created)
 			if err != nil {
 				return err
 			}
