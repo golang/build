@@ -1253,6 +1253,11 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 			}
 
 			deadline := waitStart.AddDate(0, 1, 0) // 1 month
+			if gi.HasLabel("CherryPickCandidate") {
+				// Cherry-pick candidates may sometimes need to wait for fixes
+				// to soak on the order of months, so give them more time.
+				deadline = waitStart.AddDate(0, 6, 0)
+			}
 			if now.Before(deadline) {
 				return nil
 			}
