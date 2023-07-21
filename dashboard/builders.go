@@ -416,13 +416,10 @@ var Hosts = map[string]*HostConfig{
 		HermeticReverse: true,
 	},
 	"host-linux-ppc64-sid-power10": {
-		Notes:     "debian sid; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
-		Owners:    []*gophers.Person{gh("pmur")},
-		IsReverse: true,
-		// GOPPC64=power10 is only supported in go1.20 and later. The container provides a 1.20 bootstrap.
-		env: []string{
-			"GOPPC64=power10",
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		Notes:           "debian sid; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
+		Owners:          []*gophers.Person{gh("pmur")},
+		IsReverse:       true,
+		env:             []string{"GOPPC64=power10"},
 		ExpectNum:       5,
 		SSHUsername:     "root",
 		HermeticReverse: true,
@@ -436,13 +433,10 @@ var Hosts = map[string]*HostConfig{
 		HermeticReverse: true,
 	},
 	"host-linux-ppc64le-power10-osu": {
-		Notes:     "Ubuntu 20.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
-		Owners:    []*gophers.Person{gh("pmur")},
-		IsReverse: true,
-		// GOPPC64=power10 is only supported in go1.20 and later. The container provides a patched boostrap compiler.
-		env: []string{
-			"GOPPC64=power10",
-			"GOROOT_BOOTSTRAP=/usr/local/go-bootstrap"},
+		Notes:           "Ubuntu 22.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl",
+		Owners:          []*gophers.Person{gh("pmur")},
+		IsReverse:       true,
+		env:             []string{"GOPPC64=power10"},
 		SSHUsername:     "root",
 		HermeticReverse: true,
 	},
