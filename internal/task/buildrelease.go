@@ -87,14 +87,7 @@ func adjustTar(reader *tar.Reader, writer *tar.Writer, prefixDir string, adjusts
 	if !strings.HasSuffix(prefixDir, "/") {
 		return fmt.Errorf("prefix dir %q must have a trailing /", prefixDir)
 	}
-	writer.WriteHeader(&tar.Header{
-		Name:       prefixDir,
-		Typeflag:   tar.TypeDir,
-		Mode:       0755,
-		ModTime:    time.Now(),
-		AccessTime: time.Now(),
-		ChangeTime: time.Now(),
-	})
+
 file:
 	for {
 		header, err := reader.Next()
@@ -205,6 +198,36 @@ func fixupCrossCompile(target *releasetargets.Target) adjustFunc {
 		if strings.HasPrefix(h.Name, "pkg/linux_amd64") ||
 			strings.HasPrefix(h.Name, "pkg/tool/linux_amd64") {
 			return nil
+		}
+		return h
+	}
+}
+
+// dropDirs drops all directory entries.
+func dropDirs() adjustFunc {
+	return func(h *tar.Header) *tar.Header {
+		if h.Typeflag == tar.TypeDir {
+			return nil
+		}
+		return h
+	}
+}
+
+// clearUserFields empties out all user and group fields.
+func clearUserFields() adjustFunc {
+	return func(h *tar.Header) *tar.Header {
+		h.Uid, h.Gid, h.Uname, h.Gname = 0, 0, "", ""
+		return h
+	}
+}
+
+// setTimes sets all timestamps to t.
+func setTimes(t time.Time) adjustFunc {
+	return func(h *tar.Header) *tar.Header {
+		h.ModTime = t
+		// Access/ChangeTime are only supported on PAX and GNU tar.
+		if h.Format != tar.FormatUSTAR {
+			h.AccessTime, h.ChangeTime = t, t
 		}
 		return h
 	}
@@ -460,7 +483,7 @@ type darwinDistData struct {
 }
 
 // ConvertPKGToTGZ converts a macOS installer (.pkg) to a .tar.gz tarball.
-func (b *BuildletStep) ConvertPKGToTGZ(ctx *workflow.TaskContext, in io.Reader, out io.Writer) error {
+func (b *BuildletStep) ConvertPKGToTGZ(ctx *workflow.TaskContext, in io.Reader, timestamp time.Time, out io.Writer) error {
 	if err := b.Buildlet.Put(ctx, in, "go.pkg", 0400); err != nil {
 		return err
 	}
@@ -485,7 +508,11 @@ func (b *BuildletStep) ConvertPKGToTGZ(ctx *workflow.TaskContext, in io.Reader, 
 	reader := tar.NewReader(gzReader)
 	gzWriter := gzip.NewWriter(out)
 	writer := tar.NewWriter(gzWriter)
-	if err := adjustTar(reader, writer, "go/", nil); err != nil {
+	if err := adjustTar(reader, writer, "go/", []adjustFunc{
+		dropDirs(),
+		clearUserFields(),
+		setTimes(timestamp),
+	}); err != nil {
 		return err
 	}
 	if err := writer.Close(); err != nil {
