@@ -198,10 +198,10 @@ GO_BRANCHES = {
 #
 # The format of each host is $GOOS-$GOARCH(-$HOST_SPECIFIER)?.
 HOSTS = {
-    "linux-amd64": {"os": "Linux", "cpu": "x86-64"},
-    "linux-arm64": {"os": "Linux", "cpu": "arm64"},
-    "windows-amd64": {"os": "Windows", "cpu": "x86-64"},
-    "darwin-amd64": {"os": "Mac", "cpu": "x86-64"},
+    "linux-amd64": struct(scarce = False, dimensions = {"os": "Linux", "cpu": "x86-64"}),
+    "linux-arm64": struct(scarce = False, dimensions = {"os": "Linux", "cpu": "arm64"}),
+    "windows-amd64": struct(scarce = False, dimensions = {"os": "Windows", "cpu": "x86-64"}),
+    "darwin-amd64": struct(scarce = True, dimensions = {"os": "Mac", "cpu": "x86-64"}),
 }
 
 # Return the host type for the given builder type.
@@ -262,7 +262,9 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
         The full name including a bucket prefix.
     """
 
-    properties = {
+    # Contruct the basic properties that will apply to all builders for
+    # this combination.
+    base_props = {
         "project": project,
         # NOTE: LUCI will pass in the commit information. This is
         # extra information that's only necessary for x/ repos.
@@ -277,51 +279,40 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
     host = host_of(builder_type)
     if builder_type.split("-")[1] == "386":
         host = host.replace("386", "amd64")
-        properties["env"]["GOARCH"] = "386"
-        properties["env"]["GOHOSTARCH"] = "386"
+        base_props["env"]["GOARCH"] = "386"
+        base_props["env"]["GOHOSTARCH"] = "386"
 
-    # Copy the dimensions and set the pool, which aligns with the bucket names.
-    dimensions = dict(HOSTS[host])
-    dimensions["pool"] = "luci.golang." + bucket
-    if dimensions["os"] == "Mac":
-        # Macs are currently relatively scarce, so they live in the shared-workers pool.
-        dimensions["pool"] = "luci.golang.shared-workers"
-
-    name = builder_name(project, go_branch_short, builder_type, gerrit_host)
+    # Construct the basic dimensions for the build/test running part of the build.
+    #
+    # Note that these should generally live in the worker pools.
+    base_dims = dict(HOSTS[host].dimensions)
+    base_dims["pool"] = "luci.golang." + bucket + "-workers"
+    if HOSTS[host].scarce:
+        # Scarce resources live in the shared-workers pool.
+        base_dims["pool"] = "luci.golang.shared-workers"
 
     # TODO(heschi): Select the version based on the macOS version or builder type
-    if dimensions["os"] == "Mac":
-        properties["xcode_version"] = "12e5244e"
+    if base_dims["os"] == "Mac":
+        base_props["xcode_version"] = "12e5244e"
 
     run_mods = run_mods_of(builder_type)
     if "longtest" in run_mods:
-        properties["long_test"] = True
-        properties["env"]["GO_TEST_TIMEOUT_SCALE"] = "5"
+        base_props["long_test"] = True
+        base_props["env"]["GO_TEST_TIMEOUT_SCALE"] = "5"
     if "race" in run_mods:
-        properties["race_mode"] = True
+        base_props["race_mode"] = True
     if "boringcrypto" in run_mods:
-        properties["env"]["GOEXPERIMENT"] = "boringcrypto"
-    if project == "go" and bucket == "ci":
-        # The main repo builder also triggers subrepo builders of the same builder type.
-        #
-        # TODO(mknyszek): This rule will not apply for some ports in the future. Some
-        # ports only apply to the main Go repository and are not supported by all subrepos.
-        # PROJECTS should probably contain a table of supported ports or something.
-        properties["builders_to_trigger"] = [
-            "golang/%s/%s" % (bucket, builder_name(project, go_branch_short, builder_type))
-            for project in PROJECTS
-            if project != "go"
-        ]
+        base_props["env"]["GOEXPERIMENT"] = "boringcrypto"
 
     # Named cache for git clones, required for golang.cache_git_clone.
-    properties["git_cache"] = "git"
+    base_props["git_cache"] = "git"
 
     # Named cache for cipd tools root.
-    properties["tools_cache"] = "tools"
+    base_props["tools_cache"] = "tools"
 
     caches = [
-         swarming.cache(properties["git_cache"]),
-         swarming.cache(properties["tools_cache"]),
+        swarming.cache(base_props["git_cache"]),
+        swarming.cache(base_props["tools_cache"]),
     ]
 
     # Determine which experiments to apply.
@@ -342,110 +333,141 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
         cmd = ["golangbuild"],
     )
 
-    luci.builder(
-        name = name,
-        bucket = bucket,
-        executable = executable,
-        dimensions = dimensions,
-        properties = properties,
-        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-        resultdb_settings = resultdb.settings(
-            enable = True,
-        ),
-        caches = caches,
-        experiments = experiments,
-    )
-
-    # Create experimental builders for sharding tests, but only for a limited
-    # set of configurations.
-    if project == "go" and go_branch_short == "gotip" and \
-       (host_of(builder_type) == "linux-amd64" or host_of(builder_type) == "windows-amd64"):
-        coord_name = name + "-coordinator"
-        build_name = name + "-build_go"
-        test_name = name + "-test_only"
-
-        # Coordinator builder.
-        coord_dims = dict(HOSTS["linux-amd64"])
-        coord_dims.update({
-            "pool": "luci.golang." + bucket,
-        })
-        coord_props = dict(properties)
-        coord_props.update({
-            "mode": GOLANGBUILD_MODES["COORDINATOR"],
-            "coord_mode": {
-                "build_builder": "golang/" + bucket + "/" + build_name,
-                "test_builder": "golang/" + bucket + "/" + test_name,
-                "num_test_shards": 2,
-            },
-            "builders_to_trigger": [],  # Don't try to trigger anything for now.
-        })
+    # Create a helper to emit builder definitions, installing common fields from
+    # the current context.
+    def emit_builder(name, dimensions, properties, service_account, **kwargs):
         luci.builder(
-            name = coord_name,
+            name = name,
             bucket = bucket,
             executable = executable,
-            dimensions = coord_dims,
-            properties = coord_props,
-            service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+            dimensions = dimensions,
+            properties = properties,
+            service_account = service_account,
             resultdb_settings = resultdb.settings(
                 enable = True,
             ),
             caches = caches,
             experiments = experiments,
+            **kwargs
         )
 
-        # Build builder.
-        build_dims = dict(dimensions)
-        build_dims.update({
-            "pool": "luci.golang." + bucket + "-workers",
-        })
-        build_props = dict(properties)
-        build_props.update({
-            "mode": GOLANGBUILD_MODES["BUILD"],
-            "build_mode": {},
-            "builders_to_trigger": [],  # Don't try to trigger anything.
-        })
-        luci.builder(
-            name = build_name,
-            bucket = bucket,
-            executable = executable,
-            dimensions = build_dims,
-            properties = build_props,
-            service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-            resultdb_settings = resultdb.settings(
-                enable = True,
-            ),
-            caches = caches,
-            experiments = experiments,
-        )
+    name = builder_name(project, go_branch_short, builder_type, gerrit_host)
 
-        # Test builder.
-        test_dims = dict(dimensions)
-        test_dims.update({
-            "pool": "luci.golang." + bucket + "-workers",
-        })
-        test_props = dict(properties)
-        test_props.update({
-            "mode": GOLANGBUILD_MODES["TEST"],
-            "test_mode": {},
-            "test_shard": {},
-            "builders_to_trigger": [],  # Don't try to trigger anything.
-        })
-        luci.builder(
-            name = test_name,
-            bucket = bucket,
-            executable = executable,
-            dimensions = test_dims,
-            properties = test_props,
-            allowed_property_overrides = ["test_shard"],
-            service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-            resultdb_settings = resultdb.settings(
-                enable = True,
-            ),
-            caches = caches,
-            experiments = experiments,
-        )
+    # Emit the builder definitions.
+    if project == "go":
+        define_go_builder(name, bucket, host, go_branch_short, builder_type, base_props, base_dims, emit_builder)
+    else:
+        define_subrepo_builder(name, base_props, base_dims, emit_builder)
 
     return bucket + "/" + name
+
+def define_go_builder(name, bucket, host, go_branch_short, builder_type, base_props, base_dims, emit_builder):
+    # Create 3 builders: the main entrypoint/coordinator builder,
+    # a builder just to run make.bash, and a builder to run tests.
+    #
+    # This separation of builders allows for the coordinator builder to have elevated privileges,
+    # because it will never run code still in code review. Furthermore, this separation allows
+    # for sharding tests, which is very important for build latency for the Go repository
+    # specifically.
+    #
+    # The main/coordinator builder must be the only one with the ability
+    # to schedule new builds.
+    coord_name = name
+    build_name = name + "-build_go"
+    test_name = name + "-test_only"
+
+    # Determine if we should be sharding tests, and how many shards.
+    #
+    # TODO(mknyszek): Remove the exception for the go1.20 branch once it
+    # is no longer supported.
+    test_shards = 1
+    if not HOSTS[host].scarce and go_branch_short != "go1.20":
+        test_shards = 4
+
+    # The main repo builder also triggers subrepo builders of the same builder type.
+    #
+    # TODO(mknyszek): This rule will not apply for some ports in the future. Some
+    # ports only apply to the main Go repository and are not supported by all subrepos.
+    # PROJECTS should probably contain a table of supported ports or something.
+    builders_to_trigger = []
+    if bucket == "ci":
+        builders_to_trigger = [
+            "golang/%s/%s" % (bucket, builder_name(project, go_branch_short, builder_type))
+            for project in PROJECTS
+            if project != "go"
+        ]
+
+    # Coordinator builder.
+    coord_dims = dict(HOSTS["linux-amd64"].dimensions)
+    coord_dims.update({
+        "pool": "luci.golang." + bucket,
+    })
+    coord_props = dict(base_props)
+    coord_props.update({
+        "mode": GOLANGBUILD_MODES["COORDINATOR"],
+        "coord_mode": {
+            "build_builder": "golang/" + bucket + "/" + build_name,
+            "test_builder": "golang/" + bucket + "/" + test_name,
+            "num_test_shards": test_shards,
+            "builders_to_trigger_after_toolchain_build": builders_to_trigger,
+        },
+    })
+    emit_builder(
+        name = coord_name,
+        dimensions = coord_dims,
+        properties = coord_props,
+        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+    )
+
+    # Build builder.
+    build_dims = dict(base_dims)
+    build_props = dict(base_props)
+    build_props.update({
+        "mode": GOLANGBUILD_MODES["BUILD"],
+        "build_mode": {},
+    })
+    emit_builder(
+        name = build_name,
+        dimensions = build_dims,
+        properties = build_props,
+        # TODO(mknyszek): Use a service account that doesn't have ScheduleBuild permissions.
+        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+    )
+
+    # Test builder.
+    test_dims = dict(base_dims)
+    test_props = dict(base_props)
+    test_props.update({
+        "mode": GOLANGBUILD_MODES["TEST"],
+        "test_mode": {},
+        "test_shard": {},
+    })
+    emit_builder(
+        name = test_name,
+        dimensions = test_dims,
+        properties = test_props,
+        # TODO(mknyszek): Use a service account that doesn't have ScheduleBuild permissions.
+        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+        allowed_property_overrides = ["test_shard"],
+    )
+
+def define_subrepo_builder(name, base_props, base_dims, emit_builder):
+    # Create an "ALL" mode builder which just performs the full build serially.
+    #
+    # This builder is substantially simpler than the Go builders because it doesn't need
+    # to trigger any downstream builders, and also doesn't need test sharding (all subrepos'
+    # tests run fast enough that it's unnecessary).
+    all_props = dict(base_props)
+    all_props.update({
+        "mode": GOLANGBUILD_MODES["ALL"],
+    })
+    emit_builder(
+        name = name,
+        dimensions = base_dims,
+        properties = all_props,
+        # TODO(mknyszek): Use a service account that doesn't have ScheduleBuild permissions.
+        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+    )
 
 luci.builder(
     name = "tricium",
@@ -454,7 +476,7 @@ luci.builder(
         name = "tricium_simple",
     ),
     service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-    dimensions = HOSTS[host_of("linux-amd64")],
+    dimensions = HOSTS[host_of("linux-amd64")].dimensions,
 )
 
 def display_for_builder_type(builder_type):
