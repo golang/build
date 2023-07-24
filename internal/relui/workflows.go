@@ -524,7 +524,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		case "darwin":
 			pkg := wf.Task2(wd, "Build PKG installer", tasks.buildDarwinPKG, version, tar)
 			signedPKG := wf.Task2(wd, "Sign PKG installer", tasks.signArtifact, pkg, wf.Const(sign.BuildMacOS))
-			signedTGZ := wf.Task2(wd, "Convert to .tgz", tasks.convertPKGToTGZ, timestamp, signedPKG)
+			signedTGZ := wf.Task1(wd, "Convert to .tgz", tasks.convertPKGToTGZ, signedPKG)
 			mod = wf.Task4(wd, "Merge signed files into module zip", tasks.mergeSignedToModule, version, timestamp, mod, signedTGZ)
 			artifacts = append(artifacts, signedPKG, signedTGZ)
 		case "windows":
@@ -889,10 +889,10 @@ func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, version string, 
 		return bs.BuildDarwinPKG(ctx, r, version, w)
 	})
 }
-func (b *BuildReleaseTasks) convertPKGToTGZ(ctx *wf.TaskContext, timestamp time.Time, pkg artifact) (tgz artifact, _ error) {
+func (b *BuildReleaseTasks) convertPKGToTGZ(ctx *wf.TaskContext, pkg artifact) (tgz artifact, _ error) {
 	bc := dashboard.Builders[pkg.Target.Builder]
 	return b.runBuildStep(ctx, pkg.Target, bc, pkg, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-		return bs.ConvertPKGToTGZ(ctx, r, timestamp, w)
+		return bs.ConvertPKGToTGZ(ctx, r, w)
 	})
 }
 
