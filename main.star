@@ -326,6 +326,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Determine which experiments to apply.
     experiments = {
+        "golang.cache_git_clone": 100,
         "golang.no_network_in_short_test_mode": 100,
     }
 
