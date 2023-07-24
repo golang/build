@@ -368,6 +368,14 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
+	checkTGZ(t, dlURL, files, "darwin-amd64.tar.gz", task.WebsiteFile{
+		OS:   "darwin",
+		Arch: "amd64",
+		Kind: "archive",
+	}, map[string]string{
+		"go/VERSION": versionFile,
+		"go/bin/go":  "-signed <macOS>",
+	})
 	checkContents(t, dlURL, files, "darwin-amd64.pkg", task.WebsiteFile{
 		OS:   "darwin",
 		Arch: "amd64",

@@ -504,7 +504,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 			blockers = append(blockers, match)
 			if target.GOOS == "windows" {
 				zip = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
-				tar = wf.Task1(wd, "Convert to .tgz", tasks.convertZipToTGZ, zip)
+				tar = wf.Task1(wd, "Convert zip to .tgz", tasks.convertZipToTGZ, zip)
 			} else {
 				tar = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
 			}
@@ -524,9 +524,10 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		case "darwin":
 			pkg := wf.Task2(wd, "Build PKG installer", tasks.buildDarwinPKG, version, tar)
 			signedPKG := wf.Task2(wd, "Sign PKG installer", tasks.signArtifact, pkg, wf.Const(sign.BuildMacOS))
-			signedTGZ := wf.Task1(wd, "Convert to .tgz", tasks.convertPKGToTGZ, signedPKG)
+			signedTGZ := wf.Task1(wd, "Convert PKG to .tgz", tasks.convertPKGToTGZ, signedPKG)
+			mergedTGZ := wf.Task2(wd, "Merge signed files into .tgz", tasks.mergeSignedToTGZ, tar, signedTGZ)
 			mod = wf.Task4(wd, "Merge signed files into module zip", tasks.mergeSignedToModule, version, timestamp, mod, signedTGZ)
-			artifacts = append(artifacts, signedPKG, signedTGZ)
+			artifacts = append(artifacts, signedPKG, mergedTGZ)
 		case "windows":
 			msi := wf.Task1(wd, "Build MSI installer", tasks.buildWindowsMSI, tar)
 			signedMSI := wf.Task2(wd, "Sign MSI installer", tasks.signArtifact, msi, wf.Const(sign.BuildWindows))
@@ -788,36 +789,67 @@ func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, version stri
 	return result, nil
 }
 
-func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version string, timestamp time.Time, mod moduleArtifact, signed artifact) (moduleArtifact, error) {
-	a, err := b.runBuildStep(ctx, nil, nil, signed, "signedmod.zip", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
-		// Load binaries from the signed tar file.
-		szr, err := gzip.NewReader(signed)
+func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, signed artifact) (artifact, error) {
+	return b.runBuildStep(ctx, unsigned.Target, nil, signed, "tar.gz", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
+		signedBinaries, err := loadBinaries(ctx, signed)
+
+		// Copy files from the tgz, overwriting with binaries from the signed tar.
+		scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
 		if err != nil {
 			return err
 		}
-		defer szr.Close()
-		str := tar.NewReader(szr)
+		ur, err := scratchFS.Open(unsigned.ScratchPath)
+		if err != nil {
+			return err
+		}
+		defer ur.Close()
+		uzr, err := gzip.NewReader(ur)
+		if err != nil {
+			return err
+		}
+		defer uzr.Close()
 
-		binaries := map[string][]byte{}
+		utr := tar.NewReader(uzr)
+
+		zw, err := gzip.NewWriterLevel(w, gzip.BestCompression)
+		if err != nil {
+			return err
+		}
+		tw := tar.NewWriter(zw)
+
 		for {
-			th, err := str.Next()
+			th, err := utr.Next()
 			if err == io.EOF {
 				break
 			} else if err != nil {
 				return err
 			}
-			if !strings.HasPrefix(th.Name, "go/bin/") && !strings.HasPrefix(th.Name, "go/pkg/tool/") {
-				continue
+
+			hdr := *th
+			src := io.NopCloser(utr)
+			if signed, ok := signedBinaries[th.Name]; ok {
+				src = io.NopCloser(bytes.NewReader(signed))
+				hdr.Size = int64(len(signed))
 			}
-			if th.Typeflag != tar.TypeReg || th.Mode&0100 == 0 {
-				continue
-			}
-			contents, err := io.ReadAll(str)
-			if err != nil {
+
+			if err := tw.WriteHeader(&hdr); err != nil {
 				return err
 			}
-			binaries[th.Name] = contents
+			if _, err := io.Copy(tw, src); err != nil {
+				return err
+			}
 		}
+
+		if err := tw.Close(); err != nil {
+			return err
+		}
+		return zw.Close()
+	})
+}
+
+func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version string, timestamp time.Time, mod moduleArtifact, signed artifact) (moduleArtifact, error) {
+	a, err := b.runBuildStep(ctx, nil, nil, signed, "signedmod.zip", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
+		signedBinaries, err := loadBinaries(ctx, signed)
 
 		// Copy files from the module zip, overwriting with binaries from the signed tar.
 		scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
@@ -849,7 +881,7 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 			if !ok {
 				continue
 			}
-			if contents, ok := binaries["go/"+suffix]; ok {
+			if contents, ok := signedBinaries["go/"+suffix]; ok {
 				in = io.NopCloser(bytes.NewReader(contents))
 			} else {
 				in, err = f.Open()
@@ -874,6 +906,39 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 	}
 	mod.ZipScratch = a.ScratchPath
 	return mod, nil
+}
+
+// loadBinaries reads binaries that we expect to have been signed by the
+// macOS signing process from tgz.
+func loadBinaries(ctx *wf.TaskContext, tgz io.Reader) (map[string][]byte, error) {
+	zr, err := gzip.NewReader(tgz)
+	if err != nil {
+		return nil, err
+	}
+	defer zr.Close()
+	tr := tar.NewReader(zr)
+
+	binaries := map[string][]byte{}
+	for {
+		th, err := tr.Next()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		if !strings.HasPrefix(th.Name, "go/bin/") && !strings.HasPrefix(th.Name, "go/pkg/tool/") {
+			continue
+		}
+		if th.Typeflag != tar.TypeReg || th.Mode&0100 == 0 {
+			continue
+		}
+		contents, err := io.ReadAll(tr)
+		if err != nil {
+			return nil, err
+		}
+		binaries[th.Name] = contents
+	}
+	return binaries, nil
 }
 
 func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
