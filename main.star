@@ -445,7 +445,8 @@ def define_go_builder(name, bucket, host, go_branch_short, builder_type, base_pr
     test_props.update({
         "mode": GOLANGBUILD_MODES["TEST"],
         "test_mode": {},
-        "test_shard": {},
+        # The default is no sharding. This may be overwritten by the coordinator builder.
+        "test_shard": {"shard_id": 0, "num_shards": 1},
     })
     emit_builder(
         name = test_name,
