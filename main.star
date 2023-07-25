@@ -132,6 +132,7 @@ luci.list_view(
 #
 # The format of a builder type is thus $HOST(-$RUN_MOD)*.
 BUILDER_TYPES = [
+    "darwin-amd64",
     "linux-386",
     "linux-386-longtest",
     "linux-amd64",
@@ -140,10 +141,10 @@ BUILDER_TYPES = [
     "linux-amd64-longtest-race",
     "linux-amd64-race",
     "linux-arm64",
+    "linux-ppc64le",
     "windows-amd64",
     "windows-amd64-longtest",
     "windows-amd64-race",
-    "darwin-amd64",
 ]
 
 # RUN_MODS is a list of valid run-time modifications to the way we
@@ -198,10 +199,11 @@ GO_BRANCHES = {
 #
 # The format of each host is $GOOS-$GOARCH(-$HOST_SPECIFIER)?.
 HOSTS = {
+    "darwin-amd64": struct(scarce = True, dimensions = {"os": "Mac", "cpu": "x86-64"}),
     "linux-amd64": struct(scarce = False, dimensions = {"os": "Linux", "cpu": "x86-64"}),
     "linux-arm64": struct(scarce = False, dimensions = {"os": "Linux", "cpu": "arm64"}),
+    "linux-ppc64le": struct(scarce = True, dimensions = {"os": "Linux", "cpu": "ppc64le"}),
     "windows-amd64": struct(scarce = False, dimensions = {"os": "Windows", "cpu": "x86-64"}),
-    "darwin-amd64": struct(scarce = True, dimensions = {"os": "Mac", "cpu": "x86-64"}),
 }
 
 # Return the host type for the given builder type.
