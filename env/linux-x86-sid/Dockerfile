@@ -43,6 +43,7 @@ RUN apt-get update && apt-get install -y \
 	openssh-server \
 	make \
 	sudo \
+	iproute2 \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Otherwise we get "Missing privilege separation directory: /run/sshd" ...

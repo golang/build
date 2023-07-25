@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y \
 	mercurial \
 	subversion \
 	iptables \
+	iproute2 \
 	swig \
 	make \
 	sudo \

@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y \
 	netbase \
 	make \
 	sudo \
+	iproute2 \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& rm -f /usr/bin/gcc
 

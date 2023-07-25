@@ -38,6 +38,7 @@ RUN apt-get update && apt-get install -y \
 	fonts-droid-fallback \
 	openssh-server \
 	iptables \
+	iproute2 \
 	make \
 	sudo \
 	&& rm -rf /var/lib/apt/lists/*

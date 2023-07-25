@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y \
 	openssh-server \
 	git \
 	iptables \
+	iproute2 \
 	screen \
 	make \
 	&& rm -rf /var/lib/apt/lists/*

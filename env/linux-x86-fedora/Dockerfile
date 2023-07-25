@@ -18,6 +18,7 @@ RUN yum -y update && yum -y install \
     openssh-server \
     make \
     sudo \
+	iproute2 \
     && true
 
 RUN ssh-keygen -A

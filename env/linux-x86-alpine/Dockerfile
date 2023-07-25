@@ -29,6 +29,7 @@ RUN apk add --no-cache \
 	openssh \
 	procps \
 	strace \
+	iproute2 \
 	sudo
 
 RUN ssh-keygen -A
