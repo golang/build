@@ -3198,7 +3198,7 @@ func init() {
 		env: []string{
 			"GOOS=wasip1", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
-			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GO_DISABLE_OUTBOUND_NETWORK=1", "GOWASIRUNTIME=wazero",
 		},
 	})
 	addBuilder(BuildConfig{
