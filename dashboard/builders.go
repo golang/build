@@ -3184,10 +3184,9 @@ func init() {
 		SkipSnapshot: true,
 	})
 	addBuilder(BuildConfig{
-		Name:        "wasip1-wasm-wazero",
-		HostType:    "host-linux-amd64-wasip1-wasm-wazero",
-		KnownIssues: []int{61043},
-		buildsRepo:  wasip1Default,
+		Name:       "wasip1-wasm-wazero",
+		HostType:   "host-linux-amd64-wasip1-wasm-wazero",
+		buildsRepo: wasip1Default,
 		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
 			if isNormalTry && (strings.Contains(distTest, "/internal/") || distTest == "reboot") {
 				// Skip some tests in an attempt to speed up normal trybots, inherited from CL 121938.
