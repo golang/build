@@ -165,6 +165,13 @@ BUILDER_TYPES = [
     "windows-amd64-race",
 ]
 
+# NO_NETWORK_BUILDERS are a subset of builder types
+# where we require the no-network check to run.
+NO_NETWORK_BUILDERS = [
+    "linux-386",
+    "linux-amd64",
+]
+
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = [
@@ -315,6 +322,15 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
     if base_dims["os"] == "Mac":
         base_props["xcode_version"] = "12e5244e"
 
+    # Turn on the no-network check.
+    if builder_type in NO_NETWORK_BUILDERS:
+        base_props["no_network"] = True
+        # Leave release branches out of scope, they can't work until some
+        # test fixes are backported, but doing that might not be worth it.
+        # TODO(dmitshur): Delete this after Go 1.21 drops off.
+        if project == "go" and (go_branch_short == "go1.21" or go_branch_short == "go1.20"):
+            base_props.pop("no_network")
+
     run_mods = run_mods_of(builder_type)
     if "longtest" in run_mods:
         base_props["long_test"] = True
@@ -337,12 +353,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Determine which experiments to apply.
     experiments = {
-        "golang.no_network_in_short_test_mode": 100,
     }
-
-    # TODO(dmitshur): Make no-network work for the main Go repo. See https://ci.chromium.org/b/8776274213581709009.
-    if project == "go":
-        experiments.pop("golang.no_network_in_short_test_mode")
 
     # Construct the executable reference.
     executable = luci.executable(
