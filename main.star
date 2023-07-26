@@ -414,11 +414,6 @@ def define_go_builder(name, bucket, host, go_branch_short, builder_type, base_pr
             "builders_to_trigger_after_toolchain_build": builders_to_trigger,
         },
     })
-    if "xcode_version" in coord_props:
-        # Clear platform-specific properties.
-        #
-        # TODO(mknyszek): Group them all together in a single object.
-        coord_props.pop("xcode_version")
     emit_builder(
         name = coord_name,
         dimensions = coord_dims,
