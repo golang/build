@@ -28,6 +28,7 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"github.com/google/go-github/v48/github"
 	"github.com/gregjones/httpcache"
+	"golang.org/x/build/cmd/gerritbot/internal/rules"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
@@ -729,7 +730,8 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		pushOpts = "%ready"
 	}
 
-	if cl == nil {
+	newCL := cl == nil
+	if newCL {
 		// Add this informational message only on CL creation.
 		msg := fmt.Sprintf("This Gerrit CL corresponds to GitHub PR %s.\n\nAuthor: %s", prShortLink(pr), author)
 		pushOpts += ",m=" + url.QueryEscape(msg)
@@ -766,7 +768,57 @@ Please visit Gerrit at %s.
   * You should word wrap the PR description at ~76 characters unless you need longer lines (e.g., for tables or URLs).
 * See the [Sending a change via GitHub](https://go.dev/doc/contribute#sending_a_change_github) and [Reviews](https://go.dev/doc/contribute#reviews) sections of the Contribution Guide as well as the [FAQ](https://github.com/golang/go/wiki/GerritBot/#frequently-asked-questions) for details.`,
 		pr.Head.GetSHA(), changeURL)
-	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
+	err = b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
+	if err != nil {
+		return err
+	}
+
+	if newCL {
+		// Check if we spot any problems with the CL according to our internal
+		// set of rules, and if so, add an unresolved comment to Gerrit.
+		// If the author responds to this, it also helps a reviewer see the author has
+		// registered for a Gerrit account and knows how to reply in Gerrit.
+		// TODO: see CL 509135 for possible follow-ups, including possibly always
+		// asking explicitly if the CL is ready for review even if there are no problems,
+		// and possibly reminder comments followed by ultimately automatically
+		// abandoning the CL if the author never replies.
+		change, err := rules.ParseCommitMessage(repo.GetName(), cmsg)
+		if err != nil {
+			return fmt.Errorf("failed to parse commit message for %s: %v", prShortLink(pr), err)
+		}
+		problems := rules.Check(change)
+		if len(problems) > 0 {
+			summary := rules.FormatResults(problems)
+			// If needed, summary contains advice for how to edit the commit message.
+			msg := fmt.Sprintf("Hello %v, I've spotted some possible problems.\n\n"+
+				"These findings are based on simple heuristics. If a finding appears wrong, briefly reply here saying so. "+
+				"Otherwise, please address any problems and update the GitHub PR. "+
+				"When complete, mark this comment as 'Done' and click the [blue 'Reply' button](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) above.\n\n"+
+				"%s\n\n"+
+				"(In general for Gerrit code reviews, the CL author is expected to close out each piece of feedback by "+
+				"marking it as 'Done' if implemented as suggested or otherwise reply to each review comment. "+
+				"See the [Review](https://go.dev/doc/contribute#review) section of the Contributing Guide for details.)",
+				author, summary)
+
+			gcl, err := b.gerritChangeForPR(pr)
+			if err != nil {
+				return fmt.Errorf("could not look up CL after creation for %s: %v", prShortLink(pr), err)
+			}
+			unresolved := true
+			ri := gerrit.ReviewInput{
+				Comments: map[string][]gerrit.CommentInput{
+					"/PATCHSET_LEVEL": {{Message: msg, Unresolved: &unresolved}},
+				},
+			}
+			// TODO: instead of gcl.ID, we might need to do something similar to changeTriple in cmd/coordinator.
+			err = b.gerritClient.SetReview(ctx, gcl.ChangeID, gcl.ID, ri)
+			if err != nil {
+				return fmt.Errorf("could not add findings comment to CL for %s: %v", prShortLink(pr), err)
+			}
+		}
+	}
+
+	return nil
 }
 
 var changeIdentRE = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-fA-F]{40})\n?`)
