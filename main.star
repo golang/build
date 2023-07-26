@@ -306,7 +306,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
     if "boringcrypto" in run_mods:
         base_props["env"]["GOEXPERIMENT"] = "boringcrypto"
 
-    # Named cache for git clones, required for golang.cache_git_clone.
+    # Named cache for git clones.
     base_props["git_cache"] = "git"
 
     # Named cache for cipd tools root.
@@ -319,7 +319,6 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Determine which experiments to apply.
     experiments = {
-        "golang.cache_git_clone": 100,
         "golang.no_network_in_short_test_mode": 100,
     }
 
