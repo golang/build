@@ -40,7 +40,24 @@ luci.project(
         # Allow any googler to see all bots and tasks there.
         luci.binding(
             roles = "role/swarming.poolViewer",
+            realm = [
+                "pools/prod",
+            ],
             groups = "googlers",
+        ),
+
+        # Allow everyone to see all bots and tasks there.
+        luci.binding(
+            roles = "role/swarming.poolViewer",
+            realm = [
+                # Do not add the security realm
+                "pools/ci",
+                "pools/ci-workers",
+                "pools/try",
+                "pools/try-workers",
+                "pools/shared-workers",
+            ],
+            groups = "all",
         ),
 
         # Allow any googler to read/validate/reimport the project configs.
