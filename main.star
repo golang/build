@@ -46,20 +46,6 @@ luci.project(
             groups = "googlers",
         ),
 
-        # Allow everyone to see all bots and tasks there.
-        luci.binding(
-            roles = "role/swarming.poolViewer",
-            realm = [
-                # Do not add the security realm
-                "pools/ci",
-                "pools/ci-workers",
-                "pools/try",
-                "pools/try-workers",
-                "pools/shared-workers",
-            ],
-            groups = "all",
-        ),
-
         # Allow any googler to read/validate/reimport the project configs.
         luci.binding(
             roles = "role/configs.developer",
@@ -111,6 +97,20 @@ luci.realm(name = "pools/try")
 luci.realm(name = "pools/try-workers")
 luci.realm(name = "pools/shared-workers")
 luci.realm(name = "pools/prod")
+
+# Allow everyone to see all bots and tasks there.
+luci.binding(
+    roles = "role/swarming.poolViewer",
+    realm = [
+        # Do not add the security realm
+        "pools/ci",
+        "pools/ci-workers",
+        "pools/try",
+        "pools/try-workers",
+        "pools/shared-workers",
+    ],
+    groups = "all",
+)
 
 # This is the cipd package name and version where the recipe bundler will put
 # the built recipes. This line makes it the default value for all `luci.recipe`
