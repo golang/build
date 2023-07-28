@@ -159,6 +159,7 @@ BUILDER_TYPES = [
     "linux-amd64-race",
     "linux-arm64",
     "linux-ppc64le",
+    "windows-386",
     "windows-amd64",
     "windows-amd64-longtest",
     "windows-amd64-race",
