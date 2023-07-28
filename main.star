@@ -183,37 +183,43 @@ RUN_MODS = [
     "misccompile",
 ]
 
+# PT is Project Type, a classification of a project.
+PT = struct(
+    CORE = "core",  # The Go project or something that it depends on. Needs to be tested everywhere.
+    LIBRARY = "library",  # A user-facing library. Needs to be tested on a representative set of platforms.
+    TOOL = "tool",  # A developer tool. Typically only run on mainstream platforms such as Linux, MacOS, and Windows.
+    SPECIAL = "special",  # None of the above; something that needs a handcrafted set.
+)
+
 # PROJECTS lists the go.googlesource.com/<project> projects we build and test for.
-#
-# TODO(mknyszek): This likely needs some form of classification.
-PROJECTS = [
-    "go",
-    "arch",
-    "benchmarks",
-    "build",
-    "crypto",
-    "debug",
-    "exp",
-    "image",
-    "mobile",
-    "mod",
-    "net",
-    "oauth2",
-    "perf",
-    "pkgsite",
-    "pkgsite-metrics",
-    "review",
-    "sync",
-    "sys",
-    "telemetry",
-    "term",
-    "text",
-    "time",
-    "tools",
-    "vuln",
-    "vulndb",
-    "website",
-]
+PROJECTS = {
+    "go": PT.CORE,
+    "arch": PT.CORE,
+    "benchmarks": PT.LIBRARY,
+    "build": PT.TOOL,
+    "crypto": PT.CORE,
+    "debug": PT.LIBRARY,
+    "exp": PT.LIBRARY,
+    "image": PT.LIBRARY,
+    "mobile": PT.SPECIAL,
+    "mod": PT.CORE,
+    "net": PT.CORE,
+    "oauth2": PT.LIBRARY,
+    "perf": PT.TOOL,
+    "pkgsite": PT.TOOL,
+    "pkgsite-metrics": PT.TOOL,
+    "review": PT.TOOL,
+    "sync": PT.CORE,
+    "sys": PT.CORE,
+    "telemetry": PT.TOOL,
+    "term": PT.CORE,
+    "text": PT.CORE,
+    "time": PT.LIBRARY,
+    "tools": PT.LIBRARY,
+    "vuln": PT.TOOL,
+    "vulndb": PT.TOOL,
+    "website": PT.TOOL,
+}
 
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
@@ -336,6 +342,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
     }
 
     os, arch, _, run_mods = split_builder_type(builder_type)
+
     # We run 386 builds on amd64 with GO[HOST]ARCH set.
     if arch == "386":
         base_props["env"]["GOARCH"] = "386"
@@ -357,6 +364,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
     # Turn on the no-network check.
     if builder_type in NO_NETWORK_BUILDERS:
         base_props["no_network"] = True
+
         # Leave release branches out of scope, they can't work until some
         # test fixes are backported, but doing that might not be worth it.
         # TODO(dmitshur): Delete this after Go 1.21 drops off.
@@ -389,8 +397,8 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Determine which experiments to apply.
     experiments = {
-        "golang.parallel_compile_only_ports": 50, # Try both and gather data.
-        "golang.parallel_compile_only_ports_maxprocs": 50, # Try both and gather data.
+        "golang.parallel_compile_only_ports": 50,  # Try both and gather data.
+        "golang.parallel_compile_only_ports_maxprocs": 50,  # Try both and gather data.
     }
 
     # Construct the executable reference.
@@ -571,10 +579,19 @@ def display_for_builder_type(builder_type):
 # if this builder_type should run in postsubmit for the given project and branch.
 # buildifier: disable=unused-variable
 def enabled(project, go_branch_short, builder_type):
-    _, _, _, run_mods = split_builder_type(builder_type)
-    presubmit = not any([x in run_mods for x in ["longtest", "race", "misccompile"]])
+    pt = PROJECTS[project]
+    os, arch, _, run_mods = split_builder_type(builder_type)
+
+    enable_types = None
+    if pt == PT.TOOL:
+        enable_types = ["linux-amd64", "windows-amd64", "darwin-amd64"]
+    elif project == "mobile":
+        enable_types = ["linux-amd64", "android"]
+    elif pt == PT.SPECIAL:
+        fail("unhandled SPECIAL project: %s" % project)
+    postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
+    presubmit = postsubmit and not any([x in run_mods for x in ["longtest", "race", "misccompile"]])
     presubmit = presubmit and not is_capacity_constrained(builder_type)
-    postsubmit = True
     return presubmit, postsubmit
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
