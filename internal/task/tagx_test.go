@@ -389,7 +389,7 @@ func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
 			st := &types.BuildStatus{
 				Builders: builders,
 			}
-			for _, commit := range r.History() {
+			for _, commit := range r.history {
 				st.Revisions = append(st.Revisions, types.BuildRevision{
 					Repo:       r.name,
 					Revision:   commit,

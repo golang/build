@@ -103,7 +103,7 @@ type releaseTestDeps struct {
 	publishedFiles map[string]task.WebsiteFile
 }
 
-func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion string) *releaseTestDeps {
+func newReleaseTestDeps(t *testing.T, previousTag, wantVersion string) *releaseTestDeps {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
@@ -177,7 +177,6 @@ esac
 	goRepo := task.NewFakeRepo(t, "go")
 	base := goRepo.Commit(goFiles)
 	goRepo.Tag(previousTag, base)
-	goRepo.Branch(fmt.Sprintf("release-branch.go1.%d", major), base)
 	dlRepo := task.NewFakeRepo(t, "dl")
 	toolsRepo := task.NewFakeRepo(t, "tools")
 	toolsRepo1 := toolsRepo.Commit(map[string]string{
@@ -257,7 +256,7 @@ esac
 }
 
 func testRelease(t *testing.T, prevTag string, major int, wantVersion string, kind task.ReleaseKind) {
-	deps := newReleaseTestDeps(t, prevTag, major, wantVersion)
+	deps := newReleaseTestDeps(t, prevTag, wantVersion)
 	wd := workflow.New()
 
 	deps.gerrit.wantReviewers = []string{"heschi", "dmitshur"}
@@ -418,7 +417,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 }
 
 func testSecurity(t *testing.T, mergeFixes bool) {
-	deps := newReleaseTestDeps(t, "go1.17", 18, "go1.18rc1")
+	deps := newReleaseTestDeps(t, "go1.17", "go1.18rc1")
 
 	// Set up the fake merge process. Once we stop to ask for approval, commit
 	// the fix to the public server.
@@ -432,7 +431,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	defaultApprove := deps.buildTasks.ApproveAction
 	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext) error {
 		if mergeFixes {
-			deps.goRepo.CommitOnBranch("release-branch.go1.18", securityFix)
+			deps.goRepo.Commit(securityFix)
 		}
 		return defaultApprove(tc)
 	}
@@ -469,7 +468,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 }
 
 func TestAdvisoryTrybotFail(t *testing.T) {
-	deps := newReleaseTestDeps(t, "go1.17", 18, "go1.18rc1")
+	deps := newReleaseTestDeps(t, "go1.17", "go1.18rc1")
 	defaultApprove := deps.buildTasks.ApproveAction
 	var trybotApprovals atomic.Int32
 	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {

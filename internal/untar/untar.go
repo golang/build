@@ -64,9 +64,10 @@ func untar(r io.Reader, dir string) (err error) {
 		rel := filepath.FromSlash(f.Name)
 		abs := filepath.Join(dir, rel)
 
-		mode := f.FileInfo().Mode()
-		switch f.Typeflag {
-		case tar.TypeReg:
+		fi := f.FileInfo()
+		mode := fi.Mode()
+		switch {
+		case mode.IsRegular():
 			// Make the directory. This is redundant because it should
 			// already be made by a directory entry in the tar
 			// beforehand. Thus, don't check for errors; the next
@@ -124,13 +125,11 @@ func untar(r io.Reader, dir string) (err error) {
 				}
 			}
 			nFiles++
-		case tar.TypeDir:
+		case mode.IsDir():
 			if err := os.MkdirAll(abs, 0755); err != nil {
 				return err
 			}
 			madeDir[abs] = true
-		case tar.TypeXGlobalHeader:
-			// git archive generates these. Ignore them.
 		default:
 			return fmt.Errorf("tar file entry %s contained unsupported file type %v", f.Name, mode)
 		}
