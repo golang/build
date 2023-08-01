@@ -157,6 +157,7 @@ BUILDER_TYPES = [
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-race",
+    "linux-amd64-misccompile",
     "linux-arm64",
     "linux-ppc64le",
     "windows-386",
@@ -178,6 +179,7 @@ RUN_MODS = [
     "longtest",
     "race",
     "boringcrypto",
+    "misccompile",
 ]
 
 # PROJECTS lists the go.googlesource.com/<project> projects we build and test for.
@@ -339,6 +341,11 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
         base_props["race_mode"] = True
     if "boringcrypto" in run_mods:
         base_props["env"]["GOEXPERIMENT"] = "boringcrypto"
+    if "misccompile" in run_mods:
+        # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
+        # that is to cross-compile all non-first-class ports to quickly flag portability issues.
+        base_props["compile_only"] = True
+        base_props["misc_ports"] = True
 
     # Named cache for git clones.
     base_props["git_cache"] = "git"
@@ -530,7 +537,7 @@ def display_for_builder_type(builder_type):
 # buildifier: disable=unused-variable
 def enabled(project, go_branch_short, builder_type):
     run_mods = run_mods_of(builder_type)
-    presubmit = not any(["longtest" in run_mods, "race" in run_mods])
+    presubmit = not any(["longtest" in run_mods, "race" in run_mods, "misccompile" in run_mods])
     postsubmit = True
     return presubmit, postsubmit
 
