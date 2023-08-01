@@ -55,8 +55,8 @@ func (m *MilestoneTasks) FetchMilestones(ctx *wf.TaskContext, currentVersion str
 	}
 	majorVersion := fmt.Sprintf("go1.%d", x)
 
-	// RCs and betas use the major version's milestone.
-	if kind == KindRC || kind == KindBeta {
+	// Betas, RCs, and major releases use the major version's milestone.
+	if kind == KindBeta || kind == KindRC || kind == KindMajor {
 		currentVersion = majorVersion
 	}
 
