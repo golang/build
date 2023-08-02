@@ -481,13 +481,11 @@ func DiffTarGz(log *Log, rebuilt, posted []byte, fix Fixer) bool {
 		field("typeflag", r.Typeflag, p.Typeflag)
 		field("linkname", r.Linkname, p.Linkname)
 		field("mode", r.Mode, p.Mode)
-		if false { // TODO enable these after #61513 is fixed
-			field("uid", r.Uid, p.Uid)
-			field("gid", r.Gid, p.Gid)
-			field("uname", r.Uname, p.Uname)
-			field("gname", r.Gname, p.Gname)
-			field("mtime", r.ModTime, p.ModTime)
-		}
+		field("uid", r.Uid, p.Uid)
+		field("gid", r.Gid, p.Gid)
+		field("uname", r.Uname, p.Uname)
+		field("gname", r.Gname, p.Gname)
+		field("mtime", r.ModTime, p.ModTime)
 		field("atime", r.AccessTime, p.AccessTime)
 		field("ctime", r.ChangeTime, p.ChangeTime)
 		field("devmajor", r.Devmajor, p.Devmajor)
