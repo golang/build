@@ -26,6 +26,9 @@ pre { margin-left: 2em; }
 
 {{define "autoopen"}} {{if not (eq . "PASS")}} open {{end}} {{end}}
 
+Gorebuild version {{.Version}}.<br>
+Built with Go version {{.GoVersion}}, {{.GOOS}}-{{.GOARCH}}.<br>
+<br>
 Rebuild started at {{.Start.UTC.Format "2006-01-02 15:04:05"}} UTC.<br>
 Rebuild finished at {{.End.UTC.Format "2006-01-02 15:04:05"}} UTC.<br>
 Elapsed time: {{(.End.Sub .Start).Round 1e9}}.

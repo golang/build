@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +21,10 @@ import (
 // A Report is the report about this reproduction attempt.
 // It also holds unexported state for use during the attempt.
 type Report struct {
+	Version    string // module@version of gorebuild command
+	GoVersion  string // version of go command gorebuild was built with
+	GOOS       string
+	GOARCH     string
 	Start      time.Time    // time reproduction started
 	End        time.Time    // time reproduction ended
 	Work       string       // work directory
@@ -122,12 +127,23 @@ func (l *Log) Printf(format string, args ...any) {
 // Run runs the rebuilds indicated by args and returns the resulting report.
 func Run(args []string) *Report {
 	r := &Report{
-		Start: time.Now(),
-		Full:  runtime.GOOS == "linux" && runtime.GOARCH == "amd64",
+		Version:   "(unknown)",
+		GoVersion: runtime.Version(),
+		GOOS:      runtime.GOOS,
+		GOARCH:    runtime.GOARCH,
+		Start:     time.Now(),
+		Full:      runtime.GOOS == "linux" && runtime.GOARCH == "amd64",
 	}
 	defer func() {
 		r.End = time.Now()
 	}()
+	if info, ok := debug.ReadBuildInfo(); ok {
+		m := &info.Main
+		if m.Replace != nil {
+			m = m.Replace
+		}
+		r.Version = m.Path + "@" + m.Version
+	}
 
 	var err error
 	defer func() {
