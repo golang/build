@@ -424,13 +424,13 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Emit the builder definitions.
     if project == "go":
-        define_go_builder(name, bucket, go_branch_short, builder_type, base_props, base_dims, emit_builder)
+        define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
     else:
         define_subrepo_builder(name, base_props, base_dims, emit_builder)
 
     return bucket + "/" + name
 
-def define_go_builder(name, bucket, go_branch_short, builder_type, base_props, base_dims, emit_builder):
+def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
     # Create 3 builders: the main entrypoint/coordinator builder,
     # a builder just to run make.bash, and a builder to run tests.
     #
@@ -446,12 +446,13 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, base_props, b
     test_name = name + "-test_only"
 
     # Determine if we should be sharding tests, and how many shards.
-    #
-    # TODO(mknyszek): Remove the exception for the go1.20 branch once it
-    # is no longer supported.
     test_shards = 1
     if not is_capacity_constrained(builder_type) and go_branch_short != "go1.20":
+        # TODO(mknyszek): Remove the exception for the go1.20 branch once it
+        # is no longer supported.
         test_shards = 4
+    if "misccompile" in run_mods:
+        test_shards = 12
 
     # The main repo builder also triggers subrepo builders of the same builder type.
     #
