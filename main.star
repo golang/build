@@ -402,6 +402,9 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
     # Create a helper to emit builder definitions, installing common fields from
     # the current context.
     def emit_builder(name, dimensions, properties, service_account, **kwargs):
+        exps = dict(experiments)
+        if "ppc64le" in dimensions["cpu"]:
+            exps["luci.best_effort_platform"] = 100
         luci.builder(
             name = name,
             bucket = bucket,
@@ -413,7 +416,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
                 enable = True,
             ),
             caches = caches,
-            experiments = experiments,
+            experiments = exps,
             **kwargs
         )
 
