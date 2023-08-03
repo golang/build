@@ -89,6 +89,7 @@ var slowBotAliases = map[string]string{
 	"openbsd-arm64":         "openbsd-arm64-jsing",
 	"openbsd-mips64":        "openbsd-mips64-jsing",
 	"openbsd-ppc64":         "openbsd-ppc64-n2vi",
+	"openbsd-riscv64":       "openbsd-riscv64-jsing",
 	"plan9":                 "plan9-arm",
 	"plan9-386":             "plan9-386-0intro",
 	"plan9-amd64":           "plan9-amd64-0intro",
@@ -523,6 +524,15 @@ var Hosts = map[string]*HostConfig{
 		GoBootstrap: "none",
 		env: []string{
 			"GOROOT_BOOTSTRAP=/home/gopher/go-openbsd-ppc64-bootstrap",
+		},
+	},
+	"host-openbsd-riscv64-joelsing": {
+		IsReverse:   true,
+		ExpectNum:   1,
+		Owners:      []*gophers.Person{gh("4a6f656c")},
+		GoBootstrap: "none",
+		env: []string{
+			"GOROOT_BOOTSTRAP=/home/gopher/go-openbsd-riscv64-bootstrap",
 		},
 	},
 	"host-plan9-386-0intro": {
@@ -2142,6 +2152,27 @@ func init() {
 		},
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
+	})
+	addBuilder(BuildConfig{
+		Name:         "openbsd-riscv64-jsing",
+		HostType:     "host-openbsd-riscv64-joelsing",
+		KnownIssues:  []int{55999},
+		SkipSnapshot: true,
+		FlakyNet:     true,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			switch repo {
+			case "go", "net", "sys":
+				return branch == "master" && goBranch == "master"
+			default:
+				return false
+			}
+		},
+		distTestAdjust: noTestDirAndNoReboot,
+		tryBot:         nil,
+		env: []string{
+			// The machine is slow.
+			"GO_TEST_TIMEOUT_SCALE=3",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-386-9_3",
