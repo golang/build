@@ -389,6 +389,8 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Determine which experiments to apply.
     experiments = {
+        "golang.parallel_compile_only_ports": 50, # Try both and gather data.
+        "golang.parallel_compile_only_ports_maxprocs": 50, # Try both and gather data.
     }
 
     # Construct the executable reference.
