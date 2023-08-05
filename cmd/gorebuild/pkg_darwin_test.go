@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"testing"
@@ -24,7 +25,7 @@ func TestStripDarwinSig(t *testing.T) {
 	}
 
 	var log Log
-	stripped := StripDarwinSig(&log, exe, data)
+	stripped := StripDarwinSig(&log, "/bin/"+filepath.Base(exe), data)
 	for _, m := range log.Messages {
 		t.Log(m.Text)
 	}
