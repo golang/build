@@ -26,6 +26,8 @@ service GomoteService {
   rpc ListDirectory (ListDirectoryRequest) returns (ListDirectoryResponse) {}
   // ListInstances lists all of the live gomote instances owned by the caller.
   rpc ListInstances (ListInstancesRequest) returns (ListInstancesResponse) {}
+  // ListSwarmingBuilders lists all of the swarming builders for the project.
+  rpc ListSwarmingBuilders (ListSwarmingBuildersRequest) returns (ListSwarmingBuildersResponse) {}
   // ReadTGZToURL tars and zips a directory which exists on the gomote instance and returns a URL where it can be
   // downloaded from.
   rpc ReadTGZToURL (ReadTGZToURLRequest) returns (ReadTGZToURLResponse) {}
@@ -178,6 +180,14 @@ message ListInstancesRequest {}
 // ListInstancesResponse contains the list of live gomote instances owned by the caller.
 message ListInstancesResponse {
   repeated Instance instances = 1;
+}
+
+// ListSwarmingBuildersRequest specifies the data needed to list all swarming builders.
+message ListSwarmingBuildersRequest {}
+
+// ListSwarmingBuildersResponse contains a list of swarming builders.
+message ListSwarmingBuildersResponse {
+  repeated string builders = 1;
 }
 
 // ReadTGZToURLRequest specifies the data needed to retrieve a tar and zipped directory from a gomote instance.
