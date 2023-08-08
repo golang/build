@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/gomote/protos"
+	"golang.org/x/build/internal/swarmclient"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/nettest"
 	"google.golang.org/grpc"
@@ -33,7 +35,7 @@ import (
 
 const testBucketName = "unit-testing-bucket"
 
-func fakeGomoteServer(t *testing.T, ctx context.Context) protos.GomoteServiceServer {
+func fakeGomoteServer(t *testing.T, ctx context.Context, configClient *swarmclient.ConfigClient) protos.GomoteServiceServer {
 	signer, err := ssh.ParsePrivateKey([]byte(devCertCAPrivate))
 	if err != nil {
 		t.Fatalf("unable to parse raw certificate authority private key into signer=%s", err)
@@ -44,17 +46,25 @@ func fakeGomoteServer(t *testing.T, ctx context.Context) protos.GomoteServiceSer
 		gceBucketName:           testBucketName,
 		scheduler:               schedule.NewFake(),
 		sshCertificateAuthority: signer,
+		luciConfigClient:        configClient,
 	}
 }
 
 func setupGomoteTest(t *testing.T, ctx context.Context) protos.GomoteServiceClient {
+	contents, err := os.ReadFile("../swarmclient/testdata/bb-sample.cfg")
+	if err != nil {
+		t.Fatalf("unable to read test buildbucket config: %s", err)
+	}
+	configClient := swarmclient.NewMemoryConfigClient(ctx, []*swarmclient.ConfigEntry{
+		&swarmclient.ConfigEntry{"cr-buildbucket.cfg", contents},
+	})
 	lis, err := nettest.NewLocalListener("tcp")
 	if err != nil {
 		t.Fatalf("unable to create net listener: %s", err)
 	}
 	sopts := access.FakeIAPAuthInterceptorOptions()
 	s := grpc.NewServer(sopts...)
-	protos.RegisterGomoteServiceServer(s, fakeGomoteServer(t, ctx))
+	protos.RegisterGomoteServiceServer(s, fakeGomoteServer(t, ctx, configClient))
 	go s.Serve(lis)
 
 	// create GRPC client
@@ -412,6 +422,31 @@ func TestListInstance(t *testing.T) {
 	got := response.GetInstances()
 	if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&protos.Instance{}, "expires", "host_type")); diff != "" {
 		t.Errorf("ListInstances() mismatch (-want, +got):\n%s", diff)
+	}
+}
+
+func TestListSwarmingBuilders(t *testing.T) {
+	client := setupGomoteTest(t, context.Background())
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	response, err := client.ListSwarmingBuilders(ctx, &protos.ListSwarmingBuildersRequest{})
+	if err != nil {
+		t.Fatalf("client.ListSwarmingBuilders = nil, %s; want no error", err)
+	}
+	got := response.GetBuilders()
+	if diff := cmp.Diff([]string{"gotip-linux-amd64-boringcrypto"}, got); diff != "" {
+		t.Errorf("ListBuilders() mismatch (-want, +got):\n%s", diff)
+	}
+}
+
+func TestListSwarmingBuildersError(t *testing.T) {
+	client := setupGomoteTest(t, context.Background())
+	req := &protos.ListSwarmingBuildersRequest{}
+	got, err := client.ListSwarmingBuilders(context.Background(), req)
+	if err != nil && status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("unexpected error: %s; want %s", err, codes.Unauthenticated)
+	}
+	if err == nil {
+		t.Fatalf("client.ListSwarmingBuilder(ctx, %v) = %v, nil; want error", req, got)
 	}
 }
 
