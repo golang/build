@@ -109,6 +109,15 @@
                 </button>
               </div>
             </div>
+            {{else if eq $p.Type.String "bool"}}
+            <div class="NewWorkflow-parameter NewWorkflow-parameter--bool">
+              <label for="workflow.params.{{$p.Name}}" title="{{$p.Doc}}">{{$p.Name}}</label>
+              <input
+                id="workflow.params.{{$p.Name}}"
+                name="workflow.params.{{$p.Name}}"
+                {{- with $p.HTMLInputType}}type="{{.}}"{{end}}
+                {{- if $p.RequireNonZero}}required{{end}} />
+            </div>
           {{else}}
             <div class="NewWorkflow-parameter">
               <label title="{{$p.Doc}}">{{$p.Name}}</label>

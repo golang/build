@@ -223,6 +223,12 @@ var (
 	SliceLong = ParamType[[]string]{
 		HTMLElement: "textarea",
 	}
+
+	// Checkbox bool parameter
+	Bool = ParamType[bool]{
+		HTMLElement:   "input",
+		HTMLInputType: "checkbox",
+	}
 )
 
 // Param registers a new parameter p that is filled in at

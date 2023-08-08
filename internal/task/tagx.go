@@ -54,7 +54,10 @@ func (x *TagXReposTasks) NewSingleDefinition() *wf.Definition {
 	reviewers := wf.Param(wd, reviewersParam)
 	repos := wf.Task0(wd, "Load all repositories", x.SelectRepos)
 	name := wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "tools"})
-	wf.Expand3(wd, "Create single-repo plan", x.BuildSingleRepoPlan, repos, name, reviewers)
+	// TODO: optional is required to avoid the "required" check, but since it's a checkbox
+	// it's obviously yes/no, should probably be exempted from that check.
+	skipPostSubmit := wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
+	wf.Expand4(wd, "Create single-repo plan", x.BuildSingleRepoPlan, repos, name, skipPostSubmit, reviewers)
 	return wd
 }
 
@@ -247,7 +250,7 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers
 			if _, ok := updated[repo.ModPath]; ok {
 				continue
 			}
-			dep, ok := x.planRepo(wd, repo, updated, reviewers)
+			dep, ok := x.planRepo(wd, repo, updated, reviewers, false)
 			if !ok {
 				continue
 			}
@@ -274,7 +277,7 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers
 	return nil
 }
 
-func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagRepo, name string, reviewers []string) error {
+func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagRepo, name string, skipPostSubmit bool, reviewers []string) error {
 	repos := map[string]TagRepo{}
 	updatedRepos := map[string]wf.Value[TagRepo]{}
 	for _, r := range repoSlice {
@@ -288,7 +291,7 @@ func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagR
 	if !ok {
 		return fmt.Errorf("no repository %q", name)
 	}
-	tagged, ok := x.planRepo(wd, repo, updatedRepos, reviewers)
+	tagged, ok := x.planRepo(wd, repo, updatedRepos, reviewers, skipPostSubmit)
 	if !ok {
 		return fmt.Errorf("%q doesn't have all of its dependencies (%q)", repo.Name, repo.Deps)
 	}
@@ -299,7 +302,7 @@ func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagR
 // planRepo adds tasks to wf to update and tag repo. It returns a Value
 // containing the tagged repository's information, or nil, false if its
 // dependencies haven't been planned yet.
-func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[string]wf.Value[TagRepo], reviewers []string) (_ wf.Value[TagRepo], ready bool) {
+func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[string]wf.Value[TagRepo], reviewers []string, skipPostSubmit bool) (_ wf.Value[TagRepo], ready bool) {
 	var deps []wf.Value[TagRepo]
 	for _, repoDeps := range repo.Deps {
 		if dep, ok := updated[repoDeps]; ok {
@@ -319,8 +322,10 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, updated map[s
 		cl := wf.Task3(wd, "mail updated go.mod", x.MailGoMod, repoName, gomod, wf.Const(reviewers))
 		tagCommit = wf.Task3(wd, "wait for submit", x.AwaitGoMod, cl, repoName, branch)
 	}
-	greenCommit := wf.Task2(wd, "wait for green post-submit", x.AwaitGreen, wf.Const(repo), tagCommit)
-	tagged := wf.Task2(wd, "tag if appropriate", x.MaybeTag, wf.Const(repo), greenCommit)
+	if !skipPostSubmit {
+		tagCommit = wf.Task2(wd, "wait for green post-submit", x.AwaitGreen, wf.Const(repo), tagCommit)
+	}
+	tagged := wf.Task2(wd, "tag if appropriate", x.MaybeTag, wf.Const(repo), tagCommit)
 	return tagged, true
 }
 

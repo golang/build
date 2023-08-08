@@ -344,7 +344,7 @@ type tagXTestDeps struct {
 	tagXTasks *TagXReposTasks
 }
 
-func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
+func newTagXTestDeps(t *testing.T, dashboardStatus string, repos ...*FakeRepo) *tagXTestDeps {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
@@ -367,10 +367,11 @@ func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
 
 	fakeBuildlets := NewFakeBuildlets(t, "", nil)
 	fakeGerrit := NewFakeGerrit(t, repos...)
-	var builders, allOK []string
+	var builders, dashboardStatuses []string
 	for _, b := range dashboard.Builders {
 		builders = append(builders, b.Name)
-		allOK = append(allOK, "ok")
+		// allOK = append(allOK, "ok")
+		dashboardStatuses = append(dashboardStatuses, dashboardStatus)
 	}
 	fakeDash := func(repo string) *types.BuildStatus {
 		if repo == "" {
@@ -397,7 +398,7 @@ func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
 					Date:       time.Now().Format(time.RFC3339),
 					Branch:     "master",
 					GoBranch:   "master",
-					Results:    allOK,
+					Results:    dashboardStatuses,
 				})
 			}
 			return st
@@ -447,7 +448,7 @@ func TestTagXRepos(t *testing.T) {
 	})
 	tools.Tag("v1.1.5", tools1)
 
-	deps := newTagXTestDeps(t, sys, mod, tools)
+	deps := newTagXTestDeps(t, "ok", sys, mod, tools)
 
 	wd := deps.tagXTasks.NewDefinition()
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -502,7 +503,7 @@ func TestTagXRepos(t *testing.T) {
 	}
 }
 
-func TestTagSingleRepo(t *testing.T) {
+func testTagSingleRepo(t *testing.T, dashboardStatus string, skipPostSubmit bool) {
 	mod := NewFakeRepo(t, "mod")
 	mod1 := mod.Commit(map[string]string{
 		"go.mod": "module golang.org/x/mod\n",
@@ -519,14 +520,20 @@ func TestTagSingleRepo(t *testing.T) {
 		"main.go": "package main",
 	})
 
-	deps := newTagXTestDeps(t, mod, foo)
+	deps := newTagXTestDeps(t, dashboardStatus, mod, foo)
 
 	wd := deps.tagXTasks.NewSingleDefinition()
 	ctx, cancel := context.WithTimeout(deps.ctx, time.Minute)
-	w, err := workflow.Start(wd, map[string]interface{}{
+	args := map[string]interface{}{
 		"Repository name":   "foo",
 		reviewersParam.Name: []string(nil),
-	})
+	}
+	if skipPostSubmit {
+		args["Skip post submit result (optional)"] = true
+	} else {
+		args["Skip post submit result (optional)"] = false
+	}
+	w, err := workflow.Start(wd, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -547,6 +554,12 @@ func TestTagSingleRepo(t *testing.T) {
 	if !strings.Contains(string(goMod), "mod@v1.1.0") {
 		t.Errorf("foo should use mod v1.1.0. go.mod: %v", string(goMod))
 	}
+}
+
+func TestTagSingleRepo(t *testing.T) {
+	t.Run("with post-submit check", func(t *testing.T) { testTagSingleRepo(t, "ok", false) })
+	// If skipPostSubmit is false, AwaitGreen should sit an spin for a minute before failing
+	t.Run("without post-submit check", func(t *testing.T) { testTagSingleRepo(t, "bad", true) })
 }
 
 type verboseListener struct {

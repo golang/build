@@ -371,6 +371,23 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			params[p.Name()] = v
+		case "bool":
+			vStr := r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name()))
+			var v bool
+			switch vStr {
+			case "on":
+				v = true
+			case "":
+				v = false
+			default:
+				http.Error(w, fmt.Sprintf("parameter %q has an unexpected value %q", p.Name(), vStr), http.StatusBadRequest)
+				return
+			}
+			if err := p.Valid(v); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			params[p.Name()] = v
 		default:
 			http.Error(w, fmt.Sprintf("parameter %q has an unsupported type %q", p.Name(), p.Type()), http.StatusInternalServerError)
 			return
