@@ -148,6 +148,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
@@ -295,4 +296,9 @@ func instanceDoesNotExist(err error) bool {
 		err = errors.Unwrap(err)
 	}
 	return false
+}
+
+func luciEnabled() bool {
+	on, _ := strconv.ParseBool(os.Getenv("GOMOTELUCI"))
+	return on
 }

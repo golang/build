@@ -78,6 +78,16 @@ func builders() (bt []builderType) {
 	return
 }
 
+func swarmingBuilders() ([]string, error) {
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	client := gomoteServerClient(ctx)
+	resp, err := client.ListSwarmingBuilders(ctx, &protos.ListSwarmingBuildersRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to retrieve swarming builders: %s", err)
+	}
+	return resp.Builders, nil
+}
+
 func create(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 
@@ -91,18 +101,30 @@ func create(args []string) error {
 		fmt.Fprintln(os.Stderr, "added to that group.")
 		fs.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "\nValid types:")
-		for _, bt := range builders() {
-			var warn string
-			if bt.IsReverse {
-				if bt.ExpectNum > 0 {
-					warn = fmt.Sprintf("   [limited capacity: %d machines]", bt.ExpectNum)
-				} else {
-					warn = "   [limited capacity]"
+		if luciEnabled() {
+			swarmingBuilders, err := swarmingBuilders()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, " %s\n", err)
+			} else {
+				for _, builder := range swarmingBuilders {
+					fmt.Fprintf(os.Stderr, "  * %s\n", builder)
 				}
 			}
-			fmt.Fprintf(os.Stderr, "  * %s%s\n", bt.Name, warn)
+			os.Exit(1)
+		} else {
+			for _, bt := range builders() {
+				var warn string
+				if bt.IsReverse {
+					if bt.ExpectNum > 0 {
+						warn = fmt.Sprintf("   [limited capacity: %d machines]", bt.ExpectNum)
+					} else {
+						warn = "   [limited capacity]"
+					}
+				}
+				fmt.Fprintf(os.Stderr, "  * %s%s\n", bt.Name, warn)
+			}
+			os.Exit(1)
 		}
-		os.Exit(1)
 	}
 	var status bool
 	fs.BoolVar(&status, "status", true, "print regular status updates while waiting")
