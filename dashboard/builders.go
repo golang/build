@@ -1770,7 +1770,7 @@ func init() {
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-nounified",
-		HostType: "host-linux-amd64-buster",
+		HostType: "host-linux-amd64-bullseye",
 		Notes:    "builder with GOEXPERIMENT=nounified, see go.dev/issue/51397 and go.dev/issue/57977",
 		tryBot: func(repo, branch, goBranch string) bool {
 			return (repo == "go" || repo == "tools") && goBranch == "release-branch.go1.20"
@@ -1784,6 +1784,24 @@ func init() {
 		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:     "linux-amd64-newinliner",
+		HostType: "host-linux-amd64-bullseye",
+		Notes:    "builder with GOEXPERIMENT=newinliner, see go.dev/issue/61883",
+		tryBot: func(repo, branch, goBranch string) bool {
+			return repo == "go" && goBranch == "master"
+		},
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return repo == "go" && goBranch == "master"
+		},
+		env: []string{
+			"GO_DISABLE_OUTBOUND_NETWORK=1",
+			"GOEXPERIMENT=newinliner",
+		},
+		GoDeps: []string{
+			"fbf9076ee8c8f665f1e8bba08fdc473cc7a2d690", // CL 511555, which added GOEXPERIMENT=newinliner
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-goamd64v3",

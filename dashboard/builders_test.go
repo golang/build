@@ -96,6 +96,7 @@ func TestTrybots(t *testing.T) {
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-boringcrypto",
+				"linux-amd64-newinliner",
 				"linux-amd64-race",
 				"linux-arm64",
 				"openbsd-amd64-72",
@@ -847,6 +848,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-nounified@go1.20", "go"), both},
 		{b("linux-amd64-nounified@go1.20", "tools"), both},
 		{b("linux-amd64-nounified@go1.20", "net"), none},
+
+		{b("linux-amd64-newinliner", "go"), both},
+		{b("linux-amd64-newinliner", "tools"), none},
+		{b("linux-amd64-newinliner@go1.20", "go"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
