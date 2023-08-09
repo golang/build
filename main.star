@@ -474,7 +474,7 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
         builders_to_trigger = [
             "golang/%s/%s" % (bucket, builder_name(project, go_branch_short, builder_type))
             for project in PROJECTS
-            if project != "go"
+            if project != "go" and enabled(project, go_branch_short, builder_type)[1]
         ]
 
     # Coordinator builder.
