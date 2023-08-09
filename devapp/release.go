@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"log"
@@ -265,22 +266,12 @@ func (s *server) updateReleaseData() {
 	curMilestoneStart := time.Date(2021, time.August+monthsSinceGo117Release, 1, 0, 0, 0, 0, time.UTC)
 
 	dirToIssues := map[string][]*maintner.GitHubIssue{}
-	var curMilestoneIssues []*maintner.GitHubIssue
 	s.repo.ForeachIssue(func(issue *maintner.GitHubIssue) error {
-		// Only include issues in active milestones.
-		if issue.Milestone.IsUnknown() || issue.Milestone.Closed || issue.Milestone.IsNone() {
+		// Only open issues in active milestones are displayed on the page using dirToIssues.
+		if issue.Closed ||
+			issue.Milestone.IsUnknown() || issue.Milestone.Closed || issue.Milestone.IsNone() {
 			return nil
 		}
-
-		if issue.Milestone.Title == curMilestoneTitle {
-			curMilestoneIssues = append(curMilestoneIssues, issue)
-		}
-
-		// Only open issues are displayed on the page using dirToIssues.
-		if issue.Closed {
-			return nil
-		}
-
 		dirs := titleDirs(issue.Title)
 		if len(dirs) == 0 {
 			dirToIssues[""] = append(dirToIssues[""], issue)
@@ -292,11 +283,50 @@ func (s *server) updateReleaseData() {
 		return nil
 	})
 
+	// Find issues that have been in the current milestone.
+	var curMilestoneIssues []*maintner.GitHubIssue
+	s.repo.ForeachIssue(func(issue *maintner.GitHubIssue) error {
+		if issue.Closed && issue.ClosedAt.Before(curMilestoneStart) {
+			// Old issue, couldn't be relevant to current milestone.
+			return nil
+		}
+		if !issue.Milestone.IsUnknown() && issue.Milestone.Title == curMilestoneTitle {
+			// Easy case: the issue is still in current milestone.
+			curMilestoneIssues = append(curMilestoneIssues, issue)
+			return nil
+		}
+		// Check if the issue was ever in the current milestone.
+		issue.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
+			if e.Type == "milestoned" && e.Milestone == curMilestoneTitle {
+				curMilestoneIssues = append(curMilestoneIssues, issue)
+				return errStopIteration
+			}
+			return nil
+		})
+		return nil
+	})
+
 	bd := burndownData{Milestone: curMilestoneTitle}
 	for t, now := curMilestoneStart, time.Now(); t.Before(now); t = t.Add(24 * time.Hour) {
 		var e burndownEntry
 		for _, issue := range curMilestoneIssues {
 			if issue.Created.After(t) || (issue.Closed && issue.ClosedAt.Before(t)) {
+				continue
+			}
+			var inCurMilestoneAtT bool
+			issue.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
+				if e.Created.After(t) {
+					return errStopIteration
+				}
+				switch e.Type {
+				case "milestoned":
+					inCurMilestoneAtT = e.Milestone == curMilestoneTitle
+				case "demilestoned":
+					inCurMilestoneAtT = false
+				}
+				return nil
+			})
+			if !inCurMilestoneAtT {
 				continue
 			}
 			if issue.HasLabel("release-blocker") {
@@ -522,3 +552,7 @@ func (s *server) handleRelease(t *template.Template, w http.ResponseWriter, r *h
 		return
 	}
 }
+
+// errStopIteration is used to stop iteration over issues or comments.
+// It has no special meaning.
+var errStopIteration = errors.New("stop iteration")
