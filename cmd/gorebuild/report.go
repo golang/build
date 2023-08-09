@@ -305,7 +305,7 @@ func defaultVersions(releases []*DLRelease) []string {
 				// not reproducible
 				break
 			}
-			versions = append(versions, "@"+r.Version)
+			versions = append(versions, r.Version)
 			seen[major] = true
 			if len(seen) == 2 {
 				break
