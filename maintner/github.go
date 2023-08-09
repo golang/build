@@ -967,20 +967,11 @@ func (g *GitHub) setAssigneesFromProto(existing []*GitHubUser, new []*maintpb.Gi
 			existing = append(existing, g.getUser(u))
 		}
 	}
-	// IDs to delete, in descending order
-	idxsToDelete := []int{}
 	// this is quadratic but the number of assignees is very unlikely to exceed,
 	// say, 5.
-	for _, id := range toDelete {
-		for i, u := range existing {
-			if u.ID == id {
-				idxsToDelete = append([]int{i}, idxsToDelete...)
-			}
-		}
-	}
-	for _, idx := range idxsToDelete {
-		existing = append(existing[:idx], existing[idx+1:]...)
-	}
+	existing = slicesDeleteFunc(existing, func(u *GitHubUser) bool {
+		return slicesContains(toDelete, u.ID)
+	})
 	return existing
 }
 
