@@ -341,6 +341,11 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
         "env": {},
     }
 
+    # On less-supported platforms, we may not have bootstraps before 1.21
+    # started cross-compiling everything.
+    if "ppc64le" in builder_type and (base_props["bootstrap_version"].startswith("1.20") or base_props["bootstrap_version"].startswith("1.1")):
+        base_props["bootstrap_version"] = "1.21.0"
+
     os, arch, _, run_mods = split_builder_type(builder_type)
 
     # We run 386 builds on amd64 with GO[HOST]ARCH set.
