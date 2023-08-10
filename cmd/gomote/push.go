@@ -89,6 +89,10 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 			// is enough to know whether we have Go 1.4 or
 			// not.
 			"go1.4/src", "go1.4/pkg",
+			// Ignore the cache and tmp directories, these slowly grow, and will
+			// eventually cause the listing to exceed the maximum gRPC message
+			// size.
+			"gocache", "goplscache", "tmp",
 		},
 		Digest: true,
 	})
