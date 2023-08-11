@@ -2119,6 +2119,7 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "openbsd-mips64-jsing",
 		HostType:     "host-openbsd-mips64-joelsing",
+		KnownIssues:  []int{36435, 58110, 61546},
 		SkipSnapshot: true,
 		FlakyNet:     true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
@@ -2135,6 +2136,8 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=5",
 		},
+		makeScriptArgs: []string{"-force"}, // Port is marked broken.
+		allScriptArgs:  []string{"-force"}, // Port is marked broken.
 	})
 	addBuilder(BuildConfig{
 		Name:         "openbsd-ppc64-n2vi",
@@ -2152,6 +2155,8 @@ func init() {
 		},
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
+		makeScriptArgs: []string{"-force"}, // Port is incomplete.
+		allScriptArgs:  []string{"-force"}, // Port is incomplete.
 	})
 	addBuilder(BuildConfig{
 		Name:         "openbsd-riscv64-jsing",
@@ -2173,6 +2178,8 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=3",
 		},
+		makeScriptArgs: []string{"-force"}, // Port is incomplete.
+		allScriptArgs:  []string{"-force"}, // Port is incomplete.
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-386-9_3",
