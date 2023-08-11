@@ -595,7 +595,7 @@ def enabled(project, go_branch_short, builder_type):
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
-    presubmit = postsubmit and not any([x in run_mods for x in ["longtest", "race", "misccompile"]])
+    presubmit = postsubmit and not any([x in run_mods for x in ["longtest", "race"]])
     presubmit = presubmit and not is_capacity_constrained(builder_type)
     return presubmit, postsubmit
 
