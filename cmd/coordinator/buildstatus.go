@@ -634,11 +634,14 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		return nil, err
 	}
 
-	if st.conf.RunBench {
+	switch {
+	case st.conf.RunBench:
 		remoteErr, err = st.runBenchmarkTests()
-	} else if st.IsSubrepo() {
+	case st.IsSubrepo():
 		remoteErr, err = st.runSubrepoTests()
-	} else if !st.conf.IsCrossCompileOnly() {
+	case st.conf.IsCrossCompileOnly():
+		remoteErr, err = st.buildTestPackages()
+	default:
 		// Only run platform tests if we're not cross-compiling.
 		// dist can't actually build test packages without running them yet.
 		// See #58297.
@@ -655,6 +658,32 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	if remoteErr != nil {
 		return fmt.Errorf("tests failed: %v", remoteErr), nil
 	}
+	return nil, nil
+}
+
+// buildTestPackages runs `go tool dist test -compile-only`, which builds all standard
+// library test packages but does not run any tests. Used in cross-compilation modes.
+func (st *buildStatus) buildTestPackages() (remoteErr, err error) {
+	if st.RevBranch == "release-branch.go1.19" || st.RevBranch == "release-branch.go1.20" {
+		// TODO(mknyszek): Go 1.19 and 1.20 don't support `go tool dist test -compile-only`
+		// very well. Remove this condition when Go 1.20 is no longer supported.
+		return nil, nil
+	}
+	sp := st.CreateSpan("build_test_pkgs")
+	remoteErr, err = st.bc.Exec(st.ctx, path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		Output: st,
+		Debug:  true,
+		Args:   []string{"tool", "dist", "test", "-compile-only"},
+	})
+	if err != nil {
+		sp.Done(err)
+		return nil, err
+	}
+	if remoteErr != nil {
+		sp.Done(remoteErr)
+		return fmt.Errorf("go tool dist test -compile-only failed: %v", remoteErr), nil
+	}
+	sp.Done(nil)
 	return nil, nil
 }
 
