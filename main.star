@@ -67,7 +67,7 @@ luci.project(
 
         # Allow external contributions to run try jobs.
         luci.binding(
-            roles = "role/cq.dryRunner",
+            roles = ["role/cq.dryRunner", "role/buildbucket.triggerer"],
             groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
         ),
     ],
