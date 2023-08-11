@@ -134,7 +134,7 @@ func (r *Report) Build(log *Log, goroot, version string, env, args []string) err
 	make := "./make.bash"
 	switch runtime.GOOS {
 	case "windows":
-		make = "./make.bat"
+		make = `.\make.bat`
 	case "plan9":
 		make = "./make.rc"
 	}
