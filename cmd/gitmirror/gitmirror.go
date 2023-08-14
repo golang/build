@@ -11,6 +11,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -696,15 +697,19 @@ func (m *gitMirror) subscribeToMaintnerAndTickle() error {
 func (m *gitMirror) gerritMetaMap() (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	meta, err := m.gerritClient.GetProjects(ctx, "master")
+	projs, err := m.gerritClient.ListProjects(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("gerritClient.GetProjects: %v", err)
+		return nil, fmt.Errorf("gerritClient.ListProjects: %v", err)
 	}
 	result := map[string]string{}
-	for repo, v := range meta {
-		if master, ok := v.Branches["master"]; ok {
-			result[repo] = master
+	for _, p := range projs {
+		b, err := m.gerritClient.GetBranch(ctx, p.Name, "master")
+		if errors.Is(err, gerrit.ErrResourceNotExist) {
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf(`gerritClient.GetBranch(ctx, %q, "master"): %v`, p.Name, err)
 		}
+		result[p.Name] = b.Revision
 	}
 	return result, nil
 }

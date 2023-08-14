@@ -70,7 +70,7 @@ func main() {
 	// Fetch latest hashes of Go projects from Gerrit,
 	// using the specified branch name.
 	//
-	// This gives us a consistent snapshot of all golang.org/x module versions
+	// We get a fairly consistent snapshot of all golang.org/x module versions
 	// at a given point in time. This ensures selection of latest available
 	// pseudo-versions is done without being subject to module mirror caching,
 	// and that selected pseudo-versions can be re-used across multiple modules.
@@ -79,18 +79,19 @@ func main() {
 	// commits that are selected and reporting if any of them have a failure.
 	//
 	cl := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
-	projs, err := cl.GetProjects(context.Background(), *branch)
+	projs, err := cl.ListProjects(context.Background())
 	if err != nil {
 		log.Fatalln("failed to get a list of Gerrit projects:", err)
 	}
 	hashes := map[string]string{}
-	for name, p := range projs {
-		if p.State != "ACTIVE" {
+	for _, p := range projs {
+		b, err := cl.GetBranch(context.Background(), p.Name, *branch)
+		if errors.Is(err, gerrit.ErrResourceNotExist) {
 			continue
+		} else if err != nil {
+			log.Fatalf("failed to get the %q branch of Gerrit project %q: %v\n", *branch, p.Name, err)
 		}
-		if hash, ok := p.Branches[*branch]; ok {
-			hashes[name] = hash
-		}
+		hashes[p.Name] = b.Revision
 	}
 
 	w := Work{

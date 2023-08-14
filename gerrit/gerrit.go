@@ -4,8 +4,10 @@
 
 // Package gerrit contains code to interact with Gerrit servers.
 //
-// The API is not subject to the Go 1 compatibility promise and may change at
-// any time.
+// This package doesn't intend to provide complete coverage of the Gerrit API,
+// but only a small subset for the current needs of the Go project infrastructure.
+// Its API is not subject to the Go 1 compatibility promise and may change at any time.
+// For general-purpose Gerrit API clients, see https://pkg.go.dev/search?q=gerrit.
 package gerrit
 
 import (
@@ -732,7 +734,7 @@ type ProjectInfo struct {
 //
 // The returned slice is sorted by project ID and excludes the "All-Projects" and "All-Users" projects.
 //
-// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-projects
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-projects.
 func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
 	var res map[string]ProjectInfo
 	err := c.do(ctx, &res, "GET", "/projects/")
@@ -1011,13 +1013,6 @@ func (c *Client) QueryAccounts(ctx context.Context, q string, opts ...QueryAccou
 		"S": condInt(opt.Start),
 	})
 	return changes, err
-}
-
-// GetProjects returns a map of all projects on the Gerrit server.
-func (c *Client) GetProjects(ctx context.Context, branch string) (map[string]*ProjectInfo, error) {
-	mp := make(map[string]*ProjectInfo)
-	err := c.do(ctx, &mp, "GET", fmt.Sprintf("/projects/?b=%s&format=JSON", branch))
-	return mp, err
 }
 
 type TimeStamp time.Time
