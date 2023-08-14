@@ -25,11 +25,15 @@ luci.project(
                 # Allow owners to submit any task in any pool.
                 "role/swarming.poolOwner",
                 "role/swarming.poolUser",
+                "role/swarming.poolViewer",
                 "role/swarming.taskTriggerer",
                 # Allow owners to trigger and cancel LUCI Scheduler jobs.
                 "role/scheduler.owner",
                 # Allow owners to trigger and cancel any build.
                 "role/buildbucket.owner",
+                # Allow owners to read/validate/reimport the project configs.
+                "role/configs.developer",
+
                 # Allow owners to create/edit ResultDB invocations (for local result_adapter development).
                 # TODO(dmitshur): Remove or move to AOD after it stops being actively used.
                 "role/resultdb.invocationCreator",
@@ -37,38 +41,11 @@ luci.project(
             groups = "mdb/golang-luci-admin",
         ),
 
-        # Allow any googler to see all bots and tasks there.
-        luci.binding(
-            roles = "role/swarming.poolViewer",
-            realm = [
-                "pools/prod",
-            ],
-            groups = "googlers",
-        ),
-
-        # Allow any googler to read/validate/reimport the project configs.
-        luci.binding(
-            roles = "role/configs.developer",
-            groups = "googlers",
-        ),
-
-        # Allow everyone in the world to see bulders.
-        luci.binding(
-            roles = "role/buildbucket.reader",
-            groups = "all",
-        ),
-
         # Allow task service accounts to spawn builds.
         luci.binding(
             roles = "role/buildbucket.triggerer",
             groups = "project-golang-task-accounts",
             users = "tricium-prod@appspot.gserviceaccount.com",
-        ),
-
-        # Allow external contributions to run try jobs.
-        luci.binding(
-            roles = ["role/cq.dryRunner", "role/buildbucket.triggerer"],
-            groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
         ),
     ],
     acls = [
@@ -80,10 +57,6 @@ luci.project(
             roles = acl.CQ_COMMITTER,
             groups = "mdb/golang-luci-admin",
         ),
-        acl.entry(
-            roles = acl.CQ_DRY_RUNNER,
-            groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
-        ),
     ],
 )
 
@@ -91,25 +64,44 @@ luci.project(
 luci.logdog(gs_bucket = "logdog-golang-archive")
 
 # Realms with ACLs for corresponding Swarming pools.
-luci.realm(name = "pools/ci")
-luci.realm(name = "pools/ci-workers")
-luci.realm(name = "pools/try")
-luci.realm(name = "pools/try-workers")
-luci.realm(name = "pools/shared-workers")
+PUBLIC_REALMS = [
+    luci.realm(name = "pools/ci"),
+    luci.realm(name = "pools/ci-workers"),
+    luci.realm(name = "pools/try"),
+    luci.realm(name = "pools/try-workers"),
+    luci.realm(name = "pools/shared-workers"),
+]
+
+SECURITY_REALMS = [
+    luci.realm(name = "pools/security"),
+    luci.realm(name = "pools/security-workers"),
+]
+
 luci.realm(name = "pools/prod")
 
-# Allow everyone to see all bots and tasks there.
+# Allow everyone to see public builds, pools, bots, and tasks.
+# WARNING: this doesn't do much for Swarming entities -- chromium-swarm
+# has a global allow-all ACL that supersedes us. Private realms run in
+# chrome-swarming.
 luci.binding(
-    roles = "role/swarming.poolViewer",
-    realm = [
-        # Do not add the security realm
-        "pools/ci",
-        "pools/ci-workers",
-        "pools/try",
-        "pools/try-workers",
-        "pools/shared-workers",
-    ],
+    roles = ["role/swarming.poolViewer", "role/buildbucket.reader"],
+    realm = PUBLIC_REALMS,
     groups = "all",
+)
+
+# Allow external contributors to trigger public builds.
+luci.binding(
+    roles = ["role/buildbucket.triggerer"],
+    realm = PUBLIC_REALMS,
+    groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
+)
+
+# Allow security release participants to see and trigger security builds, etc.
+# WARNING: similar to above, chrome-swarming is open to all Googlers.
+luci.binding(
+    roles = ["role/swarming.poolViewer", "role/buildbucket.reader", "role/buildbucket.triggerer"],
+    realm = SECURITY_REALMS,
+    groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
 )
 
 # This is the cipd package name and version where the recipe bundler will put
@@ -314,7 +306,7 @@ GOLANGBUILD_MODES = {
     "TEST": 3,
 }
 
-def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host = "go"):
+def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host = "go", swarming_host = "chromium-swarm.appspot.com"):
     """Creates a builder definition.
 
     Args:
@@ -323,6 +315,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
         go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
         gerrit_host: The gerrit host name, either `go` or `go-internal`.
+        swarming_host: The Swarming host name.
 
     Returns:
         The full name including a bucket prefix.
@@ -427,6 +420,7 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
             dimensions = dimensions,
             properties = properties,
             service_account = service_account,
+            swarming_host = swarming_host,
             resultdb_settings = resultdb.settings(
                 enable = True,
             ),
@@ -635,6 +629,10 @@ def _define_go_ci():
             cq_group_name = ("%s_repo_%s" % (project, go_branch_short)).replace(".", "-")
             luci.cq_group(
                 name = cq_group_name,
+                acls = [acl.entry(
+                    roles = acl.CQ_DRY_RUNNER,
+                    groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
+                )],
                 watch = cq.refset(
                     repo = "https://go.googlesource.com/%s" % project,
                     refs = ["refs/heads/%s" % branch_props.branch],
@@ -785,6 +783,10 @@ def _define_go_internal_ci():
         cq_group_name = ("go-internal_%s" % go_branch_short).replace(".", "-")
         luci.cq_group(
             name = cq_group_name,
+            acls = [acl.entry(
+                roles = acl.CQ_DRY_RUNNER,
+                groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+            )],
             watch = cq.refset(
                 repo = "https://go-internal.googlesource.com/go",
                 refs = ["refs/heads/%s" % branch_props.branch],
@@ -812,7 +814,7 @@ def _define_go_internal_ci():
             presubmit, _ = enabled("go", go_branch_short, builder_type)
 
             # Define presubmit builders.
-            name = define_builder("try", "go", go_branch_short, builder_type, "go-internal")
+            name = define_builder("try", "go", go_branch_short, builder_type, "go-internal", "chrome-swarming.appspot.com")
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
