@@ -143,3 +143,4 @@ is documentation at https://golang.org/wiki/DashboardBuilders, but depending
 on the type of builder, we may want to run it ourselves, after you prepare an
 environment description (resulting in a VM image) of it. See the env directory.
 
+This is a test edit. 
