@@ -306,7 +306,7 @@ GOLANGBUILD_MODES = {
     "TEST": 3,
 }
 
-def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host = "go", swarming_host = "chromium-swarm.appspot.com"):
+def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host = "go", worker_account_name = "public-worker-builder", swarming_host = "chromium-swarm.appspot.com"):
     """Creates a builder definition.
 
     Args:
@@ -433,13 +433,15 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
 
     # Emit the builder definitions.
     if project == "go":
-        define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
+        define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, base_props, base_dims, worker_account_name, emit_builder)
     else:
-        define_subrepo_builder(name, base_props, base_dims, emit_builder)
+        define_subrepo_builder(name, base_props, base_dims, worker_account_name, emit_builder)
 
     return bucket + "/" + name
 
-def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
+def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, base_props, base_dims, worker_account_name, emit_builder):
+    worker_account = worker_account_name + "@golang-ci-luci.iam.gserviceaccount.com"
+
     # Create 3 builders: the main entrypoint/coordinator builder,
     # a builder just to run make.bash, and a builder to run tests.
     #
@@ -495,7 +497,7 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
         name = coord_name,
         dimensions = coord_dims,
         properties = coord_props,
-        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+        service_account = "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
     )
 
     # Build builder.
@@ -509,8 +511,7 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
         name = build_name,
         dimensions = build_dims,
         properties = build_props,
-        # TODO(mknyszek): Use a service account that doesn't have ScheduleBuild permissions.
-        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+        service_account = worker_account,
     )
 
     # Test builder.
@@ -526,12 +527,11 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
         name = test_name,
         dimensions = test_dims,
         properties = test_props,
-        # TODO(mknyszek): Use a service account that doesn't have ScheduleBuild permissions.
-        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+        service_account = worker_account,
         allowed_property_overrides = ["test_shard"],
     )
 
-def define_subrepo_builder(name, base_props, base_dims, emit_builder):
+def define_subrepo_builder(name, base_props, base_dims, worker_account_name, emit_builder):
     # Create an "ALL" mode builder which just performs the full build serially.
     #
     # This builder is substantially simpler than the Go builders because it doesn't need
@@ -545,8 +545,7 @@ def define_subrepo_builder(name, base_props, base_dims, emit_builder):
         name = name,
         dimensions = base_dims,
         properties = all_props,
-        # TODO(mknyszek): Use a service account that doesn't have ScheduleBuild permissions.
-        service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
+        service_account = worker_account_name + "@golang-ci-luci.iam.gserviceaccount.com",
     )
 
 luci.builder(
@@ -814,7 +813,7 @@ def _define_go_internal_ci():
             presubmit, _ = enabled("go", go_branch_short, builder_type)
 
             # Define presubmit builders.
-            name = define_builder("try", "go", go_branch_short, builder_type, "go-internal", "chrome-swarming.appspot.com")
+            name = define_builder("try", "go", go_branch_short, builder_type, "go-internal", "security-worker-builder", "chrome-swarming.appspot.com")
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
