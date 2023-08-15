@@ -1253,9 +1253,9 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 			}
 
 			deadline := waitStart.AddDate(0, 1, 0) // 1 month
-			if gi.HasLabel("CherryPickCandidate") {
-				// Cherry-pick candidates may sometimes need to wait for fixes
-				// to soak on the order of months, so give them more time.
+			if gi.HasLabel("CherryPickCandidate") || gi.HasLabel("CherryPickApproved") {
+				// Cherry-pick issues may sometimes need to wait while
+				// fixes get prepared and soak, so give them more time.
 				deadline = waitStart.AddDate(0, 6, 0)
 			}
 			if now.Before(deadline) {
@@ -1728,6 +1728,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 		for _, l := range [...]string{
 			"Security",
 			"GoCommand",
+			"Testing",
 		} {
 			if gi.HasLabel(l) {
 				extraLabels = append(extraLabels, l)
