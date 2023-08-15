@@ -810,8 +810,8 @@ Please visit Gerrit at %s.
 					"/PATCHSET_LEVEL": {{Message: msg, Unresolved: &unresolved}},
 				},
 			}
-			// TODO: instead of gcl.ID, we might need to do something similar to changeTriple in cmd/coordinator.
-			err = b.gerritClient.SetReview(ctx, gcl.ChangeID, gcl.ID, ri)
+			changeID := fmt.Sprintf("%s~%d", url.PathEscape(gcl.Project), gcl.ChangeNumber)
+			err = b.gerritClient.SetReview(ctx, changeID, "1", ri)
 			if err != nil {
 				return fmt.Errorf("could not add findings comment to CL for %s: %v", prShortLink(pr), err)
 			}

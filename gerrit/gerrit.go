@@ -221,13 +221,22 @@ const (
 // ChangeInfo is a Gerrit data structure.
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-info
 type ChangeInfo struct {
-	// ID is the ID of the change in the format
-	// "'<project>~<branch>~<Change-Id>'", where 'project',
-	// 'branch' and 'Change-Id' are URL encoded. For 'branch' the
-	// refs/heads/ prefix is omitted.
-	ID           string `json:"id"`
-	ChangeNumber int    `json:"_number"`
-	ChangeID     string `json:"change_id"`
+	// The ID of the change. Subject to a 'GerritBackendFeature__return_new_change_info_id' experiment,
+	// the format is either "'<project>~<_number>'" (new format),
+	// or "'<project>~<branch>~<Change-Id>'" (old format).
+	// 'project', '_number', and 'branch' are URL encoded.
+	// For 'branch' the refs/heads/ prefix is omitted.
+	// The callers must not rely on the format.
+	ID string `json:"id"`
+
+	// ChangeNumber is a change number like "4247".
+	ChangeNumber int `json:"_number"`
+
+	// ChangeID is the Change-Id footer value like "I8473b95934b5732ac55d26311a706c9c2bde9940".
+	// Note that some of the functions in this package take a changeID parameter that is a {change-id},
+	// which is a distinct concept from a Change-Id footer. (See the documentation links for details,
+	// including https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id).
+	ChangeID string `json:"change_id"`
 
 	Project string `json:"project"`
 
