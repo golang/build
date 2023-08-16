@@ -25,6 +25,6 @@ SWARM_DIR=/b/swarming
 mkdir -p $SWARM_DIR
 chown swarming:swarming $SWARM_DIR
 
-su -c "$(dirname $0)/bootstrapswarm" swarming &
+su -c "$(dirname $0)/bootstrapswarm --swarming ${SWARMING}.appspot.com" swarming &
 wait %1
 exit $?

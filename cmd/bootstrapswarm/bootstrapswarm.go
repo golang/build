@@ -48,6 +48,7 @@ import (
 var (
 	tokenFilePath = flag.String("token-file-path", defaultTokenLocation(), "Path to the token file (used when not on GCE)")
 	hostname      = flag.String("hostname", os.Getenv("HOSTNAME"), "Hostname of machine to bootstrap (required)")
+	swarming      = flag.String("swarming", "chromium-swarm.appspot.com", "Swarming server to connect to")
 )
 
 func main() {
@@ -98,7 +99,7 @@ func bootstrap(ctx context.Context, hostname, tokenPath string) error {
 		httpHeaders["X-Luci-Machine-Token"] = tok.LuciMachineToken
 	}
 	log.Println("Downloading the swarming bot")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, `https://chromium-swarm.appspot.com/bot_code`, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+*swarming+"/bot_code", nil)
 	if err != nil {
 		return fmt.Errorf("http.NewRequest: %w", err)
 	}
