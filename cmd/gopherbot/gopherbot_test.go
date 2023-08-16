@@ -626,7 +626,7 @@ func TestFilterGerritOwners(t *testing.T) {
 }
 
 func TestForeachIssue(t *testing.T) {
-	if testing.Short() || flag.Lookup("test.run").Value.(flag.Getter).Get().(string) != "^TestForeachIssue$" {
+	if testing.Short() || flag.Lookup("test.run").Value.String() != "^TestForeachIssue$" {
 		t.Skip("not running test requiring large Go corpus download in short mode and if not explicitly requested with go test -run=^TestForeachIssue$")
 	}
 

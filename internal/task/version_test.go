@@ -18,7 +18,7 @@ import (
 var flagRunVersionTest = flag.Bool("run-version-test", false, "run version test, which will submit CLs to go.googlesource.com/scratch. Must have a Gerrit cookie in gitcookies.")
 
 func TestGetNextVersionLive(t *testing.T) {
-	if !testing.Verbose() || flag.Lookup("test.run").Value.(flag.Getter).Get().(string) != "^TestGetNextVersionLive$" {
+	if !testing.Verbose() || flag.Lookup("test.run").Value.String() != "^TestGetNextVersionLive$" {
 		t.Skip("not running test requiring manual verification if not explicitly requested with go test -v -run=^TestGetNextVersionLive$")
 	}
 
@@ -79,11 +79,11 @@ func TestGetNextVersion(t *testing.T) {
 		kind  ReleaseKind
 		want  string
 	}{
-		{major: 5, kind: KindBeta, want: "go1.5beta2"},
-		{major: 5, kind: KindRC, want: "go1.5rc2"},
-		{major: 5, kind: KindMajor, want: "go1.5.0"},
-		{major: 4, kind: KindMinor, want: "go1.4.2"},
-		{major: 3, kind: KindMinor, want: "go1.3.4"},
+		{major: 5, kind: KindBeta, want: "go1.5beta2", name: "next beta"},
+		{major: 5, kind: KindRC, want: "go1.5rc2", name: "next RC"},
+		{major: 5, kind: KindMajor, want: "go1.5.0", name: "next major"},
+		{major: 4, kind: KindMinor, want: "go1.4.2", name: "next current minor"},
+		{major: 3, kind: KindMinor, want: "go1.3.4", name: "next previous minor"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tasks.GetNextVersion(ctx, tc.major, tc.kind)
