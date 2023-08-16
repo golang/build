@@ -44,8 +44,8 @@ func main() {
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
-	privateKey := secret.Flag(secret.NameGomoteSSHPrivateKey, "SendGrid API key for workflows involving sending email.")
-	publicKey := secret.Flag(secret.NameGomoteSSHPublicKey, "SendGrid API key for workflows involving sending email.")
+	privateKey := secret.Flag(secret.NameGomoteSSHPrivateKey, "Gomote SSH private key.")
+	publicKey := secret.Flag(secret.NameGomoteSSHPublicKey, "Gomote SSH public key.")
 
 	sp := remote.NewSessionPool(context.Background())
 	sshCA := mustRetrieveSSHCertificateAuthority()
