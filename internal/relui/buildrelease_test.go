@@ -41,7 +41,7 @@ import (
 
 func TestNonDistpack(t *testing.T) {
 	t.Run("minor", func(t *testing.T) {
-		testRelease(t, "go1.20", 20, "go1.20.1", task.KindCurrentMinor)
+		testRelease(t, "go1.20", 20, "go1.20.1", task.KindMinor)
 	})
 }
 

@@ -24,7 +24,7 @@ import (
 func TestAnnounceReleaseShortContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, KindCurrentMinor, []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, nil, nil)
+	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, KindMinor, []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, nil, nil)
 	if err == nil {
 		t.Errorf("want non-nil error")
 	} else if !strings.HasPrefix(err.Error(), "insufficient time") {
@@ -41,7 +41,7 @@ func TestAnnouncementMail(t *testing.T) {
 		{
 			name: "announce-minor",
 			in: releaseAnnouncement{
-				Kind:             KindCurrentMinor,
+				Kind:             KindMinor,
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.9",
 				Names:            []string{"Alice", "Bob", "Charlie"},
@@ -51,7 +51,7 @@ func TestAnnouncementMail(t *testing.T) {
 		{
 			name: "announce-minor-with-security",
 			in: releaseAnnouncement{
-				Kind:             KindCurrentMinor,
+				Kind:             KindMinor,
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.9",
 				Security: []string{
@@ -85,7 +85,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 		{
 			name: "announce-minor-solo",
 			in: releaseAnnouncement{
-				Kind:     KindCurrentMinor,
+				Kind:     KindMinor,
 				Version:  "go1.11.1",
 				Security: []string{"abc: security fix 1", "xyz: security fix 2"},
 				Names:    []string{"Alice"},
@@ -203,7 +203,7 @@ func TestAnnounceRelease(t *testing.T) {
 	}{
 		{
 			name:         "minor",
-			kind:         KindCurrentMinor,
+			kind:         KindMinor,
 			published:    []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, // Intentionally not 1.17.9 so the real email doesn't get in the way.
 			coordinators: []string{"heschi", "dmitshur"},
 			want:         SentMail{Subject: "Go 1.18.1 and Go 1.17.8 are released"},

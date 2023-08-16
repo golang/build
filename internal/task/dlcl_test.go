@@ -26,7 +26,7 @@ func TestMailDLCL(t *testing.T) {
 	}{
 		{
 			name:    "minor",
-			kind:    KindCurrentMinor,
+			kind:    KindMinor,
 			major:   17,
 			version: "go1.17.1",
 			wantLog: `file "go1.17.1/main.go" (command "golang.org/dl/go1.17.1"):

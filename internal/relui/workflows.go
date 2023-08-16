@@ -244,17 +244,16 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		return err
 	}
 	releases := []struct {
-		kinds []task.ReleaseKind
-		name  string
+		majors []int
 	}{
-		{[]task.ReleaseKind{task.KindCurrentMinor, task.KindPrevMinor}, fmt.Sprintf("next minor release for Go 1.%d and 1.%d", currentMajor, currentMajor-1)},
-		{[]task.ReleaseKind{task.KindCurrentMinor}, fmt.Sprintf("next minor release for Go 1.%d", currentMajor)},
-		{[]task.ReleaseKind{task.KindPrevMinor}, fmt.Sprintf("next minor release for Go 1.%d", currentMajor-1)},
+		{[]int{currentMajor, currentMajor - 1}}, // Both minors.
+		{[]int{currentMajor}},                   // Current minor only.
+		{[]int{currentMajor - 1}},               // Previous minor only.
 	}
 	for _, r := range releases {
 		wd := wf.New()
 
-		versions := wf.Task1(wd, "Get next versions", version.GetNextVersions, wf.Const(r.kinds))
+		versions := wf.Task1(wd, "Get next versions", version.GetNextMinorVersions, wf.Const(r.majors))
 		targetDate := wf.Param(wd, targetDateParam)
 		securityContent := wf.Param(wd, securityPreAnnParam)
 		cves := wf.Param(wd, securityPreAnnCVEsParam)
@@ -263,7 +262,11 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		sentMail := wf.Task5(wd, "mail-pre-announcement", comm.PreAnnounceRelease, versions, targetDate, securityContent, cves, coordinators)
 		wf.Output(wd, "Pre-announcement URL", wf.Task1(wd, "await-pre-announcement", comm.AwaitAnnounceMail, sentMail))
 
-		h.RegisterDefinition("pre-announce "+r.name, wd)
+		var names []string
+		for _, m := range r.majors {
+			names = append(names, fmt.Sprintf("1.%d", m))
+		}
+		h.RegisterDefinition("pre-announce next minor release for Go "+strings.Join(names, " and "), wd)
 	}
 
 	// Register workflows for miscellaneous tasks that happen as part of the Go release cycle.
@@ -306,20 +309,20 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		return err
 	}
 	type release struct {
-		kind   task.ReleaseKind
 		major  int
+		kind   task.ReleaseKind
 		suffix string
 	}
 	releases := []release{
-		{task.KindMajor, currentMajor + 1, "final"},
-		{task.KindRC, currentMajor + 1, "next RC"},
-		{task.KindBeta, currentMajor + 1, "next beta"},
-		{task.KindCurrentMinor, currentMajor, "next minor"},
-		{task.KindPrevMinor, currentMajor - 1, "next minor"},
-		{task.KindPrevMinor, currentMajor - 2, "next minor"}, // TODO(go.dev/issue/62076): Remove after Go 1.19.13 is out.
+		{currentMajor + 1, task.KindMajor, "final"},
+		{currentMajor + 1, task.KindRC, "next RC"},
+		{currentMajor + 1, task.KindBeta, "next beta"},
+		{currentMajor, task.KindMinor, "next minor"},     // Current minor only.
+		{currentMajor - 1, task.KindMinor, "next minor"}, // Previous minor only.
+		{currentMajor - 2, task.KindMinor, "next minor"}, // TODO(go.dev/issue/62076): Remove after Go 1.19.13 is out.
 	}
 	if time.Since(majorReleaseTime) < 7*24*time.Hour {
-		releases = append(releases, release{task.KindMajor, currentMajor, "final"})
+		releases = append(releases, release{currentMajor, task.KindMajor, "final"})
 	}
 	for _, r := range releases {
 		wd := wf.New()
@@ -330,7 +333,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 
 		securitySummary := wf.Const("")
 		securityFixes := wf.Slice[string]()
-		if r.kind == task.KindCurrentMinor || r.kind == task.KindPrevMinor {
+		if r.kind == task.KindMinor {
 			securitySummary = wf.Param(wd, securitySummaryParameter)
 			securityFixes = wf.Param(wd, securityFixesParameter)
 		}
@@ -351,7 +354,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.VersionTasks, build *BuildReleaseTasks, major int, kind task.ReleaseKind) {
 	wd := wf.New()
 
-	nextVersion := wf.Task1(wd, "Get next version", version.GetNextVersion, wf.Const(kind))
+	nextVersion := wf.Task2(wd, "Get next version", version.GetNextVersion, wf.Const(major), wf.Const(kind))
 	branch := fmt.Sprintf("release-branch.go1.%d", major)
 	if kind == task.KindBeta {
 		branch = "master"
@@ -373,12 +376,12 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	wd := wf.New()
 
 	coordinators := wf.Param(wd, releaseCoordinators)
-	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindCurrentMinor, coordinators)
-	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindPrevMinor, coordinators)
+	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators)
+	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindMinor, coordinators)
 
 	securitySummary := wf.Param(wd, securitySummaryParameter)
 	securityFixes := wf.Param(wd, securityFixesParameter)
-	addCommTasks(wd, build, comm, task.KindCurrentMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators)
+	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators)
 
 	return wd, nil
 }
@@ -420,7 +423,7 @@ func addSingleReleaseWorkflow(
 	startingHead := wf.Task1(wd, "Read starting branch head", version.ReadBranchHead, branchVal)
 
 	// Select version, check milestones.
-	nextVersion := wf.Task1(wd, "Get next version", version.GetNextVersion, kindVal)
+	nextVersion := wf.Task2(wd, "Get next version", version.GetNextVersion, wf.Const(major), kindVal)
 	timestamp := wf.Task0(wd, "Timestamp release", now)
 	versionFile := wf.Task3(wd, "Generate VERSION file", version.GenerateVersionFile, distpackVal, nextVersion, timestamp)
 	wf.Output(wd, "VERSION file", versionFile)

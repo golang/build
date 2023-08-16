@@ -7,10 +7,10 @@ package task
 import (
 	"context"
 	"flag"
+	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
 )
@@ -18,11 +18,11 @@ import (
 var flagRunVersionTest = flag.Bool("run-version-test", false, "run version test, which will submit CLs to go.googlesource.com/scratch. Must have a Gerrit cookie in gitcookies.")
 
 func TestGetNextVersionLive(t *testing.T) {
-	if !*flagRunVersionTest {
-		t.Skip("Not enabled by flags")
+	if !testing.Verbose() || flag.Lookup("test.run").Value.(flag.Getter).Get().(string) != "^TestGetNextVersionLive$" {
+		t.Skip("not running test requiring manual verification if not explicitly requested with go test -v -run=^TestGetNextVersionLive$")
 	}
 
-	cl := gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookiesAuth())
+	cl := gerrit.NewClient("https://go-review.googlesource.com", nil)
 	tasks := &VersionTasks{
 		Gerrit:    &RealGerritClient{Client: cl},
 		GoProject: "go",
@@ -32,16 +32,30 @@ func TestGetNextVersionLive(t *testing.T) {
 		Logger:  &testLogger{t, ""},
 	}
 
-	versions := map[ReleaseKind]string{}
-	for kind := ReleaseKind(0); kind <= KindPrevMinor; kind++ {
-		var err error
-		versions[kind], err = tasks.GetNextVersion(ctx, kind)
+	var out strings.Builder
+	currentMajor, _, err := tasks.GetCurrentMajor(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range [...]struct {
+		major int
+		kind  ReleaseKind
+	}{
+		{currentMajor + 1, KindMajor}, // Next major release.
+		{currentMajor + 1, KindRC},    // Next RC.
+		{currentMajor + 1, KindBeta},  // Next beta.
+		{currentMajor, KindMinor},     // Current minor only.
+		{currentMajor - 1, KindMinor}, // Previous minor only.
+		{currentMajor - 2, KindMinor}, // TODO(go.dev/issue/62076): Remove after Go 1.19.13 is out.
+	} {
+		v, err := tasks.GetNextVersion(ctx, tc.major, tc.kind)
 		if err != nil {
 			t.Fatal(err)
 		}
+		fmt.Fprintf(&out, "tasks.GetNextVersion(ctx, %d, %#v) = %q\n", tc.major, tc.kind, v)
 	}
 	// It's hard to check correctness automatically.
-	t.Errorf("manually verify results: %#v", versions)
+	t.Logf("manually verify results:\n%s", &out)
 }
 
 func TestGetNextVersion(t *testing.T) {
@@ -59,23 +73,27 @@ func TestGetNextVersion(t *testing.T) {
 		Context: context.Background(),
 		Logger:  &testLogger{t, ""},
 	}
-	versions := map[ReleaseKind]string{}
-	for kind := ReleaseKind(1); kind <= KindPrevMinor; kind++ {
-		var err error
-		versions[kind], err = tasks.GetNextVersion(ctx, kind)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	want := map[ReleaseKind]string{
-		KindBeta:         "go1.5beta2",
-		KindRC:           "go1.5rc2",
-		KindMajor:        "go1.5.0",
-		KindCurrentMinor: "go1.4.2",
-		KindPrevMinor:    "go1.3.4",
-	}
-	if diff := cmp.Diff(want, versions); diff != "" {
-		t.Fatalf("GetNextVersions mismatch (-want +got):\n%s", diff)
+	for _, tc := range [...]struct {
+		name  string
+		major int
+		kind  ReleaseKind
+		want  string
+	}{
+		{major: 5, kind: KindBeta, want: "go1.5beta2"},
+		{major: 5, kind: KindRC, want: "go1.5rc2"},
+		{major: 5, kind: KindMajor, want: "go1.5.0"},
+		{major: 4, kind: KindMinor, want: "go1.4.2"},
+		{major: 3, kind: KindMinor, want: "go1.3.4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tasks.GetNextVersion(ctx, tc.major, tc.kind)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

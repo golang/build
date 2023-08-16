@@ -183,7 +183,7 @@ func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
 		name = "rc"
 	case KindMajor:
 		name = "major"
-	case KindCurrentMinor, KindPrevMinor:
+	case KindMinor:
 		name = "minor"
 	default:
 		return "", fmt.Errorf("unknown release kind: %v", r.Kind)

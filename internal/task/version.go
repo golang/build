@@ -66,12 +66,12 @@ func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, curre
 	return nil, 0, "", fmt.Errorf("couldn't find the most recently released major version out of %d tags", len(tagList))
 }
 
-// GetNextVersions returns the next for each of the given types of release.
+// GetNextMinorVersions returns the next minor for each of the given major series.
 // It uses the same format as Go tags (for example, "go1.23.4").
-func (t *VersionTasks) GetNextVersions(ctx context.Context, kinds []ReleaseKind) ([]string, error) {
+func (t *VersionTasks) GetNextMinorVersions(ctx context.Context, majors []int) ([]string, error) {
 	var next []string
-	for _, k := range kinds {
-		n, err := t.GetNextVersion(ctx, k)
+	for _, major := range majors {
+		n, err := t.GetNextVersion(ctx, major, KindMinor)
 		if err != nil {
 			return nil, err
 		}
@@ -80,10 +80,10 @@ func (t *VersionTasks) GetNextVersions(ctx context.Context, kinds []ReleaseKind)
 	return next, nil
 }
 
-// GetNextVersion returns the next for the given type of release.
+// GetNextVersion returns the next for the given major series and kind of release.
 // It uses the same format as Go tags (for example, "go1.23.4").
-func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (string, error) {
-	tags, currentMajor, _, err := t.tagInfo(ctx)
+func (t *VersionTasks) GetNextVersion(ctx context.Context, major int, kind ReleaseKind) (string, error) {
+	tags, _, _, err := t.tagInfo(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -99,18 +99,17 @@ func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (st
 		}
 	}
 	switch kind {
-	case KindCurrentMinor:
-		return findUnused(fmt.Sprintf("go1.%d.1", currentMajor))
-	case KindPrevMinor:
-		return findUnused(fmt.Sprintf("go1.%d.1", currentMajor-1))
+	case KindMinor:
+		return findUnused(fmt.Sprintf("go1.%d.1", major))
 	case KindBeta:
-		return findUnused(fmt.Sprintf("go1.%dbeta1", currentMajor+1))
+		return findUnused(fmt.Sprintf("go1.%dbeta1", major))
 	case KindRC:
-		return findUnused(fmt.Sprintf("go1.%drc1", currentMajor+1))
+		return findUnused(fmt.Sprintf("go1.%drc1", major))
 	case KindMajor:
-		return fmt.Sprintf("go1.%d.0", currentMajor+1), nil
+		return fmt.Sprintf("go1.%d.0", major), nil
+	default:
+		return "", fmt.Errorf("unknown release kind %v", kind)
 	}
-	return "", fmt.Errorf("unknown release kind %v", kind)
 }
 
 // GetDevelVersion returns the current major Go 1.x version in development.

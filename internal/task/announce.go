@@ -344,7 +344,7 @@ func announcementMail(data any) (MailContent, error) {
 			name = "announce-rc.md"
 		case KindMajor:
 			name = "announce-major.md"
-		case KindCurrentMinor, KindPrevMinor:
+		case KindMinor:
 			name = "announce-minor.md"
 		default:
 			return MailContent{}, fmt.Errorf("unknown release kind: %v", r.Kind)

@@ -32,9 +32,25 @@ const (
 	KindBeta
 	KindRC
 	KindMajor
-	KindCurrentMinor
-	KindPrevMinor
+	KindMinor
 )
+
+func (k ReleaseKind) GoString() string {
+	switch k {
+	case KindUnknown:
+		return "KindUnknown"
+	case KindBeta:
+		return "KindBeta"
+	case KindRC:
+		return "KindRC"
+	case KindMajor:
+		return "KindMajor"
+	case KindMinor:
+		return "KindMinor"
+	default:
+		return fmt.Sprintf("ReleaseKind(%d)", k)
+	}
+}
 
 type ReleaseMilestones struct {
 	// Current is the GitHub milestone number for the current Go release.
@@ -148,7 +164,7 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 			removeLabel("okay-after-beta1")
 		} else if kind == KindRC && strings.HasSuffix(version, "rc1") {
 			removeLabel("okay-after-rc1")
-		} else if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
+		} else if kind == KindMajor || kind == KindMinor {
 			newMilestone = &milestones.Next
 			actions = append(actions, fmt.Sprintf("pushed to milestone %d", milestones.Next))
 		}
@@ -165,7 +181,7 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 		}
 		ctx.Printf("Updated issue %d: %s.", issueNumber, strings.Join(actions, ", "))
 	}
-	if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
+	if kind == KindMajor || kind == KindMinor {
 		_, _, err := m.Client.EditMilestone(ctx, m.RepoOwner, m.RepoName, milestones.Current, &github.Milestone{
 			State: github.String("closed"),
 		})

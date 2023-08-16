@@ -62,7 +62,7 @@ func (t *VersionTasks) MailDLCL(ctx *workflow.TaskContext, major int, kind Relea
 }
 
 func docLink(major int, kind ReleaseKind, ver string) string {
-	if kind == KindCurrentMinor || kind == KindPrevMinor {
+	if kind == KindMinor {
 		return fmt.Sprintf("https://go.dev/doc/devel/release#%v", ver)
 	}
 

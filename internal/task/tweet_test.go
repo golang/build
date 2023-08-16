@@ -36,7 +36,7 @@ func TestTweetRelease(t *testing.T) {
 	}{
 		{
 			name: "minor",
-			kind: KindCurrentMinor,
+			kind: KindMinor,
 			published: []Published{
 				{Version: "go1.17.1", Files: []WebsiteFile{{
 					OS: "linux", Arch: "arm64",
@@ -70,7 +70,7 @@ go version go1.17.1 linux/arm64` + "\n",
 		},
 		{
 			name: "minor-solo",
-			kind: KindCurrentMinor,
+			kind: KindMinor,
 			published: []Published{{Version: "go1.11.1", Files: []WebsiteFile{{
 				OS: "darwin", Arch: "amd64",
 				Filename: "go1.11.1.darwin-amd64.tar.gz", Size: 124181190, Kind: "archive"}},
