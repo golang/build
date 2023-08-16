@@ -124,6 +124,9 @@ luci.bucket(name = "try")
 # The ci bucket will include builders which work on post-commit code.
 luci.bucket(name = "ci")
 
+# The security bucket is for builders that test embargoed security fixes.
+luci.bucket(name = "security")
+
 # The prod bucket will include builders which work on post-commit code and
 # generate executable artifacts used by other users or machines.
 luci.bucket(name = "prod")
@@ -813,7 +816,7 @@ def _define_go_internal_ci():
             presubmit, _ = enabled("go", go_branch_short, builder_type)
 
             # Define presubmit builders.
-            name = define_builder("try", "go", go_branch_short, builder_type, "go-internal", "security-worker-builder", "chrome-swarming.appspot.com")
+            name = define_builder("security", "go", go_branch_short, builder_type, "go-internal", "security-worker-builder", "chrome-swarming.appspot.com")
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
