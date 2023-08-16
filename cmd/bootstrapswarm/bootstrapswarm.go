@@ -154,7 +154,7 @@ func writeToWorkDirectory(b []byte, filename string) (string, error) {
 
 // retrieveGCEVMToken retrieves a GCE VM token from the GCP metadata service.
 func retrieveGCEVMToken(ctx context.Context) (string, error) {
-	const url = `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=https://chromium-swarm.appspot.com&format=full`
+	url := "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=https://" + *swarming + "&format=full"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", fmt.Errorf("http.NewRequest: %w", err)
