@@ -789,6 +789,10 @@ Please visit Gerrit at %s.
 		problems := rules.Check(change)
 		if len(problems) > 0 {
 			summary := rules.FormatResults(problems)
+			user := author
+			if pr.User != nil && pr.User.Login != nil {
+				user = *pr.User.Login
+			}
 			// If needed, summary contains advice for how to edit the commit message.
 			msg := fmt.Sprintf("Hello %v, I've spotted some possible problems.\n\n"+
 				"These findings are based on simple heuristics. If a finding appears wrong, briefly reply here saying so. "+
@@ -798,7 +802,7 @@ Please visit Gerrit at %s.
 				"(In general for Gerrit code reviews, the CL author is expected to close out each piece of feedback by "+
 				"marking it as 'Done' if implemented as suggested or otherwise reply to each review comment. "+
 				"See the [Review](https://go.dev/doc/contribute#review) section of the Contributing Guide for details.)",
-				author, summary)
+				user, summary)
 
 			gcl, err := b.gerritChangeForPR(pr)
 			if err != nil {
