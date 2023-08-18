@@ -302,6 +302,8 @@ def dimensions_of(low_capacity_hosts, builder_type):
             os = "Debian-11"
         elif os == "Mac":
             os = "Mac-12.6"
+        elif os == "Windows":
+            os = "Windows-10"
 
         # TODO: Add more platforms and decide on whether we
         # even want this concept of a "default", suffixless
