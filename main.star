@@ -601,7 +601,11 @@ luci.builder(
         name = "tricium_simple",
     ),
     service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-    dimensions = dimensions_of(PUBLIC_TRY_ENV.low_capacity_hosts, "linux-amd64"),
+    dimensions = {
+        "pool": "luci.golang.try",
+        "os": "Linux",
+        "cpu": "x86-64",
+    },
 )
 
 def display_for_builder_type(builder_type):
