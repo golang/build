@@ -834,26 +834,4 @@ def _define_go_internal_ci():
 _define_go_ci()
 _define_go_internal_ci()
 
-luci.builder(
-    name = "robocrop",
-    bucket = "prod",
-    executable = luci.recipe(
-        name = "robocrop",
-        cipd_package = "infra/recipe_bundles/chromium.googlesource.com/chromiumos/infra/recipes",
-        cipd_version = "prod",
-    ),
-    execution_timeout = 5 * time.minute,
-    dimensions = {
-        "pool": "luci.golang.prod",
-        "os": "Ubuntu",
-        "cpu": "x86-64",
-    },
-    properties = {
-        "application": "golang",
-        "commit_changes": True,
-    },
-    schedule = "with 2m interval",
-    service_account = "robocrop@golang-ci-luci.iam.gserviceaccount.com",
-)
-
 exec("./recipes.star")
