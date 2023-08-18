@@ -251,7 +251,7 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 		return fmt.Errorf("error closing upload: %w", err)
 	}
 
-	comparisons := []struct{
+	comparisons := []struct {
 		suffix      string
 		compare     string
 		numerator   string
@@ -263,7 +263,7 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 			compare:     "toolchain",
 			numerator:   "experiment",
 			denominator: "baseline",
-			filter:      "-pgo:on",  // "off" or unset (bent doesn't set pgo).
+			filter:      "-pgo:on", // "off" or unset (bent doesn't set pgo).
 		},
 		{
 			// toolchain:baseline vs experiment with PGO
