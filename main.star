@@ -252,7 +252,10 @@ def dimensions_of(builder_type):
     os, arch, suffix, _ = split_builder_type(builder_type)
 
     # LUCI uses Mac to refer to macOS.
-    os = os.replace("darwin", "mac").capitalize()
+    os = os.replace("darwin", "mac")
+
+    # Capitalize the OS. LUCI OS dimensions are always capitalized.
+    os = os.capitalize()
 
     # We run 386 builds on AMD64.
     arch = arch.replace("386", "amd64")
@@ -260,12 +263,30 @@ def dimensions_of(builder_type):
     # LUCI calls amd64 x86-64.
     arch = arch.replace("amd64", "x86-64")
 
-    if os == "Linux" and suffix != "":
-        # linux-amd64_debian11 -> Debian-11
-        os = suffix.replace("debian", "Debian-")
-    elif os == "Mac" and suffix != "":
-        # darwin-amd64_12.6 -> Mac-12.6
-        os = "Mac-" + suffix
+    if suffix != "":
+        # Narrow down the dimensions using the suffix.
+        if os == "Linux":
+            # linux-amd64_debian11 -> Debian-11
+            os = suffix.replace("debian", "Debian-")
+        elif os == "Mac":
+            # darwin-amd64_12.6 -> Mac-12.6
+            os = "Mac-" + suffix
+    else:
+        # Set the default dimensions for each platform.
+        #
+        # Even without a suffix, we need to narrow down the
+        # dimensions so robocrop can correctly identify the
+        # queue length. This *must* line up with the
+        # expected_dimensions field for the botset in the
+        # internal config: //starlark/common/envs/golang.star
+        if os == "Linux":
+            os = "Debian-11"
+        elif os == "Mac":
+            os = "Mac-12.6"
+
+        # TODO: Add more platforms and decide on whether we
+        # even want this concept of a "default", suffixless
+        # builder.
 
     return {"os": os, "cpu": arch}
 
