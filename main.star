@@ -73,8 +73,8 @@ PUBLIC_REALMS = [
 ]
 
 SECURITY_REALMS = [
-    luci.realm(name = "pools/security"),
-    luci.realm(name = "pools/security-workers"),
+    luci.realm(name = "pools/security-try"),
+    luci.realm(name = "pools/security-try-workers"),
 ]
 
 luci.realm(name = "pools/prod")
@@ -145,9 +145,9 @@ PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-
 # The ci bucket will include builders which work on post-commit code.
 PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-builder", "public-worker-builder", LOW_CAPACITY_HOSTS)
 
-# The security bucket is for builders that test unreviewed, embargoed
+# The security-try bucket is for builders that test unreviewed, embargoed
 # security fixes.
-SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security", "coordinator-builder", "security-worker-builder", LOW_CAPACITY_HOSTS)
+SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security-try", "security-coordinator-builder", "security-worker-builder", LOW_CAPACITY_HOSTS)
 
 # The prod bucket will include builders which work on post-commit code and
 # generate executable artifacts used by other users or machines.
