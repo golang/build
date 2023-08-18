@@ -47,12 +47,6 @@ luci.project(
             groups = "project-golang-task-accounts",
             users = "tricium-prod@appspot.gserviceaccount.com",
         ),
-
-        # Allow robocrop service account to read buildbucket.
-        luci.binding(
-            roles = "role/buildbucket.reader",
-            users = "robocrop@golang-ci-luci.iam.gserviceaccount.com",
-        ),
     ],
     acls = [
         acl.entry(
