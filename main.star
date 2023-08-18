@@ -262,9 +262,11 @@ def split_builder_type(builder_type):
         arch, suffix = arch.split("_", 2)
     return os, arch, suffix, parts[2:]
 
-def dimensions_of(builder_type):
+def dimensions_of(low_capacity_hosts, builder_type):
     """dimensions_of returns the bot dimensions for a builder type."""
     os, arch, suffix, _ = split_builder_type(builder_type)
+    # TODO(mknyszek): Consider adding "_suffix " to the end of this.
+    host = "%s-%s" % (os, arch)
 
     # LUCI uses Mac to refer to macOS.
     os = os.replace("darwin", "mac")
@@ -287,14 +289,16 @@ def dimensions_of(builder_type):
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffix
     else:
-        # Set the default dimensions for each platform.
+        # Set the default dimensions for each platform, but only
+        # if it's not a low-capacity host. Low-capacity hosts
+        # need their dimensions to be as general as possible.
         #
         # Even without a suffix, we need to narrow down the
         # dimensions so robocrop can correctly identify the
         # queue length. This *must* line up with the
         # expected_dimensions field for the botset in the
         # internal config: //starlark/common/envs/golang.star
-        if os == "Linux":
+        if os == "Linux" and host not in low_capacity_hosts:
             os = "Debian-11"
         elif os == "Mac":
             os = "Mac-12.6"
@@ -306,8 +310,8 @@ def dimensions_of(builder_type):
     return {"os": os, "cpu": arch}
 
 def is_capacity_constrained(low_capacity_hosts, builder_type):
-    dims = dimensions_of(builder_type)
-    return any([dimensions_of(x) == dims for x in low_capacity_hosts])
+    dims = dimensions_of(low_capacity_hosts, builder_type)
+    return any([dimensions_of(low_capacity_hosts, x) == dims for x in low_capacity_hosts])
 
 # builder_name produces the final builder name.
 def builder_name(env, project, go_branch_short, builder_type):
@@ -386,7 +390,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Construct the basic dimensions for the build/test running part of the build.
     #
     # Note that these should generally live in the worker pools.
-    base_dims = dimensions_of(builder_type)
+    base_dims = dimensions_of(env.low_capacity_hosts, builder_type)
     base_dims["pool"] = env.worker_pool
     if is_capacity_constrained(env.low_capacity_hosts, builder_type):
         # Scarce resources live in the shared-workers pool.
@@ -595,7 +599,7 @@ luci.builder(
         name = "tricium_simple",
     ),
     service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-    dimensions = dimensions_of("linux-amd64"),
+    dimensions = dimensions_of(PUBLIC_TRY_ENV.low_capacity_hosts, "linux-amd64"),
 )
 
 def display_for_builder_type(builder_type):
