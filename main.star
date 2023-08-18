@@ -514,10 +514,15 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
         ]
 
     # Coordinator builder.
-    coord_dims = dimensions_of("linux-amd64")
-    coord_dims.update({
+    #
+    # Specify the dimensions directly. Coordinator builds can have very vague dimensions
+    # because we don't really care what machines they run on. We still need to specify
+    # something for robocrop, but the robocrop config will look for just "Linux."
+    coord_dims = {
         "pool": env.coordinator_pool,
-    })
+        "os": "Linux",
+        "cpu": "x86-64",
+    }
     coord_props = dict(base_props)
     coord_props.update({
         "mode": GOLANGBUILD_MODES["COORDINATOR"],
