@@ -117,15 +117,37 @@ luci.recipe.defaults.cipd_package.set("golang/recipe_bundles/go.googlesource.com
 luci.recipe.defaults.cipd_version.set("refs/heads/luci-config")
 luci.recipe.defaults.use_python3.set(True)
 
+def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, low_capacity):
+    luci.bucket(name = bucket)
+    return struct(
+        gerrit_host = gerrit_host,
+        swarming_host = swarming_host + ".appspot.com",
+        bucket = bucket,
+        coordinator_sa = coordinator_sa + "@golang-ci-luci.iam.gserviceaccount.com",
+        coordinator_pool = "luci.golang.%s" % bucket,
+        worker_sa = worker_sa + "@golang-ci-luci.iam.gserviceaccount.com",
+        worker_pool = "luci.golang.%s-workers" % bucket,
+        shared_worker_pool = "luci.golang.shared-workers",
+        low_capacity_hosts = low_capacity,
+    )
+
+# LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
+# They need to match the builder type, excluding any run mods.
+LOW_CAPACITY_HOSTS = [
+    "darwin-amd64",
+    "linux-ppc64le",
+]
+
 # The try bucket will include builders which work on pre-commit or pre-review
 # code.
-luci.bucket(name = "try")
+PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-builder", "public-worker-builder", LOW_CAPACITY_HOSTS)
 
 # The ci bucket will include builders which work on post-commit code.
-luci.bucket(name = "ci")
+PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-builder", "public-worker-builder", LOW_CAPACITY_HOSTS)
 
-# The security bucket is for builders that test embargoed security fixes.
-luci.bucket(name = "security")
+# The security bucket is for builders that test unreviewed, embargoed
+# security fixes.
+SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security", "coordinator-builder", "security-worker-builder", LOW_CAPACITY_HOSTS)
 
 # The prod bucket will include builders which work on post-commit code and
 # generate executable artifacts used by other users or machines.
@@ -224,13 +246,6 @@ GO_BRANCHES = {
     "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
 }
 
-# LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
-# They need to match the builder type, excluding any run mods.
-LOW_CAPACITY_HOSTS = [
-    "darwin-amd64",
-    "linux-ppc64le",
-]
-
 def split_builder_type(builder_type):
     """split_builder_type splits a builder type into its pieces.
 
@@ -290,19 +305,19 @@ def dimensions_of(builder_type):
 
     return {"os": os, "cpu": arch}
 
-def is_capacity_constrained(builder_type):
+def is_capacity_constrained(low_capacity_hosts, builder_type):
     dims = dimensions_of(builder_type)
-    return any([dimensions_of(x) == dims for x in LOW_CAPACITY_HOSTS])
+    return any([dimensions_of(x) == dims for x in low_capacity_hosts])
 
 # builder_name produces the final builder name.
-def builder_name(project, go_branch_short, builder_type, gerrit_host = "go"):
+def builder_name(env, project, go_branch_short, builder_type):
     """Derives the name for a certain builder.
 
     Args:
+        env: the environment the builder runs in.
         project: A go project defined in `PROJECTS`.
         go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
-        gerrit_host: The gerrit host name, either `go` or `go-internal`.
 
     Returns:
         The full name for the builder with the given specs.
@@ -312,7 +327,7 @@ def builder_name(project, go_branch_short, builder_type, gerrit_host = "go"):
         # Omit the project name for the main Go repository.
         # The branch short name already has a "go" prefix so
         # it's clear what the builder is building and testing.
-        if gerrit_host == "go-internal":
+        if "internal" in env.gerrit_host:
             return "%s-internal-%s" % (go_branch_short, builder_type)
         else:
             return "%s-%s" % (go_branch_short, builder_type)
@@ -330,16 +345,14 @@ GOLANGBUILD_MODES = {
     "TEST": 3,
 }
 
-def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host = "go", worker_account_name = "public-worker-builder", swarming_host = "chromium-swarm.appspot.com"):
+def define_builder(env, project, go_branch_short, builder_type):
     """Creates a builder definition.
 
     Args:
-        bucket: A LUCI bucket name, e.g. "ci".
+        env: the environment the builder runs in.
         project: A go project defined in `PROJECTS`.
         go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
-        gerrit_host: The gerrit host name, either `go` or `go-internal`.
-        swarming_host: The Swarming host name.
 
     Returns:
         The full name including a bucket prefix.
@@ -374,10 +387,10 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
     #
     # Note that these should generally live in the worker pools.
     base_dims = dimensions_of(builder_type)
-    base_dims["pool"] = "luci.golang." + bucket + "-workers"
-    if is_capacity_constrained(builder_type):
+    base_dims["pool"] = env.worker_pool
+    if is_capacity_constrained(env.low_capacity_hosts, builder_type):
         # Scarce resources live in the shared-workers pool.
-        base_dims["pool"] = "luci.golang.shared-workers"
+        base_dims["pool"] = env.shared_worker_pool
 
     # TODO(heschi): Select the version based on the macOS version or builder type
     if os == "darwin":
@@ -439,12 +452,12 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
             exps["luci.best_effort_platform"] = 100
         luci.builder(
             name = name,
-            bucket = bucket,
+            bucket = env.bucket,
             executable = executable,
             dimensions = dimensions,
             properties = properties,
             service_account = service_account,
-            swarming_host = swarming_host,
+            swarming_host = env.swarming_host,
             resultdb_settings = resultdb.settings(
                 enable = True,
             ),
@@ -453,19 +466,17 @@ def define_builder(bucket, project, go_branch_short, builder_type, gerrit_host =
             **kwargs
         )
 
-    name = builder_name(project, go_branch_short, builder_type, gerrit_host)
+    name = builder_name(env, project, go_branch_short, builder_type)
 
     # Emit the builder definitions.
     if project == "go":
-        define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, base_props, base_dims, worker_account_name, emit_builder)
+        define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
     else:
-        define_subrepo_builder(name, base_props, base_dims, worker_account_name, emit_builder)
+        define_subrepo_builder(env, name, base_props, base_dims, emit_builder)
 
-    return bucket + "/" + name
+    return env.bucket + "/" + name
 
-def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, base_props, base_dims, worker_account_name, emit_builder):
-    worker_account = worker_account_name + "@golang-ci-luci.iam.gserviceaccount.com"
-
+def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
     # Create 3 builders: the main entrypoint/coordinator builder,
     # a builder just to run make.bash, and a builder to run tests.
     #
@@ -482,7 +493,7 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
 
     # Determine if we should be sharding tests, and how many shards.
     test_shards = 1
-    if not is_capacity_constrained(builder_type) and go_branch_short != "go1.20":
+    if not is_capacity_constrained(env.low_capacity_hosts, builder_type) and go_branch_short != "go1.20":
         # TODO(mknyszek): Remove the exception for the go1.20 branch once it
         # is no longer supported.
         test_shards = 4
@@ -495,24 +506,24 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
     # ports only apply to the main Go repository and are not supported by all subrepos.
     # PROJECTS should probably contain a table of supported ports or something.
     builders_to_trigger = []
-    if bucket == "ci":
+    if env.bucket == "ci":
         builders_to_trigger = [
-            "golang/%s/%s" % (bucket, builder_name(project, go_branch_short, builder_type))
+            "golang/%s/%s" % (env.bucket, builder_name(env, project, go_branch_short, builder_type))
             for project in PROJECTS
-            if project != "go" and enabled(project, go_branch_short, builder_type)[1]
+            if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[1]
         ]
 
     # Coordinator builder.
     coord_dims = dimensions_of("linux-amd64")
     coord_dims.update({
-        "pool": "luci.golang." + bucket,
+        "pool": env.coordinator_pool,
     })
     coord_props = dict(base_props)
     coord_props.update({
         "mode": GOLANGBUILD_MODES["COORDINATOR"],
         "coord_mode": {
-            "build_builder": "golang/" + bucket + "/" + build_name,
-            "test_builder": "golang/" + bucket + "/" + test_name,
+            "build_builder": "golang/" + env.bucket + "/" + build_name,
+            "test_builder": "golang/" + env.bucket + "/" + test_name,
             "num_test_shards": test_shards,
             "builders_to_trigger_after_toolchain_build": builders_to_trigger,
         },
@@ -521,7 +532,7 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
         name = coord_name,
         dimensions = coord_dims,
         properties = coord_props,
-        service_account = "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
+        service_account = env.coordinator_sa,
     )
 
     # Build builder.
@@ -535,7 +546,7 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
         name = build_name,
         dimensions = build_dims,
         properties = build_props,
-        service_account = worker_account,
+        service_account = env.worker_sa,
     )
 
     # Test builder.
@@ -551,11 +562,11 @@ def define_go_builder(name, bucket, go_branch_short, builder_type, run_mods, bas
         name = test_name,
         dimensions = test_dims,
         properties = test_props,
-        service_account = worker_account,
+        service_account = env.worker_sa,
         allowed_property_overrides = ["test_shard"],
     )
 
-def define_subrepo_builder(name, base_props, base_dims, worker_account_name, emit_builder):
+def define_subrepo_builder(env, name, base_props, base_dims, emit_builder):
     # Create an "ALL" mode builder which just performs the full build serially.
     #
     # This builder is substantially simpler than the Go builders because it doesn't need
@@ -569,7 +580,7 @@ def define_subrepo_builder(name, base_props, base_dims, worker_account_name, emi
         name = name,
         dimensions = base_dims,
         properties = all_props,
-        service_account = worker_account_name + "@golang-ci-luci.iam.gserviceaccount.com",
+        service_account = env.worker_sa,
     )
 
 luci.builder(
@@ -600,7 +611,7 @@ def display_for_builder_type(builder_type):
 # should run in presubmit for the given project and branch, and the second indicates
 # if this builder_type should run in postsubmit for the given project and branch.
 # buildifier: disable=unused-variable
-def enabled(project, go_branch_short, builder_type):
+def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     pt = PROJECTS[project]
     os, arch, _, run_mods = split_builder_type(builder_type)
 
@@ -613,7 +624,7 @@ def enabled(project, go_branch_short, builder_type):
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
     presubmit = postsubmit and not any([x in run_mods for x in ["longtest", "race"]])
-    presubmit = presubmit and not is_capacity_constrained(builder_type)
+    presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, builder_type)
     return presubmit, postsubmit
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
@@ -682,10 +693,10 @@ def _define_go_ci():
             # Define builders.
             postsubmit_builders = {}
             for builder_type in BUILDER_TYPES:
-                presubmit, postsubmit = enabled(project, go_branch_short, builder_type)
+                presubmit, postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
 
                 # Define presubmit builders.
-                name = define_builder("try", project, go_branch_short, builder_type)
+                name = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
                 luci.cq_tryjob_verifier(
                     builder = name,
                     cq_group = cq_group_name,
@@ -694,7 +705,7 @@ def _define_go_ci():
 
                 # Define post-submit builders.
                 if postsubmit:
-                    name = define_builder("ci", project, go_branch_short, builder_type)
+                    name = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
                     postsubmit_builders[name] = display_for_builder_type(builder_type)
 
             # Create the gitiles_poller last because we need the full set of builders to
@@ -834,10 +845,10 @@ def _define_go_internal_ci():
         )
 
         for builder_type in BUILDER_TYPES:
-            presubmit, _ = enabled("go", go_branch_short, builder_type)
+            presubmit, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
 
             # Define presubmit builders.
-            name = define_builder("security", "go", go_branch_short, builder_type, "go-internal", "security-worker-builder", "chrome-swarming.appspot.com")
+            name = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
