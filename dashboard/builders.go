@@ -460,6 +460,10 @@ var Hosts = map[string]*HostConfig{
 		IsReverse: true,
 		ExpectNum: 2,
 		Owners:    []*gophers.Person{gh("mengzhuo")},
+
+		// Use go1.20.7 (slightly newer than the default go1.20.6 on 2023-08-18)
+		// for https://go.dev/issue/62104#issuecomment-1683207172.
+		GoBootstrap: "go1.20.7",
 	},
 	"host-linux-s390x": {
 		Notes:     "run by IBM",
