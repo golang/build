@@ -121,7 +121,9 @@ var slowBotAliases = map[string]string{
 var Builders = map[string]*BuildConfig{}
 
 // GoBootstrap is the bootstrap Go version.
-// Bootstrap Go builds with this name must be in the bucket,
+//
+// For bootstrap versions prior to Go 1.21.0,
+// bootstrap Go builds with this name must be in the buildlet bucket,
 // usually uploaded by 'genbootstrap -upload all'.
 const GoBootstrap = "go1.20.6"
 
@@ -699,12 +701,15 @@ type HostConfig struct {
 	HostArch string
 
 	// GoBootstrap is the version of Go to use for bootstrap.
-	// A bootstrap toolchain built with that version must be in the bucket.
 	// If unset, it is set in func init to GoBootstrap (the global constant).
 	//
 	// If GoBootstrap is set to "none", it means this buildlet is not given a new bootstrap
 	// toolchain for each build, typically because it cannot download from
 	// storage.googleapis.com.
+	//
+	// For bootstrap versions prior to Go 1.21.0,
+	// a bootstrap toolchain built with that version must be in the buildlet bucket,
+	// usually uploaded by 'genbootstrap -upload all'.
 	//
 	// (See the GoBootstrapURL method.)
 	GoBootstrap string
@@ -1034,8 +1039,20 @@ func (c *BuildConfig) GoBootstrapURL(e *buildenv.Environment) string {
 	if hc.GoBootstrap == "none" {
 		return ""
 	}
-	return "https://storage.googleapis.com/" + e.BuildletBucket +
-		"/gobootstrap-" + hc.HostArch + "-" + hc.GoBootstrap + ".tar.gz"
+	if x, ok := version.Go1PointX(hc.GoBootstrap); ok && x < 21 {
+		return "https://storage.googleapis.com/" + e.BuildletBucket +
+			"/gobootstrap-" + hc.HostArch + "-" + hc.GoBootstrap + ".tar.gz"
+	}
+	if c.GOOS() == "windows" {
+		// Can't use Windows downloads from go.dev/dl, they're in .zip
+		// format but the buildlet API accepts only the .tar.gz format.
+		//
+		// Since all this will be replaced by LUCI fairly soon,
+		// keep using the bootstrap bucket for Windows for now.
+		return "https://storage.googleapis.com/" + e.BuildletBucket +
+			"/gobootstrap-" + hc.HostArch + "-" + hc.GoBootstrap + ".tar.gz"
+	}
+	return "https://go.dev/dl/" + hc.GoBootstrap + "." + hc.HostArch + ".tar.gz"
 }
 
 // BuildletBinaryURL returns the public URL of this builder's buildlet.

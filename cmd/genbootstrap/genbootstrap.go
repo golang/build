@@ -14,6 +14,12 @@ Usage:
 
 The argument list can be a single glob pattern (for example '*'),
 which expands to all known targets matching that pattern.
+
+Deprecated: As of Go 1.21.0, genbootstrap is superseded
+by make.bash -distpack and doesn't need to be used anymore.
+The one exception are GOOS=windows targets, since their
+go.dev/dl downloads are in .zip format but the builders
+in x/build support pushing .tar.gz format only.
 */
 package main
 
@@ -35,6 +41,7 @@ import (
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/envutil"
+	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 )
 
 var skipBuild = flag.String("skip_build", "", "skip bootstrap.bash and reuse output in `dir` instead")
@@ -72,11 +79,21 @@ func main() {
 		log.Printf("expanded %s: %v", pattern, list)
 	}
 
+	var nonWindowsTargets []string
 	for _, pair := range list {
 		f := strings.Split(pair, "-")
 		if len(f) != 2 && len(f) != 3 {
 			log.Fatalf("invalid target: %q", pair)
 		}
+		if goos := f[0]; goos != "windows" {
+			nonWindowsTargets = append(nonWindowsTargets, pair)
+		}
+	}
+
+	if x, _ := version.Go1PointX(*rev); x >= 21 && len(nonWindowsTargets) > 0 {
+		log.Fatalf("genbootstrap isn't needed to build Go 1.21.0 and newer bootstrap toolchains for %v, "+
+			"they're already built with make.bash -distpack and made available at go.dev/dl for all ports "+
+			"(GOOS=windows targets are permitted; builders need .tar.gz format so go.dev/dl can't be used as is)", nonWindowsTargets)
 	}
 
 	dir, err := os.MkdirTemp("", "genbootstrap-*")
