@@ -322,11 +322,10 @@ def is_capacity_constrained(low_capacity_hosts, builder_type):
     return any([dimensions_of(low_capacity_hosts, x) == dims for x in low_capacity_hosts])
 
 # builder_name produces the final builder name.
-def builder_name(env, project, go_branch_short, builder_type):
+def builder_name(project, go_branch_short, builder_type):
     """Derives the name for a certain builder.
 
     Args:
-        env: the environment the builder runs in.
         project: A go project defined in `PROJECTS`.
         go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
@@ -339,10 +338,7 @@ def builder_name(env, project, go_branch_short, builder_type):
         # Omit the project name for the main Go repository.
         # The branch short name already has a "go" prefix so
         # it's clear what the builder is building and testing.
-        if "internal" in env.gerrit_host:
-            return "%s-internal-%s" % (go_branch_short, builder_type)
-        else:
-            return "%s-%s" % (go_branch_short, builder_type)
+        return "%s-%s" % (go_branch_short, builder_type)
 
     # Add an x_ prefix to the project to help make it clear that
     # we're testing a golang.org/x/* repository. These repositories
@@ -478,7 +474,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             **kwargs
         )
 
-    name = builder_name(env, project, go_branch_short, builder_type)
+    name = builder_name(project, go_branch_short, builder_type)
 
     # Emit the builder definitions.
     if project == "go":
@@ -520,7 +516,7 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     builders_to_trigger = []
     if env.bucket == "ci":
         builders_to_trigger = [
-            "golang/%s/%s" % (env.bucket, builder_name(env, project, go_branch_short, builder_type))
+            "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
             for project in PROJECTS
             if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[1]
         ]
