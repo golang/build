@@ -1258,6 +1258,11 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 				// fixes get prepared and soak, so give them more time.
 				deadline = waitStart.AddDate(0, 6, 0)
 			}
+			if repo.ID().Repo == "vscode-go" && gi.HasLabel("automatedReport") {
+				// Automated issue reports have low response rates.
+				// Apply shorter timeout.
+				deadline = waitStart.AddDate(0, 0, 7)
+			}
 			if now.Before(deadline) {
 				return nil
 			}
