@@ -28,6 +28,7 @@ linux-arm64     linux      arm64      linux-arm64
 	Running on GCP
 
 linux-armv6l    linux      arm        linux-arm-aws
+	Extra env: ["GOARM=6"]
 	Running on AWS
 
 linux-ppc64le   linux      ppc64le    linux-ppc64le-buildlet
@@ -78,6 +79,7 @@ linux-arm64     linux      arm64      linux-arm64
 	Running on GCP
 
 linux-armv6l    linux      arm        linux-arm-aws
+	Extra env: ["GOARM=6"]
 	Running on AWS
 
 linux-ppc64le   linux      ppc64le    linux-ppc64le-buildlet
@@ -140,6 +142,7 @@ linux-arm64     linux      arm64      linux-arm64
 	Running on GCP
 
 linux-armv6l    linux      arm        linux-arm-aws
+	Extra env: ["GOARM=6"]
 	Running on AWS
 
 linux-loong64   linux      loong64    (cross-compiled, no tests)

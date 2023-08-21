@@ -87,8 +87,9 @@ var allReleases = map[int]ReleaseTargets{
 			LongTestBuilder: "linux-386-longtest",
 		},
 		"linux-armv6l": &Target{
-			GOARCH:  "arm",
-			Builder: "linux-arm-aws",
+			GOARCH:   "arm",
+			Builder:  "linux-arm-aws",
+			ExtraEnv: []string{"GOARM=6"},
 		},
 		"linux-arm64": &Target{
 			Builder: "linux-arm64",
