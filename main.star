@@ -66,18 +66,21 @@ luci.project(
 # Per-service tweaks.
 luci.logdog(gs_bucket = "logdog-golang-archive")
 
-# Realms with ACLs for corresponding Swarming pools.
+# Realms for public buckets and Swarming pools.
 PUBLIC_REALMS = [
     luci.realm(name = "pools/ci"),
     luci.realm(name = "pools/ci-workers"),
     luci.realm(name = "pools/try"),
     luci.realm(name = "pools/try-workers"),
     luci.realm(name = "pools/shared-workers"),
+    luci.bucket(name = "try"),
+    luci.bucket(name = "ci"),
 ]
 
 SECURITY_REALMS = [
     luci.realm(name = "pools/security-try"),
     luci.realm(name = "pools/security-try-workers"),
+    luci.bucket(name = "security-try"),
 ]
 
 luci.realm(name = "pools/prod")
@@ -121,7 +124,6 @@ luci.recipe.defaults.cipd_version.set("refs/heads/luci-config")
 luci.recipe.defaults.use_python3.set(True)
 
 def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, low_capacity):
-    luci.bucket(name = bucket)
     return struct(
         gerrit_host = gerrit_host,
         swarming_host = swarming_host + ".appspot.com",
