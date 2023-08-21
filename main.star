@@ -44,8 +44,11 @@ luci.project(
         # Allow task service accounts to spawn builds.
         luci.binding(
             roles = "role/buildbucket.triggerer",
-            groups = "project-golang-task-accounts",
-            users = "tricium-prod@appspot.gserviceaccount.com",
+            users = [
+                "tricium-prod@appspot.gserviceaccount.com",
+                "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
+                "security-coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
+            ],
         ),
     ],
     acls = [
@@ -265,6 +268,7 @@ def split_builder_type(builder_type):
 def dimensions_of(low_capacity_hosts, builder_type):
     """dimensions_of returns the bot dimensions for a builder type."""
     os, arch, suffix, _ = split_builder_type(builder_type)
+
     # TODO(mknyszek): Consider adding "_suffix " to the end of this.
     host = "%s-%s" % (os, arch)
 
