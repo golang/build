@@ -644,8 +644,11 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
-    presubmit = postsubmit and not any([x in run_mods for x in ["longtest", "race"]])
-    presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, builder_type)
+    presubmit = postsubmit \
+        and not any([x in run_mods for x in ["longtest", "race"]]) \
+        and not is_capacity_constrained(low_capacity_hosts, builder_type)
+    if project != "go" and go_branch_short != "gotip":
+        presubmit = os == "linux" and arch == "amd64" and run_mods == []
     return presubmit, postsubmit
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
@@ -677,7 +680,7 @@ POST_ACTIONS = [
 
 def _define_go_ci():
     for project in PROJECTS:
-        for go_branch_short, branch_props in GO_BRANCHES.items():
+        for go_branch_short, go_branch in GO_BRANCHES.items():
             # Set up a CQ group for the builder definitions below.
             #
             # cq group names must match "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"
@@ -690,7 +693,10 @@ def _define_go_ci():
                 )],
                 watch = cq.refset(
                     repo = "https://go.googlesource.com/%s" % project,
-                    refs = ["refs/heads/%s" % branch_props.branch],
+                    refs = [
+                        "refs/heads/%s" % go_branch.branch if project == "go"
+                        else "refs/heads/master"
+                    ]
                 ),
                 allow_submit_with_open_deps = True,
                 verifiers = [
@@ -739,7 +745,7 @@ def _define_go_ci():
             # This is controlled by the "builders_to_trigger" property on those
             # builders.
             if project == "go":
-                poller_branch = branch_props.branch
+                poller_branch = go_branch.branch
             else:
                 poller_branch = "master"
             luci.gitiles_poller(
@@ -766,7 +772,7 @@ def _define_go_ci():
                     name = "%s-%s-ci" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
                     title = go_branch_short,
-                    refs = ["refs/heads/" + branch_props.branch],
+                    refs = ["refs/heads/" + go_branch.branch],
                     entries = make_console_view_entries(postsubmit_builders),
                     header = {
                         "links": [
@@ -827,12 +833,12 @@ def _define_go_ci():
                     name = "%s-%s-by-go-ci" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
                     title = console_title + " (by go commit)",
-                    refs = ["refs/heads/" + branch_props.branch],
+                    refs = ["refs/heads/" + go_branch.branch],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
 
 def _define_go_internal_ci():
-    for go_branch_short, branch_props in GO_BRANCHES.items():
+    for go_branch_short, go_branch in GO_BRANCHES.items():
         # TODO(yifany): Simplify cq.location_filter once Tricium to CV
         # migration (go/luci/tricium) is done.
         cq_group_name = ("go-internal_%s" % go_branch_short).replace(".", "-")
@@ -844,7 +850,7 @@ def _define_go_internal_ci():
             )],
             watch = cq.refset(
                 repo = "https://go-internal.googlesource.com/go",
-                refs = ["refs/heads/%s" % branch_props.branch],
+                refs = ["refs/heads/%s" % go_branch.branch],
             ),
             allow_submit_with_open_deps = True,
             verifiers = [
