@@ -485,6 +485,8 @@ def define_builder(env, project, go_branch_short, builder_type):
     return env.bucket + "/" + name
 
 def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
+    os, arch, _, _ = split_builder_type(builder_type)
+
     # Create 3 builders: the main entrypoint/coordinator builder,
     # a builder just to run make.bash, and a builder to run tests.
     #
@@ -539,6 +541,8 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
             "test_builder": "golang/" + env.bucket + "/" + test_name,
             "num_test_shards": test_shards,
             "builders_to_trigger_after_toolchain_build": builders_to_trigger,
+            "target_goos": os,
+            "target_goarch": arch,
         },
     })
     emit_builder(
