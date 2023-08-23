@@ -1823,6 +1823,8 @@ func init() {
 		GoDeps: []string{
 			"fbf9076ee8c8f665f1e8bba08fdc473cc7a2d690", // CL 511555, which added GOEXPERIMENT=newinliner
 		},
+		numTestHelpers:    1,
+		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-goamd64v3",
