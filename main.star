@@ -647,8 +647,6 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     presubmit = postsubmit \
         and not any([x in run_mods for x in ["longtest", "race"]]) \
         and not is_capacity_constrained(low_capacity_hosts, builder_type)
-    if project != "go" and go_branch_short != "gotip":
-        presubmit = os == "linux" and arch == "amd64" and run_mods == []
     return presubmit, postsubmit
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
@@ -694,8 +692,7 @@ def _define_go_ci():
                 watch = cq.refset(
                     repo = "https://go.googlesource.com/%s" % project,
                     refs = [
-                        "refs/heads/%s" % go_branch.branch if project == "go"
-                        else "refs/heads/master"
+                        "refs/heads/%s" % go_branch.branch
                     ]
                 ),
                 allow_submit_with_open_deps = True,
