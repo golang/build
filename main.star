@@ -197,24 +197,50 @@ NO_NETWORK_BUILDERS = [
 ]
 
 # make_run_mod returns a run_mod that adds the given properties and environment
-# variables.
-def make_run_mod(add_props = {}, add_env = {}):
-    def mod(props):
+# variables. If set, enabled is a function receives the project and branch, and
+# returns three booleans to affect the builder it's being added to:
+# - exists, whether the builder should be created at all
+# - presubmit, whether the builder should be run in presubmit by default
+# - postsubmit, whether the builder should run in postsubmit
+def make_run_mod(add_props = {}, add_env = {}, enabled = None):
+    def apply_mod(props):
         props.update(add_props)
         props["env"].update(add_env)
-        return True
 
-    return mod
+    if enabled == None:
+        enabled = lambda project, go_branch_short: (True, True, True)
+    return struct(
+        enabled = enabled,
+        apply = apply_mod,
+    )
+
+# enable only on release branches in the Go project.
+def presubmit_only_on_release_branches():
+    def f(project, go_branch_short):
+        presubmit = project == "go" and go_branch_short != "gotip"
+        return (True, presubmit, True)
+
+    return f
+
+# define the builder only for the go project at versions after x, useful for
+# non-default build modes that were created at x.
+def define_for_go_starting_at(x):
+    def f(project, go_branch_short):
+        run = project == "go" and (go_branch_short == "gotip" or go_branch_short >= x)
+        return (run, run, run)
+
+    return f
 
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
-    longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}),
-    race = make_run_mod({"race_mode": True}),
+    longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}, enabled = presubmit_only_on_release_branches()),
+    race = make_run_mod({"race_mode": True}, enabled = presubmit_only_on_release_branches()),
     boringcrypto = make_run_mod(add_env = {"GOEXPERIMENT": "boringcrypto"}),
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
     misccompile = make_run_mod({"compile_only": True, "misc_ports": True}),
+    newinliner = make_run_mod(add_env = {"GOEXPERIMENT": "newinliner"}, enabled = define_for_go_starting_at("go1.22")),
 )
 
 # PT is Project Type, a classification of a project.
@@ -429,7 +455,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     for mod in run_mods:
         if not mod in RUN_MODS:
             fail("unknown run mod: %s" % mod)
-        RUN_MODS[mod](base_props)
+        RUN_MODS[mod].apply(base_props)
 
     # Named cache for git clones.
     base_props["git_cache"] = "git"
@@ -534,7 +560,7 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
         builders_to_trigger = [
             "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
             for project in PROJECTS
-            if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[1]
+            if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[2]
         ]
 
     # Coordinator builder.
@@ -646,18 +672,16 @@ def display_for_builder_type(builder_type):
     category = "|".join(components[:2])
     return category, short_name  # Produces: "$GOOS|$GOARCH", $HOST_SPECIFIER(-$RUN_MOD)*
 
-# enabled returns two boolean values: the first one indicates if this builder_type
-# should run in presubmit for the given project and branch, and the second indicates
-# if this builder_type should run in postsubmit for the given project and branch.
-# buildifier: disable=unused-variable
+# enabled returns three boolean values: the first one indicates if this 
+# builder_type should exist at all for the given project and branch, the
+# second whether it should run in presubmit by default, and the third if it
+# should run in postsubmit.
 def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     pt = PROJECTS[project]
     os, arch, _, run_mods = split_builder_type(builder_type)
 
-    presubmit_skip_run_mods = ["longtest", "race"]
-    if project == "go" and go_branch_short != "gotip":
-        presubmit_skip_run_mods = [] # See go.dev/issue/37827.
-
+    # Apply basic policies about which projects run on what machine types,
+    # and what we have capacity to run in presubmit.
     enable_types = None
     if pt == PT.TOOL:
         enable_types = ["linux-amd64", "windows-amd64", "darwin-amd64"]
@@ -666,10 +690,17 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
-    presubmit = postsubmit \
-        and not any([x in run_mods for x in presubmit_skip_run_mods]) \
-        and not is_capacity_constrained(low_capacity_hosts, builder_type)
-    return presubmit, postsubmit
+    presubmit = postsubmit and not is_capacity_constrained(low_capacity_hosts, builder_type)
+
+    # Apply policies for each run mod.
+    exists = True
+    for mod in run_mods:
+        ex, pre, post = RUN_MODS[mod].enabled(project, go_branch_short)
+        exists = exists and ex
+        presubmit = presubmit and pre
+        postsubmit = postsubmit and post
+
+    return exists, presubmit, postsubmit
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
 #
@@ -758,7 +789,9 @@ def _define_go_ci():
             # Define builders.
             postsubmit_builders = {}
             for builder_type in BUILDER_TYPES:
-                presubmit, postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
+                exists, presubmit, postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
+                if not exists:
+                    continue
 
                 # Define presubmit builders.
                 name = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
@@ -932,7 +965,9 @@ def _define_go_internal_ci():
         )
 
         for builder_type in BUILDER_TYPES:
-            presubmit, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
+            exists, presubmit, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
+            if not exists:
+                continue
 
             # Define presubmit builders.
             name = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
