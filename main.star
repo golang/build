@@ -681,8 +681,23 @@ def _define_go_ci():
         for go_branch_short, go_branch in GO_BRANCHES.items():
             # Set up a CQ group for the builder definitions below.
             #
+            # The CQ group "{project}_repo_{go-branch}" is configured to watch
+            # applicable branches in project and test with the Go version that
+            # corresponds to go-branch.
+            # Each branch must be watched by no more than one matched CQ group.
+            #
             # cq group names must match "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"
             cq_group_name = ("%s_repo_%s" % (project, go_branch_short)).replace(".", "-")
+            if project == "go":
+                # Main Go repo trybot branch coverage.
+                watch_branch = go_branch.branch
+            else:
+                # golang.org/x repo trybot branch coverage.
+                if go_branch_short == "gotip":
+                    watch_branch = "master"
+                else:
+                    # See go.dev/issue/46154.
+                    watch_branch = "internal-branch.%s-vendor" % go_branch_short
             luci.cq_group(
                 name = cq_group_name,
                 acls = [
@@ -697,9 +712,7 @@ def _define_go_ci():
                 ],
                 watch = cq.refset(
                     repo = "https://go.googlesource.com/%s" % project,
-                    refs = [
-                        "refs/heads/%s" % go_branch.branch
-                    ]
+                    refs = ["refs/heads/%s" % watch_branch],
                 ),
                 allow_submit_with_open_deps = True,
                 verifiers = [
