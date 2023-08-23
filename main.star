@@ -177,6 +177,7 @@ BUILDER_TYPES = [
     "linux-386-longtest",
     "linux-amd64",
     "linux-amd64-boringcrypto",
+    "linux-amd64-newinliner",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-race",
