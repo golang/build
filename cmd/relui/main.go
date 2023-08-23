@@ -237,6 +237,14 @@ func main() {
 	}
 	dh.RegisterDefinition("Update x/crypto NSS root bundle", bundleTasks.NewDefinition())
 
+	tagTelemetryTasks := &task.TagTelemetryTasks{
+		Gerrit:           gerritClient,
+		GerritURL:        "https://go.googlesource.com",
+		CreateBuildlet:   coordinator.CreateBuildlet,
+		LatestGoBinaries: task.LatestGoBinaries,
+	}
+	dh.RegisterDefinition("Tag a new version of x/telemetry/config (if necessary)", tagTelemetryTasks.NewDefinition())
+
 	var base *url.URL
 	if *baseURL != "" {
 		base, err = url.Parse(*baseURL)

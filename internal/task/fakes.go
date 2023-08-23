@@ -370,6 +370,9 @@ func NewFakeRepo(t *testing.T, name string) *FakeRepo {
 	return r
 }
 
+// TODO(rfindley): probably every method on FakeRepo should invoke
+// repo.t.Helper(), otherwise it's impossible to see where the test failed.
+
 func (repo *FakeRepo) runGit(args ...string) []byte {
 	repo.t.Helper()
 	configArgs := []string{
@@ -379,7 +382,7 @@ func (repo *FakeRepo) runGit(args ...string) []byte {
 	}
 	out, err := repo.dir.RunCommand(context.Background(), append(configArgs, args...)...)
 	if err != nil {
-		repo.t.Fatal(err)
+		repo.t.Fatalf("runGit(%v) failed: %v; output:\n%s", args, err, out)
 	}
 	return out
 }
