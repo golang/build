@@ -70,13 +70,16 @@ PUBLIC_REALMS = [
     luci.realm(name = "pools/try-workers"),
     luci.realm(name = "pools/shared-workers"),
     luci.bucket(name = "try"),
+    luci.bucket(name = "try-workers"),
     luci.bucket(name = "ci"),
+    luci.bucket(name = "ci-workers"),
 ]
 
 SECURITY_REALMS = [
     luci.realm(name = "pools/security-try"),
     luci.realm(name = "pools/security-try-workers"),
     luci.bucket(name = "security-try"),
+    luci.bucket(name = "security-try-workers"),
 ]
 
 luci.realm(name = "pools/prod")
@@ -124,6 +127,7 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
         gerrit_host = gerrit_host,
         swarming_host = swarming_host + ".appspot.com",
         bucket = bucket,
+        worker_bucket = bucket + "-workers",
         coordinator_sa = coordinator_sa + "@golang-ci-luci.iam.gserviceaccount.com",
         coordinator_pool = "luci.golang.%s" % bucket,
         worker_sa = worker_sa + "@golang-ci-luci.iam.gserviceaccount.com",
@@ -450,13 +454,13 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     # Create a helper to emit builder definitions, installing common fields from
     # the current context.
-    def emit_builder(name, dimensions, properties, service_account, **kwargs):
+    def emit_builder(name, bucket, dimensions, properties, service_account, **kwargs):
         exps = dict(experiments)
         if "ppc64le" in dimensions["cpu"]:
             exps["luci.best_effort_platform"] = 100
         luci.builder(
             name = name,
-            bucket = env.bucket,
+            bucket = bucket,
             executable = executable,
             dimensions = dimensions,
             properties = properties,
@@ -533,8 +537,8 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     coord_props.update({
         "mode": GOLANGBUILD_MODES["COORDINATOR"],
         "coord_mode": {
-            "build_builder": "golang/" + env.bucket + "/" + build_name,
-            "test_builder": "golang/" + env.bucket + "/" + test_name,
+            "build_builder": "golang/" + env.worker_bucket + "/" + build_name,
+            "test_builder": "golang/" + env.worker_bucket + "/" + test_name,
             "num_test_shards": test_shards,
             "builders_to_trigger_after_toolchain_build": builders_to_trigger,
             "target_goos": os,
@@ -543,6 +547,7 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     })
     emit_builder(
         name = coord_name,
+        bucket = env.bucket,
         dimensions = coord_dims,
         properties = coord_props,
         service_account = env.coordinator_sa,
@@ -557,6 +562,7 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     })
     emit_builder(
         name = build_name,
+        bucket = env.worker_bucket,
         dimensions = build_dims,
         properties = build_props,
         service_account = env.worker_sa,
@@ -573,6 +579,7 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     })
     emit_builder(
         name = test_name,
+        bucket = env.worker_bucket,
         dimensions = test_dims,
         properties = test_props,
         service_account = env.worker_sa,
@@ -591,6 +598,7 @@ def define_subrepo_builder(env, name, base_props, base_dims, emit_builder):
     })
     emit_builder(
         name = name,
+        bucket = env.bucket,
         dimensions = base_dims,
         properties = all_props,
         service_account = env.worker_sa,
