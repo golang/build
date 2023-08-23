@@ -196,14 +196,26 @@ NO_NETWORK_BUILDERS = [
     "linux-amd64",
 ]
 
+# make_run_mod returns a run_mod that adds the given properties and environment
+# variables.
+def make_run_mod(add_props = {}, add_env = {}):
+    def mod(props):
+        props.update(add_props)
+        props["env"].update(add_env)
+        return True
+
+    return mod
+
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
-RUN_MODS = [
-    "longtest",
-    "race",
-    "boringcrypto",
-    "misccompile",
-]
+RUN_MODS = dict(
+    longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}),
+    race = make_run_mod({"race_mode": True}),
+    boringcrypto = make_run_mod(add_env = {"GOEXPERIMENT": "boringcrypto"}),
+    # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
+    # that is to cross-compile all non-first-class ports to quickly flag portability issues.
+    misccompile = make_run_mod({"compile_only": True, "misc_ports": True}),
+)
 
 # PT is Project Type, a classification of a project.
 PT = struct(
@@ -414,18 +426,10 @@ def define_builder(env, project, go_branch_short, builder_type):
         if project == "go" and (go_branch_short == "go1.21" or go_branch_short == "go1.20"):
             base_props.pop("no_network")
 
-    if "longtest" in run_mods:
-        base_props["long_test"] = True
-        base_props["env"]["GO_TEST_TIMEOUT_SCALE"] = "5"
-    if "race" in run_mods:
-        base_props["race_mode"] = True
-    if "boringcrypto" in run_mods:
-        base_props["env"]["GOEXPERIMENT"] = "boringcrypto"
-    if "misccompile" in run_mods:
-        # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
-        # that is to cross-compile all non-first-class ports to quickly flag portability issues.
-        base_props["compile_only"] = True
-        base_props["misc_ports"] = True
+    for mod in run_mods:
+        if not mod in RUN_MODS:
+            fail("unknown run mod: %s" % mod)
+        RUN_MODS[mod](base_props)
 
     # Named cache for git clones.
     base_props["git_cache"] = "git"
