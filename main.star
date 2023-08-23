@@ -632,6 +632,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     pt = PROJECTS[project]
     os, arch, _, run_mods = split_builder_type(builder_type)
 
+    presubmit_skip_run_mods = ["longtest", "race"]
+    if project == "go" and go_branch_short != "gotip":
+        presubmit_skip_run_mods = [] # See go.dev/issue/37827.
+
     enable_types = None
     if pt == PT.TOOL:
         enable_types = ["linux-amd64", "windows-amd64", "darwin-amd64"]
@@ -641,7 +645,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
     presubmit = postsubmit \
-        and not any([x in run_mods for x in ["longtest", "race"]]) \
+        and not any([x in run_mods for x in presubmit_skip_run_mods]) \
         and not is_capacity_constrained(low_capacity_hosts, builder_type)
     return presubmit, postsubmit
 
