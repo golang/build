@@ -56,10 +56,6 @@ luci.project(
             roles = acl.PROJECT_CONFIGS_READER,
             groups = "all",
         ),
-        acl.entry(
-            roles = acl.CQ_COMMITTER,
-            groups = "mdb/golang-luci-admin",
-        ),
     ],
 )
 
@@ -95,11 +91,11 @@ luci.binding(
     groups = "all",
 )
 
-# Allow external contributors to trigger public builds.
+# may-start-trybots grants the permission to trigger public builds.
 luci.binding(
     roles = ["role/buildbucket.triggerer"],
     realm = PUBLIC_REALMS,
-    groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
+    groups = ["project-golang-may-start-trybots"],
 )
 
 # Allow security release participants to see and trigger security builds, etc.
@@ -685,10 +681,16 @@ def _define_go_ci():
             cq_group_name = ("%s_repo_%s" % (project, go_branch_short)).replace(".", "-")
             luci.cq_group(
                 name = cq_group_name,
-                acls = [acl.entry(
-                    roles = acl.CQ_DRY_RUNNER,
-                    groups = ["project-golang-may-start-trybots", "project-golang-approvers", "mdb/golang-team"],
-                )],
+                acls = [
+                    acl.entry(
+                        roles = acl.CQ_DRY_RUNNER,
+                        groups = ["project-golang-may-start-trybots"],
+                    ),
+                    acl.entry(
+                        roles = acl.CQ_COMMITTER,
+                        groups = ["project-golang-approvers"],
+                    ),
+                ],
                 watch = cq.refset(
                     repo = "https://go.googlesource.com/%s" % project,
                     refs = [
@@ -841,10 +843,16 @@ def _define_go_internal_ci():
         cq_group_name = ("go-internal_%s" % go_branch_short).replace(".", "-")
         luci.cq_group(
             name = cq_group_name,
-            acls = [acl.entry(
-                roles = acl.CQ_DRY_RUNNER,
-                groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
-            )],
+            acls = [
+                acl.entry(
+                    roles = acl.CQ_DRY_RUNNER,
+                    groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+                ),
+                acl.entry(
+                    roles = acl.CQ_COMMITTER,
+                    groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+                ),
+            ],
             watch = cq.refset(
                 repo = "https://go-internal.googlesource.com/go",
                 refs = ["refs/heads/%s" % go_branch.branch],
