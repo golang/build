@@ -50,11 +50,6 @@ message AuthenticateRequest {}
 // AuthenticateResponse contains authenticated user data.
 message AuthenticateResponse {}
 
-// CreateInstanceRequest specifies the data needed to create a gomote instance.
-message CreateInstanceRequest {
-  string builder_type = 1;
-}
-
 // AddBootstrapRequest specifies the data needed for a request to add the bootstrap version of Go
 // to the instance.
 message AddBootstrapRequest {
@@ -68,6 +63,11 @@ message AddBootstrapResponse {
   // If empty, the bootstrap version is undefined and has probably been included in
   // the instance image.
   string bootstrap_go_url = 1;
+}
+
+// CreateInstanceRequest specifies the data needed to create a gomote instance.
+message CreateInstanceRequest {
+  string builder_type = 1;
 }
 
 // CreateInstanceResponse contains data about a created gomote instance.

@@ -151,54 +151,6 @@ func (*AuthenticateResponse) Descriptor() ([]byte, []int) {
 	return file_gomote_proto_rawDescGZIP(), []int{1}
 }
 
-// CreateInstanceRequest specifies the data needed to create a gomote instance.
-type CreateInstanceRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	BuilderType string `protobuf:"bytes,1,opt,name=builder_type,json=builderType,proto3" json:"builder_type,omitempty"`
-}
-
-func (x *CreateInstanceRequest) Reset() {
-	*x = CreateInstanceRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_gomote_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CreateInstanceRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateInstanceRequest) ProtoMessage() {}
-
-func (x *CreateInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gomote_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateInstanceRequest.ProtoReflect.Descriptor instead.
-func (*CreateInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_gomote_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *CreateInstanceRequest) GetBuilderType() string {
-	if x != nil {
-		return x.BuilderType
-	}
-	return ""
-}
-
 // AddBootstrapRequest specifies the data needed for a request to add the bootstrap version of Go
 // to the instance.
 type AddBootstrapRequest struct {
@@ -213,7 +165,7 @@ type AddBootstrapRequest struct {
 func (x *AddBootstrapRequest) Reset() {
 	*x = AddBootstrapRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_gomote_proto_msgTypes[3]
+		mi := &file_gomote_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -226,7 +178,7 @@ func (x *AddBootstrapRequest) String() string {
 func (*AddBootstrapRequest) ProtoMessage() {}
 
 func (x *AddBootstrapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_gomote_proto_msgTypes[3]
+	mi := &file_gomote_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -239,7 +191,7 @@ func (x *AddBootstrapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddBootstrapRequest.ProtoReflect.Descriptor instead.
 func (*AddBootstrapRequest) Descriptor() ([]byte, []int) {
-	return file_gomote_proto_rawDescGZIP(), []int{3}
+	return file_gomote_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *AddBootstrapRequest) GetGomoteId() string {
@@ -264,7 +216,7 @@ type AddBootstrapResponse struct {
 func (x *AddBootstrapResponse) Reset() {
 	*x = AddBootstrapResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_gomote_proto_msgTypes[4]
+		mi := &file_gomote_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -277,7 +229,7 @@ func (x *AddBootstrapResponse) String() string {
 func (*AddBootstrapResponse) ProtoMessage() {}
 
 func (x *AddBootstrapResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_gomote_proto_msgTypes[4]
+	mi := &file_gomote_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -290,12 +242,60 @@ func (x *AddBootstrapResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddBootstrapResponse.ProtoReflect.Descriptor instead.
 func (*AddBootstrapResponse) Descriptor() ([]byte, []int) {
-	return file_gomote_proto_rawDescGZIP(), []int{4}
+	return file_gomote_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AddBootstrapResponse) GetBootstrapGoUrl() string {
 	if x != nil {
 		return x.BootstrapGoUrl
+	}
+	return ""
+}
+
+// CreateInstanceRequest specifies the data needed to create a gomote instance.
+type CreateInstanceRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	BuilderType string `protobuf:"bytes,1,opt,name=builder_type,json=builderType,proto3" json:"builder_type,omitempty"`
+}
+
+func (x *CreateInstanceRequest) Reset() {
+	*x = CreateInstanceRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_gomote_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CreateInstanceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateInstanceRequest) ProtoMessage() {}
+
+func (x *CreateInstanceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_gomote_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateInstanceRequest.ProtoReflect.Descriptor instead.
+func (*CreateInstanceRequest) Descriptor() ([]byte, []int) {
+	return file_gomote_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CreateInstanceRequest) GetBuilderType() string {
+	if x != nil {
+		return x.BuilderType
 	}
 	return ""
 }
@@ -1765,18 +1765,18 @@ var file_gomote_proto_rawDesc = []byte{
 	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x22, 0x15, 0x0a, 0x13, 0x41, 0x75, 0x74, 0x68, 0x65, 0x6e,
 	0x74, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x16, 0x0a,
 	0x14, 0x41, 0x75, 0x74, 0x68, 0x65, 0x6e, 0x74, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x3a, 0x0a, 0x15, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x49,
-	0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x21,
-	0x0a, 0x0c, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x65, 0x72, 0x5f, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x65, 0x72, 0x54, 0x79, 0x70,
-	0x65, 0x22, 0x32, 0x0a, 0x13, 0x41, 0x64, 0x64, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61,
-	0x70, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1b, 0x0a, 0x09, 0x67, 0x6f, 0x6d, 0x6f,
-	0x74, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x67, 0x6f, 0x6d,
-	0x6f, 0x74, 0x65, 0x49, 0x64, 0x22, 0x40, 0x0a, 0x14, 0x41, 0x64, 0x64, 0x42, 0x6f, 0x6f, 0x74,
-	0x73, 0x74, 0x72, 0x61, 0x70, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x28, 0x0a,
-	0x10, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x5f, 0x67, 0x6f, 0x5f, 0x75, 0x72,
-	0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72,
-	0x61, 0x70, 0x47, 0x6f, 0x55, 0x72, 0x6c, 0x22, 0xdc, 0x01, 0x0a, 0x16, 0x43, 0x72, 0x65, 0x61,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x32, 0x0a, 0x13, 0x41, 0x64, 0x64, 0x42, 0x6f, 0x6f, 0x74,
+	0x73, 0x74, 0x72, 0x61, 0x70, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1b, 0x0a, 0x09,
+	0x67, 0x6f, 0x6d, 0x6f, 0x74, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x08, 0x67, 0x6f, 0x6d, 0x6f, 0x74, 0x65, 0x49, 0x64, 0x22, 0x40, 0x0a, 0x14, 0x41, 0x64, 0x64,
+	0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x12, 0x28, 0x0a, 0x10, 0x62, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x5f, 0x67,
+	0x6f, 0x5f, 0x75, 0x72, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0e, 0x62, 0x6f, 0x6f,
+	0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x47, 0x6f, 0x55, 0x72, 0x6c, 0x22, 0x3a, 0x0a, 0x15, 0x43,
+	0x72, 0x65, 0x61, 0x74, 0x65, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x12, 0x21, 0x0a, 0x0c, 0x62, 0x75, 0x69, 0x6c, 0x64, 0x65, 0x72, 0x5f,
+	0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x62, 0x75, 0x69, 0x6c,
+	0x64, 0x65, 0x72, 0x54, 0x79, 0x70, 0x65, 0x22, 0xdc, 0x01, 0x0a, 0x16, 0x43, 0x72, 0x65, 0x61,
 	0x74, 0x65, 0x49, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
 	0x73, 0x65, 0x12, 0x2c, 0x0a, 0x08, 0x69, 0x6e, 0x73, 0x74, 0x61, 0x6e, 0x63, 0x65, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x2e, 0x49, 0x6e,
@@ -2014,9 +2014,9 @@ var file_gomote_proto_goTypes = []interface{}{
 	(CreateInstanceResponse_Status)(0),   // 0: protos.CreateInstanceResponse.Status
 	(*AuthenticateRequest)(nil),          // 1: protos.AuthenticateRequest
 	(*AuthenticateResponse)(nil),         // 2: protos.AuthenticateResponse
-	(*CreateInstanceRequest)(nil),        // 3: protos.CreateInstanceRequest
-	(*AddBootstrapRequest)(nil),          // 4: protos.AddBootstrapRequest
-	(*AddBootstrapResponse)(nil),         // 5: protos.AddBootstrapResponse
+	(*AddBootstrapRequest)(nil),          // 3: protos.AddBootstrapRequest
+	(*AddBootstrapResponse)(nil),         // 4: protos.AddBootstrapResponse
+	(*CreateInstanceRequest)(nil),        // 5: protos.CreateInstanceRequest
 	(*CreateInstanceResponse)(nil),       // 6: protos.CreateInstanceResponse
 	(*DestroyInstanceRequest)(nil),       // 7: protos.DestroyInstanceRequest
 	(*DestroyInstanceResponse)(nil),      // 8: protos.DestroyInstanceResponse
@@ -2051,8 +2051,8 @@ var file_gomote_proto_depIdxs = []int32{
 	11, // 2: protos.ListInstancesResponse.instances:type_name -> protos.Instance
 	32, // 3: protos.UploadFileResponse.fields:type_name -> protos.UploadFileResponse.FieldsEntry
 	1,  // 4: protos.GomoteService.Authenticate:input_type -> protos.AuthenticateRequest
-	4,  // 5: protos.GomoteService.AddBootstrap:input_type -> protos.AddBootstrapRequest
-	3,  // 6: protos.GomoteService.CreateInstance:input_type -> protos.CreateInstanceRequest
+	3,  // 5: protos.GomoteService.AddBootstrap:input_type -> protos.AddBootstrapRequest
+	5,  // 6: protos.GomoteService.CreateInstance:input_type -> protos.CreateInstanceRequest
 	7,  // 7: protos.GomoteService.DestroyInstance:input_type -> protos.DestroyInstanceRequest
 	9,  // 8: protos.GomoteService.ExecuteCommand:input_type -> protos.ExecuteCommandRequest
 	12, // 9: protos.GomoteService.InstanceAlive:input_type -> protos.InstanceAliveRequest
@@ -2066,7 +2066,7 @@ var file_gomote_proto_depIdxs = []int32{
 	28, // 17: protos.GomoteService.WriteFileFromURL:input_type -> protos.WriteFileFromURLRequest
 	30, // 18: protos.GomoteService.WriteTGZFromURL:input_type -> protos.WriteTGZFromURLRequest
 	2,  // 19: protos.GomoteService.Authenticate:output_type -> protos.AuthenticateResponse
-	5,  // 20: protos.GomoteService.AddBootstrap:output_type -> protos.AddBootstrapResponse
+	4,  // 20: protos.GomoteService.AddBootstrap:output_type -> protos.AddBootstrapResponse
 	6,  // 21: protos.GomoteService.CreateInstance:output_type -> protos.CreateInstanceResponse
 	8,  // 22: protos.GomoteService.DestroyInstance:output_type -> protos.DestroyInstanceResponse
 	10, // 23: protos.GomoteService.ExecuteCommand:output_type -> protos.ExecuteCommandResponse
@@ -2118,18 +2118,6 @@ func file_gomote_proto_init() {
 			}
 		}
 		file_gomote_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateInstanceRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_gomote_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AddBootstrapRequest); i {
 			case 0:
 				return &v.state
@@ -2141,8 +2129,20 @@ func file_gomote_proto_init() {
 				return nil
 			}
 		}
-		file_gomote_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+		file_gomote_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*AddBootstrapResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_gomote_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CreateInstanceRequest); i {
 			case 0:
 				return &v.state
 			case 1:
