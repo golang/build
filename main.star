@@ -520,7 +520,17 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     # ports only apply to the main Go repository and are not supported by all subrepos.
     # PROJECTS should probably contain a table of supported ports or something.
     builders_to_trigger = []
-    if env.bucket == "ci":
+    if env.bucket == "try":
+        builders_to_trigger = [
+            "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
+            for project in PROJECTS
+            # TODO(dmitshur): Factor this into enabled or so. It needs to know the difference
+            # between x/tools itself being tested vs its tests being used to test Go.
+            # At that point the "try" and "ci" cases can be joined. For now, the existing
+            # policy of running x/tools tests on linux/amd64 is hardcoded below.
+            if project == "tools" and builder_type == "linux-amd64"
+        ]
+    elif env.bucket == "ci":
         builders_to_trigger = [
             "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
             for project in PROJECTS
