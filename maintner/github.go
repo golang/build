@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -969,8 +970,8 @@ func (g *GitHub) setAssigneesFromProto(existing []*GitHubUser, new []*maintpb.Gi
 	}
 	// this is quadratic but the number of assignees is very unlikely to exceed,
 	// say, 5.
-	existing = slicesDeleteFunc(existing, func(u *GitHubUser) bool {
-		return slicesContains(toDelete, u.ID)
+	existing = slices.DeleteFunc(existing, func(u *GitHubUser) bool {
+		return slices.Contains(toDelete, u.ID)
 	})
 	return existing
 }
