@@ -141,6 +141,7 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
 LOW_CAPACITY_HOSTS = [
     "darwin-amd64",
     "linux-ppc64le",
+    "openbsd-amd64",
 ]
 
 # The try bucket will include builders which work on pre-commit or pre-review
@@ -184,6 +185,7 @@ BUILDER_TYPES = [
     "linux-amd64-misccompile",
     "linux-arm64",
     "linux-ppc64le",
+    "openbsd-amd64",
     "windows-386",
     "windows-amd64",
     "windows-amd64-longtest",
@@ -313,11 +315,12 @@ def dimensions_of(low_capacity_hosts, builder_type):
     # TODO(mknyszek): Consider adding "_suffix " to the end of this.
     host = "%s-%s" % (os, arch)
 
-    # LUCI uses Mac to refer to macOS.
-    os = os.replace("darwin", "mac")
-
-    # Capitalize the OS. LUCI OS dimensions are always capitalized.
-    os = os.capitalize()
+    # LUCI originally supported Linux, Windows, and Mac. Other OSes follow our scheme.
+    os = {
+        "darwin": "Mac",
+        "linux": "Linux",
+        "windows": "Windows",
+    }.get(os, os)
 
     # We run 386 builds on AMD64.
     arch = arch.replace("386", "amd64")
@@ -673,7 +676,7 @@ def display_for_builder_type(builder_type):
     category = "|".join(components[:2])
     return category, short_name  # Produces: "$GOOS|$GOARCH", $HOST_SPECIFIER(-$RUN_MOD)*
 
-# enabled returns three boolean values: the first one indicates if this 
+# enabled returns three boolean values: the first one indicates if this
 # builder_type should exist at all for the given project and branch, the
 # second whether it should run in presubmit by default, and the third if it
 # should run in postsubmit.
