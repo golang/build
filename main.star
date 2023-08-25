@@ -363,6 +363,9 @@ def is_capacity_constrained(low_capacity_hosts, builder_type):
     dims = dimensions_of(low_capacity_hosts, builder_type)
     return any([dimensions_of(low_capacity_hosts, x) == dims for x in low_capacity_hosts])
 
+def is_fully_supported(dims):
+    return any([dims["os"].startswith(x) for x in ["Debian", "Linux", "Mac", "Windows"]]) and dims["cpu"] in ["x86-64", "arm64"]
+
 # builder_name produces the final builder name.
 def builder_name(project, go_branch_short, builder_type):
     """Derives the name for a certain builder.
@@ -421,11 +424,6 @@ def define_builder(env, project, go_branch_short, builder_type):
         "env": {},
     }
 
-    # On less-supported platforms, we may not have bootstraps before 1.21
-    # started cross-compiling everything.
-    if "ppc64le" in builder_type and (base_props["bootstrap_version"].startswith("1.20") or base_props["bootstrap_version"].startswith("1.1")):
-        base_props["bootstrap_version"] = "1.21.0"
-
     os, arch, _, run_mods = split_builder_type(builder_type)
 
     # We run 386 builds on amd64 with GO[HOST]ARCH set.
@@ -441,6 +439,11 @@ def define_builder(env, project, go_branch_short, builder_type):
     if is_capacity_constrained(env.low_capacity_hosts, builder_type):
         # Scarce resources live in the shared-workers pool.
         base_dims["pool"] = env.shared_worker_pool
+
+    # On less-supported platforms, we may not have bootstraps before 1.21
+    # started cross-compiling everything.
+    if not is_fully_supported(base_dims) and (base_props["bootstrap_version"].startswith("1.20") or base_props["bootstrap_version"].startswith("1.1")):
+        base_props["bootstrap_version"] = "1.21.0"
 
     # TODO(heschi): Select the version based on the macOS version or builder type
     if os == "darwin":
@@ -490,7 +493,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     # the current context.
     def emit_builder(name, bucket, dimensions, properties, service_account, **kwargs):
         exps = dict(experiments)
-        if "ppc64le" in dimensions["cpu"]:
+        if not is_fully_supported(dimensions):
             exps["luci.best_effort_platform"] = 100
         luci.builder(
             name = name,
