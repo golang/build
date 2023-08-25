@@ -421,7 +421,11 @@ func (repo *FakeRepo) Branch(branch, commit string) {
 }
 
 func (repo *FakeRepo) ReadFile(commit, file string) ([]byte, error) {
-	return repo.dir.RunCommand(context.Background(), "show", commit+":"+file)
+	b, err := repo.dir.RunCommand(context.Background(), "show", commit+":"+file)
+	if err != nil && strings.Contains(err.Error(), " does not exist ") {
+		err = errors.Join(gerrit.ErrResourceNotExist, err)
+	}
+	return b, err
 }
 
 var _ GerritClient = (*FakeGerrit)(nil)
@@ -447,6 +451,7 @@ func (g *FakeGerrit) ReadBranchHead(ctx context.Context, project, branch string)
 	if err != nil {
 		return "", err
 	}
+	// TODO: If the branch doesn't exist, return an error matching gerrit.ErrResourceNotExist.
 	out, err := repo.dir.RunCommand(ctx, "rev-parse", "refs/heads/"+branch)
 	return strings.TrimSpace(string(out)), err
 }
@@ -465,7 +470,13 @@ func (g *FakeGerrit) ListTags(ctx context.Context, project string) ([]string, er
 		return nil, err
 	}
 	out, err := repo.dir.RunCommand(ctx, "tag", "-l")
-	return strings.Split(strings.TrimSpace(string(out)), "\n"), err
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, nil // No tags.
+	}
+	return strings.Split(strings.TrimSpace(string(out)), "\n"), nil
 }
 
 func (g *FakeGerrit) GetTag(ctx context.Context, project string, tag string) (gerrit.TagInfo, error) {

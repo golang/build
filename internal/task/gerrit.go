@@ -34,6 +34,7 @@ type GerritClient interface {
 	// ListTags returns all the tags on project.
 	ListTags(ctx context.Context, project string) ([]string, error)
 	// ReadBranchHead returns the head of a branch in project.
+	// If the branch doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
 	ReadBranchHead(ctx context.Context, project, branch string) (string, error)
 	// ListProjects lists all the projects on the server.
 	ListProjects(ctx context.Context) ([]string, error)
