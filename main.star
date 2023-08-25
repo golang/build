@@ -364,6 +364,15 @@ def is_capacity_constrained(low_capacity_hosts, builder_type):
     return any([dimensions_of(low_capacity_hosts, x) == dims for x in low_capacity_hosts])
 
 def is_fully_supported(dims):
+    """Reports whether dims identifies a platform fully supported by LUCI.
+
+    Some packages, notably Python, Go, and Git aren't built into CIPD for
+    all platforms or at all versions we need. We work around their absence
+    on unsupported platforms.
+
+    Args:
+        dims: The dimensions of a task/bot.
+    """
     return any([dims["os"].startswith(x) for x in ["Debian", "Linux", "Mac", "Windows"]]) and dims["cpu"] in ["x86-64", "arm64"]
 
 # builder_name produces the final builder name.
