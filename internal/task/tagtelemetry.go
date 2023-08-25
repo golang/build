@@ -92,10 +92,11 @@ func (t *TagTelemetryTasks) GenerateConfig(ctx *wf.TaskContext, reviewers []stri
 
 	logWriter := &LogWriter{Logger: ctx}
 	go logWriter.Run(ctx)
-	remoteErr, execErr := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
+	remoteErr, execErr := bc.Exec(ctx, "./go/bin/go", buildlet.ExecOpts{
 		Dir:      "telemetry",
 		Args:     []string{"run", "./internal/configgen", "-w"},
 		Output:   logWriter,
+		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
 		ExtraEnv: []string{"GO_DISABLE_OUTBOUND_NETWORK=0"},
 	})
 	if execErr != nil {

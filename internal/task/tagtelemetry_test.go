@@ -16,6 +16,8 @@ import (
 )
 
 func TestTagTelemetry(t *testing.T) {
+	mustHaveShell(t)
+
 	tests := []struct {
 		label           string
 		tags            []string

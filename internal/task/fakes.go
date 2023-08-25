@@ -181,9 +181,10 @@ func (b *fakeBuildlet) Close() error {
 }
 
 func (b *fakeBuildlet) Exec(ctx context.Context, cmd string, opts buildlet.ExecOpts) (remoteErr error, execErr error) {
-	if opts.Path != nil {
-		return nil, fmt.Errorf("opts.Path option is set, but fakeBuildlet doesn't support it")
-	} else if opts.OnStartExec != nil {
+	// TODO: add support for opts.Path. Previously, setting opts.Path would cause
+	// an error here, but that caused unnecessary failures in tests that use mock
+	// execution.
+	if opts.OnStartExec != nil {
 		return nil, fmt.Errorf("opts.OnStartExec option is set, but fakeBuildlet doesn't support it")
 	}
 	b.logf("exec %v %v\n\twd %q env %v", cmd, opts.Args, opts.Dir, opts.ExtraEnv)

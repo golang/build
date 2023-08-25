@@ -344,10 +344,16 @@ type tagXTestDeps struct {
 	tagXTasks *TagXReposTasks
 }
 
-func newTagXTestDeps(t *testing.T, dashboardStatus string, repos ...*FakeRepo) *tagXTestDeps {
+// mustHaveShell skips if the current environment doesn't support shell
+// scripting (/bin/bash).
+func mustHaveShell(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
+}
+
+func newTagXTestDeps(t *testing.T, dashboardStatus string, repos ...*FakeRepo) *tagXTestDeps {
+	mustHaveShell(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
