@@ -188,8 +188,12 @@ func (t *TagTelemetryTasks) MaybeTag(ctx *wf.TaskContext) (string, error) {
 		ctx.Printf("not tagging: no existing release tag found, not tagging the initial version")
 		return "", nil
 	}
+	tagInfo, err := t.Gerrit.GetTag(ctx, "telemetry", latestTag)
+	if err != nil {
+		return "", fmt.Errorf("reading tag %s: %v", latestTag, err)
+	}
 
-	latestConfig, err := t.Gerrit.ReadFile(ctx, "telemetry", latestTag, "config/config.json")
+	latestConfig, err := t.Gerrit.ReadFile(ctx, "telemetry", tagInfo.Revision, "config/config.json")
 	if err != nil {
 		return "", fmt.Errorf("reading config/config.json@latest: %v", err)
 	}
