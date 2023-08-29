@@ -3087,6 +3087,7 @@ func init() {
 		HostType:       "host-linux-s390x",
 		numTestHelpers: 0,
 		FlakyNet:       true,
+		env:            []string{"GO_TEST_TIMEOUT_SCALE=5"},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-s390x-ibm-race",
