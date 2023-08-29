@@ -865,16 +865,14 @@ def _define_go_ci():
             if project == "tools" and go_branch_short == "gotip":
                 for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
                     builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
-
-                    # TODO(dmitshur): Try it as a post-submit builder first. If it works, move it to pre-submit.
-                    name = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
-                    postsubmit_builders[name] = display_for_builder_type(builder_type)
-                    #name = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
-                    #luci.cq_tryjob_verifier(
-                    #    builder = name,
-                    #    cq_group = cq_group_name,
-                    #    disable_reuse = True,
-                    #)
+                    try_builder = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
+                    luci.cq_tryjob_verifier(
+                        builder = try_builder,
+                        cq_group = cq_group_name,
+                        disable_reuse = True,
+                    )
+                    ci_builder = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
+                    postsubmit_builders[ci_builder] = display_for_builder_type(builder_type)
 
             # Create the gitiles_poller last because we need the full set of builders to
             # trigger at the point of definition.
