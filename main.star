@@ -292,6 +292,14 @@ GO_BRANCHES = {
     "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
 }
 
+# EXTRA_GO_BRANCHES are Go branches that aren't used for project-wide testing
+# because they're out of scope per https://go.dev/doc/devel/release#policy,
+# but are used by specific golang.org/x repositories.
+EXTRA_GO_BRANCHES = {
+    "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13"),
+    "go1.18": struct(branch = "release-branch.go1.18", bootstrap = "1.17.13"),
+}
+
 def split_builder_type(builder_type):
     """split_builder_type splits a builder type into its pieces.
 
@@ -413,7 +421,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     Args:
         env: the environment the builder runs in.
         project: A go project defined in `PROJECTS`.
-        go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
+        go_branch_short: A go repository branch name defined in `GO_BRANCHES` or `EXTRA_GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
 
     Returns:
@@ -422,14 +430,16 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     # Contruct the basic properties that will apply to all builders for
     # this combination.
+    known_go_branches = dict(GO_BRANCHES)
+    known_go_branches.update(EXTRA_GO_BRANCHES)
     base_props = {
         "project": project,
         # NOTE: LUCI will pass in the commit information. This is
         # extra information that's only necessary for x/ repos.
         # However, we pass it to all builds for consistency and
         # convenience.
-        "go_branch": GO_BRANCHES[go_branch_short].branch,
-        "bootstrap_version": GO_BRANCHES[go_branch_short].bootstrap,
+        "go_branch": known_go_branches[go_branch_short].branch,
+        "bootstrap_version": known_go_branches[go_branch_short].bootstrap,
         "env": {},
     }
 
@@ -837,6 +847,18 @@ def _define_go_ci():
                         builder = name,
                         cq_group = cq_group_name,
                     )
+            # For golang.org/x/tools, also include coverage for extra Go versions.
+            if project == "tools" and go_branch_short == "gotip":
+                for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
+                    builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
+                    # TODO(dmitshur): Try it as a post-submit builder first. If it works, move it to pre-submit.
+                    name = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
+                    postsubmit_builders[name] = display_for_builder_type(builder_type)
+                    #name = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
+                    #luci.cq_tryjob_verifier(
+                    #    builder = name,
+                    #    cq_group = cq_group_name,
+                    #)
 
             # Create the gitiles_poller last because we need the full set of builders to
             # trigger at the point of definition.
