@@ -951,7 +951,7 @@ func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]Ta
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-tag.
 func (c *Client) GetTag(ctx context.Context, project, tag string) (TagInfo, error) {
 	var res TagInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/%s", project, tag))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/%s", project, url.PathEscape(tag)))
 	return res, err
 }
 
