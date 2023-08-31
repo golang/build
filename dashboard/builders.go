@@ -1546,7 +1546,7 @@ func miscCompileBuildSet(goos, goarch string) func(proj, branch, goBranch string
 			// given the nature of the repository. Leave this as a blanket policy for now.
 			return false
 		case "pkgsite": // #61341
-			return goos != "plan9" && goos != "aix" && goos != "wasip1"
+			return goos != "plan9" && goos != "wasip1"
 		case "vuln":
 			// Failure to build because of a dependency not supported on plan9.
 			return goos != "plan9"
