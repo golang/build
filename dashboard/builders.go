@@ -2816,6 +2816,9 @@ func init() {
 				b = true
 			case "build", "blog", "talks", "review", "tour", "website":
 				b = false
+			case "pkgsite":
+				// The pkgsite tests need CL 472096, released in 1.21 to run properly.
+				b = atLeastGo1(goBranch, 21)
 			}
 			return b
 		},
@@ -2854,6 +2857,9 @@ func init() {
 				b = true
 			case "build", "blog", "talks", "review", "tour", "website":
 				b = false
+			case "pkgsite":
+				// The pkgsite tests need CL 472096, released in 1.21 to run properly.
+				b = atLeastGo1(goBranch, 21)
 			}
 			return b
 		},
