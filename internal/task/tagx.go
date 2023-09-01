@@ -184,7 +184,7 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		return nil, nil
 	}
 
-	currentTag, err := x.latestReleaseTag(ctx, project)
+	currentTag, _, err := x.latestReleaseTag(ctx, project, "")
 	if err != nil {
 		return nil, err
 	}
@@ -558,6 +558,15 @@ func (x *TagXReposTasks) AwaitGoMod(ctx *wf.TaskContext, changeID, repo, branch 
 }
 
 func (x *TagXReposTasks) AwaitGreen(ctx *wf.TaskContext, repo TagRepo, commit string) (string, error) {
+	// Check if commit is already the latest tagged version.
+	// If so, it's deemed green and there's no need to wait.
+	if _, highestReleaseTagIsCommit, err := x.latestReleaseTag(ctx, repo.Name, commit); err != nil {
+		return "", err
+	} else if highestReleaseTagIsCommit {
+		return commit, nil
+	}
+
+	// Wait for a green commit.
 	return AwaitCondition(ctx, time.Minute, func() (string, bool, error) {
 		return x.findGreen(ctx, repo, commit, false)
 	})
@@ -710,46 +719,49 @@ func (x *TagXReposTasks) getBuildStatus(modPath string) (*types.BuildStatus, err
 // MaybeTag tags repo at commit with the next version, unless commit is already
 // the latest tagged version. repo is returned with NewerVersion populated.
 func (x *TagXReposTasks) MaybeTag(ctx *wf.TaskContext, repo TagRepo, commit string) (TagRepo, error) {
-	highestRelease, err := x.latestReleaseTag(ctx, repo.Name)
+	// Check if commit is already the latest tagged version.
+	highestRelease, highestReleaseTagIsCommit, err := x.latestReleaseTag(ctx, repo.Name, commit)
 	if err != nil {
 		return TagRepo{}, err
-	}
-
-	if highestRelease == "" {
+	} else if highestRelease == "" {
 		return TagRepo{}, fmt.Errorf("no semver tags found in %v", repo.Name)
 	}
-	tagInfo, err := x.Gerrit.GetTag(ctx, repo.Name, highestRelease)
-	if err != nil {
-		return TagRepo{}, fmt.Errorf("reading project %v tag %v: %v", repo.Name, highestRelease, err)
-	}
-	if tagInfo.Revision == commit {
+	if highestReleaseTagIsCommit {
 		repo.NewerVersion = highestRelease
 		return repo, nil
 	}
+
+	// Tag commit.
 	repo.NewerVersion, err = nextMinor(highestRelease)
 	if err != nil {
 		return TagRepo{}, fmt.Errorf("couldn't pick next version for %v: %v", repo.Name, err)
 	}
-
 	ctx.Printf("Tagging %v at %v as %v", repo.Name, commit, repo.NewerVersion)
 	return repo, x.Gerrit.Tag(ctx, repo.Name, repo.NewerVersion, commit)
 }
 
 // latestReleaseTag fetches tags for repo and returns the latest release tag,
-// or the empty string if there are no release tags.
-func (x *TagXReposTasks) latestReleaseTag(ctx context.Context, repo string) (string, error) {
+// or the empty string if there are no release tags. It also reports whether
+// commit, if provided, matches the latest release tag's revision.
+func (x *TagXReposTasks) latestReleaseTag(ctx context.Context, repo, commit string) (highestRelease string, isCommit bool, _ error) {
 	tags, err := x.Gerrit.ListTags(ctx, repo)
 	if err != nil {
-		return "", err
+		return "", false, fmt.Errorf("listing project %q tags: %v", repo, err)
 	}
-	highestRelease := ""
 	for _, tag := range tags {
 		if semver.IsValid(tag) && semver.Prerelease(tag) == "" &&
 			(highestRelease == "" || semver.Compare(highestRelease, tag) < 0) {
 			highestRelease = tag
 		}
 	}
-	return highestRelease, nil
+	if commit != "" && highestRelease != "" {
+		tagInfo, err := x.Gerrit.GetTag(ctx, repo, highestRelease)
+		if err != nil {
+			return "", false, fmt.Errorf("reading project %q tag %q: %v", repo, highestRelease, err)
+		}
+		isCommit = tagInfo.Revision == commit
+	}
+	return highestRelease, isCommit, nil
 }
 
 var majorMinorRestRe = regexp.MustCompile(`^v(\d+)\.(\d+)\..*$`)
