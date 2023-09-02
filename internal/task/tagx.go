@@ -78,6 +78,10 @@ type TagRepo struct {
 // UpdateOnlyAndNotTag reports whether repo
 // r should be updated only, and not tagged.
 func (r TagRepo) UpdateOnlyAndNotTag() bool {
+	if r.Name == "vuln" {
+		return true // x/vuln only has manual tagging for now. See go.dev/issue/59686.
+	}
+
 	// Consider a repo without an existing tag as one
 	// that hasn't yet opted in for automatic tagging.
 	return r.StartVersion == ""
