@@ -430,11 +430,17 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 		return nil, fmt.Errorf("Command failed: %v", remoteErr)
 	}
 
-	// Tidy the root module. For tools, also tidy gopls so that its replaced
-	// version still works.
-	dirs := []string{""}
-	if repo.Name == "tools" {
-		dirs = append(dirs, "gopls")
+	// Tidy the root module.
+	// Also tidy nested modules with a replace directive.
+	dirs := []string{"."}
+	switch repo.Name {
+	case "exp":
+		dirs = append(dirs, "slog/benchmarks/zap_benchmarks")     // A local replace directive as of 2023-09-05.
+		dirs = append(dirs, "slog/benchmarks/zerolog_benchmarks") // A local replace directive as of 2023-09-05.
+	case "telemetry":
+		dirs = append(dirs, "godev") // A local replace directive as of 2023-09-05.
+	case "tools":
+		dirs = append(dirs, "gopls") // A local replace directive as of 2023-09-05.
 	}
 	var fetchCmd []string
 	for _, dir := range dirs {
