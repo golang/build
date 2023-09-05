@@ -17,11 +17,11 @@ import (
 
 type GerritClient interface {
 	// CreateAutoSubmitChange creates a change with the given metadata and
-	// contents, sets Run-TryBots and Auto-Submit, and returns its change ID.
+	// contents, starts trybots with auto-submit enabled, and returns its change ID.
 	// If the content of a file is empty, that file will be deleted from the repository.
 	// If the requested contents match the state of the repository, no change
 	// is created and the returned change ID will be empty.
-	// Reviewers is the username part of a google.com or golang.org email address.
+	// Reviewers is the username part of a golang.org or google.com email address.
 	CreateAutoSubmitChange(ctx *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error)
 	// Submitted checks if the specified change has been submitted or failed
 	// trybots. If the CL is submitted, returns the submitted commit hash.
@@ -104,8 +104,8 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx *wf.TaskContext, input ger
 	}
 	if err := c.Client.SetReview(ctx, changeID, "current", gerrit.ReviewInput{
 		Labels: map[string]int{
-			"Run-TryBot":  1,
-			"Auto-Submit": 1,
+			"Commit-Queue": 1,
+			"Auto-Submit":  1,
 		},
 		Reviewers: reviewerInputs,
 	}); err != nil {
