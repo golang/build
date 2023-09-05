@@ -41,13 +41,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"cloud.google.com/go/compute/metadata"
 )
 
 var (
 	tokenFilePath = flag.String("token-file-path", defaultTokenLocation(), "Path to the token file (used when not on GCE)")
-	hostname      = flag.String("hostname", os.Getenv("HOSTNAME"), "Hostname of machine to bootstrap (required)")
+	hostname      = flag.String("hostname", os.Getenv("HOSTNAME"), "Hostname of machine to bootstrap")
 	swarming      = flag.String("swarming", "chromium-swarm.appspot.com", "Swarming server to connect to")
 )
 
@@ -70,7 +71,7 @@ func main() {
 var httpClient = http.DefaultClient
 
 func bootstrap(ctx context.Context, hostname, tokenPath string) error {
-	httpHeaders := map[string]string{"X-Luci-Swarming-Bot-ID": hostname}
+	httpHeaders := map[string]string{}
 	if metadata.OnGCE() {
 		log.Println("Bootstrapping the swarming bot with GCE authentication")
 		log.Println("retrieving the GCE VM token")
@@ -79,6 +80,14 @@ func bootstrap(ctx context.Context, hostname, tokenPath string) error {
 			return fmt.Errorf("unable to retrieve GCE Machine Token: %w", err)
 		}
 		httpHeaders["X-Luci-Gce-Vm-Token"] = token
+
+		// Override the hostname flag with the GCE hostname. This is a hard
+		// requirement for LUCI, so there's no point in trying anything else.
+		fullHost, err := metadata.Hostname()
+		if err != nil {
+			return fmt.Errorf("retrieving hostname: %w", err)
+		}
+		hostname = strings.Split(fullHost, ".")[0]
 	} else {
 		log.Println("Bootstrapping the swarming bot with certificate authentication")
 		log.Println("retrieving the luci-machine-token from the token file")
@@ -98,6 +107,7 @@ func bootstrap(ctx context.Context, hostname, tokenPath string) error {
 		}
 		httpHeaders["X-Luci-Machine-Token"] = tok.LuciMachineToken
 	}
+	httpHeaders["X-Luci-Swarming-Bot-ID"] = hostname
 	log.Println("Downloading the swarming bot")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+*swarming+"/bot_code", nil)
 	if err != nil {
