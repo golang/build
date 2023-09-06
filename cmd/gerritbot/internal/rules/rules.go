@@ -322,22 +322,22 @@ var ruleGroups = [][]rule{
 			name: "body: bug format looks incorrect",
 			skip: []string{"proposal"},
 			f: func(change Change) (finding string, note string) {
-				finding = "Do you have the right bug reference format? %s (without a period) at the end of the commit message."
+				finding = "Do you have the right bug reference format? %s at the end of the commit message."
 				if mightBeTrivial(change) {
 					return "", ""
 				}
 				var bugPattern string
 				switch {
 				case change.Repo == "go":
-					bugPattern = `#\d{4,}$`
+					bugPattern = `#\d{4,}`
 				case usesTracker(change.Repo) == mainTracker:
-					bugPattern = `golang/go#\d{4,}$`
+					bugPattern = `golang/go#\d{4,}`
 				case usesTracker(change.Repo) == ownTracker:
-					bugPattern = fmt.Sprintf(`golang/%s#\d{2,}$`, change.Repo)
+					bugPattern = fmt.Sprintf(`golang/%s#\d{2,}`, change.Repo)
 				default:
-					bugPattern = `golang/go#\d{4,}$`
+					bugPattern = `golang/go#\d{4,}`
 				}
-				if !match(`(?m)^(Fixes|Updates|For|Closes|Resolves) `+bugPattern, change.Body) {
+				if !match(`(?m)^(Fixes|Updates|For|Closes|Resolves) `+bugPattern+`\.?$`, change.Body) {
 					return fmt.Sprintf(finding, bugExamples(change.Repo)), commitMessageAdvice
 				}
 				return "", ""

@@ -41,7 +41,7 @@ To edit the commit message, see instructions [here](https://github.com/golang/go
 			want: `Possible problems detected:
   1. The commit title should start with the primary affected component name followed by a colon, like "src/goInstallTools: improve [...]".
   2. The first word in the commit title after the component should be a lowercase English word (usually a verb).
-  3. Do you have the right bug reference format? For the vscode-go repo, the format is usually 'Fixes golang/vscode-go#1234' or 'Updates golang/vscode-go#1234' (without a period) at the end of the commit message.
+  3. Do you have the right bug reference format? For the vscode-go repo, the format is usually 'Fixes golang/vscode-go#1234' or 'Updates golang/vscode-go#1234' at the end of the commit message.
 
 To edit the commit message, see instructions [here](https://github.com/golang/go/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
 `,
