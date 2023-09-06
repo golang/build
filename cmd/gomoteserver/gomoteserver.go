@@ -8,7 +8,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -40,13 +39,11 @@ var (
 
 func main() {
 	log.Println("starting gomote server")
+	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
-	privateKey := secret.Flag(secret.NameGomoteSSHPrivateKey, "Gomote SSH private key.")
-	publicKey := secret.Flag(secret.NameGomoteSSHPublicKey, "Gomote SSH public key.")
-
 	sp := remote.NewSessionPool(context.Background())
 	sshCA := mustRetrieveSSHCertificateAuthority()
 	var sched = schedule.NewScheduler()
@@ -76,12 +73,8 @@ func main() {
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page.
 
 	configureSSHServer := func() (*remote.SSHServer, error) {
-		if *privateKey != "" && *publicKey != "" {
-			return remote.NewSSHServer(*sshAddr, []byte(*privateKey), []byte(*publicKey), sshCA, sp)
-		}
-		if *mode != "dev" {
-			return nil, errors.New("SSH key pair is not configured")
-		}
+		// Always generate a gomote SSH key pair. If the server is restarted then the existing
+		// instances will be destroyed and a new pair of keys can be used.
 		priKey, pubKey, err := remote.SSHKeyPair()
 		if err != nil {
 			return nil, fmt.Errorf("unable to generate development SSH key pair: %s", err)
@@ -127,13 +120,17 @@ func mustRetrieveSSHCertificateAuthority() (privateKey []byte) {
 
 func mustStorageClient() *storage.Client {
 	if metadata.OnGCE() {
-		return pool.NewGCEConfiguration().StorageClient()
+		sc, err := pool.StorageClient(context.Background())
+		if err != nil {
+			log.Fatalf("unable to create authenticated storage client: %v", err)
+		}
+		return sc
 	}
-	storageClient, err := storage.NewClient(context.Background(), option.WithoutAuthentication())
+	sc, err := storage.NewClient(context.Background(), option.WithoutAuthentication())
 	if err != nil {
-		log.Fatalf("unable to create storage client: %s", err)
+		log.Fatalf("unable to create unauthenticated storage client: %s", err)
 	}
-	return storageClient
+	return sc
 }
 
 func fromSecret(ctx context.Context, sc *secret.Client, secretName string) (string, error) {

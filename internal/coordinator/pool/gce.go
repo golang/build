@@ -219,6 +219,15 @@ func InitGCE(sc *secret.Client, basePin *atomic.Value, fn IsRemoteBuildletFunc, 
 	return nil
 }
 
+// StorageClient retrieves the GCE storage client.
+func StorageClient(ctx context.Context) (*storage.Client, error) {
+	sc, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("storage.NewClient: %w", err)
+	}
+	return sc, nil
+}
+
 // TODO(golang.org/issue/38337): These should be moved into a struct as
 // part of the effort to reduce package level variables.
 

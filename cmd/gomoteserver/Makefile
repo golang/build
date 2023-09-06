@@ -8,7 +8,8 @@ usage: FORCE
 FORCE:
 
 MUTABLE_VERSION := latest
-VERSION := $(shell ./version.sh) # TODO(go.dev/issue/62118) change how version is generated.
+# TODO(go.dev/issue/62118) change how version is generated.
+VERSION := $(shell ./version.sh)
 
 GCP_PROJECT_PROD := symbolic-datum-552
 IMAGE_PROD := gcr.io/$(GCP_PROJECT_PROD)/gomoteserver
