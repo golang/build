@@ -141,6 +141,7 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
 LOW_CAPACITY_HOSTS = [
     "darwin-amd64",
     "linux-ppc64le",
+    "solaris-amd64",
 ]
 
 # The try bucket will include builders which work on pre-commit or pre-review
@@ -185,6 +186,7 @@ BUILDER_TYPES = [
     "linux-arm64",
     "linux-ppc64le",
     "openbsd-amd64",
+    "solaris-amd64",
     "windows-386",
     "windows-amd64",
     "windows-amd64-longtest",
