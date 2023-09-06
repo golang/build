@@ -319,7 +319,6 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		{currentMajor + 1, task.KindBeta, "next beta"},
 		{currentMajor, task.KindMinor, "next minor"},     // Current minor only.
 		{currentMajor - 1, task.KindMinor, "next minor"}, // Previous minor only.
-		{currentMajor - 2, task.KindMinor, "next minor"}, // TODO(go.dev/issue/62076): Remove after Go 1.19.13 is out.
 	}
 	if time.Since(majorReleaseTime) < 7*24*time.Hour {
 		releases = append(releases, release{currentMajor, task.KindMajor, "final"})

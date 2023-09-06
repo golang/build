@@ -184,11 +184,6 @@ func (t *VersionTasks) GenerateVersionFile(_ *workflow.TaskContext, distpack boo
 
 // CreateAutoSubmitVersionCL mails an auto-submit change to update VERSION file on branch.
 func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch, version string, reviewers []string, versionFile string) (string, error) {
-	// TODO(go.dev/issue/62076): Remove after Go 1.19.13 is out.
-	if branch == "release-branch.go1.19" && version == "go1.19.13" {
-		return "go~526138", nil // Use the CL it already created (but failed to add votes/reviewers to).
-	}
-
 	return t.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: t.GoProject,
 		Branch:  branch,

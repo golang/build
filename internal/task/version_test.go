@@ -46,7 +46,6 @@ func TestGetNextVersionLive(t *testing.T) {
 		{currentMajor + 1, KindBeta},  // Next beta.
 		{currentMajor, KindMinor},     // Current minor only.
 		{currentMajor - 1, KindMinor}, // Previous minor only.
-		{currentMajor - 2, KindMinor}, // TODO(go.dev/issue/62076): Remove after Go 1.19.13 is out.
 	} {
 		v, err := tasks.GetNextVersion(ctx, tc.major, tc.kind)
 		if err != nil {
