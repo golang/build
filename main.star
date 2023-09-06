@@ -721,6 +721,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
     presubmit = postsubmit and not is_capacity_constrained(low_capacity_hosts, builder_type)
+    presubmit = presubmit and "openbsd" not in builder_type
 
     # Apply policies for each run mod.
     exists = True
