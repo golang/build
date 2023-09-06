@@ -516,7 +516,7 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 
 ---
 Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
-After addressing review feedback, remember to [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
+After addressing review feedback, remember to [publish your drafts](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
 			m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
 		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), header, msg); err != nil {
 			return fmt.Errorf("postGitHubMessageNoDup: %v", err)
@@ -755,17 +755,17 @@ Please visit Gerrit at %s.
 **Important tips**:
 
 * Don't comment on this PR. All discussion takes place in Gerrit.
-* You need a Gmail or other Google account to [register for Gerrit](https://go-review.googlesource.com/login/).
+* You need a Gmail or other Google account to [log in to Gerrit](https://go-review.googlesource.com/login/).
 * To change your code in response to feedback:
   * Push a new commit to the branch used by your GitHub PR.
   * A new "patch set" will then appear in Gerrit.
   * Respond to each comment by marking as **Done** in Gerrit if implemented as suggested. You can alternatively write a reply.
-  * **Critical**: you must click the [blue **Reply** button](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) near the top to publish your Gerrit responses.
+  * **Critical**: you must click the [blue **Reply** button](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) near the top to publish your Gerrit responses.
   * Multiple commits in the PR will be squashed by GerritBot.
 * The title and description of the GitHub PR are used to construct the final commit message.
   * Edit these as needed via the GitHub web interface (not via Gerrit or git).
   * You should word wrap the PR description at ~76 characters unless you need longer lines (e.g., for tables or URLs).
-* See the [Sending a change via GitHub](https://go.dev/doc/contribute#sending_a_change_github) and [Reviews](https://go.dev/doc/contribute#reviews) sections of the Contribution Guide as well as the [FAQ](https://github.com/golang/go/wiki/GerritBot/#frequently-asked-questions) for details.`,
+* See the [Sending a change via GitHub](https://go.dev/doc/contribute#sending_a_change_github) and [Reviews](https://go.dev/doc/contribute#reviews) sections of the Contribution Guide as well as the [FAQ](https://go.dev/wiki/GerritBot/#frequently-asked-questions) for details.`,
 		pr.Head.GetSHA(), changeURL)
 	err = b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
 	if err != nil {
@@ -788,20 +788,17 @@ Please visit Gerrit at %s.
 		problems := rules.Check(change)
 		if len(problems) > 0 {
 			summary := rules.FormatResults(problems)
-			user := author
-			if pr.User != nil && pr.User.Login != nil {
-				user = *pr.User.Login
-			}
 			// If needed, summary contains advice for how to edit the commit message.
-			msg := fmt.Sprintf("Hello %v, I've spotted some possible problems.\n\n"+
+			msg := fmt.Sprintf("I spotted some possible problems.\n\n"+
 				"These findings are based on simple heuristics. If a finding appears wrong, briefly reply here saying so. "+
 				"Otherwise, please address any problems and update the GitHub PR. "+
-				"When complete, mark this comment as 'Done' and click the [blue 'Reply' button](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) above.\n\n"+
+				"When complete, mark this comment as 'Done' and click the [blue 'Reply' button](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) above.\n\n"+
 				"%s\n\n"+
-				"(In general for Gerrit code reviews, the CL author is expected to close out each piece of feedback by "+
+				"(In general for Gerrit code reviews, the change author is expected to [log in to Gerrit](https://go-review.googlesource.com/login/) "+
+				"with a Gmail or other Google account and then close out each piece of feedback by "+
 				"marking it as 'Done' if implemented as suggested or otherwise reply to each review comment. "+
 				"See the [Review](https://go.dev/doc/contribute#review) section of the Contributing Guide for details.)",
-				user, summary)
+				summary)
 
 			gcl, err := b.gerritChangeForPR(pr)
 			if err != nil {

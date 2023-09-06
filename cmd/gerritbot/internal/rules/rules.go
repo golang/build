@@ -373,7 +373,8 @@ var ruleGroups = [][]rule{
 }
 
 // Auxiliary advice.
-var commitMessageAdvice = "To edit the commit message, see instructions [here](https://github.com/golang/go/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). " +
+var commitMessageAdvice = "The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). " +
+	"For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). " +
 	"For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages)."
 
 // mightBeTrivial reports if a change looks like something
@@ -397,7 +398,7 @@ func bugExamples(repo string) string {
 	default:
 		// We don't know how issues should be referenced for this repo, including this might be
 		// some future created after these rules were last updated, so be a bit vaguer.
-		return "For most repos outside the main go repo, the format is usually 'Fixes #12345' or 'Updates #12345'"
+		return "For most repos outside the main go repo, the format is usually 'Fixes golang/go#12345' or 'Updates golang/go#12345'"
 	}
 }
 
@@ -434,6 +435,8 @@ func usesTracker(repo string) tracker {
 	// TODO: not immediately clear where vulndb should go. In practice, it seems to use the main golang/go tracker,
 	// but it also has its own tracker (which might just be for security reports?). Leaving unspecified for now,
 	// which results in vaguer advice.
+	// TODO: oauth2 might transition from its own tracker to the main tracker (https://go.dev/issue/56402), so
+	// we also leave unspecified for now.
 	switch repo {
 	case "go", "arch", "build", "crypto", "debug", "exp", "image", "mobile", "mod", "net", "perf", "pkgsite", "playground",
 		"proposal", "review", "sync", "sys", "telemetry", "term", "text", "time", "tools", "tour", "vuln", "website", "xerrors":

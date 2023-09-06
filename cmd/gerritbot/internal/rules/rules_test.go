@@ -31,7 +31,7 @@ func TestFormatRuleResults(t *testing.T) {
   2. The first word in the commit title after the package should be a lowercase English word (usually a verb).
   3. The commit title should not end with a period.
 
-To edit the commit message, see instructions [here](https://github.com/golang/go/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
+The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
 `,
 		},
 		{
@@ -43,7 +43,7 @@ To edit the commit message, see instructions [here](https://github.com/golang/go
   2. The first word in the commit title after the component should be a lowercase English word (usually a verb).
   3. Do you have the right bug reference format? For the vscode-go repo, the format is usually 'Fixes golang/vscode-go#1234' or 'Updates golang/vscode-go#1234' at the end of the commit message.
 
-To edit the commit message, see instructions [here](https://github.com/golang/go/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
+The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
 `,
 		},
 		{
@@ -52,7 +52,7 @@ To edit the commit message, see instructions [here](https://github.com/golang/go
 			want: `Possible problems detected:
   1. You usually need to reference a bug number for all but trivial or cosmetic fixes. For this repo, the format is usually 'Fixes #12345' or 'Updates #12345' at the end of the commit message. Should you have a bug reference?
 
-To edit the commit message, see instructions [here](https://github.com/golang/go/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
+The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
 `,
 		},
 	}
