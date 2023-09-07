@@ -836,6 +836,7 @@ def _define_go_ci():
                     builder = name,
                     cq_group = cq_group_name,
                     includable_only = not presubmit,
+                    disable_reuse = True,
                 )
 
                 # Define post-submit builders.
@@ -858,10 +859,12 @@ def _define_go_ci():
                         builder = name,
                         cq_group = cq_group_name,
                     )
+
             # For golang.org/x/tools, also include coverage for extra Go versions.
             if project == "tools" and go_branch_short == "gotip":
                 for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
                     builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
+
                     # TODO(dmitshur): Try it as a post-submit builder first. If it works, move it to pre-submit.
                     name = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
                     postsubmit_builders[name] = display_for_builder_type(builder_type)
@@ -1024,6 +1027,7 @@ def _define_go_internal_ci():
                 builder = name,
                 cq_group = cq_group_name,
                 includable_only = not presubmit,
+                disable_reuse = True,
             )
 
             # TODO(yifany): Define postsubmit builders if needed.
