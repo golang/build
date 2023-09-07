@@ -858,6 +858,7 @@ def _define_go_ci():
                     luci.cq_tryjob_verifier(
                         builder = name,
                         cq_group = cq_group_name,
+                        disable_reuse = True,
                     )
 
             # For golang.org/x/tools, also include coverage for extra Go versions.
@@ -872,6 +873,7 @@ def _define_go_ci():
                     #luci.cq_tryjob_verifier(
                     #    builder = name,
                     #    cq_group = cq_group_name,
+                    #    disable_reuse = True,
                     #)
 
             # Create the gitiles_poller last because we need the full set of builders to
