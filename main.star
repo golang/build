@@ -324,11 +324,12 @@ def dimensions_of(low_capacity_hosts, builder_type):
     # TODO(mknyszek): Consider adding "_suffix " to the end of this.
     host = "%s-%s" % (os, arch)
 
-    # LUCI originally supported Linux, Windows, and Mac. Other OSes follow our scheme.
+    # LUCI originally supported Linux, Windows, and Mac. Most other OSes follow our scheme.
     os = {
         "darwin": "Mac",
         "linux": "Linux",
         "windows": "Windows",
+        "solaris": "sunos", # Swarming bot reports SunOS, not Solaris.
     }.get(os, os)
 
     # We run 386 builds on AMD64.
