@@ -21,7 +21,6 @@ import (
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/remote"
-	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/gomote"
 	gomotepb "golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
@@ -38,15 +37,15 @@ var (
 )
 
 func main() {
-	log.Println("starting gomote server")
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
+	log.Println("starting gomote server")
+
 	sp := remote.NewSessionPool(context.Background())
 	sshCA := mustRetrieveSSHCertificateAuthority()
-	var sched = schedule.NewScheduler()
 
 	var gomoteBucket string
 	var opts []grpc.ServerOption
@@ -65,7 +64,10 @@ func main() {
 		opts = append(opts, grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(access.IAPSkipAudienceValidation)))
 	}
 	grpcServer := grpc.NewServer(opts...)
-	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient(), mustLUCIConfigClient())
+	gomoteServer, err := gomote.NewSwarming(sp, sshCA, gomoteBucket, mustStorageClient(), mustLUCIConfigClient())
+	if err != nil {
+		log.Fatalf("unable to create gomote server: %s", err)
+	}
 	gomotepb.RegisterGomoteServiceServer(grpcServer, gomoteServer)
 
 	mux := http.NewServeMux()
