@@ -329,7 +329,6 @@ def dimensions_of(low_capacity_hosts, builder_type):
         "darwin": "Mac",
         "linux": "Linux",
         "windows": "Windows",
-        "solaris": "sunos", # Swarming bot reports SunOS, not Solaris.
     }.get(os, os)
 
     # We run 386 builds on AMD64.
@@ -366,6 +365,12 @@ def dimensions_of(low_capacity_hosts, builder_type):
         # TODO: Add more platforms and decide on whether we
         # even want this concept of a "default", suffixless
         # builder.
+
+    if os == "solaris":
+        # Python on Solaris reports some surprising values for OS and
+        # architecture. We should fix the bot.
+        os = "sunos"
+        arch = "i86pc-64"
 
     return {"os": os, "cpu": arch}
 
