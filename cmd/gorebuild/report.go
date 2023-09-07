@@ -335,7 +335,13 @@ func (r *Report) ReproFile(rel *Release, file *File, src []byte) (err error) {
 	if err := UnpackTarGz(goroot, src); err != nil {
 		return err
 	}
-	if err := r.Build(&file.Log, goroot, rel.Version, []string{"GOOS=" + file.GOOS, "GOARCH=" + file.GOARCH}, []string{"-distpack"}); err != nil {
+	env := []string{"GOOS=" + file.GOOS, "GOARCH=" + file.GOARCH}
+	// For historical reasons, the linux-arm downloads are built
+	// with GOARM=6, even though the cross-compiled default is 7.
+	if strings.HasSuffix(file.Name, "-armv6l.tar.gz") || strings.HasSuffix(file.Name, ".linux-arm.zip") {
+		env = append(env, "GOARM=6")
+	}
+	if err := r.Build(&file.Log, goroot, rel.Version, env, []string{"-distpack"}); err != nil {
 		return err
 	}
 
@@ -383,7 +389,7 @@ func (r *Report) ReproFile(rel *Release, file *File, src []byte) (err error) {
 			bf.Log.Printf("FAIL: rebuilt SHA256 %s does not match public download SHA256 %s", SHA256(data), SHA256(pubData))
 			continue
 		}
-		bf.Log.Printf("PASS: rebuilt with GOOS=%s GOARCH=%s", file.GOOS, file.GOARCH)
+		bf.Log.Printf("PASS: rebuilt with %q", env)
 		if bf.dl != nil && bf.dl.Kind == "archive" {
 			if file.GOOS == "darwin" {
 				r.ReproDarwinPkg(rel, bf, pubData)

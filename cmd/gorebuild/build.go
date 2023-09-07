@@ -140,8 +140,7 @@ func (r *Report) Build(log *Log, goroot, version string, env, args []string) err
 	}
 	cmd := exec.Command(make, args...)
 	cmd.Dir = filepath.Join(goroot, "src")
-	cmd.Env = append(os.Environ(), env...)
-	cmd.Env = append(cmd.Env,
+	cmd.Env = append(os.Environ(),
 		"GOROOT="+goroot,
 		"GOROOT_BOOTSTRAP="+bdir,
 		"GOTOOLCHAIN=local", // keep bootstraps honest
@@ -172,6 +171,7 @@ func (r *Report) Build(log *Log, goroot, version string, env, args []string) err
 		"GO_LDSO=",
 		"PKG_CONFIG=",
 	)
+	cmd.Env = append(cmd.Env, env...)
 	log.Printf("running %s env=%v args=%v\nGOROOT=%s\nGOROOT_BOOTSTRAP=%s\n",
 		make, env, args, goroot, bdir)
 	out, err := cmd.CombinedOutput()
