@@ -309,15 +309,6 @@ func (b *BuildletStep) BuildBinary(ctx *workflow.TaskContext, sourceArchive io.R
 		return err
 	}
 
-	if b.Target.Race {
-		ctx.Printf("Building race detector.")
-		if err := b.runGo(ctx, []string{"install", "-race", "std"}, buildlet.ExecOpts{
-			ExtraEnv: b.makeEnv(),
-		}); err != nil {
-			return err
-		}
-	}
-
 	ctx.Printf("Building release tarball.")
 	input, err := b.Buildlet.GetTar(ctx, "go")
 	if err != nil {

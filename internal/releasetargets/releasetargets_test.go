@@ -62,9 +62,6 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 			}
 
 		}
-		if target.Race {
-			flags = append(flags, "Race enabled")
-		}
 		if target.LongTestBuilder != "" {
 			flags = append(flags, "Long tests on "+target.LongTestBuilder)
 		}

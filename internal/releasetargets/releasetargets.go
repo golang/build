@@ -22,7 +22,6 @@ type Target struct {
 	Builder         string
 	BuildOnly       bool
 	LongTestBuilder string
-	Race            bool
 	ExtraEnv        []string // Extra environment variables set during toolchain build.
 
 	// For Darwin targets, the minimum targeted version, e.g. 10.13 or 13.
@@ -62,7 +61,6 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 // overridden if necessary. Name will also be set and should not be overridden.
 var allReleases = map[int]ReleaseTargets{
 	20: {
-		// 1.20 drops Race .as from the distribution.
 		"darwin-amd64": &Target{
 			Builder:         "darwin-amd64-13",
 			MinMacOSVersion: "10.13",                                           // Issues #36025 #35459
