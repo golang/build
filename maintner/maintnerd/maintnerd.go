@@ -345,19 +345,23 @@ func syncProdToDevMutationLogs() {
 
 	want := map[string]int64{} // basename => size
 
-	srcFis, err := ioutil.ReadDir(src)
+	srcDEs, err := os.ReadDir(src)
 	if err != nil {
 		log.Fatal(err)
 	}
-	dstFis, err := ioutil.ReadDir(dst)
+	dstDEs, err := os.ReadDir(dst)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, fi := range srcFis {
-		name := fi.Name()
+	for _, de := range srcDEs {
+		name := de.Name()
 		if !strings.HasSuffix(name, ".mutlog") {
 			continue
+		}
+		fi, err := de.Info()
+		if err != nil {
+			log.Fatal(err)
 		}
 		// The DiskMutationLogger (as we'l use in the dst dir)
 		// prepends "maintner-".  So prepend that here ahead
@@ -366,10 +370,14 @@ func syncProdToDevMutationLogs() {
 		want["maintner-"+name] = fi.Size()
 	}
 
-	for _, fi := range dstFis {
-		name := fi.Name()
+	for _, de := range dstDEs {
+		name := de.Name()
 		if !strings.HasSuffix(name, ".mutlog") {
 			continue
+		}
+		fi, err := de.Info()
+		if err != nil {
+			log.Fatal(err)
 		}
 		if want[name] == fi.Size() {
 			delete(want, name)

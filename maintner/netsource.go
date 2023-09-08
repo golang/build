@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"net"
@@ -194,17 +195,21 @@ func (ns *netMutSource) locallyCachedSegments() (segs []fileSeg, err error) {
 			log.Printf("No network connection; using %d locally cached segments.", len(segs))
 		}
 	}()
-	fis, err := ioutil.ReadDir(ns.cacheDir)
+	des, err := os.ReadDir(ns.cacheDir)
 	if err != nil {
 		return nil, err
 	}
-	fiMap := map[string]os.FileInfo{}
+	fiMap := map[string]fs.FileInfo{}
 	segHex := map[int]string{}
 	segGrowing := map[int]bool{}
-	for _, fi := range fis {
-		name := fi.Name()
+	for _, de := range des {
+		name := de.Name()
 		if !strings.HasSuffix(name, ".mutlog") {
 			continue
+		}
+		fi, err := de.Info()
+		if err != nil {
+			return nil, err
 		}
 		fiMap[name] = fi
 
