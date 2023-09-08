@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -83,7 +82,7 @@ func TestFileServerHandler(t *testing.T) {
 			if resp.StatusCode != c.wantCode {
 				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
 			}
-			b, err := ioutil.ReadAll(resp.Body)
+			b, err := io.ReadAll(resp.Body)
 			if err != nil {
 				t.Errorf("resp.Body = _, %v, wanted no error", err)
 			}

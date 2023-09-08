@@ -3,14 +3,12 @@
 // license that can be found in the LICENSE file.
 
 //go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
 
 package main
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -138,9 +136,9 @@ func TestTryStatusJSON(t *testing.T) {
 				t.Errorf("response status code: got %d; want %d", got, want)
 			}
 			defer resp.Body.Close()
-			b, err := ioutil.ReadAll(resp.Body)
+			b, err := io.ReadAll(resp.Body)
 			if err != nil {
-				t.Fatalf("ioutil.ReadAll: %v", err)
+				t.Fatalf("io.ReadAll: %v", err)
 			}
 			if got, want := string(b), tc.body; got != want {
 				t.Errorf("body: got\n%v\nwant\n%v", got, want)

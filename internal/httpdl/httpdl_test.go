@@ -5,7 +5,6 @@
 package httpdl
 
 import (
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,7 +25,7 @@ func TestDownload(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	tmpDir, err := ioutil.TempDir("", "dl")
+	tmpDir, err := os.MkdirTemp("", "dl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +69,7 @@ func TestDownload(t *testing.T) {
 	}
 
 	// Also check re-download on size change.
-	ioutil.WriteFile(dstFile, []byte(someContent+someContent), 0644)
+	os.WriteFile(dstFile, []byte(someContent+someContent), 0644)
 	os.Chtimes(dstFile, someTime, someTime)
 	if err := Download(dstFile, ts.URL+"/foo.txt"); err != nil {
 		t.Fatal(err)

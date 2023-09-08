@@ -14,7 +14,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -319,7 +318,7 @@ func publishFile(uploadURL string, auth buildlet.UserPass, f task.WebsiteFile) e
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		b, _ := ioutil.ReadAll(resp.Body)
+		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("upload failed to %q: %v\n%s", uploadURL, resp.Status, b)
 	}
 	return nil

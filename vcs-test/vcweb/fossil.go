@@ -3,12 +3,10 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux
-// +build linux
 
 package main
 
 import (
-	"io/ioutil"
 	"net/http"
 	"net/http/cgi"
 	"os"
@@ -36,7 +34,7 @@ func fossilDispatch(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 	}
 	if _, err := os.Stat(db + ".cgi"); err != nil {
-		ioutil.WriteFile(db+".cgi", []byte("#!/usr/bin/fossil\nrepository: "+db+"\n"), 0777)
+		os.WriteFile(db+".cgi", []byte("#!/usr/bin/fossil\nrepository: "+db+"\n"), 0777)
 	}
 
 	h := &cgi.Handler{

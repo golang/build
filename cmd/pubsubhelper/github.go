@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -96,7 +96,7 @@ func validateGithubRequest(w http.ResponseWriter, r *http.Request) (body []byte,
 		return nil, err
 	}
 
-	body, err = ioutil.ReadAll(http.MaxBytesReader(w, r.Body, 5<<20))
+	body, err = io.ReadAll(http.MaxBytesReader(w, r.Body, 5<<20))
 	if err != nil {
 		return nil, err
 	}

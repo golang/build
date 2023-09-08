@@ -3,12 +3,10 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux
-// +build linux
 
 package main
 
 import (
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/cgi"
@@ -38,10 +36,10 @@ var hgwebCfg = `
 
 func hgHandler() http.Handler {
 	py := filepath.Join(*dir, "hgweb.py")
-	if err := ioutil.WriteFile(py, []byte(hgwebPy), 0777); err != nil {
+	if err := os.WriteFile(py, []byte(hgwebPy), 0777); err != nil {
 		log.Fatal(err)
 	}
-	if err := ioutil.WriteFile(filepath.Join(*dir, "hgweb.cfg"), []byte(strings.Replace(hgwebCfg, "DIR", *dir, -1)), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(*dir, "hgweb.cfg"), []byte(strings.Replace(hgwebCfg, "DIR", *dir, -1)), 0777); err != nil {
 		log.Fatal(err)
 	}
 	os.Mkdir(filepath.Join(*dir, "hg"), 0777)

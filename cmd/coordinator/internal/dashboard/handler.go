@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 // Package dashboard contains the implementation of the build dashboard for the Coordinator.
 package dashboard

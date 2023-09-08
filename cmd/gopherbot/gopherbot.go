@@ -15,7 +15,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -123,7 +122,7 @@ func getGitHubToken(ctx context.Context, sc *secret.Client) (string, error) {
 			return token, nil
 		}
 	}
-	slurp, err := ioutil.ReadFile(*githubTokenFile)
+	slurp, err := os.ReadFile(*githubTokenFile)
 	if err != nil {
 		return "", err
 	}
@@ -147,7 +146,7 @@ func getGerritAuth(ctx context.Context, sc *secret.Client) (username string, pas
 	}
 
 	var slurpBytes []byte
-	slurpBytes, err = ioutil.ReadFile(*gerritTokenFile)
+	slurpBytes, err = os.ReadFile(*gerritTokenFile)
 	if err != nil {
 		return "", "", err
 	}

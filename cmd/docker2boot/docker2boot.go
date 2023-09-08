@@ -10,7 +10,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -62,7 +61,7 @@ func main() {
 
 	checkDeps()
 
-	mntDir, err := ioutil.TempDir("", "docker2boot")
+	mntDir, err := os.MkdirTemp("", "docker2boot")
 	if err != nil {
 		failf("Failed to create mount temp dir: %v", err)
 	}
@@ -152,7 +151,7 @@ func main() {
 	writeFile(filepath.Join(mntDir, "etc", "resolv.conf"), "nameserver 8.8.8.8\n")
 
 	// Append the source image id & docker version to /etc/issue.
-	issue, err := ioutil.ReadFile("/etc/issue")
+	issue, err := os.ReadFile("/etc/issue")
 	if err != nil && !os.IsNotExist(err) {
 		failf("Failed to read /etc/issue: %v", err)
 	}
@@ -252,7 +251,7 @@ func httpGet(u string) io.Reader {
 }
 
 func slurpFile(file string) string {
-	v, err := ioutil.ReadFile(file)
+	v, err := os.ReadFile(file)
 	if err != nil {
 		failf("Failed to read %s: %v", file, err)
 	}
@@ -260,7 +259,7 @@ func slurpFile(file string) string {
 }
 
 func writeFile(file, contents string) {
-	if err := ioutil.WriteFile(file, []byte(contents), 0644); err != nil {
+	if err := os.WriteFile(file, []byte(contents), 0644); err != nil {
 		failf("writeFile %s: %v", file, err)
 	}
 }

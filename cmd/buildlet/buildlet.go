@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -412,7 +411,7 @@ func metadataValue(key string) string {
 	v := os.Getenv(envKey)
 	// Respect curl-style '@' prefix to mean the rest is a filename.
 	if strings.HasPrefix(v, "@") {
-		slurp, err := ioutil.ReadFile(v[1:])
+		slurp, err := os.ReadFile(v[1:])
 		if err != nil {
 			log.Fatalf("Error reading file for GCEMETA_%v: %v", key, err)
 		}
@@ -1613,7 +1612,7 @@ func waitLocalSSH() {
 
 func numProcs() int {
 	n := 0
-	fis, _ := ioutil.ReadDir("/proc")
+	fis, _ := os.ReadDir("/proc")
 	for _, fi := range fis {
 		if _, err := strconv.Atoi(fi.Name()); err == nil {
 			n++
@@ -1810,7 +1809,7 @@ func appendSSHAuthorizedKey(sshUser, authKey string) error {
 		return err
 	}
 	authFile := filepath.Join(sshDir, "authorized_keys")
-	exist, err := ioutil.ReadFile(authFile)
+	exist, err := os.ReadFile(authFile)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}

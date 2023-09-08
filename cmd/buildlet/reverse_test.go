@@ -4,7 +4,6 @@
 
 // Same requirements as internal/coordinator/pool/reverse.go.
 //go:build linux || darwin
-// +build linux darwin
 
 package main
 

@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 // Code interacting with Google Compute Engine (GCE) and
 // a GCE implementation of the BuildletPool interface.

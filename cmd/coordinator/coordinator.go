@@ -3,8 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
 
 // The coordinator runs the majority of the Go build system.
 //
@@ -27,7 +25,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -2013,7 +2010,7 @@ func newBuildLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 			io.Closer
 		}{
 			os.Stderr,
-			ioutil.NopCloser(nil),
+			io.NopCloser(nil),
 		}, "devmode://build-log/" + objName
 	}
 	if pool.NewGCEConfiguration().StorageClient() == nil {

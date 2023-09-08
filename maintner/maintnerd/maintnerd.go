@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -327,7 +326,7 @@ func getGithubToken(ctx context.Context) (string, error) {
 	}
 
 	tokenFile := filepath.Join(os.Getenv("HOME"), ".github-issue-token")
-	slurp, err := ioutil.ReadFile(tokenFile)
+	slurp, err := os.ReadFile(tokenFile)
 	if err != nil {
 		return "", err
 	}
@@ -391,11 +390,11 @@ func syncProdToDevMutationLogs() {
 
 	for name := range want {
 		log.Printf("syncing %s from %s to %s", name, src, dst)
-		slurp, err := ioutil.ReadFile(filepath.Join(src, strings.TrimPrefix(name, "maintner-")))
+		slurp, err := os.ReadFile(filepath.Join(src, strings.TrimPrefix(name, "maintner-")))
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err := ioutil.WriteFile(filepath.Join(dst, name), slurp, 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(dst, name), slurp, 0644); err != nil {
 			log.Fatal(err)
 		}
 	}

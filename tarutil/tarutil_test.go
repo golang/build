@@ -8,7 +8,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -66,7 +65,7 @@ func TestFileList(t *testing.T) {
 		switch h.Name {
 		case "symlink-file":
 		case "regular.txt":
-			all, err := ioutil.ReadAll(tr)
+			all, err := io.ReadAll(tr)
 			if err != nil {
 				t.Fatalf("Reading regular.txt: %v", err)
 			}

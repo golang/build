@@ -3,8 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
 
 // Code interacting with build.golang.org ("the dashboard").
 
@@ -19,10 +17,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -163,7 +161,7 @@ func builderKey(builder string) string {
 
 func loadKey(sc *secret.Client) {
 	if *masterKeyFile != "" {
-		b, err := ioutil.ReadFile(*masterKeyFile)
+		b, err := os.ReadFile(*masterKeyFile)
 		if err != nil {
 			log.Fatal(err)
 		}

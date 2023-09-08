@@ -12,7 +12,6 @@ import (
 	"crypto/sha1"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -110,7 +109,7 @@ func writeCookiesFile(sc *secret.Client) error {
 	if err != nil {
 		return fmt.Errorf("secret.Retrieve(ctx, %q): %q, %w", secret.NameGerritbotGitCookies, cookies, err)
 	}
-	return ioutil.WriteFile(*gitcookiesFile, []byte(cookies), 0600)
+	return os.WriteFile(*gitcookiesFile, []byte(cookies), 0600)
 }
 
 func githubClient(sc *secret.Client) (*github.Client, error) {
@@ -144,7 +143,7 @@ func githubToken(sc *secret.Client) (string, error) {
 			return token, nil
 		}
 	}
-	slurp, err := ioutil.ReadFile(*githubTokenFile)
+	slurp, err := os.ReadFile(*githubTokenFile)
 	if err != nil {
 		return "", err
 	}
@@ -176,7 +175,7 @@ func gerritAuth(sc *secret.Client) (string, string, error) {
 		}
 	}
 	if len(slurp) == 0 {
-		slurpBytes, err := ioutil.ReadFile(*gerritTokenFile)
+		slurpBytes, err := os.ReadFile(*gerritTokenFile)
 		if err != nil {
 			return "", "", err
 		}

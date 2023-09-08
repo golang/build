@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -676,7 +675,7 @@ func checkTGZ(t *testing.T, dlURL string, files map[string]task.WebsiteFile, fil
 			if !ok {
 				continue
 			}
-			b, err := ioutil.ReadAll(tr)
+			b, err := io.ReadAll(tr)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -706,7 +705,7 @@ func checkZip(t *testing.T, dlURL string, files map[string]task.WebsiteFile, fil
 			if err != nil {
 				t.Fatal(err)
 			}
-			b, err := ioutil.ReadAll(r)
+			b, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}

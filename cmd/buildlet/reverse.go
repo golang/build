@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -37,7 +36,7 @@ func keyForMode(mode string) (string, error) {
 	if v := os.Getenv("GO_BUILD_KEY_PATH"); v != "" {
 		keyPath = v
 	}
-	key, err := ioutil.ReadFile(keyPath)
+	key, err := os.ReadFile(keyPath)
 	if ok, _ := strconv.ParseBool(os.Getenv("GO_BUILD_KEY_DELETE_AFTER_READ")); ok {
 		os.Remove(keyPath)
 	}

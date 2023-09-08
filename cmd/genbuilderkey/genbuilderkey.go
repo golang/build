@@ -14,7 +14,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -57,7 +56,7 @@ func getMasterKey() []byte {
 	if err == nil {
 		return []byte(strings.TrimSpace(v))
 	}
-	key, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys/gobuilder-master.key"))
+	key, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "keys/gobuilder-master.key"))
 	if err == nil {
 		return bytes.TrimSpace(key)
 	}

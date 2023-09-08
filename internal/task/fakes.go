@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -270,7 +269,7 @@ func (b *fakeBuildlet) GetTar(ctx context.Context, dir string) (io.ReadCloser, e
 	if err := zw.Close(); err != nil {
 		return nil, err
 	}
-	return ioutil.NopCloser(buf), nil
+	return io.NopCloser(buf), nil
 }
 
 func (b *fakeBuildlet) ListDir(ctx context.Context, dir string, opts buildlet.ListDirOpts, fn func(buildlet.DirEntry)) error {

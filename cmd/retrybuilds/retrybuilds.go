@@ -24,7 +24,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -147,7 +147,7 @@ func foreachFailure(fn func(f Failure, failLog string)) {
 			if err != nil {
 				log.Fatalf("Error fetching %s: %v", f.LogURL, err)
 			}
-			failLog, err := ioutil.ReadAll(res.Body)
+			failLog, err := io.ReadAll(res.Body)
 			res.Body.Close()
 			if err != nil {
 				log.Fatalf("Error reading %s: %v", f.LogURL, err)
@@ -290,7 +290,7 @@ func (c *client) wipe(builder, hash string) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		res.Body.Close()
 		if err != nil {
 			log.Fatal(err)
@@ -327,7 +327,7 @@ func builderKey(builder string) string {
 	if *keyFile == "" {
 		log.Fatalf("No --key specified for builder %s", builder)
 	}
-	slurp, err := ioutil.ReadFile(*keyFile)
+	slurp, err := os.ReadFile(*keyFile)
 	if err != nil {
 		log.Fatalf("Error reading builder key %s: %v", builder, err)
 	}
@@ -337,7 +337,7 @@ func builderKey(builder string) string {
 func builderKeyFromMaster(builder string) (key string, ok bool) {
 	masterKey, err := getMasterKeyFromSecretManager()
 	if err != nil {
-		slurp, err := ioutil.ReadFile(*masterKeyFile)
+		slurp, err := os.ReadFile(*masterKeyFile)
 		if err != nil {
 			return "", false
 		}
@@ -380,7 +380,7 @@ func failures() (ret []Failure) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	slurp, err := ioutil.ReadAll(res.Body)
+	slurp, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		log.Fatal(err)

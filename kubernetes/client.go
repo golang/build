@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -90,7 +89,7 @@ func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodSta
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: POST %q: %v", postURL, err)
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request body for POST %q: %v", postURL, err)
@@ -142,7 +141,7 @@ func (c *Client) do(ctx context.Context, method, urlStr string, dst interface{})
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		return fmt.Errorf("%v %s: %v, %s", method, urlStr, res.Status, body)
 	}
 	if dst != nil {
@@ -223,7 +222,7 @@ func (c *Client) DeletePod(ctx context.Context, podName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to make request: DELETE %q: %v", url, err)
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return fmt.Errorf("failed to read response body: DELETE %q: %v", url, err)
@@ -389,7 +388,7 @@ func (c *Client) PodStatus(ctx context.Context, podName string) (*api.PodStatus,
 		return nil, fmt.Errorf("failed to make request: GET %q: %v", getURL, err)
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request body for GET %q: %v", getURL, err)
@@ -418,7 +417,7 @@ func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to make request: GET %q: %v", url, err)
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: GET %q: %v", url, err)

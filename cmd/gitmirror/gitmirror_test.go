@@ -6,7 +6,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -195,7 +195,7 @@ func (tm *testMirror) loopOnce() {
 
 func (tm *testMirror) commit(content string) {
 	tm.t.Helper()
-	if err := ioutil.WriteFile(filepath.Join(tm.gerrit, "README"), []byte(content), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(tm.gerrit, "README"), []byte(content), 0777); err != nil {
 		tm.t.Fatal(err)
 	}
 	tm.git(tm.gerrit, "add", ".")
@@ -219,7 +219,7 @@ func (tm *testMirror) get(path string) string {
 	if err != nil {
 		tm.t.Fatal(err)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		tm.t.Fatal(err)

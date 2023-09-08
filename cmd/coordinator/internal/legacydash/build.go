@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build go1.16
-// +build go1.16
 
 package legacydash
 
@@ -14,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	pathpkg "path"
 	"strings"
@@ -444,7 +442,7 @@ func (l *Log) Text() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading log data: %v", err)
 	}
-	b, err := ioutil.ReadAll(d)
+	b, err := io.ReadAll(d)
 	if err != nil {
 		return nil, fmt.Errorf("reading log data: %v", err)
 	}

@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build cgo
-// +build cgo
 
 // Package sqlite3 provides the sqlite3 driver for
 // x/build/perfdata/db. It must be imported instead of go-sqlite3 to

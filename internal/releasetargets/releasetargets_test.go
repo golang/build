@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package releasetargets
 
@@ -12,7 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -29,13 +28,13 @@ func TestReleaseTargets(t *testing.T) {
 		printRelease(out, release, TargetsForGo1Point(release))
 	}
 	if *update {
-		if err := ioutil.WriteFile("releases.txt", out.Bytes(), 0); err != nil {
+		if err := os.WriteFile("releases.txt", out.Bytes(), 0); err != nil {
 			t.Fatalf("updating golden: %v", err)
 		}
 		return
 	}
 
-	golden, err := ioutil.ReadFile("releases.txt")
+	golden, err := os.ReadFile("releases.txt")
 	if err != nil {
 		t.Fatalf("reading golden: %v", err)
 	}

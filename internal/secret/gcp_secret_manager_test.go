@@ -8,7 +8,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"reflect"
 	"testing"
 
@@ -167,7 +167,7 @@ func TestFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.flagVal, func(t *testing.T) {
 			fs := flag.NewFlagSet("", flag.ContinueOnError)
-			fs.SetOutput(ioutil.Discard)
+			fs.SetOutput(io.Discard)
 			flagVal := r.Flag(fs, "testflag", "usage")
 			err := fs.Parse([]string{"--testflag", tt.flagVal})
 			if tt.wantErr {
@@ -214,7 +214,7 @@ func TestJSONFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.flagVal, func(t *testing.T) {
 			fs := flag.NewFlagSet("", flag.ContinueOnError)
-			fs.SetOutput(ioutil.Discard)
+			fs.SetOutput(io.Discard)
 			value := &jsonValue{}
 			r.JSONVarFlag(fs, value, "testflag", "usage")
 			err := fs.Parse([]string{"--testflag", tt.flagVal})

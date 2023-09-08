@@ -8,7 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -139,7 +139,7 @@ func probeBuildlet(ctx context.Context, buildletURL string, opts *VMOpts) error 
 	if err != nil {
 		return fmt.Errorf("error probe buildlet %s: %w", buildletURL, err)
 	}
-	ioutil.ReadAll(res.Body)
+	io.ReadAll(res.Body)
 	res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("buildlet returned HTTP status code %d for %s", res.StatusCode, buildletURL)

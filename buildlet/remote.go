@@ -11,7 +11,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -112,7 +112,7 @@ func (cc *CoordinatorClient) CreateBuildletWithStatus(builderType string, status
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		slurp, _ := ioutil.ReadAll(res.Body)
+		slurp, _ := io.ReadAll(res.Body)
 		return nil, fmt.Errorf("%s: %s", res.Status, slurp)
 	}
 
@@ -185,7 +185,7 @@ func (cc *CoordinatorClient) RemoteBuildlets() ([]RemoteBuildlet, error) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		slurp, _ := ioutil.ReadAll(res.Body)
+		slurp, _ := io.ReadAll(res.Body)
 		return nil, fmt.Errorf("%s: %s", res.Status, slurp)
 	}
 	var ret []RemoteBuildlet
@@ -256,7 +256,7 @@ func userToken() (string, error) {
 	}
 	keyDir := configDir()
 	userPath := filepath.Join(keyDir, "user-"+gomoteUserFlag+".user")
-	b, err := ioutil.ReadFile(userPath)
+	b, err := os.ReadFile(userPath)
 	if err == nil {
 		gomoteUserFlag = string(bytes.TrimSpace(b))
 	}
@@ -265,7 +265,7 @@ func userToken() (string, error) {
 		baseFile = "staging-" + baseFile
 	}
 	tokenFile := filepath.Join(keyDir, baseFile)
-	slurp, err := ioutil.ReadFile(tokenFile)
+	slurp, err := os.ReadFile(tokenFile)
 	if os.IsNotExist(err) {
 		return "", fmt.Errorf("Missing file %s for user %q. Change --user or obtain a token and place it there.",
 			tokenFile, gomoteUserFlag)

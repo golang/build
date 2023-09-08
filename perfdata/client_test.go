@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -119,7 +118,7 @@ func TestNewUpload(t *testing.T) {
 			if have, want := p.FileName(), fmt.Sprintf("want%d.txt", i); have != want {
 				t.Errorf("file name = %q, want %q", have, want)
 			}
-			content, _ := ioutil.ReadAll(p)
+			content, _ := io.ReadAll(p)
 			if have, want := string(content), "content"; have != want {
 				t.Errorf("unexpected content %q, want %q", have, want)
 			}
@@ -177,7 +176,7 @@ func TestNewUploadAbort(t *testing.T) {
 			if have, want := p.FileName(), fmt.Sprintf("want%d.txt", i); have != want {
 				t.Errorf("file name = %q, want %q", have, want)
 			}
-			content, _ := ioutil.ReadAll(p)
+			content, _ := io.ReadAll(p)
 			if have, want := string(content), "content"; have != want {
 				t.Errorf("unexpected content %q, want %q", have, want)
 			}

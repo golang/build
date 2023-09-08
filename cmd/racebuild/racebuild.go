@@ -16,7 +16,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -491,7 +490,7 @@ func (p *Platform) Build(ctx context.Context) error {
 	}
 
 	// Execute the script.
-	script, err := ioutil.TempFile("", "racebuild")
+	script, err := os.CreateTemp("", "racebuild")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %v", err)
 	}
@@ -572,7 +571,7 @@ func (p *Platform) UpdateReadme() error {
 	defer readmeMu.Unlock()
 
 	readmeFile := filepath.Join(*flagGoroot, "src", "runtime", "race", "README")
-	readme, err := ioutil.ReadFile(readmeFile)
+	readme, err := os.ReadFile(readmeFile)
 	if err != nil {
 		log.Fatalf("bad -goroot? %v", err)
 	}
@@ -597,7 +596,7 @@ func (p *Platform) UpdateReadme() error {
 		readme = append(append(readme, []byte(updatedLine)...), '\n')
 	}
 
-	return ioutil.WriteFile(readmeFile, readme, 0640)
+	return os.WriteFile(readmeFile, readme, 0640)
 }
 
 func (p *Platform) Gomote(ctx context.Context, args ...string) ([]byte, error) {

@@ -8,7 +8,6 @@ import (
 	"context"
 	"flag"
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,7 +81,7 @@ func TestDirFSWrite(t *testing.T) {
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	b, err := ioutil.ReadFile(filepath.Join(temp, "fsystest.txt"))
+	b, err := os.ReadFile(filepath.Join(temp, "fsystest.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}

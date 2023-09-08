@@ -14,7 +14,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -68,7 +67,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("creating cache dir: %v", err)
 	}
-	credsDir, err := ioutil.TempDir("", "gitmirror-credentials")
+	credsDir, err := os.MkdirTemp("", "gitmirror-credentials")
 	if err != nil {
 		log.Fatalf("creating credentials dir: %v", err)
 	}
@@ -136,7 +135,7 @@ func writeCredentials(home string) error {
 			return fmt.Errorf("reading github key from secret manager: %v", err)
 		}
 		privKeyPath := filepath.Join(home, secret.NameGitHubSSHKey)
-		if err := ioutil.WriteFile(privKeyPath, []byte(privKey+"\n"), 0600); err != nil {
+		if err := os.WriteFile(privKeyPath, []byte(privKey+"\n"), 0600); err != nil {
 			return err
 		}
 		fmt.Fprintf(sshConfig, "Host github.com\n  IdentityFile %v\n", privKeyPath)
@@ -147,10 +146,10 @@ func writeCredentials(home string) error {
 		fmt.Fprintf(gitConfig, "[credential \"https://source.developers.google.com\"]\n  helper=gcloud.sh\n")
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(home, ".gitconfig"), gitConfig.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), gitConfig.Bytes(), 0600); err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(sshConfigPath, sshConfig.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(sshConfigPath, sshConfig.Bytes(), 0600); err != nil {
 		return err
 	}
 
@@ -159,7 +158,7 @@ func writeCredentials(home string) error {
 
 func retrieveSecret(ctx context.Context, name string) (string, error) {
 	if *flagSecretsDir != "" {
-		secret, err := ioutil.ReadFile(filepath.Join(*flagSecretsDir, name))
+		secret, err := os.ReadFile(filepath.Join(*flagSecretsDir, name))
 		return string(secret), err
 	}
 	sc := secret.MustNewClient()
@@ -169,7 +168,7 @@ func retrieveSecret(ctx context.Context, name string) (string, error) {
 
 func createCacheDir() (string, error) {
 	if *flagCacheDir == "" {
-		dir, err := ioutil.TempDir("", "gitmirror")
+		dir, err := os.MkdirTemp("", "gitmirror")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -467,7 +466,7 @@ func (r *repo) addRemote(name, url, pushOption string) error {
 	remote := "URL: " + url + "\n" +
 		"Push: +refs/heads/*:refs/heads/*\n" +
 		"Push: +refs/tags/*:refs/tags/*\n"
-	return ioutil.WriteFile(filepath.Join(r.root, "remotes", name), []byte(remote), 0777)
+	return os.WriteFile(filepath.Join(r.root, "remotes", name), []byte(remote), 0777)
 }
 
 // loop continuously runs "git fetch" in the repo, checks for new

@@ -6,7 +6,6 @@ package local
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +16,7 @@ import (
 func TestNewWriter(t *testing.T) {
 	ctx := context.Background()
 
-	dir, err := ioutil.TempDir("", "local_test")
+	dir, err := os.MkdirTemp("", "local_test")
 	if err != nil {
 		t.Fatalf("TempDir = %v", err)
 	}
@@ -40,7 +39,7 @@ func TestNewWriter(t *testing.T) {
 		t.Fatalf("Close = %v", err)
 	}
 
-	have, err := ioutil.ReadFile(filepath.Join(dir, "dir/file"))
+	have, err := os.ReadFile(filepath.Join(dir, "dir/file"))
 	if err != nil {
 		t.Fatalf("ReadFile = %v", err)
 	}

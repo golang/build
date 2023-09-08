@@ -3,13 +3,12 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux
-// +build linux
 
 package dashboard
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,7 +53,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 	dh.ServeHTTP(w, req)
 	resp := w.Result()
 	defer resp.Body.Close()
-	ioutil.ReadAll(resp.Body)
+	io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("resp.StatusCode = %d, wanted %d", resp.StatusCode, http.StatusOK)

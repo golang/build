@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build cloud && !plan9
-// +build cloud,!plan9
 
 package dbtest
 

@@ -3,8 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
 
 package remote
 
@@ -19,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -330,7 +327,7 @@ func (ss *SSHServer) setupRemoteSSHEnv(bconf *dashboard.BuildConfig, workDir str
 // WriteSSHPrivateKeyToTempFile writes a key to a temporary file on the local file system. It also
 // sets the permissions on the file to what is expected by OpenSSH implementations of SSH.
 func WriteSSHPrivateKeyToTempFile(key []byte) (path string, err error) {
-	tf, err := ioutil.TempFile("", "ssh-priv-key")
+	tf, err := os.CreateTemp("", "ssh-priv-key")
 	if err != nil {
 		return "", err
 	}

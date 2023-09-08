@@ -8,7 +8,7 @@ package autocertcache
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/crypto/acme/autocert"
@@ -40,7 +40,7 @@ func (c *gcsAutocertCache) Get(ctx context.Context, key string) ([]byte, error) 
 		return nil, err
 	}
 	defer rd.Close()
-	return ioutil.ReadAll(rd)
+	return io.ReadAll(rd)
 }
 
 func (c *gcsAutocertCache) Put(ctx context.Context, key string, data []byte) error {

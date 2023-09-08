@@ -9,7 +9,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -102,7 +101,7 @@ func writeCertificateToDisk(b []byte) (string, error) {
 	if err := os.MkdirAll(tmpDir, 0700); err != nil {
 		return "", fmt.Errorf("unable to create temp directory for certficates: %w", err)
 	}
-	tf, err := ioutil.TempFile(tmpDir, "id_ed25519-*-cert.pub")
+	tf, err := os.CreateTemp(tmpDir, "id_ed25519-*-cert.pub")
 	if err != nil {
 		return "", err
 	}

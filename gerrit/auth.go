@@ -9,7 +9,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -102,7 +101,7 @@ func (gitCookiesAuth) setAuth(c *Client, r *http.Request) error {
 	// got so long that old versions of curl couldn't handle them.
 	host := url.Host
 	netrc := netrcPath()
-	data, _ := ioutil.ReadFile(netrc)
+	data, _ := os.ReadFile(netrc)
 	for _, line := range strings.Split(string(data), "\n") {
 		if i := strings.Index(line, "#"); i >= 0 {
 			line = line[:i]
@@ -125,7 +124,7 @@ type gitCookieFileAuth struct {
 }
 
 func (a *gitCookieFileAuth) loadCookieFileOnce() {
-	data, err := ioutil.ReadFile(a.file)
+	data, err := os.ReadFile(a.file)
 	if err != nil {
 		a.err = fmt.Errorf("Error loading cookie file: %v", err)
 		return

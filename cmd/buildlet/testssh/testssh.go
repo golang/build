@@ -12,7 +12,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -129,7 +128,7 @@ func genKey() (pubKey, privateKeyPath string) {
 			log.Fatalf("ssh-keygen: %v, %s", err, out)
 		}
 	}
-	slurp, err := ioutil.ReadFile(pubKeyPath)
+	slurp, err := os.ReadFile(pubKeyPath)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -54,7 +53,7 @@ func NewNetworkMutationSource(server, cacheDir string) MutationSource {
 // TailNetworkMutationSource returns if fn returns an error, if ctx expires,
 // or if it runs into a network error.
 func TailNetworkMutationSource(ctx context.Context, server string, fn func(MutationStreamEvent) error) error {
-	td, err := ioutil.TempDir("", "maintnertail")
+	td, err := os.MkdirTemp("", "maintnertail")
 	if err != nil {
 		return err
 	}
@@ -654,7 +653,7 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (_ file
 	// then perhaps encoding the desired file size into the
 	// filename suffix (instead of just *.growing.mutlog) so
 	// concurrent readers know where to stop.
-	tf, err := ioutil.TempFile(ns.cacheDir, "tempseg")
+	tf, err := os.CreateTemp(ns.cacheDir, "tempseg")
 	if err != nil {
 		return fileSeg{}, nil, err
 	}

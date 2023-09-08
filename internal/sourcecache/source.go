@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -145,11 +144,11 @@ func getSourceTgzFromURL(hc *http.Client, service, repo, rev, url string) (sourc
 	}
 	defer res.Body.Close()
 	if res.StatusCode/100 != 2 {
-		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		slurp, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 		return source{}, fmt.Errorf("fetching %s/%s from %s: %v; body: %s", repo, rev, service, res.Status, slurp)
 	}
 	// See golang.org/issue/11224 for a discussion on tree filtering.
-	b, err := ioutil.ReadAll(io.LimitReader(res.Body, maxSize(repo)+1))
+	b, err := io.ReadAll(io.LimitReader(res.Body, maxSize(repo)+1))
 	if int64(len(b)) > maxSize(repo) && err == nil {
 		return source{TooBig: true}, nil
 	}
