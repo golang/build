@@ -61,68 +61,6 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
 var allReleases = map[int]ReleaseTargets{
-	19: {
-		"darwin-amd64": &Target{
-			Builder:         "darwin-amd64-12_0",
-			Race:            true,
-			MinMacOSVersion: "10.13",                                           // Issues #36025 #35459
-			ExtraEnv:        []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
-		},
-		"darwin-arm64": &Target{
-			Builder:         "darwin-arm64-12",
-			Race:            true,
-			MinMacOSVersion: "11", // Big Sur was the first release with M1 support.
-		},
-		"freebsd-386": &Target{
-			SecondClass: true,
-			Builder:     "freebsd-386-12_3",
-		},
-		"freebsd-amd64": &Target{
-			SecondClass: true,
-			Builder:     "freebsd-amd64-12_3",
-			Race:        true,
-		},
-		"linux-386": &Target{
-			Builder:         "linux-386-buster",
-			LongTestBuilder: "linux-386-longtest",
-		},
-		"linux-armv6l": &Target{
-			GOARCH:   "arm",
-			Builder:  "linux-arm-aws",
-			ExtraEnv: []string{"GOARM=6"},
-		},
-		"linux-arm64": &Target{
-			Builder: "linux-arm64",
-		},
-		"linux-amd64": &Target{
-			Builder:         "linux-amd64-buster",
-			LongTestBuilder: "linux-amd64-longtest",
-			Race:            true,
-		},
-		"linux-s390x": &Target{
-			SecondClass: true,
-			Builder:     "linux-s390x-crosscompile",
-			BuildOnly:   true,
-		},
-		"linux-ppc64le": &Target{
-			SecondClass: true,
-			Builder:     "linux-ppc64le-buildlet",
-			BuildOnly:   true,
-		},
-		// *-oldcc amd64/386 builders needed for 1.18, 1.19
-		"windows-386": &Target{
-			Builder: "windows-386-2008-oldcc",
-		},
-		"windows-amd64": &Target{
-			Builder:         "windows-amd64-2008-oldcc",
-			LongTestBuilder: "windows-amd64-longtest-oldcc",
-			Race:            true,
-		},
-		"windows-arm64": &Target{
-			SecondClass: true,
-			Builder:     "windows-arm64-11",
-		},
-	},
 	20: {
 		// 1.20 drops Race .as from the distribution.
 		"darwin-amd64": &Target{
@@ -146,13 +84,28 @@ var allReleases = map[int]ReleaseTargets{
 			Builder:         "linux-386-bullseye",
 			LongTestBuilder: "linux-386-longtest",
 		},
-		"linux-arm64": &Target{
-			Builder:         "linux-arm64",
-			LongTestBuilder: "linux-arm64-longtest",
+		"linux-armv6l": &Target{
+			GOARCH:   "arm",
+			Builder:  "linux-arm-aws",
+			ExtraEnv: []string{"GOARM=6"},
 		},
 		"linux-amd64": &Target{
 			Builder:         "linux-amd64-bullseye",
 			LongTestBuilder: "linux-amd64-longtest",
+		},
+		"linux-arm64": &Target{
+			Builder:         "linux-arm64",
+			LongTestBuilder: "linux-arm64-longtest",
+		},
+		"linux-ppc64le": &Target{
+			SecondClass: true,
+			Builder:     "linux-ppc64le-buildlet",
+			BuildOnly:   true,
+		},
+		"linux-s390x": &Target{
+			SecondClass: true,
+			Builder:     "linux-s390x-crosscompile",
+			BuildOnly:   true,
 		},
 		"windows-386": &Target{
 			Builder: "windows-386-2008",
@@ -160,6 +113,10 @@ var allReleases = map[int]ReleaseTargets{
 		"windows-amd64": &Target{
 			Builder:         "windows-amd64-2008",
 			LongTestBuilder: "windows-amd64-longtest",
+		},
+		"windows-arm64": &Target{
+			SecondClass: true,
+			Builder:     "windows-arm64-11",
 		},
 	},
 	21: {
