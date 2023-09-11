@@ -337,7 +337,7 @@ func TestSlowBotsFromComments(t *testing.T) {
 			},
 		},
 	}
-	slowBots := slowBotsFromComments(work)
+	slowBots, _ := slowBotsFromComments(work)
 	var got []string
 	for _, bc := range slowBots {
 		got = append(got, bc.Name)
@@ -487,5 +487,31 @@ func TestListPatchSetThreads(t *testing.T) {
 	}
 	if mostRecentTryBotThread != "aaf7aa39_658707c2" {
 		t.Errorf("wrong most recent TryBot thread: got %s, want %s", mostRecentTryBotThread, "aaf7aa39_658707c2")
+	}
+}
+
+func TestInvalidSlowBots(t *testing.T) {
+	work := &apipb.GerritTryWorkItem{
+		Version: 2,
+		TryMessage: []*apipb.TryVoteMessage{
+			{
+				Version: 1,
+				Message: "aix, linux-mipps, amd64, freeebsd",
+			},
+		},
+	}
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
+	var got []string
+	for _, bc := range slowBots {
+		got = append(got, bc.Name)
+	}
+	want := []string{"aix-ppc64", "linux-amd64"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+	}
+
+	wantInvalid := []string{"linux-mipps", "freeebsd"}
+	if !reflect.DeepEqual(invalidSlowBots, wantInvalid) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", invalidSlowBots, wantInvalid)
 	}
 }

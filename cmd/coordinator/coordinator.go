@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1101,6 +1102,9 @@ func findTryWork() error {
 			continue
 		} else {
 			ts := newTrySet(work)
+			if ts == nil {
+				continue
+			}
 			ts.wantedAsOf = now
 			tries[key] = ts
 		}
@@ -1192,7 +1196,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		subBranch = work.Branch
 	}
 	tryBots := dashboard.TryBuildersForProject(work.Project, work.Branch, goBranch)
-	slowBots := slowBotsFromComments(work)
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
 	builders := joinBuilders(tryBots, slowBots)
 
 	key := tryWorkItemKey(work)
@@ -1204,6 +1208,12 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			builds: make([]*buildStatus, 0, len(builders)),
 		},
 		slowBots: slowBots,
+	}
+
+	if len(invalidSlowBots) > 0 {
+		log.Printf("WARNING: invalid slowbots: %s", strings.Join(invalidSlowBots, ", "))
+		ts.noteInvalidSlowBots(invalidSlowBots)
+		return nil
 	}
 
 	// Defensive check that the input is well-formed.
@@ -1750,6 +1760,17 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 	}
 }
 
+func (ts *trySet) noteInvalidSlowBots(invalidSlowBots []string) {
+	gerritClient := pool.NewGCEConfiguration().GerritClient()
+	if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
+		Tag:     tryBotsTag("failed"),
+		Message: fmt.Sprintf("Invalid SlowBots: %s", strings.Join(invalidSlowBots, ", ")),
+		Labels:  map[string]int{"TryBot-Result": -1},
+	}); err != nil {
+		log.Printf("Error leaving Gerrit comment on %s: %v", ts.Commit[:8], err)
+	}
+}
+
 // getBuildlets creates up to n buildlets and sends them on the returned channel
 // before closing the channel.
 func getBuildlets(ctx context.Context, n int, schedTmpl *queue.SchedItem, lg pool.Logger) <-chan buildlet.Client {
@@ -2058,11 +2079,16 @@ func importPathOfRepo(repo string) string {
 // slowBotsFromComments looks at the Gerrit comments in work,
 // and returns all build configurations that were explicitly
 // requested to be tested as SlowBots via the TRY= syntax.
-func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.BuildConfig) {
+func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.BuildConfig, invalidTryTerms []string) {
 	tryTerms := latestTryTerms(work)
+	invalidTryTerms = make([]string, len(tryTerms))
+	copy(invalidTryTerms, tryTerms)
 	for _, bc := range dashboard.Builders {
 		for _, term := range tryTerms {
 			if bc.MatchesSlowBotTerm(term) {
+				invalidTryTerms = slices.DeleteFunc(invalidTryTerms, func(e string) bool {
+					return e == term
+				})
 				builders = append(builders, bc)
 				break
 			}
@@ -2071,7 +2097,7 @@ func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.
 	sort.Slice(builders, func(i, j int) bool {
 		return builders[i].Name < builders[j].Name
 	})
-	return builders
+	return builders, invalidTryTerms
 }
 
 type xRepoAndBuilder struct {
