@@ -301,6 +301,41 @@ EXTRA_GO_BRANCHES = {
     "go1.18": struct(branch = "release-branch.go1.18", bootstrap = "1.17.13"),
 }
 
+def go_cq_group(project, go_branch_short):
+    """go_cq_group returns the CQ group name and watch for project and
+    go_branch_short."""
+
+    # The CQ group "{project}_repo_{go-branch}" is configured to watch
+    # applicable branches in project and test with the Go version that
+    # corresponds to go-branch.
+    #
+    # LUCI's CQ group names must match "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$".
+    # Each branch must be watched by no more than one matched CQ group.
+    cq_group_name = ("%s_repo_%s" % (project, go_branch_short)).replace(".", "-")
+
+    if project == "go":
+        # Main Go repo trybot branch coverage.
+        if go_branch_short == "gotip":
+            refs, refs_exclude = ["^refs/heads/.+$"], ["^refs/heads/release-branch\\..+$"]
+        else:
+            refs, refs_exclude = ["^refs/heads/release-branch\\.%s$" % go_branch_short.replace(".", "\\.")], None
+    else:
+        # golang.org/x repo trybot branch coverage.
+        # See go.dev/issue/46154.
+        if go_branch_short == "gotip":
+            refs, refs_exclude = ["^refs/heads/.+$"], ["^refs/heads/internal-branch\\..+$"]
+        else:
+            refs, refs_exclude = ["^refs/heads/internal-branch\\.%s-.+$" % go_branch_short.replace(".", "\\.")], None
+
+    return struct(
+        name = cq_group_name,
+        watch = cq.refset(
+            repo = "https://go.googlesource.com/%s" % project,
+            refs = refs,
+            refs_exclude = refs_exclude,
+        ),
+    )
+
 def split_builder_type(builder_type):
     """split_builder_type splits a builder type into its pieces.
 
@@ -770,26 +805,9 @@ def _define_go_ci():
     for project in PROJECTS:
         for go_branch_short, go_branch in GO_BRANCHES.items():
             # Set up a CQ group for the builder definitions below.
-            #
-            # The CQ group "{project}_repo_{go-branch}" is configured to watch
-            # applicable branches in project and test with the Go version that
-            # corresponds to go-branch.
-            # Each branch must be watched by no more than one matched CQ group.
-            #
-            # cq group names must match "^[a-zA-Z][a-zA-Z0-9_-]{0,39}$"
-            cq_group_name = ("%s_repo_%s" % (project, go_branch_short)).replace(".", "-")
-            if project == "go":
-                # Main Go repo trybot branch coverage.
-                watch_branch = go_branch.branch
-            else:
-                # golang.org/x repo trybot branch coverage.
-                if go_branch_short == "gotip":
-                    watch_branch = "master"
-                else:
-                    # See go.dev/issue/46154.
-                    watch_branch = "internal-branch.%s-vendor" % go_branch_short
+            cq_group = go_cq_group(project, go_branch_short)
             luci.cq_group(
-                name = cq_group_name,
+                name = cq_group.name,
                 acls = [
                     acl.entry(
                         roles = acl.CQ_DRY_RUNNER,
@@ -800,10 +818,7 @@ def _define_go_ci():
                         groups = ["project-golang-approvers"],
                     ),
                 ],
-                watch = cq.refset(
-                    repo = "https://go.googlesource.com/%s" % project,
-                    refs = ["refs/heads/%s" % watch_branch],
-                ),
+                watch = cq_group.watch,
                 allow_submit_with_open_deps = True,
                 verifiers = [
                     luci.cq_tryjob_verifier(
@@ -834,7 +849,7 @@ def _define_go_ci():
                 name = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
                 luci.cq_tryjob_verifier(
                     builder = name,
-                    cq_group = cq_group_name,
+                    cq_group = cq_group.name,
                     includable_only = not presubmit,
                     disable_reuse = True,
                 )
@@ -857,7 +872,7 @@ def _define_go_ci():
                     name = PUBLIC_TRY_ENV.bucket + "/" + builder_name(project, supported_go_release, builder_type)
                     luci.cq_tryjob_verifier(
                         builder = name,
-                        cq_group = cq_group_name,
+                        cq_group = cq_group.name,
                         disable_reuse = True,
                     )
 
@@ -868,7 +883,7 @@ def _define_go_ci():
                     try_builder = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
                     luci.cq_tryjob_verifier(
                         builder = try_builder,
-                        cq_group = cq_group_name,
+                        cq_group = cq_group.name,
                         disable_reuse = True,
                     )
                     ci_builder = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
