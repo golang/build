@@ -1102,9 +1102,6 @@ func findTryWork() error {
 			continue
 		} else {
 			ts := newTrySet(work)
-			if ts == nil {
-				continue
-			}
 			ts.wantedAsOf = now
 			tries[key] = ts
 		}
@@ -1211,9 +1208,8 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	}
 
 	if len(invalidSlowBots) > 0 {
-		log.Printf("WARNING: invalid slowbots: %s", strings.Join(invalidSlowBots, ", "))
+		log.Printf("WARNING: invalid slowbots in TRY comment: %s", strings.Join(invalidSlowBots, ", "))
 		ts.noteInvalidSlowBots(invalidSlowBots)
-		return nil
 	}
 
 	// Defensive check that the input is well-formed.
@@ -1763,9 +1759,7 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 func (ts *trySet) noteInvalidSlowBots(invalidSlowBots []string) {
 	gerritClient := pool.NewGCEConfiguration().GerritClient()
 	if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
-		Tag:     tryBotsTag("failed"),
 		Message: fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s", strings.Join(invalidSlowBots, ", ")),
-		Labels:  map[string]int{"TryBot-Result": -1},
 	}); err != nil {
 		log.Printf("Error leaving Gerrit comment on %s: %v", ts.Commit[:8], err)
 	}
