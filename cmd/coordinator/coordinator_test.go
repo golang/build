@@ -264,8 +264,8 @@ func TestIssue42084(t *testing.T) {
 
 	// Next, add try messages, and check that the SlowBot is now included.
 	work.TryMessage = []*apipb.TryVoteMessage{
-		{Message: "TRY=linux", AuthorId: 1234, Version: 1},
-		{Message: "TRY=linux-arm", AuthorId: 1234, Version: 1},
+		{Message: "linux", AuthorId: 1234, Version: 1},
+		{Message: "linux-arm", AuthorId: 1234, Version: 1},
 	}
 	ts = newTrySet(work)
 	hasLinuxArmBuilder = false

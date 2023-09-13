@@ -29,7 +29,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"slices"
+	"golang.org/x/exp/slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1764,7 +1764,7 @@ func (ts *trySet) noteInvalidSlowBots(invalidSlowBots []string) {
 	gerritClient := pool.NewGCEConfiguration().GerritClient()
 	if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
 		Tag:     tryBotsTag("failed"),
-		Message: fmt.Sprintf("Invalid SlowBots: %s", strings.Join(invalidSlowBots, ", ")),
+		Message: fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s", strings.Join(invalidSlowBots, ", ")),
 		Labels:  map[string]int{"TryBot-Result": -1},
 	}); err != nil {
 		log.Printf("Error leaving Gerrit comment on %s: %v", ts.Commit[:8], err)
@@ -2078,11 +2078,12 @@ func importPathOfRepo(repo string) string {
 
 // slowBotsFromComments looks at the Gerrit comments in work,
 // and returns all build configurations that were explicitly
-// requested to be tested as SlowBots via the TRY= syntax.
+// requested to be tested as SlowBots via the TRY= syntax. It
+// also returns any build terms that are not a valid builder
+// or alias.
 func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.BuildConfig, invalidTryTerms []string) {
 	tryTerms := latestTryTerms(work)
-	invalidTryTerms = make([]string, len(tryTerms))
-	copy(invalidTryTerms, tryTerms)
+	invalidTryTerms = slices.Clone(tryTerms)
 	for _, bc := range dashboard.Builders {
 		for _, term := range tryTerms {
 			if bc.MatchesSlowBotTerm(term) {
