@@ -63,6 +63,7 @@ import (
 	"golang.org/x/build/repos"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
+	"golang.org/x/exp/slices"
 	"golang.org/x/time/rate"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -1192,11 +1193,11 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		subBranch = work.Branch
 	}
 	tryBots := dashboard.TryBuildersForProject(work.Project, work.Branch, goBranch)
-	slowBots := slowBotsFromComments(work)
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
 	builders := joinBuilders(tryBots, slowBots)
 
 	key := tryWorkItemKey(work)
-	log.Printf("Starting new trybot set for %v", key)
+	log.Printf("Starting new trybot set for %v (ignored invalid terms = %q)", key, invalidSlowBots)
 	ts := &trySet{
 		tryKey: key,
 		tryID:  "T" + randHex(9),
@@ -1246,7 +1247,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	// Start the main TryBot build using the selected builders.
 	// There may be additional builds, those are handled below.
 	if !testingKnobSkipBuilds {
-		go ts.notifyStarting()
+		go ts.notifyStarting(invalidSlowBots)
 	}
 	for _, bconf := range builders {
 		goVersion := types.MajorMinor{Major: int(work.GoVersion[0].Major), Minor: int(work.GoVersion[0].Minor)}
@@ -1476,12 +1477,16 @@ func (ts *trySet) statusPage() string {
 
 // notifyStarting runs in its own goroutine and posts to Gerrit that
 // the trybots have started on the user's CL with a link of where to watch.
-func (ts *trySet) notifyStarting() {
+func (ts *trySet) notifyStarting(invalidSlowBots []string) {
 	name := "TryBots"
 	if len(ts.slowBots) > 0 {
 		name = "SlowBots"
 	}
 	msg := name + " beginning. Status page: " + ts.statusPage() + "\n"
+
+	if len(invalidSlowBots) > 0 {
+		msg += fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s.\n", strings.Join(invalidSlowBots, ", "))
+	}
 
 	// If any of the requested SlowBot builders
 	// have a known issue, give users a warning.
@@ -2057,12 +2062,18 @@ func importPathOfRepo(repo string) string {
 
 // slowBotsFromComments looks at the Gerrit comments in work,
 // and returns all build configurations that were explicitly
-// requested to be tested as SlowBots via the TRY= syntax.
-func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.BuildConfig) {
+// requested to be tested as SlowBots via the TRY= syntax. It
+// also returns any build terms that are not a valid builder
+// or alias.
+func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.BuildConfig, invalidTryTerms []string) {
 	tryTerms := latestTryTerms(work)
+	invalidTryTerms = slices.Clone(tryTerms)
 	for _, bc := range dashboard.Builders {
 		for _, term := range tryTerms {
 			if bc.MatchesSlowBotTerm(term) {
+				invalidTryTerms = slices.DeleteFunc(invalidTryTerms, func(e string) bool {
+					return e == term
+				})
 				builders = append(builders, bc)
 				break
 			}
@@ -2071,7 +2082,7 @@ func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.
 	sort.Slice(builders, func(i, j int) bool {
 		return builders[i].Name < builders[j].Name
 	})
-	return builders
+	return builders, invalidTryTerms
 }
 
 type xRepoAndBuilder struct {

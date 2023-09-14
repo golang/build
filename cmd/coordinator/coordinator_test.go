@@ -264,8 +264,8 @@ func TestIssue42084(t *testing.T) {
 
 	// Next, add try messages, and check that the SlowBot is now included.
 	work.TryMessage = []*apipb.TryVoteMessage{
-		{Message: "TRY=linux", AuthorId: 1234, Version: 1},
-		{Message: "TRY=linux-arm", AuthorId: 1234, Version: 1},
+		{Message: "linux", AuthorId: 1234, Version: 1},
+		{Message: "linux-arm", AuthorId: 1234, Version: 1},
 	}
 	ts = newTrySet(work)
 	hasLinuxArmBuilder = false
@@ -337,7 +337,7 @@ func TestSlowBotsFromComments(t *testing.T) {
 			},
 		},
 	}
-	slowBots := slowBotsFromComments(work)
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
 	var got []string
 	for _, bc := range slowBots {
 		got = append(got, bc.Name)
@@ -345,6 +345,10 @@ func TestSlowBotsFromComments(t *testing.T) {
 	want := []string{"aix-ppc64", "darwin-amd64-13", "linux-arm64"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+	}
+
+	if len(invalidSlowBots) > 0 {
+		t.Errorf("mismatch invalidSlowBots:\n got: %d\nwant: 0", len(invalidSlowBots))
 	}
 }
 
@@ -487,5 +491,31 @@ func TestListPatchSetThreads(t *testing.T) {
 	}
 	if mostRecentTryBotThread != "aaf7aa39_658707c2" {
 		t.Errorf("wrong most recent TryBot thread: got %s, want %s", mostRecentTryBotThread, "aaf7aa39_658707c2")
+	}
+}
+
+func TestInvalidSlowBots(t *testing.T) {
+	work := &apipb.GerritTryWorkItem{
+		Version: 2,
+		TryMessage: []*apipb.TryVoteMessage{
+			{
+				Version: 1,
+				Message: "aix, linux-mipps, amd64, freeebsd",
+			},
+		},
+	}
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
+	var got []string
+	for _, bc := range slowBots {
+		got = append(got, bc.Name)
+	}
+	want := []string{"aix-ppc64", "linux-amd64"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+	}
+
+	wantInvalid := []string{"linux-mipps", "freeebsd"}
+	if !reflect.DeepEqual(invalidSlowBots, wantInvalid) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", invalidSlowBots, wantInvalid)
 	}
 }
