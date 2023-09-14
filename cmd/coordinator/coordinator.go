@@ -29,7 +29,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"golang.org/x/exp/slices"
 	"sort"
 	"strings"
 	"sync"
@@ -64,6 +63,7 @@ import (
 	"golang.org/x/build/repos"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
+	"golang.org/x/exp/slices"
 	"golang.org/x/time/rate"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -1197,7 +1197,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	builders := joinBuilders(tryBots, slowBots)
 
 	key := tryWorkItemKey(work)
-	log.Printf("Starting new trybot set for %v", key)
+	log.Printf("Starting new trybot set for %v (ignored invalid terms = %q)", key, invalidSlowBots)
 	ts := &trySet{
 		tryKey: key,
 		tryID:  "T" + randHex(9),
@@ -1205,11 +1205,6 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 			builds: make([]*buildStatus, 0, len(builders)),
 		},
 		slowBots: slowBots,
-	}
-
-	if len(invalidSlowBots) > 0 {
-		log.Printf("WARNING: invalid slowbots in TRY comment: %s", strings.Join(invalidSlowBots, ", "))
-		ts.noteInvalidSlowBots(invalidSlowBots)
 	}
 
 	// Defensive check that the input is well-formed.
@@ -1252,7 +1247,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	// Start the main TryBot build using the selected builders.
 	// There may be additional builds, those are handled below.
 	if !testingKnobSkipBuilds {
-		go ts.notifyStarting()
+		go ts.notifyStarting(invalidSlowBots)
 	}
 	for _, bconf := range builders {
 		goVersion := types.MajorMinor{Major: int(work.GoVersion[0].Major), Minor: int(work.GoVersion[0].Minor)}
@@ -1482,12 +1477,16 @@ func (ts *trySet) statusPage() string {
 
 // notifyStarting runs in its own goroutine and posts to Gerrit that
 // the trybots have started on the user's CL with a link of where to watch.
-func (ts *trySet) notifyStarting() {
+func (ts *trySet) notifyStarting(invalidSlowBots []string) {
 	name := "TryBots"
 	if len(ts.slowBots) > 0 {
 		name = "SlowBots"
 	}
 	msg := name + " beginning. Status page: " + ts.statusPage() + "\n"
+
+	if len(invalidSlowBots) > 0 {
+		msg += fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s.\n", strings.Join(invalidSlowBots, ", "))
+	}
 
 	// If any of the requested SlowBot builders
 	// have a known issue, give users a warning.
@@ -1752,15 +1751,6 @@ func (ts *trySet) noteBuildComplete(bs *buildStatus) {
 		}
 	}
 	if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, ri); err != nil {
-		log.Printf("Error leaving Gerrit comment on %s: %v", ts.Commit[:8], err)
-	}
-}
-
-func (ts *trySet) noteInvalidSlowBots(invalidSlowBots []string) {
-	gerritClient := pool.NewGCEConfiguration().GerritClient()
-	if err := gerritClient.SetReview(context.Background(), ts.ChangeTriple(), ts.Commit, gerrit.ReviewInput{
-		Message: fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s", strings.Join(invalidSlowBots, ", ")),
-	}); err != nil {
 		log.Printf("Error leaving Gerrit comment on %s: %v", ts.Commit[:8], err)
 	}
 }

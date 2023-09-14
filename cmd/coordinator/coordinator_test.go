@@ -337,7 +337,7 @@ func TestSlowBotsFromComments(t *testing.T) {
 			},
 		},
 	}
-	slowBots, _ := slowBotsFromComments(work)
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
 	var got []string
 	for _, bc := range slowBots {
 		got = append(got, bc.Name)
@@ -345,6 +345,10 @@ func TestSlowBotsFromComments(t *testing.T) {
 	want := []string{"aix-ppc64", "darwin-amd64-13", "linux-arm64"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+	}
+
+	if len(invalidSlowBots) > 0 {
+		t.Errorf("mismatch invalidSlowBots:\n got: %d\nwant: 0", len(invalidSlowBots))
 	}
 }
 
