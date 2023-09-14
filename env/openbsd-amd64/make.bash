@@ -119,7 +119,7 @@ swarming ALL=NOPASSWD:/sbin/shutdown -r now
 EOF
 chmod +x ${SITE}/install.site
 mkdir -p ${SITE}/usr/local/bin
-CGO_ENABLED=0 GOOS=openbsd GOARCH=amd64 go1.21.0 build -o ${SITE}/usr/local/bin/bootstrapswarm golang.org/x/build/cmd/bootstrapswarm
+CGO_ENABLED=0 GOOS=openbsd GOARCH=${ARCH/i386/386} go1.21.0 build -o ${SITE}/usr/local/bin/bootstrapswarm golang.org/x/build/cmd/bootstrapswarm
 tar -C ${SITE} -zcf ${WORK}/site${RELNO}.tgz .
 
 # Autoinstall script.
