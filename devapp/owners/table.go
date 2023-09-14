@@ -816,7 +816,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{mpvl},
 	},
 	"telemetry": {
-		Primary:   []Owner{jamalc, pjw, hyangah},
+		Primary:   []Owner{pjw, hyangah, findleyr},
 		Secondary: []Owner{toolsTeam},
 	},
 	// default owners of x/tools/...
