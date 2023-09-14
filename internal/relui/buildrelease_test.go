@@ -219,7 +219,7 @@ esac
 		GerritHTTPClient:         http.DefaultClient,
 		GerritURL:                fakeGerrit.GerritURL() + "/go",
 		GCSClient:                nil,
-		ScratchURL:               "file://" + filepath.ToSlash(t.TempDir()),
+		ScratchFS:                &task.ScratchFS{BaseURL: "file://" + filepath.ToSlash(t.TempDir())},
 		ServingURL:               "file://" + filepath.ToSlash(servingDir),
 		CreateBuildlet:           fakeBuildlets.CreateBuildlet,
 		SignService:              task.NewFakeSignService(t),

@@ -172,14 +172,17 @@ func main() {
 	signServer := sign.NewServer()
 	protos.RegisterReleaseServiceServer(grpcServer, signServer)
 	buildTasks := &relui.BuildReleaseTasks{
-		GerritClient:             gerritClient,
-		GerritHTTPClient:         oauth2.NewClient(ctx, creds.TokenSource),
-		GerritURL:                "https://go.googlesource.com/go",
-		PrivateGerritURL:         "https://team.googlesource.com/golang/go-private",
-		CreateBuildlet:           coordinator.CreateBuildlet,
-		SignService:              signServer,
-		GCSClient:                gcsClient,
-		ScratchURL:               *scratchFilesBase,
+		GerritClient:     gerritClient,
+		GerritHTTPClient: oauth2.NewClient(ctx, creds.TokenSource),
+		GerritURL:        "https://go.googlesource.com/go",
+		PrivateGerritURL: "https://team.googlesource.com/golang/go-private",
+		CreateBuildlet:   coordinator.CreateBuildlet,
+		SignService:      signServer,
+		GCSClient:        gcsClient,
+		ScratchFS: &task.ScratchFS{
+			BaseURL: *scratchFilesBase,
+			GCS:     gcsClient,
+		},
 		ServingURL:               *servingFilesBase,
 		DownloadURL:              *edgeCacheURL,
 		ProxyPrefix:              "https://proxy.golang.org/golang.org/toolchain/@v",

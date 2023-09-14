@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"math/rand"
 	"net/http"
 	"path"
 	"sort"
@@ -601,7 +600,8 @@ type BuildReleaseTasks struct {
 	GerritURL                string
 	PrivateGerritURL         string
 	GCSClient                *storage.Client
-	ScratchURL, ServingURL   string // ScratchURL is a gs:// or file:// URL, no trailing slash. E.g., "gs://golang-release-staging/relui-scratch".
+	ScratchFS                *task.ScratchFS
+	ServingURL               string // ServingURL is a gs:// or file:// URL, no trailing slash.
 	DownloadURL              string
 	ProxyPrefix              string // ProxyPrefix is the prefix at which module files are published, e.g. https://proxy.golang.org/golang.org/toolchain/@v
 	PublishFile              func(task.WebsiteFile) error
@@ -773,7 +773,7 @@ func (b *BuildReleaseTasks) modFilesFromDistpack(ctx *wf.TaskContext, distpack a
 	if err != nil {
 		return moduleArtifact{}, err
 	}
-	result.ZipScratch = artifact.ScratchPath
+	result.ZipScratch = artifact.Scratch
 	return result, nil
 }
 
@@ -788,7 +788,7 @@ func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, version stri
 	if err != nil {
 		return moduleArtifact{}, err
 	}
-	result.ZipScratch = a.ScratchPath
+	result.ZipScratch = a.Scratch
 	return result, nil
 }
 
@@ -797,11 +797,7 @@ func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, sign
 		signedBinaries, err := loadBinaries(ctx, signed)
 
 		// Copy files from the tgz, overwriting with binaries from the signed tar.
-		scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
-		if err != nil {
-			return err
-		}
-		ur, err := scratchFS.Open(unsigned.ScratchPath)
+		ur, err := b.ScratchFS.OpenRead(ctx, unsigned.Scratch)
 		if err != nil {
 			return err
 		}
@@ -855,11 +851,7 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 		signedBinaries, err := loadBinaries(ctx, signed)
 
 		// Copy files from the module zip, overwriting with binaries from the signed tar.
-		scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
-		if err != nil {
-			return err
-		}
-		mr, err := scratchFS.Open(mod.ZipScratch)
+		mr, err := b.ScratchFS.OpenRead(ctx, mod.ZipScratch)
 		if err != nil {
 			return err
 		}
@@ -907,7 +899,7 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 	if err != nil {
 		return moduleArtifact{}, err
 	}
-	mod.ZipScratch = a.ScratchPath
+	mod.ZipScratch = a.Scratch
 	return mod, nil
 }
 
@@ -1004,7 +996,7 @@ func (b *BuildReleaseTasks) computeGPG(ctx *wf.TaskContext, artifacts []artifact
 			continue
 		}
 
-		in = append(in, b.ScratchURL+"/"+a.ScratchPath)
+		in = append(in, b.ScratchFS.URL(ctx, a.Scratch))
 	}
 	out, err := b.signArtifacts(ctx, sign.BuildGPG, in)
 	if err != nil {
@@ -1013,31 +1005,13 @@ func (b *BuildReleaseTasks) computeGPG(ctx *wf.TaskContext, artifacts []artifact
 		return nil, fmt.Errorf("got %d outputs, want %d .asc signatures", len(out), len(in))
 	}
 	// All done, we have our GPG signatures.
-	// Put them in a base name → scratch path map.
-	var signatures = make(map[string]string)
-	for _, o := range out {
-		scratchPath, ok := cutPrefix(o, b.ScratchURL+"/")
-		if !ok {
-			return nil, fmt.Errorf("got signed URL %q outside of scratch space %q, which is unsupported", o, b.ScratchURL+"/")
-		}
-		signatures[path.Base(o)] = scratchPath
-	}
-
 	// Set the artifacts' GPGSignature field.
-	scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
-	if err != nil {
-		return nil, err
-	}
 	for i, a := range artifacts {
 		if !doGPG(a) {
 			continue
 		}
 
-		sigPath, ok := signatures[path.Base(a.ScratchPath)+".asc"]
-		if !ok {
-			return nil, fmt.Errorf("no GPG signature for %q", path.Base(a.ScratchPath))
-		}
-		sig, err := fs.ReadFile(scratchFS, sigPath)
+		sig, err := b.ScratchFS.ReadFile(ctx, a.Scratch+".asc")
 		if err != nil {
 			return nil, err
 		}
@@ -1049,26 +1023,18 @@ func (b *BuildReleaseTasks) computeGPG(ctx *wf.TaskContext, artifacts []artifact
 
 // signArtifact signs a single artifact of specified type.
 func (b *BuildReleaseTasks) signArtifact(ctx *wf.TaskContext, a artifact, bt sign.BuildType) (signed artifact, _ error) {
-	// Sign the unsigned artifact located at ScratchPath, and
-	// update ScratchPath to point to the new signed artifact.
-	signedURL, err := b.signArtifacts(ctx, bt, []string{b.ScratchURL + "/" + a.ScratchPath})
+	// Sign the unsigned artifact located at a.Scratch, and
+	// update it to point to the new signed artifact.
+	signedURL, err := b.signArtifacts(ctx, bt, []string{b.ScratchFS.URL(ctx, a.Scratch)})
 	if err != nil {
 		return artifact{}, err
 	} else if len(signedURL) != 1 {
 		return artifact{}, fmt.Errorf("got %d outputs, want 1 signed artifact", len(signedURL))
 	}
-	var ok bool
-	a.ScratchPath, ok = cutPrefix(signedURL[0], b.ScratchURL+"/")
-	if !ok {
-		return artifact{}, fmt.Errorf("got signed URL %q outside of scratch space %q, which is unsupported", signedURL[0], b.ScratchURL+"/")
-	}
-	scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
-	if err != nil {
-		return artifact{}, err
-	}
+	a.Scratch = path.Base(signedURL[0])
 
 	// Update the Size and SHA256 fields.
-	f, err := scratchFS.Open(a.ScratchPath)
+	f, err := b.ScratchFS.OpenRead(ctx, a.Scratch)
 	if err != nil {
 		return artifact{}, err
 	}
@@ -1233,33 +1199,26 @@ func (b *BuildReleaseTasks) runBuildStep(
 		ctx.Printf("Buildlet ready.")
 	}
 
-	scratchFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.ScratchURL)
-	if err != nil {
-		return artifact{}, err
-	}
+	var err error
 	var in io.ReadCloser
-	if input.ScratchPath != "" {
-		in, err = scratchFS.Open(input.ScratchPath)
+	if input.Scratch != "" {
+		in, err = b.ScratchFS.OpenRead(ctx, input.Scratch)
 		if err != nil {
 			return artifact{}, err
 		}
 		defer in.Close()
 	}
 	var out io.WriteCloser
-	var scratchPath string
+	var scratch string
 	hash := sha256.New()
 	size := &sizeWriter{}
 	var multiOut io.Writer
 	if outputSuffix != "" {
-		scratchName := outputSuffix
+		name := outputSuffix
 		if target != nil {
-			scratchName = target.Name + "." + outputSuffix
+			name = target.Name + "." + outputSuffix
 		}
-		scratchPath = fmt.Sprintf("%v/%v-%v", ctx.WorkflowID.String(), rand.Int63(), scratchName)
-		out, err = gcsfs.Create(scratchFS, scratchPath)
-		if err != nil {
-			return artifact{}, err
-		}
+		scratch, out, err = b.ScratchFS.OpenWrite(ctx, name)
 		defer out.Close()
 		multiOut = io.MultiWriter(out, hash, size)
 	}
@@ -1284,11 +1243,11 @@ func (b *BuildReleaseTasks) runBuildStep(
 		}
 	}
 	return artifact{
-		Target:      target,
-		ScratchPath: scratchPath,
-		Suffix:      outputSuffix,
-		SHA256:      fmt.Sprintf("%x", string(hash.Sum([]byte(nil)))),
-		Size:        size.size,
+		Target:  target,
+		Scratch: scratch,
+		Suffix:  outputSuffix,
+		SHA256:  fmt.Sprintf("%x", string(hash.Sum([]byte(nil)))),
+		Size:    size.size,
 	}, nil
 }
 
@@ -1297,9 +1256,8 @@ func (b *BuildReleaseTasks) runBuildStep(
 type artifact struct {
 	// The target platform of this artifact, or nil for source.
 	Target *releasetargets.Target
-	// The scratch path of this artifact within the scratch directory.
-	// <workflow-id>/<random-number>-<filename>
-	ScratchPath string
+	// The filename of this artifact, as used with the tasks' ScratchFS.
+	Scratch string
 	// The contents of the GPG signature for this artifact (.asc file).
 	GPGSignature string
 	// The filename suffix of the artifact, e.g. "tar.gz" or "src.tar.gz",
@@ -1321,10 +1279,6 @@ func (w *sizeWriter) Write(p []byte) (n int, err error) {
 }
 
 func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts []artifact) error {
-	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
-	if err != nil {
-		return err
-	}
 	servingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ServingURL)
 	if err != nil {
 		return err
@@ -1332,7 +1286,7 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 
 	want := map[string]bool{} // URLs we're waiting on becoming available.
 	for _, a := range artifacts {
-		if err := uploadFile(scratchFS, servingFS, a.ScratchPath, a.Filename); err != nil {
+		if err := tasks.uploadFile(ctx, servingFS, a.Scratch, a.Filename); err != nil {
 			return err
 		}
 		want[tasks.DownloadURL+"/"+a.Filename] = true
@@ -1354,10 +1308,6 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 }
 
 func (tasks *BuildReleaseTasks) uploadModules(ctx *wf.TaskContext, version string, modules []moduleArtifact) error {
-	scratchFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ScratchURL)
-	if err != nil {
-		return err
-	}
 	servingFS, err := gcsfs.FromURL(ctx, tasks.GCSClient, tasks.ServingURL)
 	if err != nil {
 		return err
@@ -1365,7 +1315,7 @@ func (tasks *BuildReleaseTasks) uploadModules(ctx *wf.TaskContext, version strin
 	want := map[string]bool{} // URLs we're waiting on becoming available.
 	for _, mod := range modules {
 		base := task.ToolchainModuleVersion(mod.Target, version)
-		if err := uploadFile(scratchFS, servingFS, mod.ZipScratch, fmt.Sprintf(base+".zip")); err != nil {
+		if err := tasks.uploadFile(ctx, servingFS, mod.ZipScratch, fmt.Sprintf(base+".zip")); err != nil {
 			return err
 		}
 		if err := gcsfs.WriteFile(servingFS, base+".info", []byte(mod.Info)); err != nil {
@@ -1416,9 +1366,9 @@ func checkFiles(ctx context.Context, want map[string]bool) func() (int, bool, er
 	}
 }
 
-// uploadFile copies a file from scratchFS to servingFS.
-func uploadFile(scratchFS, servingFS fs.FS, scratch, filename string) error {
-	in, err := scratchFS.Open(scratch)
+// uploadFile copies a file from tasks.ScratchFS to servingFS.
+func (tasks *BuildReleaseTasks) uploadFile(ctx *wf.TaskContext, servingFS fs.FS, scratch, filename string) error {
+	in, err := tasks.ScratchFS.OpenRead(ctx, scratch)
 	if err != nil {
 		return err
 	}

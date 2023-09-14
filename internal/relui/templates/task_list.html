@@ -164,11 +164,11 @@
       </dd>
       <dt class="TaskList-itemResultTerm">
         <div class="TaskList-itemResultTermContent">
-          ScratchPath
+          Scratch
         </div>
       </dt>
       <dd class="TaskList-itemResultDefinition">
-        {{.Artifact.ScratchPath}}
+        {{.Artifact.Scratch}}
       </dd>
     </dl>
   {{else if eq .Kind "Outputs"}}
@@ -219,7 +219,7 @@
                   {{else if .Target}}
                     {{.Target.Name}}
                   {{else}}
-                    {{pathBase .ScratchPath}}
+                    {{pathBase .Scratch}}
                   {{end}}
                 </div>
                 <div class="TaskList-itemResultArtifactSize">{{prettySize .Size}}</div>
