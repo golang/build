@@ -61,6 +61,8 @@ var (
 	servingFilesBase = flag.String("serving-files-base", "", "Storage for serving files. gs://bucket/path or file:///path/to/serving.")
 	edgeCacheURL     = flag.String("edge-cache-url", "", "URL release files appear at when published to the CDN, e.g. https://dl.google.com/go.")
 	websiteUploadURL = flag.String("website-upload-url", "", "URL to POST website file data to, e.g. https://go.dev/dl/upload.")
+
+	cloudBuildProject = flag.String("cloud-build-project", "", "GCP project to run miscellaneous Cloud Build tasks")
 )
 
 func main() {
@@ -142,9 +144,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Could not connect to GCS: %v", err)
 	}
-	cloudbuildClient, err := cloudbuild.NewClient(ctx)
+	cbClient, err := cloudbuild.NewClient(ctx)
 	if err != nil {
 		log.Fatalf("Could not connect to Cloud Build: %v", err)
+	}
+	cloudBuildClient := &task.RealCloudBuildClient{
+		BuildClient:   cbClient,
+		StorageClient: gcsClient,
+		ScriptProject: *cloudBuildProject,
+		ScratchURL:    *scratchFilesBase + "/build-outputs",
 	}
 	var dbPool db.PGDBTX
 	dbPool, err = pgxpool.Connect(ctx, *pgConnect)
@@ -186,7 +194,7 @@ func main() {
 		ServingURL:               *servingFilesBase,
 		DownloadURL:              *edgeCacheURL,
 		ProxyPrefix:              "https://proxy.golang.org/golang.org/toolchain/@v",
-		CloudBuildClient:         &task.RealCloudBuildClient{Client: cloudbuildClient},
+		CloudBuildClient:         cloudBuildClient,
 		GoogleDockerBuildProject: "symbolic-datum-552",
 		GoogleDockerBuildTrigger: "golang-publish-internal-boringcrypto",
 		PublishFile: func(f task.WebsiteFile) error {
@@ -205,11 +213,9 @@ func main() {
 		ApproveAction: relui.ApproveActionDep(dbPool),
 	}
 	versionTasks := &task.VersionTasks{
-		Gerrit:           gerritClient,
-		GerritURL:        "https://go.googlesource.com",
-		GoProject:        "go",
-		CreateBuildlet:   coordinator.CreateBuildlet,
-		LatestGoBinaries: task.LatestGoBinaries,
+		Gerrit:     gerritClient,
+		CloudBuild: cloudBuildClient,
+		GoProject:  "go",
 	}
 	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, commTasks); err != nil {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)
@@ -221,29 +227,23 @@ func main() {
 	}
 	ignoreProjects["vuln"] = true // x/vuln only has manual tagging for now. See issue 59686.
 	tagTasks := &task.TagXReposTasks{
-		IgnoreProjects:   ignoreProjects,
-		Gerrit:           gerritClient,
-		GerritURL:        "https://go.googlesource.com",
-		CreateBuildlet:   coordinator.CreateBuildlet,
-		LatestGoBinaries: task.LatestGoBinaries,
-		DashboardURL:     "https://build.golang.org",
+		IgnoreProjects: ignoreProjects,
+		Gerrit:         gerritClient,
+		DashboardURL:   "https://build.golang.org",
+		CloudBuild:     cloudBuildClient,
 	}
 	dh.RegisterDefinition("Tag x/ repos", tagTasks.NewDefinition())
 	dh.RegisterDefinition("Tag a single x/ repo", tagTasks.NewSingleDefinition())
 
 	bundleTasks := &task.BundleNSSRootsTask{
-		Gerrit:           gerritClient,
-		GerritURL:        "https://go.googlesource.com",
-		CreateBuildlet:   coordinator.CreateBuildlet,
-		LatestGoBinaries: task.LatestGoBinaries,
+		Gerrit:     gerritClient,
+		CloudBuild: cloudBuildClient,
 	}
 	dh.RegisterDefinition("Update x/crypto NSS root bundle", bundleTasks.NewDefinition())
 
 	tagTelemetryTasks := &task.TagTelemetryTasks{
-		Gerrit:           gerritClient,
-		GerritURL:        "https://go.googlesource.com",
-		CreateBuildlet:   coordinator.CreateBuildlet,
-		LatestGoBinaries: task.LatestGoBinaries,
+		Gerrit:     gerritClient,
+		CloudBuild: cloudBuildClient,
 	}
 	dh.RegisterDefinition("Tag a new version of x/telemetry/config (if necessary)", tagTelemetryTasks.NewDefinition())
 

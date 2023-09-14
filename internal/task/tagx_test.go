@@ -365,25 +365,16 @@ func newTagXTestDeps(t *testing.T, dashboardStatus string, repos ...*FakeRepo) *
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	goServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeTarball("dl/go1.19.linux-amd64.tar.gz", map[string]string{
-			"go/bin/go": fakeGo,
-		}, w, r)
-	}))
-	t.Cleanup(goServer.Close)
-
 	goRepo := NewFakeRepo(t, "go")
 	go1 := goRepo.Commit(map[string]string{
 		"main.go": "I'm the go command or something",
 	})
 	repos = append(repos, goRepo)
 
-	fakeBuildlets := NewFakeBuildlets(t, "", nil)
 	fakeGerrit := NewFakeGerrit(t, repos...)
 	var builders, dashboardStatuses []string
 	for _, b := range dashboard.Builders {
 		builders = append(builders, b.Name)
-		// allOK = append(allOK, "ok")
 		dashboardStatuses = append(dashboardStatuses, dashboardStatus)
 	}
 	fakeDash := func(repo string) *types.BuildStatus {
@@ -421,13 +412,9 @@ func newTagXTestDeps(t *testing.T, dashboardStatus string, repos ...*FakeRepo) *
 	dashServer := httptest.NewServer(fakeDashboard(fakeDash))
 	t.Cleanup(dashServer.Close)
 	tasks := &TagXReposTasks{
-		Gerrit:         fakeGerrit,
-		GerritURL:      fakeGerrit.GerritURL(),
-		CreateBuildlet: fakeBuildlets.CreateBuildlet,
-		LatestGoBinaries: func(context.Context) (string, error) {
-			return goServer.URL + "/dl/go1.19.linux-amd64.tar.gz", nil
-		},
+		Gerrit:       fakeGerrit,
 		DashboardURL: dashServer.URL,
+		CloudBuild:   NewFakeCloudBuild(t, fakeGerrit, "project", nil, fakeGo),
 	}
 	return &tagXTestDeps{
 		ctx:       ctx,

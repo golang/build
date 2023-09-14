@@ -188,20 +188,10 @@ esac
 	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo, toolsRepo)
 
 	gerrit := &reviewerCheckGerrit{FakeGerrit: fakeGerrit}
-	goServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		task.ServeTarball("dl/go1.19.linux-amd64.tar.gz", map[string]string{
-			"go/bin/go": fakeGo,
-		}, w, r)
-	}))
-	t.Cleanup(goServer.Close)
 	versionTasks := &task.VersionTasks{
-		Gerrit:         gerrit,
-		GerritURL:      fakeGerrit.GerritURL(),
-		GoProject:      "go",
-		CreateBuildlet: fakeBuildlets.CreateBuildlet,
-		LatestGoBinaries: func(context.Context) (string, error) {
-			return goServer.URL + "/dl/go1.19.linux-amd64.tar.gz", nil
-		},
+		Gerrit:     gerrit,
+		CloudBuild: task.NewFakeCloudBuild(t, fakeGerrit, "", nil, fakeGo),
+		GoProject:  "go",
 	}
 	milestoneTasks := &task.MilestoneTasks{
 		Client:    fakeGitHub{},
@@ -228,10 +218,7 @@ esac
 		PublishFile:              publishFile,
 		GoogleDockerBuildProject: dockerProject,
 		GoogleDockerBuildTrigger: dockerTrigger,
-		CloudBuildClient: &task.FakeCloudBuild{
-			Project:       dockerProject,
-			AllowedBuilds: map[string]map[string]string{dockerTrigger: {"_GO_VERSION": wantVersion[2:]}},
-		},
+		CloudBuildClient:         task.NewFakeCloudBuild(t, fakeGerrit, dockerProject, map[string]map[string]string{dockerTrigger: {"_GO_VERSION": wantVersion[2:]}}, ""),
 		ApproveAction: func(ctx *workflow.TaskContext) error {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
 				return nil

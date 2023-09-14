@@ -5,23 +5,19 @@
 package task
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
-	"path"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/releasetargets"
@@ -30,16 +26,13 @@ import (
 	"golang.org/x/exp/slices"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/semver"
-	"golang.org/x/net/context/ctxhttp"
 )
 
 type TagXReposTasks struct {
-	IgnoreProjects   map[string]bool // project name -> ignore
-	Gerrit           GerritClient
-	GerritURL        string
-	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
-	LatestGoBinaries func(context.Context) (string, error)
-	DashboardURL     string
+	IgnoreProjects map[string]bool // project name -> ignore
+	Gerrit         GerritClient
+	DashboardURL   string
+	CloudBuild     CloudBuildClient
 }
 
 func (x *TagXReposTasks) NewDefinition() *wf.Definition {
@@ -387,48 +380,13 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, planned map[s
 }
 
 func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, branch string) (files map[string]string, _ error) {
-	commit, err := x.Gerrit.ReadBranchHead(ctx, repo.Name, branch)
-	if err != nil {
-		return nil, err
-	}
-
-	binaries, err := x.LatestGoBinaries(ctx)
-	if err != nil {
-		return nil, err
-	}
-	bc, err := x.CreateBuildlet(ctx, "linux-amd64-longtest") // longtest to allow network access. A little yucky.
-	if err != nil {
-		return nil, err
-	}
-	defer bc.Close()
-
-	if err := bc.PutTarFromURL(ctx, binaries, ""); err != nil {
-		return nil, err
-	}
-	tarURL := fmt.Sprintf("%s/%s/+archive/%s.tar.gz", x.GerritURL, repo.Name, commit)
-	if err := bc.PutTarFromURL(ctx, tarURL, "repo"); err != nil {
-		return nil, err
-	}
-
-	writer := &LogWriter{Logger: ctx}
-	go writer.Run(ctx)
-
 	// Update the root module to the selected versions.
-	getCmd := []string{"get"}
+	var script strings.Builder
+	script.WriteString("go get")
 	for _, dep := range deps {
-		getCmd = append(getCmd, dep.ModPath+"@"+dep.NewerVersion)
+		script.WriteString(" " + dep.ModPath + "@" + dep.NewerVersion)
 	}
-	remoteErr, execErr := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
-		Dir:    "repo",
-		Args:   getCmd,
-		Output: writer,
-	})
-	if execErr != nil {
-		return nil, execErr
-	}
-	if remoteErr != nil {
-		return nil, fmt.Errorf("Command failed: %v", remoteErr)
-	}
+	script.WriteString("\n")
 
 	// Tidy the root module.
 	// Also tidy nested modules with a replace directive.
@@ -442,102 +400,42 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 	case "tools":
 		dirs = append(dirs, "gopls") // A local replace directive as of 2023-09-05.
 	}
-	var fetchCmd []string
+	var outputs []string
 	for _, dir := range dirs {
-		var tidyFlags []string
+		compat := ""
 		if repo.Compat != "" {
-			tidyFlags = append(tidyFlags, "-compat", repo.Compat)
+			compat = "-compat " + repo.Compat
 		}
-		remoteErr, execErr = bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
-			Dir:    path.Join("repo", dir),
-			Args:   append([]string{"mod", "tidy"}, tidyFlags...),
-			Output: writer,
-		})
-		if execErr != nil {
-			return nil, execErr
-		}
-		if remoteErr != nil {
-			return nil, fmt.Errorf("Command failed: %v", remoteErr)
-		}
+		script.WriteString(fmt.Sprintf("(cd %v && touch go.sum && go mod tidy %v)\n", dir, compat))
+		outputs = append(outputs, dir+"/go.mod", dir+"/go.sum")
+	}
+	build, err := x.CloudBuild.RunScript(ctx, script.String(), repo.Name, outputs)
+	if err != nil {
+		return nil, err
+	}
+	return buildToOutputs(ctx, x.CloudBuild, build)
+}
 
-		repoDir, fetchDir := path.Join("repo", dir), path.Join("fetch", dir)
-		fetchCmd = append(fetchCmd, fmt.Sprintf("mkdir -p %[2]v && cp %[1]v/go.mod %[2]v && touch %[1]v/go.sum && cp %[1]v/go.sum %[2]v", repoDir, fetchDir))
+func buildToOutputs(ctx *wf.TaskContext, buildClient CloudBuildClient, build CloudBuild) (map[string]string, error) {
+	if _, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
+		return buildClient.Completed(ctx, build)
+	}); err != nil {
+		return nil, err
 	}
 
-	remoteErr, execErr = bc.Exec(ctx, "bash", buildlet.ExecOpts{
-		Dir:         ".",
-		Args:        []string{"-c", strings.Join(fetchCmd, " && ")},
-		Output:      writer,
-		SystemLevel: true,
+	outfs, err := buildClient.ResultFS(ctx, build)
+	if err != nil {
+		return nil, err
+	}
+	outMap := map[string]string{}
+	return outMap, fs.WalkDir(outfs, ".", func(path string, d fs.DirEntry, err error) error {
+		if d.IsDir() {
+			return nil
+		}
+		bytes, err := fs.ReadFile(outfs, path)
+		outMap[path] = string(bytes)
+		return err
 	})
-	if execErr != nil {
-		return nil, execErr
-	}
-	if remoteErr != nil {
-		return nil, fmt.Errorf("Command failed: %v", remoteErr)
-	}
-
-	tgz, err := bc.GetTar(ctx, "fetch")
-	if err != nil {
-		return nil, err
-	}
-	defer tgz.Close()
-	return tgzToMap(tgz)
-}
-
-func tgzToMap(r io.Reader) (map[string]string, error) {
-	gzr, err := gzip.NewReader(r)
-	if err != nil {
-		return nil, err
-	}
-	defer gzr.Close()
-
-	result := map[string]string{}
-	tr := tar.NewReader(gzr)
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if h.Typeflag != tar.TypeReg {
-			continue
-		}
-		b, err := io.ReadAll(tr)
-		if err != nil {
-			return nil, err
-		}
-		result[h.Name] = string(b)
-	}
-	return result, nil
-}
-
-// LatestGoBinaries returns a URL to the latest linux/amd64
-// Go distribution archive using the go.dev/dl/ JSON API.
-func LatestGoBinaries(ctx context.Context) (string, error) {
-	resp, err := ctxhttp.Get(ctx, http.DefaultClient, "https://go.dev/dl/?mode=json")
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status %v", resp.Status)
-	}
-
-	releases := []*WebsiteRelease{}
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
-		return "", err
-	}
-	for _, r := range releases {
-		for _, f := range r.Files {
-			if f.OS == "linux" && f.Arch == "amd64" && f.Kind == "archive" {
-				return "https://go.dev/dl/" + f.Filename, nil
-			}
-		}
-	}
-	return "", fmt.Errorf("no linux-amd64??")
 }
 
 func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo, branch string, files map[string]string, reviewers []string) (string, error) {

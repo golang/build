@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	cloud.google.com/go/bigquery v1.50.0
-	cloud.google.com/go/cloudbuild v1.9.0
+	cloud.google.com/go/cloudbuild v1.14.0
 	cloud.google.com/go/compute/metadata v0.2.3
 	cloud.google.com/go/datastore v1.11.0
 	cloud.google.com/go/errorreporting v0.3.0
@@ -76,8 +76,8 @@ require (
 	cloud.google.com/go v0.110.2 // indirect
 	cloud.google.com/go/compute v1.20.1 // indirect
 	cloud.google.com/go/container v1.15.0 // indirect
-	cloud.google.com/go/iam v1.0.1 // indirect
-	cloud.google.com/go/longrunning v0.4.2 // indirect
+	cloud.google.com/go/iam v1.1.0 // indirect
+	cloud.google.com/go/longrunning v0.5.0 // indirect
 	cloud.google.com/go/monitoring v1.13.0 // indirect
 	cloud.google.com/go/trace v1.9.0 // indirect
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect

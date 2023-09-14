@@ -5,10 +5,8 @@
 package task
 
 import (
-	"context"
 	"fmt"
 
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
 )
@@ -19,10 +17,8 @@ import (
 // Mozilla NSS source.
 
 type BundleNSSRootsTask struct {
-	Gerrit           GerritClient
-	GerritURL        string
-	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
-	LatestGoBinaries func(context.Context) (string, error)
+	Gerrit     GerritClient
+	CloudBuild CloudBuildClient
 }
 
 func (x *BundleNSSRootsTask) NewDefinition() *wf.Definition {
@@ -54,54 +50,13 @@ func (x *BundleNSSRootsTask) UpdateBundle(ctx *wf.TaskContext, reviewers []strin
 		return "skipped, existing pending bundle update CL", nil
 	}
 
-	binaries, err := x.LatestGoBinaries(ctx)
+	build, err := x.CloudBuild.RunScript(ctx, "cd crypto/x509roots; go generate", "crypto", []string{"crypto/x509roots/fallback/bundle.go"})
 	if err != nil {
 		return "", err
 	}
-	// linux-amd64 automatically disables outbound network access, unless explicitly specified by
-	// setting GO_DISABLE_OUTBOUND_NETWORK=0. This has to be done every time Exec is called, since
-	// once the network is disabled it cannot be undone. We could also use linux-amd64-longtest,
-	// which does not have this property.
-	bc, err := x.CreateBuildlet(ctx, "linux-amd64")
+	files, err := buildToOutputs(ctx, x.CloudBuild, build)
 	if err != nil {
 		return "", err
-	}
-	defer bc.Close()
-	if err := bc.PutTarFromURL(ctx, binaries, ""); err != nil {
-		return "", err
-	}
-	cryptoTarURL := fmt.Sprintf("%s/%s/+archive/%s.tar.gz", x.GerritURL, "crypto", "master")
-	if err := bc.PutTarFromURL(ctx, cryptoTarURL, "crypto"); err != nil {
-		return "", err
-	}
-
-	writer := &LogWriter{Logger: ctx}
-	go writer.Run(ctx)
-
-	remoteErr, execErr := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
-		Dir:      "crypto/x509roots",
-		Args:     []string{"generate", "."},
-		Output:   writer,
-		ExtraEnv: []string{"GO_DISABLE_OUTBOUND_NETWORK=0"},
-	})
-	if execErr != nil {
-		return "", fmt.Errorf("Exec failed: %v", execErr)
-	}
-	if remoteErr != nil {
-		return "", fmt.Errorf("Command failed: %v", remoteErr)
-	}
-	tgz, err := bc.GetTar(context.Background(), "crypto/x509roots/fallback")
-	if err != nil {
-		return "", err
-	}
-	defer tgz.Close()
-	crypto, err := tgzToMap(tgz)
-	if err != nil {
-		return "", err
-	}
-
-	files := map[string]string{
-		"x509roots/fallback/bundle.go": crypto["bundle.go"],
 	}
 	changeInput := gerrit.ChangeInput{
 		Project: "crypto",

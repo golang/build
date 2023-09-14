@@ -5,17 +5,12 @@
 package task
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
-	"path"
 	"strings"
 	"time"
 
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/mod/semver"
@@ -24,10 +19,8 @@ import (
 // TagTelemetryTasks implements a new workflow definition to tag
 // x/telemetry/config whenever the generated config.json changes.
 type TagTelemetryTasks struct {
-	Gerrit           GerritClient
-	GerritURL        string
-	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
-	LatestGoBinaries func(context.Context) (string, error)
+	Gerrit     GerritClient
+	CloudBuild CloudBuildClient
 }
 
 func (t *TagTelemetryTasks) NewDefinition() *wf.Definition {
@@ -63,55 +56,23 @@ func (t *TagTelemetryTasks) GenerateConfig(ctx *wf.TaskContext, reviewers []stri
 		return "", nil
 	}
 
-	binaries, err := t.LatestGoBinaries(ctx)
+	const script = `
+cp config/config.json config/config.json.before
+go run ./internal/configgen -w
+`
+
+	build, err := t.CloudBuild.RunScript(ctx, script, "telemetry", []string{"config/config.json.before", "config/config.json"})
 	if err != nil {
 		return "", err
 	}
 
-	// linux-amd64 automatically disables outbound network access, unless explicitly specified by
-	// setting GO_DISABLE_OUTBOUND_NETWORK=0. This has to be done every time Exec is called, since
-	// once the network is disabled it cannot be undone. We could also use linux-amd64-longtest,
-	// which does not have this property.
-	bc, err := t.CreateBuildlet(ctx, "linux-amd64")
+	outputs, err := buildToOutputs(ctx, t.CloudBuild, build)
 	if err != nil {
 		return "", err
 	}
-	defer bc.Close()
-	if err := bc.PutTarFromURL(ctx, binaries, ""); err != nil {
-		return "", fmt.Errorf("putting Go binaries: %v", err)
-	}
-	tarURL := fmt.Sprintf("%s/%s/+archive/%s.tar.gz", t.GerritURL, "telemetry", "master")
-	if err := bc.PutTarFromURL(ctx, tarURL, "telemetry"); err != nil {
-		return "", fmt.Errorf("putting telemetry content: %v", err)
-	}
 
-	before, err := readBuildletFile(bc, "telemetry/config/config.json")
-	if err != nil {
-		return "", fmt.Errorf("reading initial config: %v", err)
-	}
-
-	logWriter := &LogWriter{Logger: ctx}
-	go logWriter.Run(ctx)
-	remoteErr, execErr := bc.Exec(ctx, "./go/bin/go", buildlet.ExecOpts{
-		Dir:      "telemetry",
-		Args:     []string{"run", "./internal/configgen", "-w"},
-		Output:   logWriter,
-		Path:     []string{"$WORKDIR/go/bin", "$PATH"},
-		ExtraEnv: []string{"GO_DISABLE_OUTBOUND_NETWORK=0"},
-	})
-	if execErr != nil {
-		return "", fmt.Errorf("Exec failed: %v", execErr)
-	}
-	if remoteErr != nil {
-		return "", fmt.Errorf("Command failed: %v", remoteErr)
-	}
-
-	after, err := readBuildletFile(bc, "telemetry/config/config.json")
-	if err != nil {
-		return "", fmt.Errorf("reading generated config: %v", err)
-	}
-
-	if bytes.Equal(before, after) {
+	before, after := outputs["config/config.json.before"], outputs["config/config.json"]
+	if before == after {
 		ctx.Printf("not creating CL: config has not changed")
 		return "", nil
 	}
@@ -125,38 +86,6 @@ func (t *TagTelemetryTasks) GenerateConfig(ctx *wf.TaskContext, reviewers []stri
 		"config/config.json": string(after),
 	}
 	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
-}
-
-// readBuildletFile reads a single file from the buildlet at the specified file
-// path.
-func readBuildletFile(bc buildlet.RemoteClient, file string) ([]byte, error) {
-	dir, name := path.Split(file)
-	tgz, err := bc.GetTar(context.Background(), dir)
-	if err != nil {
-		return nil, err
-	}
-	defer tgz.Close()
-
-	gzr, err := gzip.NewReader(tgz)
-	if err != nil {
-		return nil, err
-	}
-	defer gzr.Close()
-
-	tr := tar.NewReader(gzr)
-	for {
-		h, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if h.Name == name && h.Typeflag == tar.TypeReg {
-			return io.ReadAll(tr)
-		}
-	}
-	return nil, fmt.Errorf("file %q not found", file)
 }
 
 // AwaitSubmitted waits for the CL with the given change ID to be submitted.

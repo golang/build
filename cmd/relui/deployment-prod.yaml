@@ -45,6 +45,7 @@ spec:
             - "--serving-files-base=gs://golang"
             - "--edge-cache-url=https://dl.google.com/go"
             - "--website-upload-url=https://go.dev/dl/upload"
+            - "--cloud-build-project=symbolic-datum-552"
           readinessProbe:
             httpGet:
               path: /healthz

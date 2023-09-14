@@ -15,18 +15,15 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
 )
 
 // VersionTasks contains tasks related to versioning the release.
 type VersionTasks struct {
-	Gerrit           GerritClient
-	GerritURL        string
-	GoProject        string
-	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
-	LatestGoBinaries func(context.Context) (string, error)
+	Gerrit     GerritClient
+	CloudBuild CloudBuildClient
+	GoProject  string
 }
 
 // GetCurrentMajor returns the most recent major Go version, and the time at
@@ -221,47 +218,15 @@ func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit str
 }
 
 func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, reviewers []string, version string) (string, error) {
-	var files = make(map[string]string) // Map key is relative path, and map value is file content.
+	build, err := t.CloudBuild.RunScript(ctx, "go generate ./internal/imports", "tools", []string{"internal/imports/zstdlib.go"})
+	if err != nil {
+		return "", err
+	}
 
-	binaries, err := t.LatestGoBinaries(ctx)
+	files, err := buildToOutputs(ctx, t.CloudBuild, build)
 	if err != nil {
 		return "", err
 	}
-	bc, err := t.CreateBuildlet(ctx, "linux-amd64-longtest")
-	if err != nil {
-		return "", err
-	}
-	defer bc.Close()
-	if err := bc.PutTarFromURL(ctx, binaries, ""); err != nil {
-		return "", err
-	}
-	toolsTarURL := fmt.Sprintf("%s/%s/+archive/%s.tar.gz", t.GerritURL, "tools", "master")
-	if err := bc.PutTarFromURL(ctx, toolsTarURL, "tools"); err != nil {
-		return "", err
-	}
-	writer := &LogWriter{Logger: ctx}
-	go writer.Run(ctx)
-	remoteErr, execErr := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
-		Dir:    "tools",
-		Args:   []string{"generate", "./internal/imports"},
-		Output: writer,
-	})
-	if execErr != nil {
-		return "", fmt.Errorf("Exec failed: %v", execErr)
-	}
-	if remoteErr != nil {
-		return "", fmt.Errorf("Command failed: %v", remoteErr)
-	}
-	tgz, err := bc.GetTar(context.Background(), "tools/internal/imports")
-	if err != nil {
-		return "", err
-	}
-	defer tgz.Close()
-	tools, err := tgzToMap(tgz)
-	if err != nil {
-		return "", err
-	}
-	files["internal/imports/zstdlib.go"] = tools["zstdlib.go"]
 
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",

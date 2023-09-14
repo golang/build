@@ -1428,15 +1428,15 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 	return task.Published{Version: version, Files: files}, nil
 }
 
-func (b *BuildReleaseTasks) runGoogleDockerBuild(ctx context.Context, version string) (string, error) {
+func (b *BuildReleaseTasks) runGoogleDockerBuild(ctx context.Context, version string) (task.CloudBuild, error) {
 	// Because we want to publish versions without the leading "go", it's easiest to strip it here.
 	v := strings.TrimPrefix(version, "go")
 	return b.CloudBuildClient.RunBuildTrigger(ctx, b.GoogleDockerBuildProject, b.GoogleDockerBuildTrigger, map[string]string{"_GO_VERSION": v})
 }
 
-func (b *BuildReleaseTasks) awaitCloudBuild(ctx *wf.TaskContext, id string) (string, error) {
+func (b *BuildReleaseTasks) awaitCloudBuild(ctx *wf.TaskContext, build task.CloudBuild) (string, error) {
 	detail, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
-		return b.CloudBuildClient.Completed(ctx, b.GoogleDockerBuildProject, id)
+		return b.CloudBuildClient.Completed(ctx, build)
 	})
 	return detail, err
 }

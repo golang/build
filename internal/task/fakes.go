@@ -13,6 +13,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -28,6 +30,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/untar"
 	wf "golang.org/x/build/internal/workflow"
@@ -658,6 +661,35 @@ func fakeSignPKG(f, msg string) string {
 	return f + ".signed"
 }
 
+func tgzToMap(r io.Reader) (map[string]string, error) {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return nil, err
+	}
+	defer gzr.Close()
+
+	result := map[string]string{}
+	tr := tar.NewReader(gzr)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if h.Typeflag != tar.TypeReg {
+			continue
+		}
+		b, err := io.ReadAll(tr)
+		if err != nil {
+			return nil, err
+		}
+		result[h.Name] = string(b)
+	}
+	return result, nil
+}
+
 func fakeSignFile(f, msg string) string {
 	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
 	if err != nil {
@@ -686,26 +718,99 @@ func fakeGPGFile(f string) string {
 
 var _ CloudBuildClient = (*FakeCloudBuild)(nil)
 
+func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowedTriggers map[string]map[string]string, fakeGo string) *FakeCloudBuild {
+	goDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(goDir, "go"), []byte(fakeGo), 0777); err != nil {
+		t.Fatal(err)
+	}
+	return &FakeCloudBuild{
+		t:               t,
+		gerrit:          gerrit,
+		project:         project,
+		allowedTriggers: allowedTriggers,
+		goDir:           goDir,
+		results:         map[string]error{},
+	}
+}
+
 type FakeCloudBuild struct {
-	Project       string
-	AllowedBuilds map[string]map[string]string
+	t               *testing.T
+	gerrit          *FakeGerrit
+	project         string
+	allowedTriggers map[string]map[string]string
+	goDir           string
+
+	mu      sync.Mutex
+	results map[string]error
 }
 
-const fakeBuildID = "build-12345"
-
-func (cb *FakeCloudBuild) RunBuildTrigger(ctx context.Context, project string, trigger string, substitutions map[string]string) (string, error) {
-	if project != cb.Project {
-		return "", fmt.Errorf("unexpected project %v, want %v", project, cb.Project)
+func (cb *FakeCloudBuild) RunBuildTrigger(ctx context.Context, project string, trigger string, substitutions map[string]string) (CloudBuild, error) {
+	if project != cb.project {
+		return CloudBuild{}, fmt.Errorf("unexpected project %v, want %v", project, cb.project)
 	}
-	if allowedSubs, ok := cb.AllowedBuilds[trigger]; !ok || !reflect.DeepEqual(allowedSubs, substitutions) {
-		return "", fmt.Errorf("unexpected trigger %v: got params %#v, want %#v", trigger, substitutions, allowedSubs)
+	if allowedSubs, ok := cb.allowedTriggers[trigger]; !ok || !reflect.DeepEqual(allowedSubs, substitutions) {
+		return CloudBuild{}, fmt.Errorf("unexpected trigger %v: got params %#v, want %#v", trigger, substitutions, allowedSubs)
 	}
-	return fakeBuildID, nil
+	id := fmt.Sprintf("build-%v", rand.Int63())
+	cb.mu.Lock()
+	cb.results[id] = nil
+	cb.mu.Unlock()
+	return CloudBuild{Project: project, ID: id}, nil
 }
 
-func (cb *FakeCloudBuild) Completed(ctx context.Context, project string, id string) (string, bool, error) {
-	if project != cb.Project || id != fakeBuildID {
-		return "", false, fmt.Errorf("unexpected build project/id: got %v %v, want %v %v", project, id, cb.Project, fakeBuildID)
+func (cb *FakeCloudBuild) Completed(ctx context.Context, build CloudBuild) (string, bool, error) {
+	if build.Project != cb.project {
+		return "", false, fmt.Errorf("unexpected build project: got %q, want %q", build.Project, cb.project)
 	}
-	return "here's some build detail", true, nil
+	cb.mu.Lock()
+	result, ok := cb.results[build.ID]
+	cb.mu.Unlock()
+	if !ok {
+		return "", false, fmt.Errorf("unknown build ID %q", build.ID)
+	}
+	return "here's some build detail", true, result
+}
+
+func (c *FakeCloudBuild) ResultFS(ctx context.Context, build CloudBuild) (fs.FS, error) {
+	return gcsfs.FromURL(ctx, nil, build.ResultURL)
+}
+
+func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritProject string, outputs []string) (CloudBuild, error) {
+	var wd string
+	if gerritProject != "" {
+		repo, err := cb.gerrit.repo(gerritProject)
+		if err != nil {
+			return CloudBuild{}, err
+		}
+		dir, err := (&Git{}).Clone(ctx, repo.dir.dir)
+		defer dir.Close()
+		wd = dir.dir
+	} else {
+		wd = cb.t.TempDir()
+	}
+
+	cmd := exec.Command("bash", "-eux")
+	cmd.Stdin = strings.NewReader(script)
+	cmd.Dir = wd
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "PATH=/bin:/usr/bin:"+cb.goDir)
+	// redirect stdout/err
+	_, runErr := cmd.Output()
+
+	id := fmt.Sprintf("build-%v", rand.Int63())
+	resultDir := cb.t.TempDir()
+	if runErr == nil {
+		for _, out := range outputs {
+			target := filepath.Join(resultDir, out)
+			os.MkdirAll(filepath.Dir(target), 0777)
+			if err := os.Rename(filepath.Join(wd, out), target); err != nil {
+				runErr = fmt.Errorf("collecting outputs: %v", err)
+				break
+			}
+		}
+	}
+	cb.mu.Lock()
+	cb.results[id] = runErr
+	cb.mu.Unlock()
+	return CloudBuild{Project: cb.project, ID: id, ResultURL: "file://" + resultDir}, nil
 }

@@ -7,8 +7,6 @@ package task
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -84,19 +82,10 @@ func TestTagTelemetry(t *testing.T) {
 
 echo -n %q > config/config.json
 `, test.generatedConfig)
-			goServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				ServeTarball("dl/go1.19.linux-amd64.tar.gz", map[string]string{
-					"go/bin/go": fakeGo,
-				}, w, r)
-			}))
 
 			tasks := &TagTelemetryTasks{
-				Gerrit:         gerrit,
-				GerritURL:      gerrit.GerritURL(),
-				CreateBuildlet: NewFakeBuildlets(t, "", nil).CreateBuildlet,
-				LatestGoBinaries: func(context.Context) (string, error) {
-					return goServer.URL + "/dl/go1.19.linux-amd64.tar.gz", nil
-				},
+				Gerrit:     gerrit,
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, fakeGo),
 			}
 
 			wd := tasks.NewDefinition()
