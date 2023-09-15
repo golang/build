@@ -50,15 +50,17 @@ import (
 )
 
 var (
-	haltEntireOS = flag.Bool("halt", true, "halt OS in /halt handler. If false, the buildlet process just ends.")
-	rebootOnHalt = flag.Bool("reboot", false, "reboot system in /halt handler.")
-	workDir      = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
-	listenAddr   = flag.String("listen", "AUTO", "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
-	reverseType  = flag.String("reverse-type", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is the dashboard/builders.go Hosts map key, naming a HostConfig. This buildlet will receive work for any BuildConfig specifying this named HostConfig.")
-	coordinator  = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
-	hostname     = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
-	healthAddr   = flag.String("health-addr", "0.0.0.0:8080", "For reverse buildlets, address to listen for /healthz requests separately from the reverse dialer to the coordinator.")
+	haltEntireOS     = flag.Bool("halt", true, "halt OS in /halt handler. If false, the buildlet process just ends.")
+	rebootOnHalt     = flag.Bool("reboot", false, "reboot system in /halt handler.")
+	workDir          = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
+	listenAddr       = flag.String("listen", "AUTO", "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
+	reverseType      = flag.String("reverse-type", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is the dashboard/builders.go Hosts map key, naming a HostConfig. This buildlet will receive work for any BuildConfig specifying this named HostConfig.")
+	coordinator      = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
+	hostname         = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
+	healthAddr       = flag.String("health-addr", "0.0.0.0:8080", "For reverse buildlets, address to listen for /healthz requests separately from the reverse dialer to the coordinator.")
 	version      = flag.Bool("version", false, "print buildlet version and exit")
+	gomoteServerAddr = flag.String("gomote-server-addr", "gomote.golang.org:443", "Gomote server address and port")
+	swarmingBot      = flag.Bool("swarming-bot", false, "start the buildlet on a swarming bot")
 )
 
 // Bump this whenever something notable happens, or when another
@@ -84,7 +86,8 @@ var (
 //	25: use removeAllIncludingReadonly for all work area cleanup
 //	26: clean up path validation and normalization
 //	27: export GOPLSCACHE=$workdir/goplscache
-const buildletVersion = 27
+//	28: add support for gomote server
+const buildletVersion = 28
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -249,7 +252,7 @@ func main() {
 	http.Handle("/connect-ssh", requireAuth(handleConnectSSH))
 	http.HandleFunc("/healthz", handleHealthz)
 
-	if !isReverse {
+	if !isReverse && !*swarmingBot {
 		listenForCoordinator()
 	} else {
 		go func() {
@@ -257,9 +260,9 @@ func main() {
 				log.Printf("Error in serveReverseHealth: %v", err)
 			}
 		}()
-		ln, err := dialCoordinator()
+		ln, err := dialServer()
 		if err != nil {
-			log.Fatalf("Error dialing coordinator: %v", err)
+			log.Fatalf("Error dialing server: %v", err)
 		}
 		srv := &http.Server{}
 		err = srv.Serve(ln)
@@ -272,6 +275,13 @@ func main() {
 		}
 		os.Exit(0)
 	}
+}
+
+func dialServer() (net.Listener, error) {
+	if *swarmingBot {
+		return dialGomoteServer()
+	}
+	return dialCoordinator()
 }
 
 func listenForCoordinator() {
