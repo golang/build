@@ -572,15 +572,29 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     name = builder_name(project, go_branch_short, builder_type)
 
+    # Determine if we should be sharding tests, and how many shards.
+    test_shards = 1
+    if project == "go" and not is_capacity_constrained(env.low_capacity_hosts, builder_type) and go_branch_short != "go1.20":
+        # TODO(mknyszek): Remove the exception for the go1.20 branch once it
+        # is no longer supported.
+        test_shards = 4
+    if "misccompile" in run_mods:
+        if project == "go":
+            test_shards = 12
+        else:
+            test_shards = 1
+
     # Emit the builder definitions.
-    if project == "go":
-        define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
+    if project == "go" or test_shards > 1:
+        define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
+    elif test_shards == 1:
+        define_allmode_builder(env, name, base_props, base_dims, emit_builder)
     else:
-        define_subrepo_builder(env, name, base_props, base_dims, emit_builder)
+        fail("unhandled builder definition")
 
     return env.bucket + "/" + name
 
-def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
+def define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
     os, arch, _, _ = split_builder_type(builder_type)
 
     # Create 3 builders: the main entrypoint/coordinator builder,
@@ -588,23 +602,16 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     #
     # This separation of builders allows for the coordinator builder to have elevated privileges,
     # because it will never run code still in code review. Furthermore, this separation allows
-    # for sharding tests, which is very important for build latency for the Go repository
-    # specifically.
+    # for sharding tests, which lets us improve build latency beyond what one machine is able to provide.
     #
     # The main/coordinator builder must be the only one with the ability
     # to schedule new builds.
     coord_name = name
-    build_name = name + "-build_go"
+    if project == "go":
+        build_name = name + "-build_go"
+    else:
+        build_name = builder_name("go", go_branch_short, builder_type) + "-build_go"
     test_name = name + "-test_only"
-
-    # Determine if we should be sharding tests, and how many shards.
-    test_shards = 1
-    if not is_capacity_constrained(env.low_capacity_hosts, builder_type) and go_branch_short != "go1.20":
-        # TODO(mknyszek): Remove the exception for the go1.20 branch once it
-        # is no longer supported.
-        test_shards = 4
-    if "misccompile" in run_mods:
-        test_shards = 12
 
     # The main repo builder also triggers subrepo builders of the same builder type.
     #
@@ -612,22 +619,23 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     # ports only apply to the main Go repository and are not supported by all subrepos.
     # PROJECTS should probably contain a table of supported ports or something.
     builders_to_trigger = []
-    if env.bucket == "try":
-        builders_to_trigger = [
-            "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
-            for project in PROJECTS
-            # TODO(dmitshur): Factor this into enabled or so. It needs to know the difference
-            # between x/tools itself being tested vs its tests being used to test Go.
-            # At that point the "try" and "ci" cases can be joined. For now, the existing
-            # policy of running x/tools tests on linux/amd64 is hardcoded below.
-            if project == "tools" and builder_type == "linux-amd64"
-        ]
-    elif env.bucket == "ci":
-        builders_to_trigger = [
-            "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
-            for project in PROJECTS
-            if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[2]
-        ]
+    if project == "go":
+        if env.bucket == "try":
+            builders_to_trigger = [
+                "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
+                for project in PROJECTS
+                # TODO(dmitshur): Factor this into enabled or so. It needs to know the difference
+                # between x/tools itself being tested vs its tests being used to test Go.
+                # At that point the "try" and "ci" cases can be joined. For now, the existing
+                # policy of running x/tools tests on linux/amd64 is hardcoded below.
+                if project == "tools" and builder_type == "linux-amd64"
+            ]
+        elif env.bucket == "ci":
+            builders_to_trigger = [
+                "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
+                for project in PROJECTS
+                if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[2]
+            ]
 
     # Coordinator builder.
     #
@@ -660,19 +668,20 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
     )
 
     # Build builder.
-    build_dims = dict(base_dims)
-    build_props = dict(base_props)
-    build_props.update({
-        "mode": GOLANGBUILD_MODES["BUILD"],
-        "build_mode": {},
-    })
-    emit_builder(
-        name = build_name,
-        bucket = env.worker_bucket,
-        dimensions = build_dims,
-        properties = build_props,
-        service_account = env.worker_sa,
-    )
+    if project == "go":
+        build_dims = dict(base_dims)
+        build_props = dict(base_props)
+        build_props.update({
+            "mode": GOLANGBUILD_MODES["BUILD"],
+            "build_mode": {},
+        })
+        emit_builder(
+            name = build_name,
+            bucket = env.worker_bucket,
+            dimensions = build_dims,
+            properties = build_props,
+            service_account = env.worker_sa,
+        )
 
     # Test builder.
     test_dims = dict(base_dims)
@@ -692,12 +701,12 @@ def define_go_builder(env, name, go_branch_short, builder_type, run_mods, base_p
         allowed_property_overrides = ["test_shard"],
     )
 
-def define_subrepo_builder(env, name, base_props, base_dims, emit_builder):
+def define_allmode_builder(env, name, base_props, base_dims, emit_builder):
     # Create an "ALL" mode builder which just performs the full build serially.
     #
-    # This builder is substantially simpler than the Go builders because it doesn't need
-    # to trigger any downstream builders, and also doesn't need test sharding (all subrepos'
-    # tests run fast enough that it's unnecessary).
+    # This builder is substantially simpler because it doesn't need to trigger any
+    # downstream builders, and also doesn't need test sharding (most subrepos' tests
+    # run fast enough that it's unnecessary).
     all_props = dict(base_props)
     all_props.update({
         "mode": GOLANGBUILD_MODES["ALL"],
