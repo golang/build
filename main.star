@@ -581,7 +581,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     if "misccompile" in run_mods:
         if project == "go":
             test_shards = 12
-        elif project == "arch":
+        else:
             test_shards = 3
 
     # Emit the builder definitions.
