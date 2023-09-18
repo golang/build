@@ -674,6 +674,8 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         build_props.update({
             "mode": GOLANGBUILD_MODES["BUILD"],
             "build_mode": {},
+            # For sharded x repo builders, go_commit will be overwritten by the coordinator builder.
+            "go_commit": "",
         })
         emit_builder(
             name = build_name,
@@ -681,6 +683,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
             dimensions = build_dims,
             properties = build_props,
             service_account = env.worker_sa,
+            allowed_property_overrides = ["go_commit"],
         )
 
     # Test builder.
@@ -689,6 +692,8 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
     test_props.update({
         "mode": GOLANGBUILD_MODES["TEST"],
         "test_mode": {},
+        # For sharded x repo builders, go_commit will be overwritten by the coordinator builder.
+        "go_commit": "",
         # The default is no sharding. This may be overwritten by the coordinator builder.
         "test_shard": {"shard_id": 0, "num_shards": 1},
     })
@@ -698,7 +703,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         dimensions = test_dims,
         properties = test_props,
         service_account = env.worker_sa,
-        allowed_property_overrides = ["test_shard"],
+        allowed_property_overrides = ["go_commit", "test_shard"],
     )
 
 def define_allmode_builder(env, name, base_props, base_dims, emit_builder):
