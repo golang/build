@@ -714,37 +714,46 @@ func (b *BuildReleaseTasks) diffArtifacts(ctx *wf.TaskContext, a1, a2 artifact) 
 }
 
 func (b *BuildReleaseTasks) hashArtifact(ctx *wf.TaskContext, a artifact) (map[string]string, error) {
-	var hashes map[string]string
+	hashes := map[string]string{}
 	_, err := b.runBuildStep(ctx, nil, nil, a, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
-		var err error
-		hashes, err = tarballHashes(r)
-		return err
+		return tarballHashes(r, "", hashes, false)
 	})
 	return hashes, err
 }
 
-func tarballHashes(r io.Reader) (map[string]string, error) {
+func tarballHashes(r io.Reader, prefix string, hashes map[string]string, includeHeaders bool) error {
 	gzr, err := gzip.NewReader(r)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer gzr.Close()
 	tr := tar.NewReader(gzr)
-	hashes := map[string]string{}
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return nil, fmt.Errorf("reading tar header: %v", err)
+			return fmt.Errorf("reading tar header: %v", err)
 		}
-		h := sha256.New()
-		if _, err := io.CopyN(h, tr, header.Size); err != nil {
-			return nil, fmt.Errorf("reading file %q: %v", header.Name, err)
+		if strings.HasSuffix(header.Name, ".tar.gz") {
+			if err := tarballHashes(tr, header.Name+":", hashes, true); err != nil {
+				return fmt.Errorf("reading inner tarball %v: %v", header.Name, err)
+			}
+		} else {
+			h := sha256.New()
+			if _, err := io.CopyN(h, tr, header.Size); err != nil {
+				return fmt.Errorf("reading file %q: %v", header.Name, err)
+			}
+			// At the top level, we don't care about headers, only contents.
+			// But in inner archives, headers are contents and we care a lot.
+			if includeHeaders {
+				hashes[prefix+header.Name] = fmt.Sprintf("%v %X", header, h.Sum(nil))
+			} else {
+				hashes[prefix+header.Name] = fmt.Sprintf("%X", h.Sum(nil))
+			}
 		}
-		hashes[header.Name] = fmt.Sprintf("%X", h.Sum(nil))
 	}
-	return hashes, nil
+	return nil
 }
 
 func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, builder string, target *releasetargets.Target, source artifact) (artifact, error) {
