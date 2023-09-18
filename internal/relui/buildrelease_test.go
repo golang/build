@@ -496,7 +496,7 @@ VERSION=$(head -n 1 $GO/VERSION)
 if [[ $# >0 && $1 == "-distpack" ]]; then
 	mkdir -p $GO/pkg/distpack
 	tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).tar
-	(cd $GO/.. && find . | xargs touch -t 202301010000 && tar cf $tmp go)
+	(cd $GO/.. && find . | xargs touch -t 202301010000 && find . | xargs chmod 0777 && tar cf $tmp go)
 	# On macOS, tar -czf puts a timestamp in the gzip header. Do it ourselves with --no-name to suppress it.
 	gzip --no-name $tmp
 	mv $tmp.gz $GO/pkg/distpack/$VERSION.src.tar.gz
@@ -540,12 +540,12 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 	"windows")
 		tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).zip
 		# The zip command isn't installed on our buildlets. Python is.
-		(cd $GO/.. && find . | xargs touch -t 202301010000 && python3 -m zipfile -c $tmp go/)
+		(cd $GO/.. && find . | xargs touch -t 202301010000 && find . | xargs chmod 0777 && python3 -m zipfile -c $tmp go/)
 		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.zip
 		;;
 	*)
 		tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).tar
-		(cd $GO/.. && find . | xargs touch -t 202301010000 && tar cf $tmp go)
+		(cd $GO/.. && find . | xargs touch -t 202301010000 && find . | xargs chmod 0777 && tar cf $tmp go)
 		# On macOS, tar -czf puts a timestamp in the gzip header. Do it ourselves with --no-name to suppress it.
 		gzip --no-name $tmp
 		mv $tmp.gz $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.tar.gz
@@ -560,7 +560,7 @@ if [[ $# >0 && $1 == "-distpack" ]]; then
 	mkdir -p $MODDIR
 	cp -r $GO $MODDIR
 	tmp=$(mktemp -d $TMPDIR/buildrel.XXXXXXXX).zip
-	(cd $MODTMP && find . | xargs touch -t 202301010000 && python3 -m zipfile -c $tmp .)
+	(cd $MODTMP && find . | xargs touch -t 202301010000 && find . | xargs chmod 0777 && python3 -m zipfile -c $tmp .)
 	mv $tmp $GO/pkg/distpack/$MODVER.zip
 fi
 `

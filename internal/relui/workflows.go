@@ -500,7 +500,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		var tar, zip wf.Value[artifact]
 		var mod wf.Value[moduleArtifact]
 		if enableDistpack(major) {
-			distpack := wf.Task3(wd, "Build distpack", tasks.buildDistpack, wf.Const("linux-amd64"), wf.Const(target), source)
+			distpack := wf.Task3(wd, "Build distpack", tasks.buildDistpack, wf.Const(""), wf.Const(target), source)
 			reproducer := wf.Task3(wd, "Reproduce distpack on Windows", tasks.buildDistpack, wf.Const("windows-amd64-2016"), wf.Const(target), source)
 			match := wf.Action2(wd, "Check distpacks match", tasks.checkDistpacksMatch, distpack, reproducer)
 			blockers = append(blockers, match)
@@ -620,14 +620,66 @@ func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, distpack bool, revi
 		url = b.PrivateGerritURL
 		rev = securityRevision
 	}
+	tarURL := url + "/+archive/" + rev + ".tar.gz"
+	resp, err := b.GerritHTTPClient.Get(tarURL)
+	if err != nil {
+		return artifact{}, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return artifact{}, fmt.Errorf("failed to fetch %q: %v", tarURL, resp.Status)
+	}
+	defer resp.Body.Close()
+
 	if distpack {
-		return b.runBuildStep(ctx, nil, dashboard.Builders["linux-amd64"], artifact{}, "src.tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
-			return bs.BuildSourceDistpack(ctx, b.GerritHTTPClient, url, rev, versionFile, w)
+		return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+			return b.buildSourceGCB(ctx, resp.Body, versionFile, w)
 		})
 	}
 	return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
-		return task.WriteSourceArchive(ctx, b.GerritHTTPClient, url, rev, versionFile, w)
+		return task.WriteSourceArchive(ctx, resp.Body, versionFile, w)
 	})
+}
+
+func (b *BuildReleaseTasks) buildSourceGCB(ctx *wf.TaskContext, r io.Reader, versionFile string, w io.Writer) error {
+	filename, f, err := b.ScratchFS.OpenWrite(ctx, "source.tgz")
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(f, r); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+
+	script := fmt.Sprintf(`
+gsutil cp %q source.tgz
+mkdir go
+tar -xf source.tgz -C go
+echo -ne %q > go/VERSION
+(cd go/src && GOOS=linux GOARCH=amd64 ./make.bash -distpack)
+mv go/pkg/distpack/*.src.tar.gz src.tar.gz
+`, b.ScratchFS.URL(ctx, filename), versionFile)
+
+	build, err := b.CloudBuildClient.RunScript(ctx, script, "", []string{"src.tar.gz"})
+	if err != nil {
+		return err
+	}
+	if _, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
+		return b.CloudBuildClient.Completed(ctx, build)
+	}); err != nil {
+		return err
+	}
+	resultFS, err := b.CloudBuildClient.ResultFS(ctx, build)
+	if err != nil {
+		return err
+	}
+	distpack, err := resultFS.Open("src.tar.gz")
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, distpack)
+	return err
 }
 
 func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, distpack bool, branch, versionFile string, source artifact) (head string, _ error) {
@@ -696,10 +748,49 @@ func tarballHashes(r io.Reader) (map[string]string, error) {
 }
 
 func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, builder string, target *releasetargets.Target, source artifact) (artifact, error) {
+	if builder == "" {
+		return b.runBuildStep(ctx, target, nil, artifact{}, "tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+			return b.buildDistpackGCB(ctx, target, source, w)
+		})
+	}
 	bc := dashboard.Builders[builder]
 	return b.runBuildStep(ctx, target, bc, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 		return bs.BuildDistpack(ctx, r, w)
 	})
+}
+
+func (b *BuildReleaseTasks) buildDistpackGCB(ctx *wf.TaskContext, target *releasetargets.Target, source artifact, w io.Writer) error {
+	// We need GOROOT_FINAL both during the binary build and test runs. See go.dev/issue/52236.
+	makeEnv := []string{"GOROOT_FINAL=" + dashboard.GorootFinal(target.GOOS)}
+	// Add extra vars from the target's configuration.
+	makeEnv = append(makeEnv, target.ExtraEnv...)
+	makeEnv = append(makeEnv, "GOOS="+target.GOOS, "GOARCH="+target.GOARCH)
+
+	script := fmt.Sprintf(`
+gsutil cp %q src.tar.gz
+tar -xf src.tar.gz
+(cd go/src && %v ./make.bash -distpack)
+(cd go/pkg/distpack && tar -czf ../../../distpacks.tar.gz *)
+`, b.ScratchFS.URL(ctx, source.Scratch), strings.Join(makeEnv, " "))
+	build, err := b.CloudBuildClient.RunScript(ctx, script, "", []string{"distpacks.tar.gz"})
+	if err != nil {
+		return err
+	}
+	if _, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
+		return b.CloudBuildClient.Completed(ctx, build)
+	}); err != nil {
+		return err
+	}
+	resultFS, err := b.CloudBuildClient.ResultFS(ctx, build)
+	if err != nil {
+		return err
+	}
+	distpack, err := resultFS.Open("distpacks.tar.gz")
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, distpack)
+	return err
 }
 
 func (b *BuildReleaseTasks) checkDistpacksMatch(ctx *wf.TaskContext, linux, windows artifact) error {

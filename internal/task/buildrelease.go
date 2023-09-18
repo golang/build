@@ -13,7 +13,6 @@ import (
 	"embed"
 	"fmt"
 	"io"
-	"net/http"
 	"path"
 	"regexp"
 	"strings"
@@ -28,18 +27,9 @@ import (
 )
 
 // WriteSourceArchive writes a source archive to out, based on revision with version written in as VERSION.
-func WriteSourceArchive(ctx *workflow.TaskContext, client *http.Client, gerritURL, revision, version string, out io.Writer) error {
+func WriteSourceArchive(ctx *workflow.TaskContext, source io.Reader, version string, out io.Writer) error {
 	ctx.Printf("Create source archive.")
-	tarURL := gerritURL + "/+archive/" + revision + ".tar.gz"
-	resp, err := client.Get(tarURL)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch %q: %v", tarURL, resp.Status)
-	}
-	defer resp.Body.Close()
-	gzReader, err := gzip.NewReader(resp.Body)
+	gzReader, err := gzip.NewReader(source)
 	if err != nil {
 		return err
 	}
@@ -220,38 +210,6 @@ type BuildletStep struct {
 	Buildlet    buildlet.RemoteClient
 	BuildConfig *dashboard.BuildConfig
 	LogWriter   io.Writer
-}
-
-func (b *BuildletStep) BuildSourceDistpack(ctx *workflow.TaskContext, client *http.Client, gerritURL, revision, versionFile string, out io.Writer) error {
-	ctx.Printf("Create source archive.")
-	tarURL := gerritURL + "/+archive/" + revision + ".tar.gz"
-	resp, err := client.Get(tarURL)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch %q: %v", tarURL, resp.Status)
-	}
-
-	ctx.Printf("Pushing source to buildlet from %v.", tarURL)
-	if err := b.Buildlet.PutTar(ctx, resp.Body, "go"); err != nil {
-		return fmt.Errorf("failed to put source tarball: %v", err)
-	}
-	ctx.Printf("Writing VERSION file.")
-	if err := b.Buildlet.Put(ctx, bytes.NewBufferString(versionFile), "go/VERSION", 0666); err != nil {
-		return fmt.Errorf("failed to write VERSION file: %v", err)
-	}
-	if err := b.buildDistpack(ctx, []string{"GOOS=linux", "GOARCH=amd64"}); err != nil {
-		return err
-	}
-	if err := b.exec(ctx, "bash", []string{"-c", "mkdir fetch && mv go/pkg/distpack/*.src.tar.gz fetch/"}, buildlet.ExecOpts{
-		Dir:         ".",
-		SystemLevel: true,
-	}); err != nil {
-		return err
-	}
-	return fetchFile(ctx, b.Buildlet, out, "fetch")
 }
 
 func (b *BuildletStep) BuildDistpack(ctx *workflow.TaskContext, sourceArchive io.Reader, out io.Writer) error {

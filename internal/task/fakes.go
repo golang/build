@@ -718,9 +718,24 @@ func fakeGPGFile(f string) string {
 
 var _ CloudBuildClient = (*FakeCloudBuild)(nil)
 
+const fakeGsutil = `
+case "$1" in
+"cp")
+  cp "${2#file://}" "${3#file://}"
+  ;;
+*)
+  echo unexpected command $@
+  exit 1
+  ;;
+esac
+`
+
 func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowedTriggers map[string]map[string]string, fakeGo string) *FakeCloudBuild {
-	goDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(goDir, "go"), []byte(fakeGo), 0777); err != nil {
+	toolDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(toolDir, "go"), []byte(fakeGo), 0777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(toolDir, "gsutil"), []byte(fakeGsutil), 0777); err != nil {
 		t.Fatal(err)
 	}
 	return &FakeCloudBuild{
@@ -728,7 +743,7 @@ func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowed
 		gerrit:          gerrit,
 		project:         project,
 		allowedTriggers: allowedTriggers,
-		goDir:           goDir,
+		toolDir:         toolDir,
 		results:         map[string]error{},
 	}
 }
@@ -738,7 +753,7 @@ type FakeCloudBuild struct {
 	gerrit          *FakeGerrit
 	project         string
 	allowedTriggers map[string]map[string]string
-	goDir           string
+	toolDir         string
 
 	mu      sync.Mutex
 	results map[string]error
@@ -789,14 +804,22 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 		wd = cb.t.TempDir()
 	}
 
+	tempDir := cb.t.TempDir()
 	cmd := exec.Command("bash", "-eux")
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Dir = wd
 	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "PATH=/bin:/usr/bin:"+cb.goDir)
-	// redirect stdout/err
-	_, runErr := cmd.Output()
+	cmd.Env = append(cmd.Env, "TEMP="+tempDir, "TMP="+tempDir, "TEMPDIR="+tempDir, "TMPDIR="+tempDir)
+	cmd.Env = append(cmd.Env, "PATH="+cb.toolDir+":/bin:/usr/bin")
 
+	buf := &bytes.Buffer{}
+	cmd.Stdout = buf
+	cmd.Stderr = buf
+
+	runErr := cmd.Run()
+	if runErr != nil {
+		runErr = fmt.Errorf("script failed: %v output:\n%s", runErr, buf.String())
+	}
 	id := fmt.Sprintf("build-%v", rand.Int63())
 	resultDir := cb.t.TempDir()
 	if runErr == nil {

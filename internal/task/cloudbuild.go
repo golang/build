@@ -23,7 +23,7 @@ type CloudBuildClient interface {
 	// RunScript runs the given script under bash -eux -o pipefail in
 	// ScriptProject. Outputs are collected into the build's ResultURL,
 	// readable with ResultFS. The script will have the latest version of Go
-	// on $PATH.
+	// and some version of gsutil on $PATH.
 	// If gerritProject is specified, the script will run in the root of a
 	// checkout of the tip version of that repository.
 	RunScript(ctx context.Context, script string, gerritProject string, outputs []string) (CloudBuild, error)
@@ -91,7 +91,7 @@ export PATH=$PWD/released_go/bin:$PATH
 				Script: downloadGoScript,
 			},
 			{
-				Name:   "bash",
+				Name:   "gcr.io/cloud-builders/gsutil",
 				Script: scriptPrefix + script,
 			},
 		},
