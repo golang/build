@@ -50,6 +50,23 @@ luci.project(
                 "security-coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
             ],
         ),
+
+        # luci-analysis permissions.
+        #
+        # It requires project-level permissions, which means we have to lock down who
+        # can actually see it. Our security builds all run in the same project.
+        #
+        # TODO(mknyszek): Figure out how to loosen this up in the future. This may
+        # require either separating out security presubmits into a separate project
+        # (which would be unfortunate) or somehow scoping what luci-analysis can
+        # observe.
+        luci.binding(
+            roles = [
+                "role/analysis.editor",
+                "role/analysis.queryUser",
+            ],
+            groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+        ),
     ],
     acls = [
         acl.entry(
@@ -84,7 +101,7 @@ SECURITY_REALMS = [
 
 luci.realm(name = "pools/prod")
 
-# Allow everyone to see public builds, pools, bots, tasks, and luci-analysis.
+# Allow everyone to see public builds, pools, bots, and tasks.
 # WARNING: this doesn't do much for Swarming entities -- chromium-swarm
 # has a global allow-all ACL that supersedes us. Private realms run in
 # chrome-swarming.
@@ -92,28 +109,9 @@ luci.binding(
     roles = [
         "role/swarming.poolViewer",
         "role/buildbucket.reader",
-        "role/analysis.reader",
     ],
     realm = PUBLIC_REALMS,
     groups = "all",
-)
-
-# Allow approvers to mutate luci-analysis state.
-luci.binding(
-    roles = ["role/analysis.editor"],
-    realm = PUBLIC_REALMS,
-    groups = ["project-golang-approvers"],
-)
-
-# Allow authenticated users to run analysis queries in public realms.
-# This policy may seem a bit strange, but the idea is to allow community
-# members to run failure analyses while still keeping a record of
-# who did it (by making them log in) to identify misuse.
-# The Chromium project does this and hasn't had any problems yet.
-luci.binding(
-    roles = ["role/analysis.queryUser"],
-    realm = PUBLIC_REALMS,
-    groups = ["authenticated-users"],
 )
 
 # may-start-trybots grants the permission to trigger public builds.
