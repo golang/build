@@ -57,7 +57,6 @@ import (
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/secret"
-	"golang.org/x/build/internal/swarmclient"
 	"golang.org/x/build/kubernetes/gke"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
@@ -346,7 +345,7 @@ func main() {
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	setSessionPool(sp)
-	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient(), mustLUCIConfigClient())
+	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient())
 	protos.RegisterCoordinatorServer(grpcServer, gs)
 	gomoteprotos.RegisterGomoteServiceServer(grpcServer, gomoteServer)
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page at farmer.golang.org.
@@ -2262,14 +2261,4 @@ func retrieveSSHKeys(ctx context.Context, sc *secret.Client, m string) (publicKe
 		return []byte(privateKeyS), []byte(publicKeyS), nil
 	}
 	return nil, nil, fmt.Errorf("unable to retrieve ssh keys")
-}
-
-func mustLUCIConfigClient() *swarmclient.ConfigClient {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	c, err := swarmclient.NewConfigClient(ctx)
-	if err != nil {
-		log.Fatalf("unable to create LUCI config client: %s", err)
-	}
-	return c
 }

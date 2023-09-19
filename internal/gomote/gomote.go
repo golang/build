@@ -29,7 +29,6 @@ import (
 	"golang.org/x/build/internal/coordinator/schedule"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/gomote/protos"
-	"golang.org/x/build/internal/swarmclient"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc/codes"
@@ -59,11 +58,10 @@ type Server struct {
 	gceBucketName           string
 	scheduler               scheduler
 	sshCertificateAuthority ssh.Signer
-	luciConfigClient        *swarmclient.ConfigClient
 }
 
 // New creates a gomote server. If the rawCAPriKey is invalid, the program will exit.
-func New(rsp *remote.SessionPool, sched *schedule.Scheduler, rawCAPriKey []byte, gomoteGCSBucket string, storageClient *storage.Client, configClient *swarmclient.ConfigClient) *Server {
+func New(rsp *remote.SessionPool, sched *schedule.Scheduler, rawCAPriKey []byte, gomoteGCSBucket string, storageClient *storage.Client) *Server {
 	signer, err := ssh.ParsePrivateKey(rawCAPriKey)
 	if err != nil {
 		log.Fatalf("unable to parse raw certificate authority private key into signer=%s", err)
@@ -74,7 +72,6 @@ func New(rsp *remote.SessionPool, sched *schedule.Scheduler, rawCAPriKey []byte,
 		gceBucketName:           gomoteGCSBucket,
 		scheduler:               sched,
 		sshCertificateAuthority: signer,
-		luciConfigClient:        configClient,
 	}
 }
 
@@ -273,27 +270,6 @@ func (s *Server) ListInstances(ctx context.Context, req *protos.ListInstancesReq
 		})
 	}
 	return res, nil
-}
-
-// ListSwarmingBuilders lists all of the swarming builders which run for gotip. The requester must be authenticated.
-func (s Server) ListSwarmingBuilders(ctx context.Context, req *protos.ListSwarmingBuildersRequest) (*protos.ListSwarmingBuildersResponse, error) {
-	_, err := access.IAPFromContext(ctx)
-	if err != nil {
-		log.Printf("ListSwarmingInstances access.IAPFromContext(ctx) = nil, %s", err)
-		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
-	}
-	bots, err := s.luciConfigClient.ListSwarmingBots(ctx)
-	if err != nil {
-		log.Printf("luciConfigClient.ListSwarmingBots(ctx) = %s", err)
-		return nil, status.Errorf(codes.Internal, "unable to query for bots")
-	}
-	builders := []string{}
-	for _, bot := range bots {
-		if bot.BucketName == "ci" && strings.HasPrefix(bot.Name, "gotip") {
-			builders = append(builders, bot.Name)
-		}
-	}
-	return &protos.ListSwarmingBuildersResponse{Builders: builders}, nil
 }
 
 // DestroyInstance will destroy a gomote instance. It will ensure that the caller is authenticated and is the owner of the instance
