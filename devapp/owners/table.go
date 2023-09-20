@@ -35,6 +35,7 @@ var (
 	codyoss      = gh("codyoss")
 	dmitshur     = gh("dmitshur")
 	danderson    = gh("danderson")
+	drakkan      = gh("drakkan")
 	drchase      = gh("dr2chase")
 	dvyukov      = gh("dvyukov")
 	eliben       = gh("eliben")
@@ -754,6 +755,10 @@ var entries = map[string]*Entry{
 	"crypto/acme/autocert": {
 		Primary:   []Owner{bradfitz, roland, securityTeam},
 		Secondary: []Owner{filippo},
+	},
+	"crypto/ssh": {
+		Primary:   []Owner{drakkan, securityTeam},
+		Secondary: []Owner{filippo, roland},
 	},
 	"debug": {
 		Primary:   []Owner{runtimeTeam},

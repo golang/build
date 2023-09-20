@@ -2117,6 +2117,7 @@ func init() {
 	addPerson("Nick Petroni", "npetroni@cs.umd.edu")
 	addPerson("Nick Sullivan", "nicholas.sullivan@gmail.com", "@grittygrease")
 	addPerson("Nickolay Turpitko", "nikolay@turpitko.com", "7015@62eb7196-b449-3ce5-99f1-c037f21e1705")
+	addPerson("Nicola Murino", "nicola.murino@gmail.com", "@drakkan")
 	addPerson("Nicolas BRULEZ", "n.brulez@gmail.com", "@N-Bz")
 	addPerson("Nicolas S. Dade", "nic.dade@gmail.com", "@nsd20463")
 	addPerson("Niek Sanders", "niek.sanders@gmail.com", "19925@62eb7196-b449-3ce5-99f1-c037f21e1705")
