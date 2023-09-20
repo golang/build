@@ -53,19 +53,41 @@ luci.project(
 
         # luci-analysis permissions.
         #
-        # It requires project-level permissions, which means we have to lock down who
-        # can actually see it. Our security builds all run in the same project.
+        # Note on security: this appears to open up reading luci-analysis to everyone
+        # for the entire project, but access to test results and cluster definitions
+        # (test names and failure reasons) is gated by access to the corresponding
+        # realm. What this is actually granting access to is cluster IDs, which are
+        # hashes of cluster definitions. In other words, all users can take a failure
+        # they have access to and find which clusters in the project correspond to it,
+        # but they can only see the details of the cluster if they have access to that
+        # realm.
         #
-        # TODO(mknyszek): Figure out how to loosen this up in the future. This may
-        # require either separating out security presubmits into a separate project
-        # (which would be unfortunate) or somehow scoping what luci-analysis can
-        # observe.
+        # Note that this also grants access to rule definitions for the whole project.
+        # This is OK for now since our security realm is just presubmit, and we're unlikely
+        # to write rules corresponding to failures in that realm that aren't public
+        # anyway. (And again, test result details are all still hidden.)
+        #
+        # If in the future we want to change this, there's a role/analysis.limitedReader
+        # role for limiting access to rule definitions as well.
         luci.binding(
             roles = [
-                "role/analysis.editor",
-                "role/analysis.queryUser",
+                "role/analysis.reader",
             ],
-            groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+            groups = "all",
+        ),
+        luci.binding(
+            # Allow approvers to mutate luci-analysis state.
+            roles = ["role/analysis.editor"],
+            groups = ["project-golang-approvers"],
+        ),
+        luci.binding(
+            # Allow authenticated users to run analysis queries in public realms.
+            # This policy may seem a bit strange, but the idea is to allow community
+            # members to run failure analyses while still keeping a record of
+            # who did it (by making them log in) to identify misuse.
+            # The Chromium project does this and hasn't had any problems yet.
+            roles = ["role/analysis.queryUser"],
+            groups = ["authenticated-users"],
         ),
     ],
     acls = [
