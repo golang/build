@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"go.chromium.org/luci/auth"
+	"golang.org/x/build/internal/rendezvous"
 	"golang.org/x/build/revdial/v2"
 )
 
@@ -210,9 +211,9 @@ func dialGomoteServer() (net.Listener, error) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		req.Header.Set("X-Go-Gomote-ID", os.Getenv("GOMOTEID"))
-		req.Header.Set("X-Go-Swarming-Auth-Token", mustSwarmingAuthToken(ctx))
-		req.Header.Set("X-Go-Hostname", *hostname)
+		req.Header.Set(rendezvous.HeaderID, os.Getenv("GOMOTEID"))
+		req.Header.Set(rendezvous.HeaderToken, mustSwarmingAuthToken(ctx))
+		req.Header.Set(rendezvous.HeaderHostname, *hostname)
 		if err := req.Write(bufw); err != nil {
 			return nil, fmt.Errorf("gomote server /reverse request failed: %v", err)
 		}

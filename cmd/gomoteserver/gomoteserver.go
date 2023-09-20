@@ -24,6 +24,7 @@ import (
 	"golang.org/x/build/internal/gomote"
 	gomotepb "golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
+	"golang.org/x/build/internal/rendezvous"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/swarmclient"
 	"google.golang.org/api/option"
@@ -43,6 +44,8 @@ func main() {
 		log.Fatalln(err)
 	}
 	log.Println("starting gomote server")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	sp := remote.NewSessionPool(context.Background())
 	sshCA := mustRetrieveSSHCertificateAuthority()
@@ -69,9 +72,10 @@ func main() {
 		log.Fatalf("unable to create gomote server: %s", err)
 	}
 	gomotepb.RegisterGomoteServiceServer(grpcServer, gomoteServer)
+	rdv := rendezvous.New(ctx)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/reverse", pool.HandleReverse)
+	mux.HandleFunc("/reverse", rdv.HandleReverse)
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page.
 
 	configureSSHServer := func() (*remote.SSHServer, error) {
