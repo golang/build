@@ -17,6 +17,8 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
+	"go.chromium.org/luci/auth"
+	"go.chromium.org/luci/swarming/client/swarming"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/coordinator/pool"
@@ -27,6 +29,7 @@ import (
 	"golang.org/x/build/internal/rendezvous"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/swarmclient"
+	"golang.org/x/build/revdial/v2"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 )
@@ -67,15 +70,16 @@ func main() {
 		opts = append(opts, grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(access.IAPSkipAudienceValidation)))
 	}
 	grpcServer := grpc.NewServer(opts...)
-	gomoteServer, err := gomote.NewSwarming(sp, sshCA, gomoteBucket, mustStorageClient(), mustLUCIConfigClient())
+	rdv := rendezvous.New(ctx)
+	gomoteServer, err := gomote.NewSwarming(sp, sshCA, gomoteBucket, mustStorageClient(), mustLUCIConfigClient(), rdv, mustSwarmingClient(ctx))
 	if err != nil {
 		log.Fatalf("unable to create gomote server: %s", err)
 	}
 	gomotepb.RegisterGomoteServiceServer(grpcServer, gomoteServer)
-	rdv := rendezvous.New(ctx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/reverse", rdv.HandleReverse)
+	mux.Handle("/revdial", revdial.ConnHandler())
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page.
 
 	configureSSHServer := func() (*remote.SSHServer, error) {
@@ -164,4 +168,16 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/plain")
 	fmt.Fprintf(w, "gomote status page placeholder")
+}
+
+func mustSwarmingClient(ctx context.Context) swarming.Client {
+	c, err := swarming.NewClient(ctx, swarming.ClientOptions{
+		ServiceURL: "https://chromium-swarm.appspot.com",
+		UserAgent:  "go-gomoteserver",
+		Auth:       auth.Options{Method: auth.GCEMetadataMethod},
+	})
+	if err != nil {
+		log.Fatalf("unable to create swarming client: %s", err)
+	}
+	return c
 }
