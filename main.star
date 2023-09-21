@@ -237,6 +237,7 @@ BUILDER_TYPES = [
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
+    "js-wasm",
     "linux-386",
     "linux-386-longtest",
     "linux-amd64",
@@ -419,8 +420,12 @@ def dimensions_of(low_capacity_hosts, builder_type):
     """dimensions_of returns the bot dimensions for a builder type."""
     goos, goarch, suffix, _ = split_builder_type(builder_type)
 
-    # We run 386 builds on AMD64.
+    # We run various builds on Linux.
+    goos = goos.replace("js", "linux")
+
+    # We run various builds on AMD64.
     goarch = goarch.replace("386", "amd64")
+    goarch = goarch.replace("wasm", "amd64")
 
     # TODO(mknyszek): Consider adding "_suffix" to the end of this.
     host = "%s-%s" % (goos, goarch)
@@ -544,6 +549,25 @@ def define_builder(env, project, go_branch_short, builder_type):
     if arch == "386":
         base_props["env"]["GOARCH"] = "386"
         base_props["env"]["GOHOSTARCH"] = "386"
+
+    # We run js/wasm builds on linux/amd64 with GOOS/GOARCH set,
+    # and Node.js provided as a CIPD dependency.
+    #
+    # TODO(dmitshur): We have target_go{os,arch} and by default they would be set to js/wasm.
+    # However, they're currently only for the coordinator, not build-go and test-only builders,
+    # so I can't use them as is. Perhaps we'll consider changing that, and then there won't be
+    # a need to set GOOS/GOARCH in the env here.
+    if os == "js" and arch == "wasm":
+        base_props["env"]["GOOS"] = "js"
+        base_props["env"]["GOARCH"] = "wasm"
+        node_versions = {
+            # Confirm that version is available with: cipd search infra/3pp/tools/nodejs/linux-amd64 -tag=version:{node_version}
+            18: "2@18.8.0",
+            14: "14.14.0",
+        }
+        base_props["node_version"] = node_versions[18]
+        if go_branch_short == "go1.20":
+            base_props["node_version"] = node_versions[14]
 
     # Construct the basic dimensions for the build/test running part of the build.
     #
@@ -706,6 +730,15 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         "pool": env.coordinator_pool,
         "cipd_platform": "linux-amd64",
     }
+    target_goos, target_goarch = os, arch
+    if os == "js" and arch == "wasm":
+        # TODO(dmitshur): The target_go{os,arch} are currently only passed to
+        # the coordinator builder, not build-go and test-only. So leaving it
+        # as js/wasm will cause skew, since the build-go and test-only host OS
+        # is going to be linux/amd64, and it doesn't yet know the intended target OS.
+        # Something needs to be done here. To make progress, for now,
+        # just override the coordinator to use the linux/amd64 toolchain.
+        target_goos, target_goarch = "linux", "amd64"
     coord_props = dict(base_props)
     coord_props.update({
         "mode": GOLANGBUILD_MODES["COORDINATOR"],
@@ -714,8 +747,8 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
             "test_builder": "golang/" + env.worker_bucket + "/" + test_name,
             "num_test_shards": test_shards,
             "builders_to_trigger_after_toolchain_build": builders_to_trigger,
-            "target_goos": os,
-            "target_goarch": arch,
+            "target_goos": target_goos,
+            "target_goarch": target_goarch,
         },
     })
     emit_builder(
@@ -842,6 +875,16 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         exists = exists and ex
         presubmit = presubmit and pre
         postsubmit = postsubmit and post
+
+    # TODO(dmitshur): Enable js-wasm trybots after post-submit is passing.
+    # TODO(dmitshur): Add js-wasm builders for the rest of repos&branches.
+    if os == "js":
+        presubmit = False
+        exists = exists and project == "go" and go_branch_short == "gotip"
+
+    # Make it easier to check enabled(...)[1] or enabled(...)[2] in a loop.
+    if not exists:
+        presubmit, postsubmit = False, False
 
     return exists, presubmit, postsubmit
 
