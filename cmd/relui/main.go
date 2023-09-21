@@ -63,6 +63,7 @@ var (
 	websiteUploadURL = flag.String("website-upload-url", "", "URL to POST website file data to, e.g. https://go.dev/dl/upload.")
 
 	cloudBuildProject = flag.String("cloud-build-project", "", "GCP project to run miscellaneous Cloud Build tasks")
+	cloudBuildAccount = flag.String("cloud-build-account", "", "Service account to run miscellaneous Cloud Build tasks")
 )
 
 func main() {
@@ -152,6 +153,7 @@ func main() {
 		BuildClient:   cbClient,
 		StorageClient: gcsClient,
 		ScriptProject: *cloudBuildProject,
+		ScriptAccount: *cloudBuildAccount,
 		ScratchURL:    *scratchFilesBase + "/build-outputs",
 	}
 	var dbPool db.PGDBTX

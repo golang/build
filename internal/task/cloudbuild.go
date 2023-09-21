@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math/rand"
+	"strings"
 
 	cloudbuild "cloud.google.com/go/cloudbuild/apiv1/v2"
 	"cloud.google.com/go/cloudbuild/apiv1/v2/cloudbuildpb"
@@ -38,6 +39,7 @@ type RealCloudBuildClient struct {
 	BuildClient   *cloudbuild.Client
 	StorageClient *storage.Client
 	ScriptProject string
+	ScriptAccount string
 	ScratchURL    string
 }
 
@@ -83,7 +85,16 @@ set -o pipefail
 export PATH=$PWD/released_go/bin:$PATH
 `
 
+	// Cloud build loses directory structure when it saves artifacts, which is
+	// a problem since (e.g.) we have multiple files named go.mod in the
+	// tagging tasks. It's not very complicated, so reimplement it ourselves.
 	resultURL := fmt.Sprintf("%v/script-build-%v", c.ScratchURL, rand.Int63())
+	var saveOutputsScript strings.Builder
+	saveOutputsScript.WriteString(scriptPrefix)
+	for _, out := range outputs {
+		saveOutputsScript.WriteString(fmt.Sprintf("gsutil cp %q %q\n", out, resultURL+"/"+out))
+	}
+
 	build := &cloudbuildpb.Build{
 		Steps: []*cloudbuildpb.BuildStep{
 			{
@@ -94,16 +105,16 @@ export PATH=$PWD/released_go/bin:$PATH
 				Name:   "gcr.io/cloud-builders/gsutil",
 				Script: scriptPrefix + script,
 			},
-		},
-		Artifacts: &cloudbuildpb.Artifacts{
-			Objects: &cloudbuildpb.Artifacts_ArtifactObjects{
-				Location: resultURL,
-				Paths:    outputs,
+			{
+				Name:   "gcr.io/cloud-builders/gsutil",
+				Script: saveOutputsScript.String(),
 			},
 		},
 		Options: &cloudbuildpb.BuildOptions{
 			MachineType: cloudbuildpb.BuildOptions_E2_HIGHCPU_8,
+			Logging:     cloudbuildpb.BuildOptions_CLOUD_LOGGING_ONLY,
 		},
+		ServiceAccount: c.ScriptAccount,
 	}
 	if gerritProject != "" {
 		build.Source = &cloudbuildpb.Source{
@@ -120,14 +131,14 @@ export PATH=$PWD/released_go/bin:$PATH
 		Build:     build,
 	})
 	if err != nil {
-		return CloudBuild{}, err
+		return CloudBuild{}, fmt.Errorf("creating build: %w", err)
 	}
 	if _, err = op.Poll(ctx); err != nil {
-		return CloudBuild{}, err
+		return CloudBuild{}, fmt.Errorf("polling: %w", err)
 	}
 	meta, err := op.Metadata()
 	if err != nil {
-		return CloudBuild{}, err
+		return CloudBuild{}, fmt.Errorf("reading metadata: %w", err)
 	}
 	return CloudBuild{Project: c.ScriptProject, ID: meta.Build.Id, ResultURL: resultURL}, nil
 

@@ -50,7 +50,7 @@ func (x *BundleNSSRootsTask) UpdateBundle(ctx *wf.TaskContext, reviewers []strin
 		return "skipped, existing pending bundle update CL", nil
 	}
 
-	build, err := x.CloudBuild.RunScript(ctx, "cd crypto/x509roots; go generate", "crypto", []string{"crypto/x509roots/fallback/bundle.go"})
+	build, err := x.CloudBuild.RunScript(ctx, "cd x509roots && go generate", "crypto", []string{"x509roots/fallback/bundle.go"})
 	if err != nil {
 		return "", err
 	}

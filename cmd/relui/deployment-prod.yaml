@@ -46,6 +46,7 @@ spec:
             - "--edge-cache-url=https://dl.google.com/go"
             - "--website-upload-url=https://go.dev/dl/upload"
             - "--cloud-build-project=symbolic-datum-552"
+            - "--cloud-build-account=projects/symbolic-datum-552/serviceAccounts/relui-prod@symbolic-datum-552.iam.gserviceaccount.com"
           readinessProbe:
             httpGet:
               path: /healthz
