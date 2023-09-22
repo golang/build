@@ -21,11 +21,12 @@
 // Requirements:
 //   - Python3 installed and in the calling user's PATH.
 //   - luci_machine_tokend running as root in a cron job.
-//     https://chromium.googlesource.com/infra/luci/luci-go/+/refs/heads/main/tokenserver
-//     Further instructions can be found at https://github.com/golang/go/wiki/DashboardBuilders
+//     See https://chromium.googlesource.com/infra/luci/luci-go/+/main/tokenserver.
+//     Further instructions can be found at https://go.dev/wiki/DashboardBuilders.
 //     The default locations for the token files should be used if possible:
 //     Most OS: /var/lib/luci_machine_tokend/token.json
 //     Windows: C:\luci_machine_tokend\token.json
+//     A custom default location can be set via the environment variable LUCI_MACHINE_TOKEN.
 //   - bootstrapswarm should not be run as a privileged user.
 package main
 
@@ -186,9 +187,11 @@ func retrieveGCEVMToken(ctx context.Context) (string, error) {
 }
 
 func defaultTokenLocation() string {
-	out := "/var/lib/luci_machine_tokend/token.json"
+	if v := os.Getenv("LUCI_MACHINE_TOKEN"); v != "" {
+		return v
+	}
 	if runtime.GOOS == "windows" {
 		return `C:\luci_machine_tokend\token.json`
 	}
-	return out
+	return "/var/lib/luci_machine_tokend/token.json"
 }
