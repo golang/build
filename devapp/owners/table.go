@@ -30,7 +30,6 @@ var (
 	austin       = gh("aclements")
 	bcmills      = gh("bcmills")
 	bradfitz     = gh("bradfitz")
-	cbro         = gh("broady")
 	cherryyz     = gh("cherrymui")
 	codyoss      = gh("codyoss")
 	dmitshur     = gh("dmitshur")
@@ -797,8 +796,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{iant},
 	},
 	"oauth2": {
-		Primary:   []Owner{bradfitz},
-		Secondary: []Owner{jbd, cbro, shinfan, codyoss},
+		Secondary: []Owner{jbd, shinfan, codyoss},
 	},
 	"perf": {
 		Primary: []Owner{runtimeTeam, releaseTeam},
