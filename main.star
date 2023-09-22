@@ -403,30 +403,22 @@ def split_builder_type(builder_type):
 
 def dimensions_of(low_capacity_hosts, builder_type):
     """dimensions_of returns the bot dimensions for a builder type."""
-    os, arch, suffix, _ = split_builder_type(builder_type)
-
-    # TODO(mknyszek): Consider adding "_suffix " to the end of this.
-    host = "%s-%s" % (os, arch)
-
-    # LUCI originally supported Linux, Windows, and Mac. Most other OSes follow our scheme.
-    os = {
-        "darwin": "Mac",
-        "linux": "Linux",
-        "windows": "Windows",
-    }.get(os, os)
+    goos, goarch, suffix, _ = split_builder_type(builder_type)
 
     # We run 386 builds on AMD64.
-    arch = arch.replace("386", "amd64")
+    goarch = goarch.replace("386", "amd64")
 
-    # LUCI calls amd64 x86-64.
-    arch = arch.replace("amd64", "x86-64")
+    # TODO(mknyszek): Consider adding "_suffix" to the end of this.
+    host = "%s-%s" % (goos, goarch)
+
+    os = None
 
     if suffix != "":
         # Narrow down the dimensions using the suffix.
-        if os == "Linux":
+        if goos == "linux":
             # linux-amd64_debian11 -> Debian-11
             os = suffix.replace("debian", "Debian-")
-        elif os == "Mac":
+        elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffix
     else:
@@ -439,24 +431,21 @@ def dimensions_of(low_capacity_hosts, builder_type):
         # queue length. This *must* line up with the
         # expected_dimensions field for the botset in the
         # internal config: //starlark/common/envs/golang.star
-        if os == "Linux" and host not in low_capacity_hosts:
+        if goos == "linux" and host not in low_capacity_hosts:
             os = "Debian-11"
-        elif os == "Mac":
+        elif goos == "darwin":
             os = "Mac-12.6"
-        elif os == "Windows":
+        elif goos == "windows":
             os = "Windows-10"
 
         # TODO: Add more platforms and decide on whether we
         # even want this concept of a "default", suffixless
         # builder.
 
-    if os == "solaris":
-        # Python on Solaris reports some surprising values for OS and
-        # architecture. We should fix the bot.
-        os = "sunos"
-        arch = "i86pc-64"
-
-    return {"os": os, "cpu": arch}
+    dims = {"cipd_platform": host.replace("darwin", "mac")}
+    if os != None:
+        dims["os"] = os
+    return dims
 
 def is_capacity_constrained(low_capacity_hosts, builder_type):
     dims = dimensions_of(low_capacity_hosts, builder_type)
@@ -472,7 +461,8 @@ def is_fully_supported(dims):
     Args:
         dims: The dimensions of a task/bot.
     """
-    return any([dims["os"].startswith(x) for x in ["Debian", "Linux", "Mac", "Windows"]]) and dims["cpu"] in ["x86-64", "arm64"]
+    supported = ["%s-%s" % (os, arch) for os in ["linux", "mac", "windows"] for arch in ["amd64", "arm64"]]
+    return dims["cipd_platform"] in supported
 
 # builder_name produces the final builder name.
 def builder_name(project, go_branch_short, builder_type):
@@ -693,8 +683,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
     # something for robocrop, but the robocrop config will look for just "Linux."
     coord_dims = {
         "pool": env.coordinator_pool,
-        "os": "Linux",
-        "cpu": "x86-64",
+        "cipd_platform": "linux-amd64",
     }
     coord_props = dict(base_props)
     coord_props.update({
