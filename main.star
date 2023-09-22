@@ -151,6 +151,13 @@ luci.binding(
     groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
 )
 
+# Allow the user to impersonate task service and manage tasks.
+luci.binding(
+    roles = "role/swarming.taskTriggerer",
+    realm = PUBLIC_REALMS,
+    users = "gomoteserver@symbolic-datum-552.iam.gserviceaccount.com",
+)
+
 # This is the cipd package name and version where the recipe bundler will put
 # the built recipes. This line makes it the default value for all `luci.recipe`
 # invocations in this configuration.
