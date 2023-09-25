@@ -68,6 +68,20 @@ func TestSecurity(t *testing.T) {
 const fakeGo = `#!/bin/bash -eu
 
 case "$1" in
+"run")
+  case "$2" in
+  "releaselet.go")
+    # We're building an MSI. The command should be run in the gomote work dir.
+    ls go/src/make.bash >/dev/null
+    mkdir msi
+    echo "I'm an MSI!" > msi/thisisanmsi.msi
+    ;;
+  *)
+    echo "unknown main file $2"
+    exit 1
+    ;;
+  esac
+  ;;
 "get")
   ls go.mod go.sum >/dev/null
   for i in "${@:2}"; do
@@ -507,12 +521,6 @@ mkdir -p $GO/bin
 cat <<'EOF' >$GO/bin/go
 #!/bin/bash -eu
 case "$@" in
-"run releaselet.go")
-    # We're building an MSI. The command should be run in the gomote work dir.
-	ls go/src/make.bash >/dev/null
-	mkdir msi
-	echo "I'm an MSI!" > msi/thisisanmsi.msi
-	;;
 "install -race")
 	# Installing the race mode stdlib. Doesn't matter where it's run.
 	mkdir -p $(dirname $0)/../pkg/something_orother/
@@ -598,7 +606,7 @@ var goFiles = map[string]string{
 
 func serveBootstrap(w http.ResponseWriter, r *http.Request) {
 	task.ServeTarball("go-builder-data/go", map[string]string{
-		"bin/go": "I'm a dummy bootstrap go command!",
+		"bin/go": fakeGo,
 	}, w, r)
 }
 

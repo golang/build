@@ -447,6 +447,10 @@ func (b *BuildletStep) ConvertPKGToTGZ(ctx *workflow.TaskContext, in io.Reader, 
 var releaselet string
 
 func (b *BuildletStep) BuildWindowsMSI(ctx *workflow.TaskContext, binaryArchive io.Reader, msi io.Writer) error {
+	ctx.Printf("Installing bootstrap go")
+	if err := b.Buildlet.PutTarFromURL(ctx, b.BuildConfig.GoBootstrapURL(buildenv.Production), "bootstrap_go"); err != nil {
+		return err
+	}
 	if err := b.Buildlet.PutTar(ctx, binaryArchive, ""); err != nil {
 		return err
 	}
@@ -454,7 +458,7 @@ func (b *BuildletStep) BuildWindowsMSI(ctx *workflow.TaskContext, binaryArchive 
 	if err := b.Buildlet.Put(ctx, strings.NewReader(releaselet), "releaselet.go", 0666); err != nil {
 		return err
 	}
-	if err := b.runGo(ctx, []string{"run", "releaselet.go"}, buildlet.ExecOpts{
+	if err := b.exec(ctx, "bootstrap_go/bin/go", []string{"run", "releaselet.go"}, buildlet.ExecOpts{
 		Dir: ".", // root of buildlet work directory
 	}); err != nil {
 		ctx.Printf("releaselet failed: %v", err)
