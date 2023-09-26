@@ -510,13 +510,22 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 		if err != nil {
 			return fmt.Errorf("b.gerritMessageAuthorName: %v", err)
 		}
+
+		// NOTE: care is required to update this message. GerritBot's sync of Gerrit comments
+		// to the GitHub PR is simple and currently relies on historical sync messages on the
+		// PR exactly matching what the current incarnation of GerritBot would have posted for
+		// old Gerrit comments. As implemented, changing the content here will cause
+		// GerritBot to post effectively duplicate messages to the GitHub PR. See CL 530736 for details.
+		// TODO: allow message content to evolve more easily, perhaps by writing an ID or timestamp
+		// for the Gerrit message being synced, or a coarser solution like having a time cutoff,
+		// or tracking more state, or some other solution.
 		header := fmt.Sprintf("Message from %s:\n", authorName)
 		msg := fmt.Sprintf(`
 %s
 
 ---
 Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
-After addressing review feedback, remember to [publish your drafts](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
+After addressing review feedback, remember to [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
 			m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
 		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), header, msg); err != nil {
 			return fmt.Errorf("postGitHubMessageNoDup: %v", err)
