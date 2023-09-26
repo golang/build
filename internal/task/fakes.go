@@ -798,6 +798,9 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 			return CloudBuild{}, err
 		}
 		dir, err := (&Git{}).Clone(ctx, repo.dir.dir)
+		if err != nil {
+			return CloudBuild{}, err
+		}
 		defer dir.Close()
 		wd = dir.dir
 	} else {
