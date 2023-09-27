@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"golang.org/x/build/internal/workflow"
 )
@@ -96,7 +95,7 @@ echo -n %q > config/config.json
 				t.Fatal(err)
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
 			outputs, err := w.Run(ctx, &verboseListener{t: t})
