@@ -42,6 +42,7 @@ spec:
             - "--builder-master-key=secret:symbolic-datum-552/builder-master-key"
             - "--github-token=secret:symbolic-datum-552/maintner-github-token"
             - "--scratch-files-base=gs://golang-release-staging/relui-scratch"
+            - "--signed-files-base=gs://golang-release-staging/relui-scratch/relworker-scratch"
             - "--serving-files-base=gs://golang"
             - "--edge-cache-url=https://dl.google.com/go"
             - "--website-upload-url=https://go.dev/dl/upload"

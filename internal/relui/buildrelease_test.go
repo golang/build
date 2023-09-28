@@ -218,15 +218,18 @@ esac
 
 	const dockerProject, dockerTrigger = "docker-build-project", "docker-build-trigger"
 
+	scratchDir := t.TempDir()
+
 	buildTasks := &BuildReleaseTasks{
 		GerritClient:             gerrit,
 		GerritHTTPClient:         http.DefaultClient,
 		GerritURL:                fakeGerrit.GerritURL() + "/go",
 		GCSClient:                nil,
-		ScratchFS:                &task.ScratchFS{BaseURL: "file://" + filepath.ToSlash(t.TempDir())},
+		ScratchFS:                &task.ScratchFS{BaseURL: "file://" + scratchDir},
+		SignedURL:                "file://" + scratchDir + "/signed/outputs",
 		ServingURL:               "file://" + filepath.ToSlash(servingDir),
 		CreateBuildlet:           fakeBuildlets.CreateBuildlet,
-		SignService:              task.NewFakeSignService(t),
+		SignService:              task.NewFakeSignService(t, scratchDir+"/signed/outputs"),
 		DownloadURL:              dlServer.URL,
 		ProxyPrefix:              dlServer.URL,
 		PublishFile:              publishFile,

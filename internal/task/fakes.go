@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -574,44 +575,46 @@ func (*FakeGerrit) SetHashtags(_ context.Context, changeID string, _ gerrit.Hash
 // and generate GPG signatures. MSIs are "signed" by adding a suffix to them.
 // PKGs must actually be tarballs with a prefix of "I'm a PKG!\n". Any files
 // they contain that look like binaries will be "signed".
-func NewFakeSignService(t *testing.T) *FakeSignService {
+func NewFakeSignService(t *testing.T, outputDir string) *FakeSignService {
 	return &FakeSignService{
 		t:             t,
+		outputDir:     outputDir,
 		completedJobs: map[string][]string{},
 	}
 }
 
 type FakeSignService struct {
 	t             *testing.T
+	outputDir     string
 	mu            sync.Mutex
 	completedJobs map[string][]string // Job ID → output objectURIs.
 }
 
 func (s *FakeSignService) SignArtifact(_ context.Context, bt sign.BuildType, in []string) (jobID string, _ error) {
 	s.t.Logf("fakeSignService: doing %s signing of %q", bt, in)
+	jobID = uuid.NewString()
 	var out []string
 	switch bt {
 	case sign.BuildMacOS:
 		if len(in) != 1 {
 			return "", fmt.Errorf("got %d inputs, want 1", len(in))
 		}
-		out = []string{fakeSignPKG(in[0], fmt.Sprintf("-signed <%s>", bt))}
+		out = []string{s.fakeSignPKG(jobID, in[0], fmt.Sprintf("-signed <%s>", bt))}
 	case sign.BuildWindows:
 		if len(in) != 1 {
 			return "", fmt.Errorf("got %d inputs, want 1", len(in))
 		}
-		out = []string{fakeSignFile(in[0], fmt.Sprintf("-signed <%s>", bt))}
+		out = []string{s.fakeSignFile(jobID, in[0], fmt.Sprintf("-signed <%s>", bt))}
 	case sign.BuildGPG:
 		if len(in) == 0 {
 			return "", fmt.Errorf("got 0 inputs, want 1 or more")
 		}
 		for _, f := range in {
-			out = append(out, fakeGPGFile(f))
+			out = append(out, s.fakeGPGFile(jobID, f))
 		}
 	default:
 		return "", fmt.Errorf("SignArtifact: not implemented for %v", bt)
 	}
-	jobID = uuid.NewString()
 	s.mu.Lock()
 	s.completedJobs[jobID] = out
 	s.mu.Unlock()
@@ -633,7 +636,7 @@ func (s *FakeSignService) CancelSigning(_ context.Context, jobID string) error {
 	return fmt.Errorf("intentional fake error")
 }
 
-func fakeSignPKG(f, msg string) string {
+func (s *FakeSignService) fakeSignPKG(jobID, f, msg string) string {
 	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
 	if err != nil {
 		panic(fmt.Errorf("fakeSignPKG: os.ReadFile: %v", err))
@@ -654,11 +657,18 @@ func fakeSignPKG(f, msg string) string {
 		panic(fmt.Errorf("fakeSignPKG: mapToTgz: %v", err))
 	}
 	b = append([]byte("I'm a PKG! "+msg+"\n"), b...)
-	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".signed", b, 0600)
-	if err != nil {
-		panic(fmt.Errorf("fakeSignPKG: os.WriteFile: %v", err))
+	return s.writeOutput(jobID, path.Base(f), b)
+}
+
+func (s *FakeSignService) writeOutput(jobID, base string, contents []byte) string {
+	path := path.Join(s.outputDir, jobID, base)
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		panic(fmt.Errorf("fake signing service: os.MkdirAll: %v", err))
 	}
-	return f + ".signed"
+	if err := os.WriteFile(path, contents, 0600); err != nil {
+		panic(fmt.Errorf("fake signing service: os.WriteFile: %v", err))
+	}
+	return "file://" + path
 }
 
 func tgzToMap(r io.Reader) (map[string]string, error) {
@@ -690,30 +700,22 @@ func tgzToMap(r io.Reader) (map[string]string, error) {
 	return result, nil
 }
 
-func fakeSignFile(f, msg string) string {
+func (s *FakeSignService) fakeSignFile(jobID, f, msg string) string {
 	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
 	if err != nil {
 		panic(fmt.Errorf("fakeSignFile: os.ReadFile: %v", err))
 	}
 	b = append(b, []byte(msg)...)
-	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".signed", b, 0600)
-	if err != nil {
-		panic(fmt.Errorf("fakeSignFile: os.WriteFile: %v", err))
-	}
-	return f + ".signed"
+	return s.writeOutput(jobID, path.Base(f), b)
 }
 
-func fakeGPGFile(f string) string {
+func (s *FakeSignService) fakeGPGFile(jobID, f string) string {
 	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
 	if err != nil {
 		panic(fmt.Errorf("fakeGPGFile: os.ReadFile: %v", err))
 	}
 	gpg := fmt.Sprintf("I'm a GPG signature for %x!", sha256.Sum256(b))
-	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".asc", []byte(gpg), 0600)
-	if err != nil {
-		panic(fmt.Errorf("fakeGPGFile: os.WriteFile: %v", err))
-	}
-	return f + ".asc"
+	return s.writeOutput(jobID, path.Base(f)+".asc", []byte(gpg))
 }
 
 var _ CloudBuildClient = (*FakeCloudBuild)(nil)

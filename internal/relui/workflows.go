@@ -601,6 +601,7 @@ type BuildReleaseTasks struct {
 	PrivateGerritURL         string
 	GCSClient                *storage.Client
 	ScratchFS                *task.ScratchFS
+	SignedURL                string // SignedURL is a gs:// or file:// URL, no trailing slash.
 	ServingURL               string // ServingURL is a gs:// or file:// URL, no trailing slash.
 	DownloadURL              string
 	ProxyPrefix              string // ProxyPrefix is the prefix at which module files are published, e.g. https://proxy.golang.org/golang.org/toolchain/@v
@@ -1105,13 +1106,27 @@ func (b *BuildReleaseTasks) computeGPG(ctx *wf.TaskContext, artifacts []artifact
 		return nil, fmt.Errorf("got %d outputs, want %d .asc signatures", len(out), len(in))
 	}
 	// All done, we have our GPG signatures.
+	// Put them in a base name → scratch path map.
+	var signatures = make(map[string]string)
+	for _, o := range out {
+		signatures[path.Base(o)] = o
+	}
+
 	// Set the artifacts' GPGSignature field.
+	signedFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.SignedURL)
+	if err != nil {
+		return nil, err
+	}
 	for i, a := range artifacts {
 		if !doGPG(a) {
 			continue
 		}
 
-		sig, err := b.ScratchFS.ReadFile(ctx, a.Scratch+".asc")
+		sigPath, ok := signatures[path.Base(a.Scratch)+".asc"]
+		if !ok {
+			return nil, fmt.Errorf("no GPG signature for %q", path.Base(a.Scratch))
+		}
+		sig, err := fs.ReadFile(signedFS, sigPath)
 		if err != nil {
 			return nil, err
 		}
@@ -1123,40 +1138,30 @@ func (b *BuildReleaseTasks) computeGPG(ctx *wf.TaskContext, artifacts []artifact
 
 // signArtifact signs a single artifact of specified type.
 func (b *BuildReleaseTasks) signArtifact(ctx *wf.TaskContext, a artifact, bt sign.BuildType) (signed artifact, _ error) {
-	// Sign the unsigned artifact located at a.Scratch, and
-	// update it to point to the new signed artifact.
-	signedURL, err := b.signArtifacts(ctx, bt, []string{b.ScratchFS.URL(ctx, a.Scratch)})
-	if err != nil {
-		return artifact{}, err
-	} else if len(signedURL) != 1 {
-		return artifact{}, fmt.Errorf("got %d outputs, want 1 signed artifact", len(signedURL))
-	}
-	a.Scratch = path.Base(signedURL[0])
+	return b.runBuildStep(ctx, a.Target, nil, artifact{}, a.Suffix, func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+		signedPaths, err := b.signArtifacts(ctx, bt, []string{b.ScratchFS.URL(ctx, a.Scratch)})
+		if err != nil {
+			return err
+		} else if len(signedPaths) != 1 {
+			return fmt.Errorf("got %d outputs, want 1 signed artifact", len(signedPaths))
+		}
 
-	// Update the Size and SHA256 fields.
-	f, err := b.ScratchFS.OpenRead(ctx, a.Scratch)
-	if err != nil {
-		return artifact{}, err
-	}
-	var hash = sha256.New()
-	n, err := io.Copy(hash, f)
-	if err != nil {
-		f.Close()
-		return artifact{}, err
-	}
-	err = f.Close()
-	if err != nil {
-		return artifact{}, err
-	}
-	a.Size = int(n)
-	a.SHA256 = fmt.Sprintf("%x", string(hash.Sum([]byte(nil))))
-
-	return a, nil
+		signedFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.SignedURL)
+		if err != nil {
+			return err
+		}
+		r, err := signedFS.Open(signedPaths[0])
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(w, r)
+		return err
+	})
 }
 
 // signArtifacts starts signing on the artifacts provided via the gs:// URL inputs,
-// waits for signing to complete, and returns the gs:// URLs of the signed outputs.
-func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType, inURLs []string) (outURLs []string, _ error) {
+// waits for signing to complete, and returns the output paths relative to SignedURL.
+func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType, inURLs []string) (outFiles []string, _ error) {
 	jobID, err := b.SignService.SignArtifact(ctx, bt, inURLs)
 	if err != nil {
 		return nil, err
@@ -1199,7 +1204,15 @@ func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType
 
 		return nil, jobError
 	}
-	return outURLs, nil
+
+	for _, url := range outURLs {
+		f, ok := strings.CutPrefix(url, b.SignedURL+"/")
+		if !ok {
+			return nil, fmt.Errorf("got signed URL %q outside of signing result dir %q, which is unsupported", url, b.SignedURL+"/")
+		}
+		outFiles = append(outFiles, f)
+	}
+	return outFiles, nil
 }
 
 func (b *BuildReleaseTasks) runTests(ctx *wf.TaskContext, build *dashboard.BuildConfig, skipTests []string, binary artifact) error {
@@ -1319,6 +1332,9 @@ func (b *BuildReleaseTasks) runBuildStep(
 			name = target.Name + "." + outputSuffix
 		}
 		scratch, out, err = b.ScratchFS.OpenWrite(ctx, name)
+		if err != nil {
+			return artifact{}, err
+		}
 		defer out.Close()
 		multiOut = io.MultiWriter(out, hash, size)
 	}

@@ -58,6 +58,7 @@ var (
 	pgConnect   = flag.String("pg-connect", "", "Postgres connection string or URI. If empty, libpq connection defaults are used.")
 
 	scratchFilesBase = flag.String("scratch-files-base", "", "Storage for scratch files. gs://bucket/path or file:///path/to/scratch.")
+	signedFilesBase  = flag.String("signed-files-base", "", "Storage for signed files. gs://bucket/path or file:///path/to/signed.")
 	servingFilesBase = flag.String("serving-files-base", "", "Storage for serving files. gs://bucket/path or file:///path/to/serving.")
 	edgeCacheURL     = flag.String("edge-cache-url", "", "URL release files appear at when published to the CDN, e.g. https://dl.google.com/go.")
 	websiteUploadURL = flag.String("website-upload-url", "", "URL to POST website file data to, e.g. https://go.dev/dl/upload.")
@@ -193,6 +194,7 @@ func main() {
 			BaseURL: *scratchFilesBase,
 			GCS:     gcsClient,
 		},
+		SignedURL:                *signedFilesBase,
 		ServingURL:               *servingFilesBase,
 		DownloadURL:              *edgeCacheURL,
 		ProxyPrefix:              "https://proxy.golang.org/golang.org/toolchain/@v",
