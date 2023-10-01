@@ -972,7 +972,7 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 		})
 		for _, f := range mzr.File {
 			var in io.ReadCloser
-			suffix, ok := cutPrefix(f.Name, prefix)
+			suffix, ok := strings.CutPrefix(f.Name, prefix)
 			if !ok {
 				continue
 			}
@@ -1539,16 +1539,4 @@ func (b *BuildReleaseTasks) awaitCloudBuild(ctx *wf.TaskContext, build task.Clou
 		return b.CloudBuildClient.Completed(ctx, build)
 	})
 	return detail, err
-}
-
-// cutPrefix returns s without the provided leading prefix string
-// and reports whether it found the prefix.
-// If s doesn't start with prefix, cutPrefix returns s, false.
-// If prefix is the empty string, cutPrefix returns s, true.
-// TODO: After Go 1.21 is out, delete in favor of strings.CutPrefix.
-func cutPrefix(s, prefix string) (after string, found bool) {
-	if !strings.HasPrefix(s, prefix) {
-		return s, false
-	}
-	return s[len(prefix):], true
 }
