@@ -16,13 +16,13 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"golang.org/x/build/internal/influx"
 	"golang.org/x/build/perfdata"
 	"golang.org/x/perf/benchfmt"
 	"golang.org/x/perf/benchseries"
 	"google.golang.org/api/idtoken"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 )
 
 const (

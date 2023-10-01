@@ -13,7 +13,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 )
 
 // FlagResolver contains the dependencies necessary to resolve a Secret flag.
