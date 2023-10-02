@@ -28,6 +28,8 @@ import (
 	"github.com/google/go-github/github"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shurcooL/githubv4"
+	"go.chromium.org/luci/auth"
+	"go.chromium.org/luci/swarming/client/swarming"
 	"go.opencensus.io/plugin/ochttp"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
@@ -65,6 +67,11 @@ var (
 
 	cloudBuildProject = flag.String("cloud-build-project", "", "GCP project to run miscellaneous Cloud Build tasks")
 	cloudBuildAccount = flag.String("cloud-build-account", "", "Service account to run miscellaneous Cloud Build tasks")
+
+	swarmingURL     = flag.String("swarming-url", "", "Swarming service to use for tasks")
+	swarmingAccount = flag.String("swarming-account", "", "Service account to use for Swarming tasks")
+	swarmingPool    = flag.String("swarming-pool", "", "Swarming pool to run tasks in")
+	swarmingRealm   = flag.String("swarming-realm", "", "Swarming realm to run tasks in")
 )
 
 func main() {
@@ -157,6 +164,15 @@ func main() {
 		ScriptAccount: *cloudBuildAccount,
 		ScratchURL:    *scratchFilesBase + "/build-outputs",
 	}
+	swarmingClient, err := swarming.NewClient(ctx, swarming.ClientOptions{
+		ServiceURL: *swarmingURL,
+		Auth: auth.Options{
+			GCEAllowAsDefault: true,
+		},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 	var dbPool db.PGDBTX
 	dbPool, err = pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
@@ -194,11 +210,17 @@ func main() {
 			BaseURL: *scratchFilesBase,
 			GCS:     gcsClient,
 		},
-		SignedURL:                *signedFilesBase,
-		ServingURL:               *servingFilesBase,
-		DownloadURL:              *edgeCacheURL,
-		ProxyPrefix:              "https://proxy.golang.org/golang.org/toolchain/@v",
-		CloudBuildClient:         cloudBuildClient,
+		SignedURL:        *signedFilesBase,
+		ServingURL:       *servingFilesBase,
+		DownloadURL:      *edgeCacheURL,
+		ProxyPrefix:      "https://proxy.golang.org/golang.org/toolchain/@v",
+		CloudBuildClient: cloudBuildClient,
+		SwarmingClient: &task.RealSwarmingClient{
+			SwarmingClient: swarmingClient,
+			ServiceAccount: *swarmingAccount,
+			Realm:          *swarmingRealm,
+			Pool:           *swarmingPool,
+		},
 		GoogleDockerBuildProject: "symbolic-datum-552",
 		GoogleDockerBuildTrigger: "golang-publish-internal-boringcrypto",
 		PublishFile: func(f task.WebsiteFile) error {

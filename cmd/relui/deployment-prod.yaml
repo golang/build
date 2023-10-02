@@ -48,6 +48,10 @@ spec:
             - "--website-upload-url=https://go.dev/dl/upload"
             - "--cloud-build-project=symbolic-datum-552"
             - "--cloud-build-account=projects/symbolic-datum-552/serviceAccounts/relui-prod@symbolic-datum-552.iam.gserviceaccount.com"
+            - "--swarming-url=https://chrome-swarming.appspot.com"
+            - "--swarming-account=relui-tasks@symbolic-datum-552.iam.gserviceaccount.com"
+            - "--swarming-pool=luci.golang.security-try-workers"
+            - "--swarming-realm=golang:security-try-workers"
           readinessProbe:
             httpGet:
               path: /healthz

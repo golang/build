@@ -50,6 +50,12 @@ func (s *ScratchFS) OpenWrite(ctx *wf.TaskContext, baseName string) (name string
 	return name, f, err
 }
 
+// WriteFilename returns a filename that can be used to write a new scratch file
+// suitable for writing from an external systems.
+func (s *ScratchFS) WriteFilename(ctx *wf.TaskContext, baseName string) string {
+	return fmt.Sprintf("%v-%v", rand.Int63(), baseName)
+}
+
 // URL returns the URL of a file in the workflow's scratch storage, suitable
 // for passing to external systems.
 func (s *ScratchFS) URL(ctx *wf.TaskContext, name string) string {

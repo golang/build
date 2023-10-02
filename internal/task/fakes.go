@@ -721,12 +721,25 @@ func (s *FakeSignService) fakeGPGFile(jobID, f string) string {
 var _ CloudBuildClient = (*FakeCloudBuild)(nil)
 
 const fakeGsutil = `
+#!/bin/bash -eux
+
 case "$1" in
 "cp")
-  cp "${2#file://}" "${3#file://}"
+  in=$2
+  out=$3
+  if [[ $in == '-' ]]; then
+    in=/dev/stdin
+  fi
+  if [[ $out == '-' ]]; then
+    out=/dev/stdout
+  fi
+  cp "${in#file://}" "${out#file://}"
+  ;;
+"cat")
+  cat "${2#file://}"
   ;;
 *)
-  echo unexpected command $@
+  echo unexpected command $@ >&2
   exit 1
   ;;
 esac
@@ -841,4 +854,65 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 	cb.results[id] = runErr
 	cb.mu.Unlock()
 	return CloudBuild{Project: cb.project, ID: id, ResultURL: "file://" + resultDir}, nil
+}
+
+type FakeSwarmingClient struct {
+	t       *testing.T
+	toolDir string
+
+	mu      sync.Mutex
+	results map[string]error
+}
+
+func NewFakeSwarmingClient(t *testing.T, fakeGo string) *FakeSwarmingClient {
+	toolDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(toolDir, "go"), []byte(fakeGo), 0777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(toolDir, "gsutil"), []byte(fakeGsutil), 0777); err != nil {
+		t.Fatal(err)
+	}
+	return &FakeSwarmingClient{
+		t:       t,
+		toolDir: toolDir,
+		results: map[string]error{},
+	}
+}
+
+var _ SwarmingClient = (*FakeSwarmingClient)(nil)
+
+func (c *FakeSwarmingClient) RunTask(ctx context.Context, dims map[string]string, script string, env map[string]string) (string, error) {
+	tempDir := c.t.TempDir()
+	cmd := exec.Command("bash", "-eux")
+	cmd.Stdin = strings.NewReader("set -o pipefail\n" + script)
+	cmd.Dir = c.t.TempDir()
+	cmd.Env = os.Environ()
+	cmd.Env = append(cmd.Env, "TEMP="+tempDir, "TMP="+tempDir, "TEMPDIR="+tempDir, "TMPDIR="+tempDir)
+	cmd.Env = append(cmd.Env, "PATH="+c.toolDir+":/bin:/usr/bin:.") // Note: . is on PATH to help with Windows compatibility
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	buf := &bytes.Buffer{}
+	cmd.Stdout = buf
+	cmd.Stderr = buf
+
+	runErr := cmd.Run()
+	if runErr != nil {
+		runErr = fmt.Errorf("script failed: %v output:\n%s", runErr, buf.String())
+	}
+	id := fmt.Sprintf("build-%v", rand.Int63())
+	c.mu.Lock()
+	c.results[id] = runErr
+	c.mu.Unlock()
+	return id, nil
+}
+
+func (c *FakeSwarmingClient) Completed(ctx context.Context, id string) (string, bool, error) {
+	c.mu.Lock()
+	result, ok := c.results[id]
+	c.mu.Unlock()
+	if !ok {
+		return "", false, fmt.Errorf("unknown task ID %q", id)
+	}
+	return "here's some build detail", true, result
 }

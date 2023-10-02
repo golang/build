@@ -500,8 +500,8 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 		var tar, zip wf.Value[artifact]
 		var mod wf.Value[moduleArtifact]
 		if enableDistpack(major) {
-			distpack := wf.Task3(wd, "Build distpack", tasks.buildDistpack, wf.Const(""), wf.Const(target), source)
-			reproducer := wf.Task3(wd, "Reproduce distpack on Windows", tasks.buildDistpack, wf.Const("windows-amd64-2016"), wf.Const(target), source)
+			distpack := wf.Task2(wd, "Build distpack", tasks.buildDistpack, wf.Const(target), source)
+			reproducer := wf.Task2(wd, "Reproduce distpack on Windows", tasks.reproduceDistpack, wf.Const(target), source)
 			match := wf.Action2(wd, "Check distpacks match", tasks.checkDistpacksMatch, distpack, reproducer)
 			blockers = append(blockers, match)
 			if target.GOOS == "windows" {
@@ -611,6 +611,7 @@ type BuildReleaseTasks struct {
 	GoogleDockerBuildProject string
 	GoogleDockerBuildTrigger string
 	CloudBuildClient         task.CloudBuildClient
+	SwarmingClient           task.SwarmingClient
 	ApproveAction            func(*wf.TaskContext) error
 }
 
@@ -757,50 +758,85 @@ func tarballHashes(r io.Reader, prefix string, hashes map[string]string, include
 	return nil
 }
 
-func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, builder string, target *releasetargets.Target, source artifact) (artifact, error) {
-	if builder == "" {
-		return b.runBuildStep(ctx, target, nil, artifact{}, "tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
-			return b.buildDistpackGCB(ctx, target, source, w)
-		})
-	}
-	bc := dashboard.Builders[builder]
-	return b.runBuildStep(ctx, target, bc, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-		return bs.BuildDistpack(ctx, r, w)
-	})
-}
+func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
+	return b.runBuildStep(ctx, target, nil, artifact{}, "tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+		// We need GOROOT_FINAL both during the binary build and test runs. See go.dev/issue/52236.
+		makeEnv := []string{"GOROOT_FINAL=" + dashboard.GorootFinal(target.GOOS)}
+		// Add extra vars from the target's configuration.
+		makeEnv = append(makeEnv, target.ExtraEnv...)
+		makeEnv = append(makeEnv, "GOOS="+target.GOOS, "GOARCH="+target.GOARCH)
 
-func (b *BuildReleaseTasks) buildDistpackGCB(ctx *wf.TaskContext, target *releasetargets.Target, source artifact, w io.Writer) error {
-	// We need GOROOT_FINAL both during the binary build and test runs. See go.dev/issue/52236.
-	makeEnv := []string{"GOROOT_FINAL=" + dashboard.GorootFinal(target.GOOS)}
-	// Add extra vars from the target's configuration.
-	makeEnv = append(makeEnv, target.ExtraEnv...)
-	makeEnv = append(makeEnv, "GOOS="+target.GOOS, "GOARCH="+target.GOARCH)
-
-	script := fmt.Sprintf(`
+		script := fmt.Sprintf(`
 gsutil cp %q src.tar.gz
 tar -xf src.tar.gz
 (cd go/src && %v ./make.bash -distpack)
 (cd go/pkg/distpack && tar -czf ../../../distpacks.tar.gz *)
 `, b.ScratchFS.URL(ctx, source.Scratch), strings.Join(makeEnv, " "))
-	build, err := b.CloudBuildClient.RunScript(ctx, script, "", []string{"distpacks.tar.gz"})
-	if err != nil {
+		build, err := b.CloudBuildClient.RunScript(ctx, script, "", []string{"distpacks.tar.gz"})
+		if err != nil {
+			return err
+		}
+		if _, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
+			return b.CloudBuildClient.Completed(ctx, build)
+		}); err != nil {
+			return err
+		}
+		resultFS, err := b.CloudBuildClient.ResultFS(ctx, build)
+		if err != nil {
+			return err
+		}
+		distpack, err := resultFS.Open("distpacks.tar.gz")
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(w, distpack)
 		return err
-	}
-	if _, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
-		return b.CloudBuildClient.Completed(ctx, build)
-	}); err != nil {
+	})
+}
+
+func (b *BuildReleaseTasks) reproduceDistpack(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
+	return b.runBuildStep(ctx, target, nil, artifact{}, "tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+		scratchFile := b.ScratchFS.WriteFilename(ctx, fmt.Sprintf("reproduce-distpack-%v.tar.gz", target.Name))
+		// This script is carefully crafted to work on both Windows and Unix
+		// for testing. In particular, Windows doesn't seem to like ./foo.exe,
+		// so we have to run it unadorned with . on PATH.
+		script := fmt.Sprintf(
+			`gsutil cat %s | tar -xzf - && cd go/src && make.bat -distpack && cd ../pkg/distpack && tar -czf - * | gsutil cp - %s`,
+			b.ScratchFS.URL(ctx, source.Scratch), b.ScratchFS.URL(ctx, scratchFile))
+
+		env := map[string]string{
+			"GOOS":   target.GOOS,
+			"GOARCH": target.GOARCH,
+		}
+		for _, e := range target.ExtraEnv {
+			k, v, ok := strings.Cut(e, "=")
+			if !ok {
+				return fmt.Errorf("malformed env var %q", e)
+			}
+			env[k] = v
+		}
+
+		id, err := b.SwarmingClient.RunTask(ctx, map[string]string{
+			"cipd_platform": "windows-amd64",
+			"os":            "Windows-10",
+		}, script, env)
+		if err != nil {
+			return err
+		}
+		if _, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
+			return b.SwarmingClient.Completed(ctx, id)
+		}); err != nil {
+			return err
+		}
+
+		distpack, err := b.ScratchFS.OpenRead(ctx, scratchFile)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(w, distpack)
 		return err
-	}
-	resultFS, err := b.CloudBuildClient.ResultFS(ctx, build)
-	if err != nil {
-		return err
-	}
-	distpack, err := resultFS.Open("distpacks.tar.gz")
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(w, distpack)
-	return err
+	})
+
 }
 
 func (b *BuildReleaseTasks) checkDistpacksMatch(ctx *wf.TaskContext, linux, windows artifact) error {

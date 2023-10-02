@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
+//go:build linux || darwin
 
 // The coordinator runs the majority of the Go build system.
 //
