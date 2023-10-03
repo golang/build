@@ -2424,8 +2424,8 @@ func init() {
 			// of Go, hence the atLeastGo1 call below; versions of Go
 			// prior to 1.20 will use the *-oldcc variant instead. See
 			// issue 35006 for more details.
-			return onlyGo(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20)
+			return atLeastGo1(goBranch, 20) &&
+				buildRepoByDefault(repo)
 		},
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		tryBot:            defaultTrySet(),

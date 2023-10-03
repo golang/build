@@ -335,6 +335,7 @@ func TestTrybots(t *testing.T) {
 				"netbsd-amd64-9_3",
 				"openbsd-386-72",
 				"openbsd-amd64-72",
+				"windows-386-2016",
 				"windows-amd64-2016",
 
 				"misc-compile-windows-arm",
