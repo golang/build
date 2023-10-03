@@ -1307,9 +1307,6 @@ var (
 // we only run them on servers and don't need to test the
 // many different architectures that Go supports (like ios).
 func linuxAmd64Repos(repo, branch, goBranch string) bool {
-	if repo == "pkgsite-metrics" {
-		return atLeastGo1(goBranch, 20)
-	}
 	return true
 }
 
@@ -1618,9 +1615,6 @@ func init() {
 		},
 		numTestHelpers:    1,
 		numTryTestHelpers: 4,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 19) && buildRepoByDefault(repo)
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:       "linux-amd64-vmx",
@@ -1630,9 +1624,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "linux-amd64-alpine",
 		HostType: "host-linux-amd64-alpine",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
-		},
 	})
 
 	// addMiscCompileGo1 adds a misc-compile TryBot that
@@ -2238,14 +2229,9 @@ func init() {
 		HostType:       "host-windows-amd64-2008",
 		distTestAdjust: noTestDirAndNoReboot,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder has modern/recent C compilers installed,
-			// meaning that we only want to use it with 1.20+ versions
-			// of Go, hence the atLeastGo1 call below; versions of Go
-			// prior to 1.20 will use the *-oldcc variant instead. See
-			// issue 35006 for more details.
-			// Go 1.20 is also the last version with Windows 7 support. See proposal 57003.
+			// Go 1.20 is the last version with Windows 7 support. See proposal 57003.
 			return onlyGo(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20) && atMostGo1(goBranch, 20)
+				atMostGo1(goBranch, 20)
 		},
 		env: []string{
 			"GOARCH=amd64",
@@ -2261,22 +2247,12 @@ func init() {
 		Name:     "windows-386-2008",
 		HostType: "host-windows-amd64-2008",
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder has modern/recent C compilers installed,
-			// meaning that we only want to use it with 1.20+ versions
-			// of Go, hence the atLeastGo1 call below; versions of Go
-			// prior to 1.20 will use the *-oldcc variant instead. See
-			// issue 35006 for more details.
-			// Go 1.20 is also the last version with Windows 7 support. See proposal 57003.
+			// Go 1.20 is the last version with Windows 7 support. See proposal 57003.
 			return defaultPlusExpBuild(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20) && atMostGo1(goBranch, 20)
+				atMostGo1(goBranch, 20)
 		},
-		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot: func(repo, branch, goBranch string) bool {
-			// See comment above about the atLeastGo1 call below.
-			dft := defaultTrySet()
-			return dft(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20)
-		},
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
@@ -2284,36 +2260,17 @@ func init() {
 		HostType:       "host-windows-amd64-2012",
 		distTestAdjust: fasterTrybots,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder has modern/recent C compilers installed,
-			// meaning that we only want to use it with 1.20+ versions
-			// of Go, hence the atLeastGo1 call below; versions of Go
-			// prior to 1.20 will use the *-oldcc variant instead. See
-			// issue 35006 for more details.
-			// Go 1.20 is also the last version with Windows 8/8.1 support. See proposal 57004.
+			// Go 1.20 is the last version with Windows 8/8.1 support. See proposal 57004.
 			return onlyGo(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20) && atMostGo1(goBranch, 20)
+				atMostGo1(goBranch, 20)
 		},
-		env: []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot: func(repo, branch, goBranch string) bool {
-			// See comment above about the atLeastGo1 call below.
-			dft := defaultTrySet()
-			return dft(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20)
-		},
+		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
+		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-386-2016",
-		HostType: "host-windows-amd64-2016",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder has modern/recent C compilers installed,
-			// meaning that we only want to use it with 1.20+ versions
-			// of Go, hence the atLeastGo1 call below; versions of Go
-			// prior to 1.20 will use the *-oldcc variant instead. See
-			// issue 35006 for more details.
-			return atLeastGo1(goBranch, 20) &&
-				buildRepoByDefault(repo)
-		},
+		Name:              "windows-386-2016",
+		HostType:          "host-windows-amd64-2016",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
@@ -2323,14 +2280,9 @@ func init() {
 		HostType:       "host-windows-amd64-2012",
 		distTestAdjust: noTestDirAndNoReboot,
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder has modern/recent C compilers installed,
-			// meaning that we only want to use it with 1.20+ versions
-			// of Go, hence the atLeastGo1 call below; versions of Go
-			// prior to 1.20 will use the *-oldcc variant instead. See
-			// issue 35006 for more details.
-			// Go 1.20 is also the last version with Windows 8/8.1 support. See proposal 57004.
+			// Go 1.20 is the last version with Windows 8/8.1 support. See proposal 57004.
 			return onlyGo(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20) && atMostGo1(goBranch, 20)
+				atMostGo1(goBranch, 20)
 		},
 		env: []string{
 			"GOARCH=amd64",
@@ -2343,17 +2295,9 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "windows-amd64-2016",
-		HostType: "host-windows-amd64-2016",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder has modern/recent C compilers installed,
-			// meaning that we only want to use it with 1.20+ versions
-			// of Go, hence the atLeastGo1 call below; versions of Go
-			// prior to 1.20 will use the *-oldcc variant instead. See
-			// issue 35006 for more details.
-			return defaultPlusExpBuild(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20)
-		},
+		Name:           "windows-amd64-2016",
+		HostType:       "host-windows-amd64-2016",
+		buildsRepo:     defaultPlusExpBuild,
 		distTestAdjust: fasterTrybots,
 		env: []string{
 			"GOARCH=amd64",
@@ -2364,12 +2308,7 @@ func init() {
 			// up:
 			"GO_TEST_TIMEOUT_SCALE=2",
 		},
-		tryBot: func(repo, branch, goBranch string) bool {
-			// See comment above about the atLeastGo1 call below.
-			dft := defaultTrySet()
-			return dft(repo, branch, goBranch) &&
-				atLeastGo1(goBranch, 20)
-		},
+		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 5,
 	})
 	addBuilder(BuildConfig{
@@ -2381,13 +2320,7 @@ func init() {
 			return repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := defaultPlusExpBuild(repo, branch, goBranch) &&
-				// This builder has modern/recent C compilers installed,
-				// meaning that we only want to use it with 1.20+ versions
-				// of Go, hence the atLeastGo1 call below; versions of Go
-				// prior to 1.20 will use the *-oldcc variant instead. See
-				// issue 35006 for more details.
-				atLeastGo1(goBranch, 20)
+			b := defaultPlusExpBuild(repo, branch, goBranch)
 			if repo != "go" && !(branch == "master" && goBranch == "master") {
 				// For golang.org/x repos, don't test non-latest versions.
 				b = false
@@ -2403,15 +2336,6 @@ func init() {
 		Name:     "windows-amd64-race",
 		HostType: "host-windows-amd64-2016",
 		Notes:    "Only runs -race tests (./race.bat)",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// This builder has modern/recent C compilers installed,
-			// meaning that we only want to use it with 1.20+ versions
-			// of Go, hence the atLeastGo1 call below; versions of Go
-			// prior to 1.20 will use the *-oldcc variant instead. See
-			// issue 35006 for more details.
-			return atLeastGo1(goBranch, 20) &&
-				buildRepoByDefault(repo)
-		},
 		env: []string{
 			"GOARCH=amd64",
 			"GOHOSTARCH=amd64",
@@ -2568,13 +2492,6 @@ func init() {
 		Notes:    "Android emulator on GCE (GOOS=android GOARCH=386)",
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
-			if repo != "go" && !atLeastGo1(goBranch, 20) {
-				// This builder ends up in an awkward state for 'go build' support
-				// because it is cross-compiled: before https://go.dev/cl/451219
-				// (released in Go 1.20), it enables cgo if the host had cgo enabled,
-				// even if the test environment lacks a C toolchain.
-				b = false
-			}
 			switch repo {
 			case "mobile":
 				b = true
@@ -2609,13 +2526,6 @@ func init() {
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			b := buildRepoByDefault(repo)
-			if repo != "go" && !atLeastGo1(goBranch, 20) {
-				// This builder ends up in an awkward state for 'go build' support
-				// because it is cross-compiled: before https://go.dev/cl/451219
-				// (released in Go 1.20), it enables cgo if the host had cgo enabled,
-				// even if the test environment lacks a C toolchain.
-				b = false
-			}
 			switch repo {
 			case "mobile":
 				b = true
@@ -2658,9 +2568,6 @@ func init() {
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "linux-ppc64le-buildlet",
@@ -2682,9 +2589,6 @@ func init() {
 		FlakyNet:       true,
 		distTestAdjust: ppc64DistTestPolicy,
 		env:            []string{"GO_TEST_TIMEOUT_SCALE=2"}, // see go.dev/issues/44422
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "linux-arm64",
@@ -2703,9 +2607,6 @@ func init() {
 			"GOEXPERIMENT=boringcrypto",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 19) && buildRepoByDefault(repo)
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "linux-arm64-longtest",
@@ -2716,7 +2617,7 @@ func init() {
 			return repo == "go" && onReleaseBranch // See issue 37827.
 		},
 		buildsRepo: func(repo, branch, goBranch string) bool {
-			b := atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
+			b := buildRepoByDefault(repo)
 			if repo != "go" && !(branch == "master" && goBranch == "master") {
 				// For golang.org/x repos, don't test non-latest versions.
 				b = false
@@ -2756,9 +2657,9 @@ func init() {
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			switch repo {
 			case "go":
-				return atLeastGo1(goBranch, 19)
+				return true
 			case "arch", "net", "sys":
-				return branch == "master" && atLeastGo1(goBranch, 19)
+				return branch == "master"
 			default:
 				return false
 			}
@@ -2893,9 +2794,6 @@ func init() {
 		HostType:     "host-dragonfly-amd64-622",
 		Notes:        "DragonFly BSD 6.2.2, running on GCE",
 		SkipSnapshot: true,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return atLeastGo1(goBranch, 20) && buildRepoByDefault(repo)
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "freebsd-arm-paulzhol",
