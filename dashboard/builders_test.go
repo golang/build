@@ -255,62 +255,6 @@ func TestTrybots(t *testing.T) {
 			},
 		},
 		{
-			repo:   "go",
-			branch: "release-branch.go1.19",
-			want: []string{
-				"freebsd-amd64-12_3",
-				"js-wasm",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-boringcrypto",
-				"linux-amd64-race",
-				"linux-arm64",
-				"openbsd-amd64-72",
-				"windows-386-2008-oldcc",
-				"windows-386-2012-oldcc",
-				"windows-386-2016-oldcc",
-				"windows-amd64-2016-oldcc",
-
-				"misc-compile-windows-arm",
-				"misc-compile-windows-arm64",
-				"misc-compile-darwin-amd64",
-				"misc-compile-darwin-arm64",
-				"misc-compile-linux-mips",
-				"misc-compile-linux-mips64",
-				"misc-compile-linux-mipsle",
-				"misc-compile-linux-mips64le",
-				"misc-compile-linux-ppc64",
-				"misc-compile-linux-ppc64le",
-				"misc-compile-aix-ppc64",
-				"misc-compile-freebsd-386",
-				"misc-compile-freebsd-arm",
-				"misc-compile-freebsd-arm64",
-				"misc-compile-netbsd-386",
-				"misc-compile-netbsd-amd64",
-				"misc-compile-netbsd-arm",
-				"misc-compile-netbsd-arm64",
-				"misc-compile-openbsd-386",
-				"misc-compile-openbsd-arm",
-				"misc-compile-openbsd-arm64",
-				"misc-compile-plan9-386",
-				"misc-compile-plan9-amd64",
-				"misc-compile-plan9-arm",
-				"misc-compile-solaris-amd64",
-				"misc-compile-illumos-amd64",
-				"misc-compile-dragonfly-amd64",
-				"misc-compile-linux-loong64",
-				"misc-compile-linux-riscv64",
-				"misc-compile-linux-s390x",
-				"misc-compile-linux-arm",
-				"misc-compile-linux-arm-arm5",
-
-				// Include longtest builders on Go repo release branches. See issue 37827.
-				"linux-386-longtest",
-				"linux-amd64-longtest",
-				"windows-amd64-longtest-oldcc",
-			},
-		},
-		{
 			repo:   "mobile",
 			branch: "master",
 			want: []string{
@@ -791,7 +735,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "vulndb"), both},
 		{b("linux-amd64-longtest", "vulndb"), onlyPost},
 
-		{b("linux-amd64@go1.19", "pkgsite-metrics"), none},
 		{b("linux-amd64@go1.20", "pkgsite-metrics"), both},
 
 		{b("js-wasm", "build"), none},
@@ -840,7 +783,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("dragonfly-amd64-622", "net"), onlyPost},
 
 		{b("linux-amd64-staticlockranking", "go"), onlyPost},
-		{b("linux-amd64-staticlockranking@go1.19", "go"), onlyPost},
 		{b("linux-amd64-staticlockranking", "net"), none},
 
 		{b("linux-amd64-nounified", "go"), none},
@@ -1324,84 +1266,6 @@ func TestHostConfigCosArchitecture(t *testing.T) {
 				t.Errorf("HostConfig.CosArchitecture() = %+v; want %+v", got, tc.want)
 			}
 		})
-	}
-}
-
-func TestWindowsCCSetup(t *testing.T) {
-	// For 1.18 + 1.19 we want to see the "-oldcc" variants,
-	// where for 1.20 and main branch we want the non-oldcc variants,
-	// both for trybots and post-submit testing.
-	tests := []struct {
-		repo   string // "go", "net", etc
-		branch string // of repo
-		want   string
-	}{
-		{
-			repo:   "go",
-			branch: "master",
-			want:   "newcc",
-		},
-		{
-			repo:   "tools",
-			branch: "master",
-			want:   "newcc",
-		},
-		{
-			repo:   "go",
-			branch: "go1.20",
-			want:   "newcc",
-		},
-		{
-			repo:   "go",
-			branch: "go1.19",
-			want:   "oldcc",
-		},
-		{
-			repo:   "build",
-			branch: "go1.19",
-			want:   "oldcc",
-		},
-	}
-
-	checkWindowsBuilders := func(got []*BuildConfig, want string, repo, branch string) {
-		t.Helper()
-		for _, b := range got {
-			bname := b.Name
-			if !strings.HasPrefix(bname, "windows-amd64") &&
-				!strings.HasPrefix(bname, "windows-386") {
-				continue
-			}
-			hasOldCC := strings.Contains(bname, "oldcc")
-			if want == "newcc" && hasOldCC {
-				t.Errorf("got unexpected oldcc builder %q repo %s branch %s",
-					bname, repo, branch)
-			} else if want == "oldcc" && !hasOldCC {
-				t.Errorf("got unexpected newcc builder %q repo %s branch %s",
-					bname, repo, branch)
-			}
-		}
-	}
-
-	for i, tt := range tests {
-		if tt.branch == "" || tt.repo == "" {
-			t.Errorf("incomplete test entry %d", i)
-			return
-		}
-		if tt.want != "newcc" && tt.want != "oldcc" {
-			t.Errorf("incorrect 'want' field in test entry %d", i)
-			return
-		}
-		t.Run(fmt.Sprintf("%s/%s", tt.repo, tt.branch), func(t *testing.T) {
-			goBranch := tt.branch // hard-code the common case for now
-			got := TryBuildersForProject(tt.repo, tt.branch, goBranch)
-			checkWindowsBuilders(got, tt.want, tt.repo, tt.branch)
-		})
-		t.Run(fmt.Sprintf("%s/%s", tt.repo, tt.branch), func(t *testing.T) {
-			goBranch := tt.branch // hard-code the common case for now
-			got := buildersForProject(tt.repo, tt.branch, goBranch, (*BuildConfig).BuildsRepoPostSubmit)
-			checkWindowsBuilders(got, tt.want, tt.repo, tt.branch)
-		})
-
 	}
 }
 
