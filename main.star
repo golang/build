@@ -188,7 +188,11 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
 # LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
 # They need to match the builder type, excluding any run mods.
 LOW_CAPACITY_HOSTS = [
-    "darwin-amd64",
+    "darwin-amd64_10.15",
+    "darwin-amd64_11",
+    "darwin-amd64_12",
+    "darwin-amd64_13",
+    "darwin-amd64_14",
     "linux-ppc64le",
     "solaris-amd64",
 ]
@@ -222,7 +226,11 @@ luci.list_view(
 #
 # The format of a builder type is thus $GOOS-$GOARCH(_osversion)?(-$RUN_MOD)*.
 BUILDER_TYPES = [
-    "darwin-amd64",
+    "darwin-amd64_10.15",
+    "darwin-amd64_11",
+    "darwin-amd64_12",
+    "darwin-amd64_13",
+    "darwin-amd64_14",
     "linux-386",
     "linux-386-longtest",
     "linux-amd64",
@@ -524,7 +532,7 @@ def define_builder(env, project, go_branch_short, builder_type):
         "env": {},
     }
 
-    os, arch, _, run_mods = split_builder_type(builder_type)
+    os, arch, suffix, run_mods = split_builder_type(builder_type)
 
     # We run 386 builds on amd64 with GO[HOST]ARCH set.
     if arch == "386":
@@ -545,9 +553,16 @@ def define_builder(env, project, go_branch_short, builder_type):
     if not is_fully_supported(base_dims) and (base_props["bootstrap_version"].startswith("1.20") or base_props["bootstrap_version"].startswith("1.1")):
         base_props["bootstrap_version"] = "1.21.0"
 
-    # TODO(heschi): Select the version based on the macOS version or builder type
     if os == "darwin":
-        base_props["xcode_version"] = "12e5244e"
+        # See available versions with: cipd instances -limit 0 infra_internal/ios/xcode/mac | less
+        xcode_versions = {
+            10: "11e503a", # released March 2020, macOS 10.15 released Oct 2019
+            11: "12b45b",  # released Nov 2020, macOS 11 released June 2020
+            12: "13c100", # released Dec 2021, macOS 12 released Oct 2021
+            13: "14b47b", # released Nov 2022, macOS 13 released Oct 2022
+            14: "15a240d", # released Sep 2023, macOS 14 released Sep 2023
+        }
+        base_props["xcode_version"] = xcode_versions[int(suffix.split('.')[0])]
 
     # Turn on the no-network check.
     if builder_type in NO_NETWORK_BUILDERS:
