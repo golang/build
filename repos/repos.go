@@ -64,6 +64,7 @@ func init() {
 	addMirrored("proposal")
 	addMirrored("sublime-build")
 	addMirrored("sublime-config")
+	addMirrored("wiki")
 
 	x("arch")
 	x("benchmarks", desc("benchmarks to measure Go as it is developed"))
