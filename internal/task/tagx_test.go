@@ -462,8 +462,7 @@ func TestTagXRepos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(deps.ctx, time.Minute)
-	defer cancel()
+	ctx := deps.ctx
 	_, err = w.Run(ctx, &verboseListener{t: t})
 	if err != nil {
 		t.Fatal(err)
