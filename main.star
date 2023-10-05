@@ -565,7 +565,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             10: "11e503a",  # released Apr 2020, macOS 10.15 released Oct 2019
             11: "12b45b",  # released Nov 2020, macOS 11 released Nov 2020
             12: "13c100",  # released Dec 2021, macOS 12 released Oct 2021
-            13: "14b47b",  # released Nov 2022, macOS 13 released Oct 2022
+            13: "14c18",  # released Dec 2022, macOS 13 released Oct 2022
             14: "15a240d",  # released Sep 2023, macOS 14 released Sep 2023
         }
         base_props["xcode_version"] = xcode_versions[int(suffix.split(".")[0])]
