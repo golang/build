@@ -58,6 +58,7 @@ var (
 	coordinator  = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
 	hostname     = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
 	healthAddr   = flag.String("health-addr", "0.0.0.0:8080", "For reverse buildlets, address to listen for /healthz requests separately from the reverse dialer to the coordinator.")
+	version      = flag.Bool("version", false, "print buildlet version and exit")
 )
 
 // Bump this whenever something notable happens, or when another
@@ -144,8 +145,13 @@ func main() {
 		}
 	}
 
-	log.Printf("buildlet starting.")
 	flag.Parse()
+	if *version {
+		fmt.Printf("buildlet version %v (%s-%s)\n", buildletVersion, runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("built with %v\n", runtime.Version())
+		os.Exit(0)
+	}
+	log.Printf("buildlet starting.")
 
 	if builderEnv == "android-amd64-emu" {
 		startAndroidEmulator()
