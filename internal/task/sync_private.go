@@ -11,6 +11,7 @@ import (
 )
 
 type PrivateMasterSyncTask struct {
+	Git              *Git
 	PrivateGerritURL string
 	Ref              string
 }
@@ -22,8 +23,7 @@ func (t *PrivateMasterSyncTask) NewDefinition() *wf.Definition {
 	// use an Action the definition will tell us we don't reference it anywhere
 	// and say it should be deleted.
 	synced := wf.Task0(wd, "Sync go-private master to public", func(ctx *wf.TaskContext) (string, error) {
-		git := &Git{}
-		repo, err := git.Clone(ctx, t.PrivateGerritURL)
+		repo, err := t.Git.Clone(ctx, t.PrivateGerritURL)
 		if err != nil {
 			return "", err
 		}

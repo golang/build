@@ -67,6 +67,10 @@ func (g *Git) runGitStreamed(ctx context.Context, stdout, stderr io.Writer, dir 
 		}
 		args = append([]string{"-c", "http.cookiefile=" + g.cookieFile}, args...)
 	}
+	args = append([]string{
+		"-c", "user.email=gobot@golang.org",
+		"-c", "user.name='Gopher Robot'",
+	}, args...)
 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir

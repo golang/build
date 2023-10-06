@@ -273,11 +273,21 @@ func main() {
 	}
 	dh.RegisterDefinition("Tag a new version of x/telemetry/config (if necessary)", tagTelemetryTasks.NewDefinition())
 
+	git := &task.Git{}
+	git.UseOAuth2Auth(creds.TokenSource)
 	privateSyncTask := &task.PrivateMasterSyncTask{
+		Git:              git,
 		PrivateGerritURL: "https://team.googlesource.com/golang/go-private",
 		Ref:              "public",
 	}
 	dh.RegisterDefinition("Sync go-private master branch with public", privateSyncTask.NewDefinition())
+
+	updateProxyTest := &task.UpdateProxyTestRepoTasks{
+		Git:       git,
+		GerritURL: "https://golang-modproxy-test.googlesource.com/latest-go-version",
+		Branch:    "main",
+	}
+	dh.RegisterDefinition("Update mod proxy test case", updateProxyTest.NewDefinition())
 
 	var base *url.URL
 	if *baseURL != "" {

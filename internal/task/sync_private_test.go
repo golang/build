@@ -20,6 +20,7 @@ func TestSyncPrivate(t *testing.T) {
 	})
 
 	sync := &PrivateMasterSyncTask{
+		Git:              &Git{},
 		PrivateGerritURL: fakeRepo.dir.dir, // kind of wild that this works
 		Ref:              "public",
 	}
