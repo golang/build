@@ -896,8 +896,11 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
-    presubmit = postsubmit and not is_capacity_constrained(low_capacity_hosts, builder_type)
-    presubmit = presubmit and "openbsd" not in builder_type
+    presubmit = postsubmit  # Default to running in presubmit if and only if running in postsubmit.
+    presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, builder_type)  # Capacity.
+    presubmit = presubmit and "openbsd" not in builder_type  # Not yet enabled. See CL 526255.
+    if project != "go":  # Some ports run as presubmit only in the main Go repo.
+        presubmit = presubmit and os not in ["js", "wasip1"]
 
     # Apply policies for each run mod.
     exists = True
@@ -906,10 +909,6 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         exists = exists and ex
         presubmit = presubmit and pre
         postsubmit = postsubmit and post
-
-    # TODO(dmitshur): Enable js-wasm trybots after post-submit is passing.
-    if os == "js":
-        presubmit = False
 
     # Make it easier to check enabled(...)[1] or enabled(...)[2] in a loop.
     if not exists:
