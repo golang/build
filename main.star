@@ -875,10 +875,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         postsubmit = postsubmit and post
 
     # TODO(dmitshur): Enable js-wasm trybots after post-submit is passing.
-    # TODO(dmitshur): Add js-wasm builders for the rest of repos&branches.
+    # TODO(dmitshur): Add js-wasm builders for the rest of repos.
     if os == "js":
         presubmit = False
-        exists = exists and project == "go" and go_branch_short == "gotip"
+        exists = exists and project == "go"
 
     # Make it easier to check enabled(...)[1] or enabled(...)[2] in a loop.
     if not exists:
