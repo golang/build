@@ -452,8 +452,6 @@ def dimensions_of(low_capacity_hosts, builder_type):
         # internal config: //starlark/common/envs/golang.star
         if goos == "linux" and host not in low_capacity_hosts:
             os = "Debian-11"
-        elif goos == "darwin":
-            os = "Mac-12.6"
         elif goos == "windows":
             os = "Windows-10"
 
