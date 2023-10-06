@@ -561,11 +561,11 @@ def define_builder(env, project, go_branch_short, builder_type):
         node_versions = {
             # Confirm that version is available with: cipd search infra/3pp/tools/nodejs/linux-amd64 -tag=version:{node_version}
             18: "2@18.8.0",
-            14: "14.14.0",
+            13: "13.2.0",
         }
         base_props["node_version"] = node_versions[18]
         if go_branch_short == "go1.20":
-            base_props["node_version"] = node_versions[14]
+            base_props["node_version"] = node_versions[13]
 
     # Construct the basic dimensions for the build/test running part of the build.
     #
