@@ -878,7 +878,11 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     # TODO(dmitshur): Add js-wasm builders for the rest of repos.
     if os == "js":
         presubmit = False
-        exists = exists and project == "go"
+        exists = exists and project in [
+            "go",
+            "arch",  # an x repo where the js/wasm builder is enabled
+            "mobile",  # an x repo where the js/wasm builder is NOT enabled
+        ]
 
     # Make it easier to check enabled(...)[1] or enabled(...)[2] in a loop.
     if not exists:
