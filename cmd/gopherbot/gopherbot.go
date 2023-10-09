@@ -368,6 +368,9 @@ func main() {
 			{vscode, 1402}: true,
 		},
 	}
+	for n := int32(55359); n <= 55828; n++ {
+		bot.deletedIssues[githubIssue{goRepo, n}] = true
+	}
 	bot.initCorpus()
 
 	for {
