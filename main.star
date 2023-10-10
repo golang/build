@@ -151,6 +151,13 @@ luci.binding(
     groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
 )
 
+# Allow users with the taskTriggerer role to impersonate the service accounts.
+luci.binding(
+    roles = "role/swarming.taskServiceAccount",
+    realm = PUBLIC_REALMS,
+    users = "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
+)
+
 # Allow the user to impersonate task service accounts and create new resources. The user must
 # have both the poolUser and taskTriggerer roles.
 luci.binding(
