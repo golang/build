@@ -76,13 +76,13 @@ func (c *RealCloudBuildClient) RunScript(ctx context.Context, script string, ger
 set -eux
 archive=$(wget -qO - 'https://go.dev/dl/?mode=json' | grep -Eo 'go.*linux-amd64.tar.gz' | head -n 1)
 wget -qO - https://go.dev/dl/${archive} | tar -xz
-mv go released_go
+mv go /workspace/released_go
 `
 
 	const scriptPrefix = `#!/usr/bin/env bash
 set -eux
 set -o pipefail
-export PATH=$PWD/released_go/bin:$PATH
+export PATH=/workspace/released_go/bin:$PATH
 `
 
 	// Cloud build loses directory structure when it saves artifacts, which is
