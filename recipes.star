@@ -45,7 +45,7 @@ def bundler(
     )
     luci.list_view_entry(
         builder = name,
-        list_view = "prod-builders",
+        list_view = "prod",
     )
 
 bundler(

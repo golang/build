@@ -225,8 +225,7 @@ luci.bucket(name = "prod")
 
 # A list with builders in "prod" bucket.
 luci.list_view(
-    name = "prod-builders",
-    title = "Production builders",
+    name = "prod",
 )
 
 # BUILDER_TYPES lists possible builder types.
@@ -920,6 +919,7 @@ POST_ACTIONS = [
 ]
 
 def _define_go_ci():
+    postsubmit_builders_by_port = {}
     for project in PROJECTS:
         for go_branch_short, go_branch in GO_BRANCHES.items():
             # Set up a CQ group for the builder definitions below.
@@ -975,7 +975,7 @@ def _define_go_ci():
                 # Define post-submit builders.
                 if postsubmit:
                     name = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
-                    postsubmit_builders[name] = display_for_builder_type(builder_type)
+                    postsubmit_builders[name] = builder_type
 
             # For golang.org/x repos, also include coverage for all
             # supported Go releases in addition to testing with tip.
@@ -1005,7 +1005,14 @@ def _define_go_ci():
                         disable_reuse = True,
                     )
                     ci_builder = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
-                    postsubmit_builders[ci_builder] = display_for_builder_type(builder_type)
+                    postsubmit_builders[ci_builder] = builder_type
+
+            # Collect all the postsubmit builders by port.
+            for name, builder_type in postsubmit_builders.items():
+                os, arch, _, _ = split_builder_type(builder_type)
+                port = "%s/%s" % (os, arch)
+                postsubmit_builders_by_port.setdefault(port, [])
+                postsubmit_builders_by_port[port].append(name)
 
             # Create the gitiles_poller last because we need the full set of builders to
             # trigger at the point of definition.
@@ -1033,10 +1040,10 @@ def _define_go_ci():
                 return [
                     luci.console_view_entry(
                         builder = name,
-                        category = display[0],
-                        short_name = display[1],
+                        category = display_for_builder_type(builder_type)[0],
+                        short_name = display_for_builder_type(builder_type)[1],
                     )
-                    for name, display in builders.items()
+                    for name, builder_type in builders.items()
                 ]
 
             if project == "go":
@@ -1108,6 +1115,14 @@ def _define_go_ci():
                     refs = ["refs/heads/" + go_branch.branch],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
+
+    # Emit builder groups for each port.
+    for port, builders in postsubmit_builders_by_port.items():
+        luci.list_view(
+            name = "port-%s" % port.replace("/", "-"),
+            title = "all %s" % port,
+            entries = builders,
+        )
 
 def _define_go_internal_ci():
     for go_branch_short, go_branch in GO_BRANCHES.items():
