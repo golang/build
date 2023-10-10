@@ -39,7 +39,8 @@ func (x *TagXReposTasks) NewDefinition() *wf.Definition {
 	wd := wf.New()
 	reviewers := wf.Param(wd, reviewersParam)
 	repos := wf.Task0(wd, "Select repositories", x.SelectRepos)
-	wf.Expand2(wd, "Create plan", x.BuildPlan, repos, reviewers)
+	done := wf.Expand2(wd, "Create plan", x.BuildPlan, repos, reviewers)
+	wf.Output(wd, "done", done)
 	return wd
 }
 
@@ -51,7 +52,8 @@ func (x *TagXReposTasks) NewSingleDefinition() *wf.Definition {
 	// TODO: optional is required to avoid the "required" check, but since it's a checkbox
 	// it's obviously yes/no, should probably be exempted from that check.
 	skipPostSubmit := wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
-	wf.Expand4(wd, "Create single-repo plan", x.BuildSingleRepoPlan, repos, name, skipPostSubmit, reviewers)
+	tagged := wf.Expand4(wd, "Create single-repo plan", x.BuildSingleRepoPlan, repos, name, skipPostSubmit, reviewers)
+	wf.Output(wd, "tagged repository", tagged)
 	return wd
 }
 
@@ -278,7 +280,7 @@ func checkCycles1(reposByModule map[string]TagRepo, repo TagRepo, stack []string
 }
 
 // BuildPlan adds the tasks needed to update repos to wd.
-func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers []string) error {
+func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers []string) (wf.Value[string], error) {
 	// repo.ModPath to the wf.Value produced by planning it.
 	planned := map[string]wf.Value[TagRepo]{}
 
@@ -305,7 +307,7 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers
 					missing = append(missing, r.Name)
 				}
 			}
-			return fmt.Errorf("failed to progress the plan: todo: %v", missing)
+			return nil, fmt.Errorf("failed to progress the plan: todo: %v", missing)
 		}
 	}
 	var allDeps []wf.Dependency
@@ -313,11 +315,10 @@ func (x *TagXReposTasks) BuildPlan(wd *wf.Definition, repos []TagRepo, reviewers
 		allDeps = append(allDeps, dep)
 	}
 	done := wf.Task0(wd, "done", func(_ context.Context) (string, error) { return "done!", nil }, wf.After(allDeps...))
-	wf.Output(wd, "done", done)
-	return nil
+	return done, nil
 }
 
-func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagRepo, name string, skipPostSubmit bool, reviewers []string) error {
+func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagRepo, name string, skipPostSubmit bool, reviewers []string) (wf.Value[TagRepo], error) {
 	repos := map[string]TagRepo{}
 	plannedRepos := map[string]wf.Value[TagRepo]{}
 	for _, r := range repoSlice {
@@ -329,7 +330,7 @@ func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagR
 	}
 	repo, ok := repos[name]
 	if !ok {
-		return fmt.Errorf("no repository %q", name)
+		return nil, fmt.Errorf("no repository %q", name)
 	}
 	tagged, ok := x.planRepo(wd, repo, plannedRepos, reviewers, skipPostSubmit)
 	if !ok {
@@ -337,10 +338,9 @@ func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagR
 		for _, d := range repo.Deps {
 			deps = append(deps, d.ModPath)
 		}
-		return fmt.Errorf("%q doesn't have all of its dependencies (%q)", repo.Name, deps)
+		return nil, fmt.Errorf("%q doesn't have all of its dependencies (%q)", repo.Name, deps)
 	}
-	wf.Output(wd, "tagged repository", tagged)
-	return nil
+	return tagged, nil
 }
 
 // planRepo adds tasks to wf to update and possibly tag repo. It returns

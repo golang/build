@@ -229,14 +229,13 @@ func TestExpansion(t *testing.T) {
 	v1 := wf.Task0(wd, "first", first)
 	v2 := wf.Task0(wd, "second", second)
 	wf.Output(wd, "second", v2)
-	wf.Expand1(wd, "add a task", func(wd *wf.Definition, arg string) error {
+	joined := wf.Expand1(wd, "add a task", func(wd *wf.Definition, arg string) (wf.Value[string], error) {
 		v3 := wf.Task0(wd, "third", third)
 		// v1 is resolved before the expansion runs, v2 and v3 are dependencies
 		// created outside and inside the epansion.
-		joined := wf.Task1(wd, "join", join, wf.Slice(wf.Const(arg), v2, v3))
-		wf.Output(wd, "final value", joined)
-		return nil
+		return wf.Task1(wd, "join", join, wf.Slice(wf.Const(arg), v2, v3)), nil
 	}, v1)
+	wf.Output(wd, "final value", joined)
 
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, nil)
@@ -252,10 +251,10 @@ func TestResumeExpansion(t *testing.T) {
 		return "", nil
 	}
 	wd := wf.New()
-	wf.Expand0(wd, "expand", func(wd *wf.Definition) error {
-		wf.Output(wd, "result", wf.Task0(wd, "succeeds", succeeds))
-		return nil
+	result := wf.Expand0(wd, "expand", func(wd *wf.Definition) (wf.Value[string], error) {
+		return wf.Task0(wd, "succeeds", succeeds), nil
 	})
+	wf.Output(wd, "result", result)
 
 	storage := &mapListener{Listener: &verboseListener{t}}
 	w := startWorkflow(t, wd, nil)
@@ -273,16 +272,16 @@ func TestResumeExpansion(t *testing.T) {
 func TestRetryExpansion(t *testing.T) {
 	counter := 0
 	wd := wf.New()
-	wf.Expand0(wd, "expand", func(wd *wf.Definition) error {
+	out := wf.Expand0(wd, "expand", func(wd *wf.Definition) (wf.Value[string], error) {
 		counter++
 		if counter == 1 {
-			return fmt.Errorf("first try fail")
+			return nil, fmt.Errorf("first try fail")
 		}
-		wf.Output(wd, "out", wf.Task0(wd, "hi", func(_ context.Context) (string, error) {
+		return wf.Task0(wd, "hi", func(_ context.Context) (string, error) {
 			return "", nil
-		}))
-		return nil
+		}), nil
 	})
+	wf.Output(wd, "out", out)
 
 	w := startWorkflow(t, wd, nil)
 	retry := func(string) {
