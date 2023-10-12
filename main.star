@@ -166,6 +166,28 @@ luci.binding(
     users = "gomoteserver@symbolic-datum-552.iam.gserviceaccount.com",
 )
 
+# Allow relui to run Swarming tasks and BuildBucket builds in both security realms
+# (for Go releases) and public realms (for x repo tagging, etc.)
+luci.binding(
+    roles = [
+        "role/swarming.taskTriggerer",
+        "role/swarming.poolUser",
+        "role/buildbucket.triggerer",
+    ],
+    realm = PUBLIC_REALMS + SECURITY_REALMS,
+    users = "relui-prod@symbolic-datum-552.iam.gserviceaccount.com",
+)
+
+# Define relui-tasks as a LUCI service account. This is normally handled
+# by a luci.builder call, but this isn't a standard builder account.
+luci.binding(
+    roles = "role/swarming.taskServiceAccount",
+    realm = PUBLIC_REALMS + SECURITY_REALMS,
+    users = [
+        "relui-tasks@symbolic-datum-552.iam.gserviceaccount.com",
+    ],
+)
+
 # This is the cipd package name and version where the recipe bundler will put
 # the built recipes. This line makes it the default value for all `luci.recipe`
 # invocations in this configuration.
