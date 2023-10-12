@@ -411,15 +411,26 @@ Reviewer: Rebecca Stambler <16140@62eb7196-b449-3ce5-99f1-c037f21e1705>
 			hasHuman: true,
 			wantIDs:  []string{"5976", "22285", "16140"},
 		},
+		{
+			desc: "reviewersInMetas should not return duplicate IDs", // Happened in go.dev/cl/534975.
+			commitMsg: `Reviewer: Gerrit User 5190 <5190@62eb7196-b449-3ce5-99f1-c037f21e1705>
+CC: Gerrit User 60063 <60063@62eb7196-b449-3ce5-99f1-c037f21e1705>
+Reviewer: Gerrit User 60063 <60063@62eb7196-b449-3ce5-99f1-c037f21e1705>`,
+			hasHuman: false,
+			wantIDs:  []string{"5190", "60063"},
+		},
 	}
 
+	cmpFn := func(a, b string) bool {
+		return a < b
+	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			metas := []*maintner.GerritMeta{
 				{Commit: &maintner.GitCommit{Msg: tc.commitMsg}},
 			}
 			ids := reviewersInMetas(metas)
-			if diff := cmp.Diff(tc.wantIDs, ids); diff != "" {
+			if diff := cmp.Diff(tc.wantIDs, ids, cmpopts.SortSlices(cmpFn)); diff != "" {
 				t.Fatalf("reviewersInMetas() mismatch (-want +got):\n%s", diff)
 			}
 		})

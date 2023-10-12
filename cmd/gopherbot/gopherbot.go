@@ -39,6 +39,7 @@ import (
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/maintner/maintnerd/apipb"
+	"golang.org/x/exp/slices"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -79,6 +80,7 @@ const (
 	gobotGerritID     = "5976"
 	gerritbotGerritID = "12446"
 	kokoroGerritID    = "37747"
+	goLUCIGerritID    = "60063"
 )
 
 // GitHub Label IDs for the golang/go repo.
@@ -2323,7 +2325,7 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 	if isPR {
 		minHumans = 2
 	}
-	reject := []string{gobotGerritID, gerritbotGerritID, kokoroGerritID, ownerID}
+	reject := []string{gobotGerritID, gerritbotGerritID, kokoroGerritID, goLUCIGerritID, ownerID}
 	ownerOrRobot := func(gerritID string) bool {
 		for _, r := range reject {
 			if gerritID == r {
@@ -2333,7 +2335,7 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 		return false
 	}
 
-	ids := deleteStrings(reviewersInMetas(cl.Metas), ownerOrRobot)
+	ids := slices.DeleteFunc(reviewersInMetas(cl.Metas), ownerOrRobot)
 	if len(ids) >= minHumans {
 		return ids, true
 	}
@@ -2356,17 +2358,6 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 		ids = append(ids, id)
 	}
 	return ids, len(ids) >= minHumans
-}
-
-func deleteStrings(s []string, reject func(val string) bool) []string {
-	var filtered []string
-	for _, val := range s {
-		if reject(val) {
-			continue
-		}
-		filtered = append(filtered, val)
-	}
-	return filtered
 }
 
 // hasServiceUserTag reports whether the account has a SERVICE_USER tag.
@@ -2539,7 +2530,7 @@ var reviewerRe = regexp.MustCompile(`.* <(?P<id>\d+)@.*>`)
 
 const gerritInstanceID = "@62eb7196-b449-3ce5-99f1-c037f21e1705"
 
-// reviewersInMetas returns the Gerrit IDs of any reviewers in the metadata.
+// reviewersInMetas returns the unique Gerrit IDs of any reviewers in the metadata.
 func reviewersInMetas(metas []*maintner.GerritMeta) []string {
 	var ids []string
 	for _, m := range metas {
@@ -2571,6 +2562,9 @@ func reviewersInMetas(metas []*maintner.GerritMeta) []string {
 			log.Printf("reviewersInMetas: got unexpected error from foreach.LineStr: %v", err)
 		}
 	}
+	// Remove duplicates.
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
 	return ids
 }
 
