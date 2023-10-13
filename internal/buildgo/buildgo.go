@@ -98,6 +98,9 @@ type GoBuilder struct {
 	// GorootBootstrap is an optional absolute Unix-style path to the
 	// bootstrap toolchain, overriding the default.
 	GorootBootstrap string
+	// Force controls whether to use the -force flag when building Go.
+	// See go.dev/issue/56679.
+	Force bool
 }
 
 // RunMake builds the tool chain.
@@ -111,11 +114,15 @@ func (gb GoBuilder) RunMake(ctx context.Context, bc buildlet.Client, w io.Writer
 	if gb.GorootBootstrap != "" {
 		env = append(env, "GOROOT_BOOTSTRAP="+gb.GorootBootstrap)
 	}
+	makeArgs := gb.Conf.MakeScriptArgs()
+	if gb.Force {
+		makeArgs = append(makeArgs, "-force")
+	}
 	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
 		Output:   w,
 		ExtraEnv: env,
 		Debug:    true,
-		Args:     gb.Conf.MakeScriptArgs(),
+		Args:     makeArgs,
 	})
 	if err != nil {
 		makeSpan.Done(err)

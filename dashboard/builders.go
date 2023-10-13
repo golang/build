@@ -2122,8 +2122,6 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=5",
 		},
-		makeScriptArgs: []string{"-force"}, // Port is marked broken.
-		allScriptArgs:  []string{"-force"}, // Port is marked broken.
 	})
 	addBuilder(BuildConfig{
 		Name:         "openbsd-ppc64-n2vi",
@@ -2141,8 +2139,6 @@ func init() {
 		},
 		distTestAdjust: noTestDirAndNoReboot,
 		tryBot:         nil,
-		makeScriptArgs: []string{"-force"}, // Port is incomplete.
-		allScriptArgs:  []string{"-force"}, // Port is incomplete.
 	})
 	addBuilder(BuildConfig{
 		Name:         "openbsd-riscv64-jsing",
@@ -2164,8 +2160,6 @@ func init() {
 			// The machine is slow.
 			"GO_TEST_TIMEOUT_SCALE=3",
 		},
-		makeScriptArgs: []string{"-force"}, // Port is incomplete.
-		allScriptArgs:  []string{"-force"}, // Port is incomplete.
 	})
 	addBuilder(BuildConfig{
 		Name:           "netbsd-386-9_3",

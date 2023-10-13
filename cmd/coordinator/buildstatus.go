@@ -598,11 +598,19 @@ func (st *buildStatus) SpanRecord(sp *schedule.Span, err error) *types.SpanRecor
 
 // goBuilder returns a GoBuilder for this buildStatus.
 func (st *buildStatus) goBuilder() buildgo.GoBuilder {
+	forceMake := true
+	if st.RevBranch == "release-branch.go1.20" {
+		// The concept of "broken ports" and -force flag didn't
+		// exist prior to Go 1.21. See go.dev/issue/56679.
+		// TODO: Remove this condition when Go 1.20 is no longer supported.
+		forceMake = false
+	}
 	return buildgo.GoBuilder{
 		Logger:     st,
 		BuilderRev: st.BuilderRev,
 		Conf:       st.conf,
 		Goroot:     "go",
+		Force:      forceMake,
 	}
 }
 
@@ -662,9 +670,9 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 // buildTestPackages runs `go tool dist test -compile-only`, which builds all standard
 // library test packages but does not run any tests. Used in cross-compilation modes.
 func (st *buildStatus) buildTestPackages() (remoteErr, err error) {
-	if st.RevBranch == "release-branch.go1.19" || st.RevBranch == "release-branch.go1.20" {
-		// TODO(mknyszek): Go 1.19 and 1.20 don't support `go tool dist test -compile-only`
-		// very well. Remove this condition when Go 1.20 is no longer supported.
+	if st.RevBranch == "release-branch.go1.20" {
+		// Go 1.20 doesn't support `go tool dist test -compile-only` very well.
+		// TODO(mknyszek): Remove this condition when Go 1.20 is no longer supported.
 		return nil, nil
 	}
 	sp := st.CreateSpan("build_test_pkgs")
