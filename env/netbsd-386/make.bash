@@ -47,7 +47,7 @@ cd anita-${ANITA_VERSION}
 python3 setup.py build
 cd ..
 
-env PYTHONPATH=${PWD}/anita-${ANITA_VERSION} python3 ../netbsd-amd64/mkvm.py ${ARCH} ${RELEASE} ${PKG_RELEASE}
+env PYTHONPATH=${PWD}/anita-${ANITA_VERSION} python3 mkvm.py ${ARCH} ${RELEASE} ${PKG_RELEASE}
 
 echo "Archiving wd0.img (this may take a while)"
 ${TAR} -Szcf ${VM_IMAGE} --transform s,${WORKDIR}/wd0.img,disk.raw, ${WORKDIR}/wd0.img
