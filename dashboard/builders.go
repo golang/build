@@ -502,6 +502,30 @@ var Hosts = map[string]*HostConfig{
 		Notes:       "OpenBSD 7.2; GCE VM, built from build/env/openbsd-amd64",
 		SSHUsername: "gopher",
 	},
+	"host-openbsd-386-73": {
+		VMImage:     "openbsd-386-73",
+		machineType: "n2", // force Intel; see go.dev/issue/49209
+		Notes:       "OpenBSD 7.3; GCE VM, built from build/env/openbsd-386",
+		SSHUsername: "gopher",
+	},
+	"host-openbsd-amd64-73": {
+		VMImage:     "openbsd-amd64-73",
+		machineType: "n2", // force Intel; see go.dev/issue/49209
+		Notes:       "OpenBSD 7.3; GCE VM, built from build/env/openbsd-amd64",
+		SSHUsername: "gopher",
+	},
+	"host-openbsd-386-74": {
+		VMImage:     "openbsd-386-74",
+		machineType: "n2", // force Intel; see go.dev/issue/49209
+		Notes:       "OpenBSD 7.4; GCE VM, built from build/env/openbsd-386",
+		SSHUsername: "gopher",
+	},
+	"host-openbsd-amd64-74": {
+		VMImage:     "openbsd-amd64-74",
+		machineType: "n2", // force Intel; see go.dev/issue/49209
+		Notes:       "OpenBSD 7.4; GCE VM, built from build/env/openbsd-amd64",
+		SSHUsername: "gopher",
+	},
 	"host-openbsd-arm-joelsing": {
 		IsReverse: true,
 		ExpectNum: 1,
@@ -2053,6 +2077,44 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "openbsd-386-72",
 		HostType: "host-openbsd-386-72",
+		tryBot:   explicitTrySet("sys"),
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// https://go.dev/issue/49529: git seems to be too slow on this
+			// platform.
+			return repo != "review" && buildRepoByDefault(repo)
+		},
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-amd64-73",
+		HostType:          "host-openbsd-amd64-73",
+		tryBot:            defaultTrySet(),
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:     "openbsd-386-73",
+		HostType: "host-openbsd-386-73",
+		tryBot:   explicitTrySet("sys"),
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			// https://go.dev/issue/49529: git seems to be too slow on this
+			// platform.
+			return repo != "review" && buildRepoByDefault(repo)
+		},
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:              "openbsd-amd64-74",
+		HostType:          "host-openbsd-amd64-74",
+		tryBot:            defaultTrySet(),
+		distTestAdjust:    noTestDirAndNoReboot,
+		numTryTestHelpers: 4,
+	})
+	addBuilder(BuildConfig{
+		Name:     "openbsd-386-74",
+		HostType: "host-openbsd-386-74",
 		tryBot:   explicitTrySet("sys"),
 		buildsRepo: func(repo, branch, goBranch string) bool {
 			// https://go.dev/issue/49529: git seems to be too slow on this
