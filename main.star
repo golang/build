@@ -230,6 +230,9 @@ LOW_CAPACITY_HOSTS = [
     "linux-ppc64le",
     "linux-riscv64",
     "openbsd-ppc64",
+    "plan9-386",
+    "plan9-amd64",
+    "plan9-arm",
     "solaris-amd64",
 ]
 
@@ -285,6 +288,9 @@ BUILDER_TYPES = [
     "linux-riscv64",
     "openbsd-amd64",
     "openbsd-ppc64",
+    "plan9-386",
+    "plan9-amd64",
+    "plan9-arm",
     "solaris-amd64",
     "windows-386",
     "windows-amd64",
