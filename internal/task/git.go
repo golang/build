@@ -61,7 +61,7 @@ func (g *Git) runGitStreamed(ctx context.Context, stdout, stderr io.Writer, dir 
 			return err
 		}
 		// https://github.com/curl/curl/blob/master/docs/HTTP-COOKIES.md
-		cookieLine := fmt.Sprintf(".googlesource.com TRUE / TRUE %v o %v\n", tok.Expiry.Unix(), tok.AccessToken)
+		cookieLine := fmt.Sprintf(".googlesource.com\tTRUE\t/\tTRUE\t%v\to\t%v\n", tok.Expiry.Unix(), tok.AccessToken)
 		if err := os.WriteFile(g.cookieFile, []byte(cookieLine), 0o700); err != nil {
 			return fmt.Errorf("error writing git cookies: %v", err)
 		}

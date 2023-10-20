@@ -19,7 +19,7 @@ FROM debian:bookworm
 
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
-	tini ca-certificates
+	tini ca-certificates git
 
 ARG PORT=8080
 ENV PORT=${PORT}
