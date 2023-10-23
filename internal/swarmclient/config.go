@@ -6,6 +6,7 @@ package swarmclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -13,6 +14,7 @@ import (
 	luciconfig "go.chromium.org/luci/config"
 	"go.chromium.org/luci/config/cfgclient"
 	"go.chromium.org/luci/config/impl/memory"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
@@ -27,6 +29,9 @@ func NewConfigClient(ctx context.Context) (*ConfigClient, error) {
 		ServiceHost: "luci-config.appspot.com",
 		ClientFactory: func(context.Context) (*http.Client, error) {
 			return http.DefaultClient, nil
+		},
+		GetPerRPCCredsFn: func(context.Context) (credentials.PerRPCCredentials, error) {
+			return nil, errors.New("GetPerRPCCredsFn unimplemented")
 		},
 	})
 	if err != nil {
