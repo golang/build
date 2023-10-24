@@ -58,8 +58,8 @@ var (
 	coordinator      = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
 	hostname         = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
 	healthAddr       = flag.String("health-addr", "0.0.0.0:8080", "For reverse buildlets, address to listen for /healthz requests separately from the reverse dialer to the coordinator.")
-	version      = flag.Bool("version", false, "print buildlet version and exit")
-	gomoteServerAddr = flag.String("gomote-server-addr", "gomote.golang.org:443", "Gomote server address and port")
+	version          = flag.Bool("version", false, "print buildlet version and exit")
+	gomoteServerAddr = flag.String("gomote-server-addr", "gomotessh.golang.org:443", "Gomote server address and port")
 	swarmingBot      = flag.Bool("swarming-bot", false, "start the buildlet on a swarming bot")
 )
 

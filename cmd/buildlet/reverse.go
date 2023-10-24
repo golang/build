@@ -204,7 +204,7 @@ func dialGomoteServer() (net.Listener, error) {
 	defer cancel()
 
 	success := false
-	location := "gomote.golang.org/reverse"
+	location := "/reverse"
 	const maxRedirects = 2
 	for i := 0; i < maxRedirects; i++ {
 		req, err := http.NewRequest("GET", location, nil)
@@ -326,7 +326,9 @@ func mustSwarmingAuthToken(ctx context.Context) string {
 		return tok
 	}
 	a := auth.NewAuthenticator(ctx, auth.SilentLogin, auth.Options{
-		Method: auth.LUCIContextMethod,
+		Audience:    "https://gomote.golang.org",
+		Method:      auth.LUCIContextMethod,
+		UseIDTokens: true,
 	})
 	token, err := a.GetAccessToken(15 * time.Second)
 	if err != nil {
