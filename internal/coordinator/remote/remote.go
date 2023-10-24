@@ -65,7 +65,6 @@ func NewSessionPool(ctx context.Context) *SessionPool {
 	sp.pollWait.Add(1)
 	go func() {
 		internal.PeriodicallyDo(ctx, remoteBuildletCleanInterval, func(ctx context.Context, _ time.Time) {
-			log.Printf("remote: cleaning up expired remote buildlets")
 			sp.destroyExpiredSessions(ctx)
 		})
 		sp.pollWait.Done()
@@ -123,8 +122,9 @@ func (sp *SessionPool) destroyExpiredSessions(ctx context.Context) {
 	sp.mu.Unlock()
 	// the sessions are no longer in the map. They can be mutated.
 	for _, s := range ss {
+		log.Printf("remote: destroying expired buildlet %s", s.ID)
 		if err := s.buildlet.Close(); err != nil {
-			log.Printf("remote: unable to close buildlet connection %s", err)
+			log.Printf("remote: unable to close buildlet connection for %s: %s", s.ID, err)
 		}
 	}
 }
