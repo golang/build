@@ -21,9 +21,10 @@ spec:
       - name: gomoteserver
         image: gcr.io/symbolic-datum-552/gomoteserver:latest
         imagePullPolicy: Always
-        command: ["/gomoteserver", "-listen-http=:80", "-autocert-bucket=gomote-golang-org-autocert-cache", "-listen-https-selfsigned=:444"]
+        command: ["/gomoteserver", "-listen-http=:80", "-listen-https-autocert=:443", "-autocert-bucket=gomote-golang-org-autocert-cache", "-listen-https-selfsigned=:444"]
         ports:
         - containerPort: 80
+        - containerPort: 443
         - containerPort: 444
         - containerPort: 2222 # ssh proxy port
         resources:
@@ -41,6 +42,12 @@ metadata:
   name: gomoteserver
 spec:
   ports:
+    - port: 80
+      targetPort: 80
+      name: http
+    - port: 443
+      targetPort: 443
+      name: https
     - port: 2222
       targetPort: 2222
       name: ssh
