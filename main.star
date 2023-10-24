@@ -1076,7 +1076,7 @@ def _define_go_ci():
 
             if project == "go":
                 luci.console_view(
-                    name = "%s-%s-ci" % (project, go_branch_short),
+                    name = "%s-%s" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
                     title = go_branch_short,
                     refs = ["refs/heads/" + go_branch.branch],
@@ -1113,11 +1113,11 @@ def _define_go_ci():
                             {
                                 "title": {"text": "golang.org/x repos on " + go_branch_short},
                                 "console_ids": [
-                                    # The *-by-go-ci consoles would be more appropriate,
+                                    # The *-by-go consoles would be more appropriate,
                                     # but because they have the same builder set and these
                                     # bubbles show just the latest build, it doesn't actually
                                     # matter.
-                                    "golang/%s-%s-ci" % (project, go_branch_short)
+                                    "golang/%s-%s" % (project, go_branch_short)
                                     for project in PROJECTS
                                     if project != "go"
                                 ],
@@ -1126,20 +1126,18 @@ def _define_go_ci():
                     },
                 )
             else:
-                console_title = "x/" + project
-                if go_branch_short != "gotip":
-                    console_title += " on " + go_branch_short
+                console_title = "x/" + project + "-" + go_branch_short
                 luci.console_view(
-                    name = "%s-%s-ci" % (project, go_branch_short),
+                    name = "x-%s-%s" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/%s" % project,
                     title = console_title,
                     refs = ["refs/heads/master"],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
                 luci.console_view(
-                    name = "%s-%s-by-go-ci" % (project, go_branch_short),
+                    name = "x-%s-%s-by-go" % (project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
-                    title = console_title + " (by go commit)",
+                    title = console_title + "-by-go-commit",
                     refs = ["refs/heads/" + go_branch.branch],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
@@ -1147,8 +1145,9 @@ def _define_go_ci():
     # Emit builder groups for each port.
     for port, builders in postsubmit_builders_by_port.items():
         luci.list_view(
-            name = "port-%s" % port.replace("/", "-"),
-            title = "all %s" % port,
+            # Put "z" at the beginning to sort this at the bottom of the page.
+            name = "z-port-%s" % port.replace("/", "-"),
+            title = "all-%s" % port,
             entries = builders,
         )
 
