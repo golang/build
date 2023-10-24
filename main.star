@@ -1117,7 +1117,7 @@ def _define_go_ci():
                                     # but because they have the same builder set and these
                                     # bubbles show just the latest build, it doesn't actually
                                     # matter.
-                                    "golang/%s-%s" % (project, go_branch_short)
+                                    "golang/x-%s-%s" % (project, go_branch_short)
                                     for project in PROJECTS
                                     if project != "go"
                                 ],
