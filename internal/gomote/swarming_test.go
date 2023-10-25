@@ -291,6 +291,115 @@ func TestSwarmingDestroyInstanceError(t *testing.T) {
 	}
 }
 
+func TestSwarmingExecuteCommand(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+	gomoteID := mustCreateSwarmingInstance(t, client, fakeIAP())
+	stream, err := client.ExecuteCommand(ctx, &protos.ExecuteCommandRequest{
+		GomoteId:          gomoteID,
+		Command:           "ls",
+		SystemLevel:       false,
+		Debug:             false,
+		AppendEnvironment: nil,
+		Path:              nil,
+		Directory:         "/workdir",
+		Args:              []string{"-alh"},
+	})
+	if err != nil {
+		t.Fatalf("client.ExecuteCommand(ctx, req) = response, %s; want no error", err)
+	}
+	var out []byte
+	for {
+		res, err := stream.Recv()
+		if err != nil && err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("stream.Recv() = _, %s; want no error", err)
+		}
+		out = append(out, res.GetOutput()...)
+	}
+	if len(out) == 0 {
+		t.Fatalf("output: %q, expected non-empty", out)
+	}
+}
+
+func TestSwarmingExecuteCommandError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call TestExecuteCommand.
+	// If overrideID is set to true, the test will use a different gomoteID than
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		gomoteID   string // Used iff overrideID is true.
+		cmd        string
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:     "missing command",
+			ctx:      access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			wantCode: codes.Aborted,
+		},
+		{
+			desc:       "gomote does not exist",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: true,
+			gomoteID:   "chucky",
+			cmd:        "ls",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:       "wrong gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: false,
+			cmd:        "ls",
+			wantCode:   codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+			gomoteID := mustCreateSwarmingInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			stream, err := client.ExecuteCommand(tc.ctx, &protos.ExecuteCommandRequest{
+				GomoteId:          gomoteID,
+				Command:           tc.cmd,
+				SystemLevel:       false,
+				Debug:             false,
+				AppendEnvironment: nil,
+				Path:              nil,
+				Directory:         "/workdir",
+				Args:              []string{"-alh"},
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			res, err := stream.Recv()
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if err == nil {
+				t.Fatalf("client.ExecuteCommand(ctx, req) = %v, nil; want error", res)
+			}
+		})
+	}
+}
+
 func TestSwarmingListInstance(t *testing.T) {
 	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())

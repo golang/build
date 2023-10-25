@@ -191,6 +191,48 @@ func (ss *SwarmingServer) DestroyInstance(ctx context.Context, req *protos.Destr
 	return &protos.DestroyInstanceResponse{}, nil
 }
 
+// ExecuteCommand will execute a command on a gomote instance. The output from the command will be streamed back to the caller if the output is set.
+func (ss *SwarmingServer) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos.GomoteService_ExecuteCommandServer) error {
+	creds, err := access.IAPFromContext(stream.Context())
+	if err != nil {
+		return status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	ses, bc, err := ss.sessionAndClient(stream.Context(), req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return err
+	}
+	builderType := req.GetImitateHostType()
+	if builderType == "" {
+		builderType = ses.BuilderType
+	}
+	remoteErr, execErr := bc.Exec(stream.Context(), req.GetCommand(), buildlet.ExecOpts{
+		Dir:         req.GetDirectory(),
+		SystemLevel: req.GetSystemLevel(),
+		Output: &streamWriter{writeFunc: func(p []byte) (int, error) {
+			err := stream.Send(&protos.ExecuteCommandResponse{
+				Output: p,
+			})
+			if err != nil {
+				return 0, fmt.Errorf("unable to send data=%w", err)
+			}
+			return len(p), nil
+		}},
+		Args:  req.GetArgs(),
+		Debug: req.GetDebug(),
+		Path:  req.GetPath(),
+	})
+	if execErr != nil {
+		// there were system errors preventing the command from being started or seen to completion.
+		return status.Errorf(codes.Aborted, "unable to execute command: %s", execErr)
+	}
+	if remoteErr != nil {
+		// the command failed remotely
+		return status.Errorf(codes.Unknown, "command execution failed: %s", remoteErr)
+	}
+	return nil
+}
+
 // ListSwarmingBuilders lists all of the swarming builders which run for gotip. The requester must be authenticated.
 func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.ListSwarmingBuildersRequest) (*protos.ListSwarmingBuildersResponse, error) {
 	_, err := access.IAPFromContext(ctx)
@@ -244,6 +286,24 @@ func (ss *SwarmingServer) session(gomoteID, ownerID string) (*remote.Session, er
 		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
 	}
 	return session, nil
+}
+
+// sessionAndClient is a helper function that retrieves a session and buildlet client for the
+// associated gomoteID and ownerID. The gomote instance timeout is renewed if the gomote id and owner id
+// are valid.
+func (ss *SwarmingServer) sessionAndClient(ctx context.Context, gomoteID, ownerID string) (*remote.Session, buildlet.Client, error) {
+	session, err := ss.session(gomoteID, ownerID)
+	if err != nil {
+		return nil, nil, err
+	}
+	bc, err := ss.buildlets.BuildletClient(gomoteID)
+	if err != nil {
+		return nil, nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if err := ss.buildlets.KeepAlive(ctx, gomoteID); err != nil {
+		log.Printf("gomote: unable to keep alive %s: %s", gomoteID, err)
+	}
+	return session, bc, nil
 }
 
 // SwarmOpts provides additional options for swarming task creation.
