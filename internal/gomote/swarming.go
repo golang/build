@@ -167,6 +167,30 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 	}
 }
 
+// DestroyInstance will destroy a gomote instance. It will ensure that the caller is authenticated and is the owner of the instance
+// before it destroys the instance.
+func (ss *SwarmingServer) DestroyInstance(ctx context.Context, req *protos.DestroyInstanceRequest) (*protos.DestroyInstanceResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("DestroyInstance access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	if req.GetGomoteId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid gomote ID")
+	}
+	_, err = ss.session(req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns a meaningful GRPC error.
+		return nil, err
+	}
+	if err := ss.buildlets.DestroySession(req.GetGomoteId()); err != nil {
+		log.Printf("DestroyInstance remote.DestroySession(%s) = %s", req.GetGomoteId(), err)
+		return nil, status.Errorf(codes.Internal, "unable to destroy gomote instance")
+	}
+	// TODO(go.dev/issue/63819) consider destroying the bot after the task has ended.
+	return &protos.DestroyInstanceResponse{}, nil
+}
+
 // ListSwarmingBuilders lists all of the swarming builders which run for gotip. The requester must be authenticated.
 func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.ListSwarmingBuildersRequest) (*protos.ListSwarmingBuildersResponse, error) {
 	_, err := access.IAPFromContext(ctx)
@@ -186,6 +210,18 @@ func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.
 		}
 	}
 	return &protos.ListSwarmingBuildersResponse{Builders: builders}, nil
+}
+
+// session is a helper function that retrieves a session associated with the gomoteID and ownerID.
+func (ss *SwarmingServer) session(gomoteID, ownerID string) (*remote.Session, error) {
+	session, err := ss.buildlets.Session(gomoteID)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "specified gomote instance does not exist")
+	}
+	if session.OwnerID != ownerID {
+		return nil, status.Errorf(codes.PermissionDenied, "not allowed to modify this gomote session")
+	}
+	return session, nil
 }
 
 // SwarmOpts provides additional options for swarming task creation.
