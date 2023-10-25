@@ -265,6 +265,36 @@ func (ss *SwarmingServer) InstanceAlive(ctx context.Context, req *protos.Instanc
 	return &protos.InstanceAliveResponse{}, nil
 }
 
+// ListDirectory lists the contents of the directory on a gomote instance.
+func (ss *SwarmingServer) ListDirectory(ctx context.Context, req *protos.ListDirectoryRequest) (*protos.ListDirectoryResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	if req.GetGomoteId() == "" || req.GetDirectory() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
+	}
+	_, bc, err := ss.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	opt := buildlet.ListDirOpts{
+		Recursive: req.GetRecursive(),
+		Digest:    req.GetDigest(),
+		Skip:      req.GetSkipFiles(),
+	}
+	var entries []string
+	if err = bc.ListDir(context.Background(), req.GetDirectory(), opt, func(bi buildlet.DirEntry) {
+		entries = append(entries, bi.String())
+	}); err != nil {
+		return nil, status.Errorf(codes.Unimplemented, "method ListDirectory not implemented")
+	}
+	return &protos.ListDirectoryResponse{
+		Entries: entries,
+	}, nil
+}
+
 // ListSwarmingBuilders lists all of the swarming builders which run for gotip. The requester must be authenticated.
 func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.ListSwarmingBuildersRequest) (*protos.ListSwarmingBuildersResponse, error) {
 	_, err := access.IAPFromContext(ctx)
