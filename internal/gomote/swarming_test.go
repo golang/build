@@ -92,6 +92,24 @@ func setupGomoteSwarmingTest(t *testing.T, ctx context.Context, swarmClient swar
 	return gc
 }
 
+func TestSwarmingAuthenticate(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClient())
+	got, err := client.Authenticate(ctx, &protos.AuthenticateRequest{})
+	if err != nil {
+		t.Fatalf("client.Authenticate(ctx, request) = %v,  %s; want no error", got, err)
+	}
+}
+
+func TestSwarmingAuthenticateError(t *testing.T) {
+	wantCode := codes.Unauthenticated
+	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClient())
+	_, err := client.Authenticate(context.Background(), &protos.AuthenticateRequest{})
+	if status.Code(err) != wantCode {
+		t.Fatalf("client.Authenticate(ctx, request) = _, %s; want %s", status.Code(err), wantCode)
+	}
+}
+
 func TestSwarmingListSwarmingBuilders(t *testing.T) {
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(os.Stdout)

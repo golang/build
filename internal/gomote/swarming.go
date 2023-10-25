@@ -68,6 +68,17 @@ func NewSwarming(rsp *remote.SessionPool, rawCAPriKey []byte, gomoteGCSBucket st
 	}, nil
 }
 
+// Authenticate will allow the caller to verify that they are properly authenticated and authorized to interact with the
+// Service.
+func (ss *SwarmingServer) Authenticate(ctx context.Context, req *protos.AuthenticateRequest) (*protos.AuthenticateResponse, error) {
+	_, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("Authenticate access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	return &protos.AuthenticateResponse{}, nil
+}
+
 // CreateInstance will create a gomote instance within a swarming task for the authenticated user.
 func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stream protos.GomoteService_CreateInstanceServer) error {
 	creds, err := access.IAPFromContext(stream.Context())
