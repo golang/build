@@ -81,7 +81,7 @@ func (c *RealSwarmingClient) RunTask(ctx context.Context, dims map[string]string
 }
 
 func (c *RealSwarmingClient) Completed(ctx context.Context, id string) (string, bool, error) {
-	result, err := c.SwarmingClient.TaskResult(ctx, id, false)
+	result, err := c.SwarmingClient.TaskResult(ctx, id, &swarming.TaskResultFields{WithPerf: false})
 	if err != nil {
 		return "", false, err
 	}

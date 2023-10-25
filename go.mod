@@ -48,14 +48,14 @@ require (
 	github.com/shurcooL/githubv4 v0.0.0-20220520033151-0b4e3294ff00
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
 	github.com/yuin/goldmark v1.4.13
-	go.chromium.org/luci v0.0.0-20231002203616-b0118309d5b5
+	go.chromium.org/luci v0.0.0-20231024170510-08aad78315cf
 	go.opencensus.io v0.24.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
 	golang.org/x/crypto v0.14.0
 	golang.org/x/exp v0.0.0-20230809094429-853ea248256d
 	golang.org/x/image v0.13.0
 	golang.org/x/mod v0.13.0
-	golang.org/x/net v0.16.0
+	golang.org/x/net v0.17.0
 	golang.org/x/oauth2 v0.13.0
 	golang.org/x/perf v0.0.0-20230717203022-1ba3a21238c9
 	golang.org/x/sync v0.4.0
