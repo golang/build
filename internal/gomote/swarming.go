@@ -244,6 +244,27 @@ func (ss *SwarmingServer) ExecuteCommand(req *protos.ExecuteCommandRequest, stre
 	return nil
 }
 
+// InstanceAlive will ensure that the gomote instance is still alive and will extend the timeout. The requester must be authenticated.
+func (ss *SwarmingServer) InstanceAlive(ctx context.Context, req *protos.InstanceAliveRequest) (*protos.InstanceAliveResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("InstanceAlive access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	if req.GetGomoteId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid gomote ID")
+	}
+	_, err = ss.session(req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	if err := ss.buildlets.RenewTimeout(req.GetGomoteId()); err != nil {
+		return nil, status.Errorf(codes.Internal, "unable to renew timeout")
+	}
+	return &protos.InstanceAliveResponse{}, nil
+}
+
 // ListSwarmingBuilders lists all of the swarming builders which run for gotip. The requester must be authenticated.
 func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.ListSwarmingBuildersRequest) (*protos.ListSwarmingBuildersResponse, error) {
 	_, err := access.IAPFromContext(ctx)
