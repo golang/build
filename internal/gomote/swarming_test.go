@@ -33,6 +33,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 const testSwarmingBucketName = "unit-testing-bucket-swarming"
@@ -287,6 +288,27 @@ func TestSwarmingDestroyInstanceError(t *testing.T) {
 				t.Fatalf("client.DestroyInstance(ctx, %v) = %v, nil; want error", req, got)
 			}
 		})
+	}
+}
+
+func TestSwarmingListInstance(t *testing.T) {
+	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	var want []*protos.Instance
+	for i := 0; i < 3; i++ {
+		want = append(want, &protos.Instance{
+			GomoteId:    mustCreateSwarmingInstance(t, client, fakeIAP()),
+			BuilderType: "gotip-linux-amd64-boringcrypto",
+		})
+	}
+	mustCreateSwarmingInstance(t, client, fakeIAPWithUser("user-x", "uuid-user-x"))
+	response, err := client.ListInstances(ctx, &protos.ListInstancesRequest{})
+	if err != nil {
+		t.Fatalf("client.ListInstances = nil, %s; want no error", err)
+	}
+	got := response.GetInstances()
+	if diff := cmp.Diff(want, got, protocmp.Transform(), protocmp.IgnoreFields(&protos.Instance{}, "expires", "host_type")); diff != "" {
+		t.Errorf("ListInstances() mismatch (-want, +got):\n%s", diff)
 	}
 }
 

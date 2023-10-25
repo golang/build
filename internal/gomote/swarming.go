@@ -212,6 +212,28 @@ func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.
 	return &protos.ListSwarmingBuildersResponse{Builders: builders}, nil
 }
 
+// ListInstances will list the gomote instances owned by the requester. The requester must be authenticated.
+func (ss *SwarmingServer) ListInstances(ctx context.Context, req *protos.ListInstancesRequest) (*protos.ListInstancesResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("ListInstances access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	res := &protos.ListInstancesResponse{}
+	for _, s := range ss.buildlets.List() {
+		if s.OwnerID != creds.ID {
+			continue
+		}
+		res.Instances = append(res.Instances, &protos.Instance{
+			GomoteId:    s.ID,
+			BuilderType: s.BuilderType,
+			HostType:    s.HostType,
+			Expires:     s.Expires.Unix(),
+		})
+	}
+	return res, nil
+}
+
 // session is a helper function that retrieves a session associated with the gomoteID and ownerID.
 func (ss *SwarmingServer) session(gomoteID, ownerID string) (*remote.Session, error) {
 	session, err := ss.buildlets.Session(gomoteID)
