@@ -207,7 +207,7 @@ func TestParameters(t *testing.T) {
 func TestParameterValue(t *testing.T) {
 	var p interface{} = wf.ParamDef[int]{}
 	if _, ok := p.(wf.Value[int]); ok {
-		t.Errorf("Parameter unexpectedly implements Value; it intentionally tries not to to reduce possible API misuse")
+		t.Errorf("Parameter unexpectedly implements Value; it intentionally tries not to reduce possible API misuse")
 	}
 }
 

@@ -1078,7 +1078,7 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 // The 'linux-arm-arm5' pseduo-port is supported by src/buildall.bash
 // and tests linux/arm with GOARM=5 set. Since it's not a normal port,
 // the TestTryBotsCompileAllPorts wouldn't report if the misc-compile
-// TryBot that covers is is accidentally removed. Check it explicitly.
+// TryBot that covers is accidentally removed. Check it explicitly.
 func TestMiscCompileLinuxGOARM5(t *testing.T) {
 	for _, b := range Builders {
 		if !strings.HasPrefix(b.Name, "misc-compile-") {

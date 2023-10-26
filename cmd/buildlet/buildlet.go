@@ -96,7 +96,7 @@ func defaultListenAddr() string {
 		// root).
 		return ":5936"
 	}
-	// check if if env is dev
+	// check if env is dev
 	if !metadata.OnGCE() && !onEC2() {
 		return "localhost:5936"
 	}

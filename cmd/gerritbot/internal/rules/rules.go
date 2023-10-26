@@ -33,7 +33,7 @@
 //	 messages for the Go project, see [here](...).
 //
 // Rules currently err on the side of simplicity and avoiding false positives.
-// It is is intended to be straightforward to add a new rule.
+// It is intended to be straightforward to add a new rule.
 //
 // Rules can be arranged to trigger completely independently of one another,
 // or alternatively a set of rules can optionally be arranged in groups that
