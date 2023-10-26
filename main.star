@@ -738,27 +738,19 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
 
     # The main repo builder also triggers subrepo builders of the same builder type.
     #
+    # This is currently only used to trigger CI builders, not trybots, because
+    # a builder triggered this way by default will be considered as optional.
+    #
     # TODO(mknyszek): This rule will not apply for some ports in the future. Some
     # ports only apply to the main Go repository and are not supported by all subrepos.
     # PROJECTS should probably contain a table of supported ports or something.
     builders_to_trigger = []
-    if project == "go":
-        if env.bucket == "try":
-            builders_to_trigger = [
-                "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
-                for project in PROJECTS
-                # TODO(dmitshur): Factor this into enabled or so. It needs to know the difference
-                # between x/tools itself being tested vs its tests being used to test Go.
-                # At that point the "try" and "ci" cases can be joined. For now, the existing
-                # policy of running x/tools tests on linux/amd64 is hardcoded below.
-                if project == "tools" and builder_type == "linux-amd64"
-            ]
-        elif env.bucket == "ci":
-            builders_to_trigger = [
-                "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
-                for project in PROJECTS
-                if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[2]
-            ]
+    if project == "go" and env.bucket == "ci":
+        builders_to_trigger = [
+            "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
+            for project in PROJECTS
+            if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[2]
+        ]
 
     # Coordinator builder.
     #
@@ -1005,6 +997,14 @@ def _define_go_ci():
                     includable_only = not presubmit,
                     disable_reuse = True,
                 )
+
+                # Add an x/tools builder to the Go presubmit.
+                if project == "go" and builder_type == "linux-amd64":
+                    luci.cq_tryjob_verifier(
+                        builder = PUBLIC_TRY_ENV.bucket + "/" + builder_name("tools", go_branch_short, builder_type),
+                        cq_group = cq_group.name,
+                        disable_reuse = True,
+                    )
 
                 # Define post-submit builders.
                 if postsubmit:
