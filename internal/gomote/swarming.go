@@ -515,6 +515,42 @@ func (ss *SwarmingServer) WriteFileFromURL(ctx context.Context, req *protos.Writ
 	return &protos.WriteFileFromURLResponse{}, nil
 }
 
+// WriteTGZFromURL will instruct the gomote instance to download the tar.gz from the provided URL. The tar.gz file will be unpacked in the work directory
+// relative to the directory provided.
+func (ss *SwarmingServer) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromURLRequest) (*protos.WriteTGZFromURLResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("WriteTGZFromURL access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	if req.GetGomoteId() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid gomote ID")
+	}
+	if req.GetUrl() == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "missing URL")
+	}
+	_, bc, err := ss.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	url := req.GetUrl()
+	if onObjectStore(ss.gceBucketName, url) {
+		object, err := objectFromURL(ss.gceBucketName, url)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid URL")
+		}
+		url, err = ss.signURLForDownload(object)
+		if err != nil {
+			return nil, status.Errorf(codes.Aborted, "unable to sign url for download: %s", err)
+		}
+	}
+	if err := bc.PutTarFromURL(ctx, url, req.GetDirectory()); err != nil {
+		return nil, status.Errorf(codes.FailedPrecondition, "unable to write tar.gz: %s", err)
+	}
+	return &protos.WriteTGZFromURLResponse{}, nil
+}
+
 // session is a helper function that retrieves a session associated with the gomoteID and ownerID.
 func (ss *SwarmingServer) session(gomoteID, ownerID string) (*remote.Session, error) {
 	session, err := ss.buildlets.Session(gomoteID)
