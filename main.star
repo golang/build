@@ -997,6 +997,18 @@ def _define_go_ci():
                     disable_reuse = True,
                 )
 
+                # For golang.org/x repos, include the ability to run presubmit
+                # against all supported releases in addition to testing with tip.
+                # Make presubmit mandatory for builders deemed "fast".
+                # See go.dev/issue/17626.
+                if project != "go" and go_branch_short != "gotip":
+                    luci.cq_tryjob_verifier(
+                        builder = name,
+                        cq_group = go_cq_group(project, "gotip").name,
+                        includable_only = builder_type != "linux-amd64", # linux-amd64 is deemed "fast."
+                        disable_reuse = True,
+                    )
+
                 # Add an x/tools builder to the Go presubmit.
                 if project == "go" and builder_type == "linux-amd64":
                     luci.cq_tryjob_verifier(
@@ -1009,23 +1021,6 @@ def _define_go_ci():
                 if postsubmit:
                     name = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
                     postsubmit_builders[name] = builder_type
-
-            # For golang.org/x repos, also include coverage for all
-            # supported Go releases in addition to testing with tip.
-            # See go.dev/issue/17626.
-            if project != "go" and go_branch_short == "gotip":
-                for supported_go_release, _ in GO_BRANCHES.items():
-                    if supported_go_release == "gotip":
-                        # All gotip's cq_tryjob_verifier calls were already
-                        # taken care of in the 'define builders' loop above.
-                        continue
-                    builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
-                    name = PUBLIC_TRY_ENV.bucket + "/" + builder_name(project, supported_go_release, builder_type)
-                    luci.cq_tryjob_verifier(
-                        builder = name,
-                        cq_group = cq_group.name,
-                        disable_reuse = True,
-                    )
 
             # For golang.org/x/tools, also include coverage for extra Go versions.
             if project == "tools" and go_branch_short == "gotip":
