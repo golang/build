@@ -665,6 +665,85 @@ func TestSwarmingRemoveFiles(t *testing.T) {
 	}
 }
 
+func TestSwarmingSignSSHKey(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+	gomoteID := mustCreateSwarmingInstance(t, client, fakeIAP())
+	if _, err := client.SignSSHKey(ctx, &protos.SignSSHKeyRequest{
+		GomoteId:     gomoteID,
+		PublicSshKey: []byte(devCertCAPublic),
+	}); err != nil {
+		t.Fatalf("client.SignSSHKey(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestSwarmingSignSSHKeyError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call SignSSHKey.
+	// If overrideID is set to true, the test will use a different gomoteID than
+	// the one created for the test.
+	testCases := []struct {
+		desc          string
+		ctx           context.Context
+		overrideID    bool
+		gomoteID      string // Used iff overrideID is true.
+		publickSSHKey []byte
+		wantCode      codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:     "missing public key",
+			ctx:      access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			wantCode: codes.InvalidArgument,
+		},
+		{
+			desc:          "gomote does not exist",
+			ctx:           access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID:    true,
+			gomoteID:      "chucky",
+			publickSSHKey: []byte(devCertCAPublic),
+			wantCode:      codes.NotFound,
+		},
+		{
+			desc:          "wrong gomote id",
+			ctx:           access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID:    false,
+			publickSSHKey: []byte(devCertCAPublic),
+			wantCode:      codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+			gomoteID := mustCreateSwarmingInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			req := &protos.SignSSHKeyRequest{
+				GomoteId:     gomoteID,
+				PublicSshKey: tc.publickSSHKey,
+			}
+			got, err := client.SignSSHKey(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
+			}
+			if err == nil {
+				t.Fatalf("client.SignSSHKey(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestSwarmingRemoveFilesError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call RemoveFiles.
 	// If overrideID is set to true, the test will use a different gomoteID than

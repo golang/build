@@ -403,6 +403,28 @@ func (ss *SwarmingServer) RemoveFiles(ctx context.Context, req *protos.RemoveFil
 	return &protos.RemoveFilesResponse{}, nil
 }
 
+// SignSSHKey signs the public SSH key with a certificate. The signed public SSH key is intended for use with the gomote service SSH
+// server. It will be signed by the certificate authority of the server and will restrict access to the gomote instance that it was
+// signed for.
+func (ss *SwarmingServer) SignSSHKey(ctx context.Context, req *protos.SignSSHKeyRequest) (*protos.SignSSHKeyResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	session, err := ss.session(req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	signedPublicKey, err := remote.SignPublicSSHKey(ctx, ss.sshCertificateAuthority, req.GetPublicSshKey(), session.ID, session.OwnerID, 5*time.Minute)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unable to sign ssh key")
+	}
+	return &protos.SignSSHKeyResponse{
+		SignedPublicSshKey: signedPublicKey,
+	}, nil
+}
+
 // session is a helper function that retrieves a session associated with the gomoteID and ownerID.
 func (ss *SwarmingServer) session(gomoteID, ownerID string) (*remote.Session, error) {
 	session, err := ss.buildlets.Session(gomoteID)
