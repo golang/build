@@ -9,6 +9,7 @@ package gomote
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -338,6 +339,47 @@ func (ss *SwarmingServer) ListInstances(ctx context.Context, req *protos.ListIns
 	return res, nil
 }
 
+// ReadTGZToURL retrieves a directory from the gomote instance and writes the file to GCS. It returns a signed URL which the caller uses
+// to read the file from GCS.
+func (ss *SwarmingServer) ReadTGZToURL(ctx context.Context, req *protos.ReadTGZToURLRequest) (*protos.ReadTGZToURLResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	_, bc, err := ss.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	tgz, err := bc.GetTar(ctx, req.GetDirectory())
+	if err != nil {
+		return nil, status.Errorf(codes.Aborted, "unable to retrieve tar from gomote instance: %s", err)
+	}
+	defer tgz.Close()
+	objectName := uuid.NewString()
+	objectHandle := ss.bucket.Object(objectName)
+	// A context for writes is used to ensure we can cancel the context if a
+	// problem is encountered while writing to the object store. The API documentation
+	// states that the context should be canceled to stop writing without saving the data.
+	writeCtx, cancel := context.WithCancel(ctx)
+	tgzWriter := objectHandle.NewWriter(writeCtx)
+	defer cancel()
+	if _, err = io.Copy(tgzWriter, tgz); err != nil {
+		return nil, status.Errorf(codes.Aborted, "unable to stream tar.gz: %s", err)
+	}
+	// when close is called, the object is stored in the bucket.
+	if err := tgzWriter.Close(); err != nil {
+		return nil, status.Errorf(codes.Aborted, "unable to store object: %s", err)
+	}
+	url, err := ss.signURLForDownload(objectName)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "unable to create signed URL for download: %s", err)
+	}
+	return &protos.ReadTGZToURLResponse{
+		Url: url,
+	}, nil
+}
+
 // session is a helper function that retrieves a session associated with the gomoteID and ownerID.
 func (ss *SwarmingServer) session(gomoteID, ownerID string) (*remote.Session, error) {
 	session, err := ss.buildlets.Session(gomoteID)
@@ -366,6 +408,19 @@ func (ss *SwarmingServer) sessionAndClient(ctx context.Context, gomoteID, ownerI
 		log.Printf("gomote: unable to keep alive %s: %s", gomoteID, err)
 	}
 	return session, bc, nil
+}
+
+// signURLForDownload generates a signed URL and fields to be used to upload an object to GCS without authenticating.
+func (ss *SwarmingServer) signURLForDownload(object string) (url string, err error) {
+	url, err = ss.bucket.SignedURL(object, &storage.SignedURLOptions{
+		Expires: time.Now().Add(10 * time.Minute),
+		Method:  http.MethodGet,
+		Scheme:  storage.SigningSchemeV4,
+	})
+	if err != nil {
+		return "", fmt.Errorf("unable to generate signed url: %w", err)
+	}
+	return url, err
 }
 
 // SwarmOpts provides additional options for swarming task creation.
