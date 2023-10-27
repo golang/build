@@ -903,18 +903,14 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         presubmit = presubmit and os not in ["js", "wasip1"]
 
     # Apply policies for each run mod.
-    exists = True
     for mod in run_mods:
         ex, pre, post = RUN_MODS[mod].enabled(project, go_branch_short)
-        exists = exists and ex
+        if not ex:
+            return False, False, False
         presubmit = presubmit and pre
         postsubmit = postsubmit and post
 
-    # Make it easier to check enabled(...)[1] or enabled(...)[2] in a loop.
-    if not exists:
-        presubmit, postsubmit = False, False
-
-    return exists, presubmit, postsubmit
+    return True, presubmit, postsubmit
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
 #
@@ -1005,7 +1001,7 @@ def _define_go_ci():
                     luci.cq_tryjob_verifier(
                         builder = name,
                         cq_group = go_cq_group(project, "gotip").name,
-                        includable_only = builder_type != "linux-amd64", # linux-amd64 is deemed "fast."
+                        includable_only = builder_type != "linux-amd64",  # linux-amd64 is deemed "fast."
                         disable_reuse = True,
                     )
 
