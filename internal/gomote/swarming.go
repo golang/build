@@ -8,6 +8,7 @@ package gomote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -423,6 +424,41 @@ func (ss *SwarmingServer) SignSSHKey(ctx context.Context, req *protos.SignSSHKey
 	return &protos.SignSSHKeyResponse{
 		SignedPublicSshKey: signedPublicKey,
 	}, nil
+}
+
+// UploadFile creates a URL and a set of HTTP post fields which are used to upload a file to a staging GCS bucket. Uploaded files are made available to the
+// gomote instances via a subsequent call to one of the WriteFromURL endpoints.
+func (ss *SwarmingServer) UploadFile(ctx context.Context, req *protos.UploadFileRequest) (*protos.UploadFileResponse, error) {
+	_, err := access.IAPFromContext(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	objectName := uuid.NewString()
+	url, fields, err := ss.signURLForUpload(objectName)
+	if err != nil {
+		log.Printf("unable to create signed URL: %s", err)
+		return nil, status.Errorf(codes.Internal, "unable to create signed url")
+	}
+	return &protos.UploadFileResponse{
+		Url:        url,
+		Fields:     fields,
+		ObjectName: objectName,
+	}, nil
+}
+
+// signURLForUpload generates a signed URL and a set of http Post fields to be used to upload an object to GCS without authenticating.
+func (ss *SwarmingServer) signURLForUpload(object string) (url string, fields map[string]string, err error) {
+	if object == "" {
+		return "", nil, errors.New("invalid object name")
+	}
+	pv4, err := ss.bucket.GenerateSignedPostPolicyV4(object, &storage.PostPolicyV4Options{
+		Expires:  time.Now().Add(10 * time.Minute),
+		Insecure: false,
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("unable to generate signed url: %w", err)
+	}
+	return pv4.URL, pv4.Fields, nil
 }
 
 // session is a helper function that retrieves a session associated with the gomoteID and ownerID.

@@ -744,6 +744,48 @@ func TestSwarmingSignSSHKeyError(t *testing.T) {
 	}
 }
 
+func TestSwarmingUploadFile(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+	_ = mustCreateSwarmingInstance(t, client, fakeIAP())
+	if _, err := client.UploadFile(ctx, &protos.UploadFileRequest{}); err != nil {
+		t.Fatalf("client.UploadFile(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestSwarmingUploadFileError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call UploadFile.
+	// If overrideID is set to true, the test will use a different gomoteID than
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		filename   string
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+			_ = mustCreateSwarmingInstance(t, client, fakeIAP())
+			req := &protos.UploadFileRequest{}
+			got, err := client.UploadFile(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
+			}
+			if err == nil {
+				t.Fatalf("client.UploadFile(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestSwarmingRemoveFilesError(t *testing.T) {
 	// This test will create a gomote instance and attempt to call RemoveFiles.
 	// If overrideID is set to true, the test will use a different gomoteID than
