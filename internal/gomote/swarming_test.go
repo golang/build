@@ -854,6 +854,91 @@ func TestSwarmingRemoveFilesError(t *testing.T) {
 	}
 }
 
+// TODO(go.dev/issue/48737) add test for files on GCS
+func TestSwarmingWriteFileFromURL(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+	gomoteID := mustCreateSwarmingInstance(t, client, fakeIAP())
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "Go is an open source programming language")
+	}))
+	defer ts.Close()
+	if _, err := client.WriteFileFromURL(ctx, &protos.WriteFileFromURLRequest{
+		GomoteId: gomoteID,
+		Url:      ts.URL,
+		Filename: "foo",
+		Mode:     0777,
+	}); err != nil {
+		t.Fatalf("client.WriteFileFromURL(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestSwarmingWriteFileFromURLError(t *testing.T) {
+	// This test will create a gomote instance and attempt to call TestWriteFileFromURL.
+	// If overrideID is set to true, the test will use a different gomoteID than
+	// the one created for the test.
+	testCases := []struct {
+		desc       string
+		ctx        context.Context
+		overrideID bool
+		gomoteID   string // Used iff overrideID is true.
+		url        string
+		filename   string
+		mode       uint32
+		wantCode   codes.Code
+	}{
+		{
+			desc:     "unauthenticated request",
+			ctx:      context.Background(),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			desc:       "missing gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP()),
+			overrideID: true,
+			gomoteID:   "",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:       "gomote does not exist",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: true,
+			gomoteID:   "chucky",
+			url:        "go.dev/dl/1_14.tar.gz",
+			wantCode:   codes.NotFound,
+		},
+		{
+			desc:       "wrong gomote id",
+			ctx:        access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAPWithUser("foo", "bar")),
+			overrideID: false,
+			url:        "go.dev/dl/1_14.tar.gz",
+			wantCode:   codes.PermissionDenied,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
+			gomoteID := mustCreateSwarmingInstance(t, client, fakeIAP())
+			if tc.overrideID {
+				gomoteID = tc.gomoteID
+			}
+			req := &protos.WriteFileFromURLRequest{
+				GomoteId: gomoteID,
+				Url:      tc.url,
+				Filename: tc.filename,
+				Mode:     0,
+			}
+			got, err := client.WriteFileFromURL(tc.ctx, req)
+			if err != nil && status.Code(err) != tc.wantCode {
+				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
+			}
+			if err == nil {
+				t.Fatalf("client.WriteFileFromURL(ctx, %v) = %v, nil; want error", req, got)
+			}
+		})
+	}
+}
+
 func TestStartNewSwarmingTask(t *testing.T) {
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(os.Stdout)

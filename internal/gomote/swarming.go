@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"strings"
@@ -459,6 +460,59 @@ func (ss *SwarmingServer) signURLForUpload(object string) (url string, fields ma
 		return "", nil, fmt.Errorf("unable to generate signed url: %w", err)
 	}
 	return pv4.URL, pv4.Fields, nil
+}
+
+// WriteFileFromURL initiates an HTTP request to the passed in URL and streams the contents of the request to the gomote instance.
+func (ss *SwarmingServer) WriteFileFromURL(ctx context.Context, req *protos.WriteFileFromURLRequest) (*protos.WriteFileFromURLResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("WriteTGZFromURL access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	_, bc, err := ss.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	var rc io.ReadCloser
+	// objects stored in the gomote staging bucket are only accessible when you have been granted explicit permissions. A builder
+	// requires a signed URL in order to access objects stored in the gomote staging bucket.
+	if onObjectStore(ss.gceBucketName, req.GetUrl()) {
+		object, err := objectFromURL(ss.gceBucketName, req.GetUrl())
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid object URL")
+		}
+		rc, err = ss.bucket.Object(object).NewReader(ctx)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "unable to create object reader: %s", err)
+		}
+	} else {
+		httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, req.GetUrl(), nil)
+		if err != nil {
+			log.Printf("gomote: unable to create HTTP request: %s", err)
+			return nil, status.Errorf(codes.Internal, "unable to create HTTP request")
+		}
+		// TODO(amedee) find sane client defaults, possibly rely on context timeout in request.
+		client := &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				TLSHandshakeTimeout: 5 * time.Second,
+			},
+		}
+		resp, err := client.Do(httpRequest)
+		if err != nil {
+			return nil, status.Errorf(codes.Aborted, "failed to get file from URL: %s", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, status.Errorf(codes.Aborted, "unable to get file from %q: response code: %d", req.GetUrl(), resp.StatusCode)
+		}
+		rc = resp.Body
+	}
+	defer rc.Close()
+	if err := bc.Put(ctx, rc, req.GetFilename(), fs.FileMode(req.GetMode())); err != nil {
+		return nil, status.Errorf(codes.Aborted, "failed to send the file to the gomote instance: %s", err)
+	}
+	return &protos.WriteFileFromURLResponse{}, nil
 }
 
 // session is a helper function that retrieves a session associated with the gomoteID and ownerID.
