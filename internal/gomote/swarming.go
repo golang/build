@@ -380,6 +380,29 @@ func (ss *SwarmingServer) ReadTGZToURL(ctx context.Context, req *protos.ReadTGZT
 	}, nil
 }
 
+// RemoveFiles removes files or directories from the gomote instance.
+func (ss *SwarmingServer) RemoveFiles(ctx context.Context, req *protos.RemoveFilesRequest) (*protos.RemoveFilesResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("RemoveFiles access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	// TODO(go.dev/issue/48742) consider what additional path validation should be implemented.
+	if req.GetGomoteId() == "" || len(req.GetPaths()) == 0 {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid arguments")
+	}
+	_, bc, err := ss.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	if err := bc.RemoveAll(ctx, req.GetPaths()...); err != nil {
+		log.Printf("RemoveFiles buildletClient.RemoveAll(ctx, %q) = %s", req.GetPaths(), err)
+		return nil, status.Errorf(codes.Unknown, "unable to remove files")
+	}
+	return &protos.RemoveFilesResponse{}, nil
+}
+
 // session is a helper function that retrieves a session associated with the gomoteID and ownerID.
 func (ss *SwarmingServer) session(gomoteID, ownerID string) (*remote.Session, error) {
 	session, err := ss.buildlets.Session(gomoteID)
