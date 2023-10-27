@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/build/revdial/v2"
 )
 
 func TestNew(t *testing.T) {
@@ -58,7 +60,7 @@ func TestWaitForInstanceError(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			rdv := &Rendezvous{
 				m: make(map[string]*entry),
-				verifier: func(ctx context.Context, jwt string) bool {
+				validator: func(ctx context.Context, jwt string) bool {
 					return true
 				},
 			}
@@ -83,7 +85,7 @@ func TestWaitForInstanceError(t *testing.T) {
 func TestWaitForInstaceErrorNonTLS(t *testing.T) {
 	rdv := &Rendezvous{
 		m: make(map[string]*entry),
-		verifier: func(ctx context.Context, jwt string) bool {
+		validator: func(ctx context.Context, jwt string) bool {
 			return true
 		},
 	}
@@ -100,36 +102,39 @@ func TestWaitForInstaceErrorNonTLS(t *testing.T) {
 	}
 }
 
-func TestWaitForInstaceError(t *testing.T) {
+func TestWaitForInstaceRevdialError(t *testing.T) {
 	rdv := &Rendezvous{
 		m: make(map[string]*entry),
-		verifier: func(ctx context.Context, jwt string) bool {
+		validator: func(ctx context.Context, jwt string) bool {
 			return true
 		},
 	}
 	instanceID := "test-id-3"
 	ctx := context.Background()
 	rdv.RegisterInstance(ctx, instanceID, 15*time.Second)
-	ts := httptest.NewTLSServer(http.HandlerFunc(rdv.HandleReverse))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/reverse", rdv.HandleReverse)
+	mux.Handle("/revdial", revdial.ConnHandler())
+	ts := httptest.NewTLSServer(mux)
 	defer ts.Close()
 	client := ts.Client()
-	req, err := http.NewRequest("GET", ts.URL, nil)
+	req, err := http.NewRequest("GET", ts.URL+"/reverse", nil)
 	req.Header.Set(HeaderID, instanceID)
 	req.Header.Set(HeaderToken, "test-token")
 	req.Header.Set(HeaderHostname, "test-hostname")
 
 	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
 		defer wg.Done()
 
 		_, _ = client.Do(req)
 	}()
-	c, err := rdv.WaitForInstance(ctx, instanceID)
-	if err != nil {
-		t.Fatalf("WaitForInstance(): got %s, want no error", err)
+	_, err = rdv.WaitForInstance(ctx, instanceID)
+	if err == nil {
+		// expect a missing status endpoint
+		t.Fatal("WaitForInstance(): got nil, want error")
 	}
-	c.Close()
 	wg.Wait()
 }
 

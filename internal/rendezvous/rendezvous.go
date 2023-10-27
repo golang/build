@@ -13,13 +13,16 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal"
+	"golang.org/x/build/revdial/v2"
+	"google.golang.org/api/idtoken"
 )
 
 // result contains the result for a waiting instance registration.
 type result struct {
-	conn net.Conn
-	err  error
+	bc  buildlet.Client
+	err error
 }
 
 // entry contains the elements needed to process an instance registration.
@@ -28,25 +31,25 @@ type entry struct {
 	ch       chan *result
 }
 
-// TokenVerifier verifies if a token is valid.
-type TokenVerifier func(ctx context.Context, jwt string) bool
+// TokenValidator verifies if a token is valid.
+type TokenValidator func(ctx context.Context, jwt string) bool
 
 // Rendezvous waits for buildlets to connect, verifies they are valid instances
 // and passes the connection to the waiting caller.
 type Rendezvous struct {
 	mu sync.Mutex
 
-	m        map[string]*entry
-	verifier TokenVerifier
+	m         map[string]*entry
+	validator TokenValidator
 }
 
 // Option is an optional configuration setting.
 type Option func(*Rendezvous)
 
-// OptionVerifier changes the verifier used by Rendezvous.
-func OptionVerifier(v TokenVerifier) Option {
+// OptionValidator changes the verifier used by Rendezvous.
+func OptionValidator(v TokenValidator) Option {
 	return func(rdv *Rendezvous) {
-		rdv.verifier = v
+		rdv.validator = v
 	}
 }
 
@@ -54,8 +57,8 @@ func OptionVerifier(v TokenVerifier) Option {
 // during the lifetime of the running service.
 func New(ctx context.Context, opts ...Option) *Rendezvous {
 	rdv := &Rendezvous{
-		m:        make(map[string]*entry),
-		verifier: verifyToken,
+		m:         make(map[string]*entry),
+		validator: validateLUCIIDToken,
 	}
 	for _, opt := range opts {
 		opt(rdv)
@@ -89,7 +92,6 @@ func (rdv *Rendezvous) RegisterInstance(ctx context.Context, id string, wait tim
 		ch:       make(chan *result, 1),
 	}
 	rdv.mu.Unlock()
-	log.Printf("rendezvous: waiting for instance=%q", id)
 }
 
 // DeregisterInstance removes the registration for an instance which has been
@@ -98,13 +100,12 @@ func (rdv *Rendezvous) DeregisterInstance(ctx context.Context, id string) {
 	rdv.mu.Lock()
 	delete(rdv.m, id)
 	rdv.mu.Unlock()
-	log.Printf("rendezvous: stopped waiting for instance=%q", id)
 }
 
 // WaitForInstance waits for the registered instance to successfully connect. It waits for the
 // lifetime of the context. If the instance is not registered or has exceeded the timeout period,
 // it will immediately return an error.
-func (rdv *Rendezvous) WaitForInstance(ctx context.Context, id string) (net.Conn, error) {
+func (rdv *Rendezvous) WaitForInstance(ctx context.Context, id string) (buildlet.Client, error) {
 	rdv.mu.Lock()
 	e, ok := rdv.m[id]
 	rdv.mu.Unlock()
@@ -122,7 +123,7 @@ func (rdv *Rendezvous) WaitForInstance(ctx context.Context, id string) (net.Conn
 		delete(rdv.m, id)
 		close(e.ch)
 		rdv.mu.Unlock()
-		return res.conn, res.err
+		return res.bc, res.err
 	}
 }
 
@@ -167,21 +168,111 @@ func (rdv *Rendezvous) HandleReverse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not expecting buildlet client", http.StatusPreconditionFailed)
 		return
 	}
-	if !rdv.verifier(r.Context(), authToken) {
+	if !rdv.validator(r.Context(), authToken) {
+		log.Printf("rendezvous: Unable to validate authentication token id=%s", id)
 		http.Error(w, "invalid authentication Token", http.StatusPreconditionFailed)
 		return
 	}
-	conn, _, err := w.(http.Hijacker).Hijack()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "webserver does not support hijacking", http.StatusHTTPVersionNotSupported)
 		return
 	}
-	log.Printf("rendezvous instance connected %q", id)
-	res.ch <- &result{conn: conn}
+	conn, _, err := hj.Hijack()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		res.ch <- &result{err: err}
+		return
+	}
+	bc, err := connToClient(conn, hostname, "swarming_task")
+	if err != nil {
+		log.Printf("rendezvous: unable to create buildlet client: %s", err)
+		conn.Close()
+		res.ch <- &result{err: err}
+		return
+	}
+	res.ch <- &result{bc: bc}
 }
 
-// verifyToken verifies that the token is valid and contains the expected fields.
-func verifyToken(ctx context.Context, jwt string) bool {
-	// TODO(go.dev/issue/63354) add service account verification
-	return false
+func connToClient(conn net.Conn, hostname, hostType string) (buildlet.Client, error) {
+	if err := (&http.Response{StatusCode: http.StatusSwitchingProtocols, Proto: "HTTP/1.1"}).Write(conn); err != nil {
+		log.Printf("gomote: error writing upgrade response to reverse buildlet %s (%s) at %s: %v", hostname, hostType, conn.RemoteAddr(), err)
+		conn.Close()
+		return nil, err
+	}
+	revDialer := revdial.NewDialer(conn, "/revdial")
+	revDialerDone := revDialer.Done()
+	dialer := revDialer.Dial
+
+	client := buildlet.NewClient(conn.RemoteAddr().String(), buildlet.NoKeyPair)
+	client.SetHTTPClient(&http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer(ctx)
+			},
+		},
+	})
+	client.SetDialer(dialer)
+	client.SetDescription(fmt.Sprintf("reverse peer %s/%s for host type %v", hostname, conn.RemoteAddr(), hostType))
+
+	var isDead struct {
+		sync.Mutex
+		v bool
+	}
+	client.SetOnHeartbeatFailure(func() {
+		isDead.Lock()
+		isDead.v = true
+		isDead.Unlock()
+		conn.Close()
+	})
+
+	// If the reverse dialer (which is always reading from the
+	// conn detects that the remote went away, close the buildlet
+	// client proactively.
+	go func() {
+		<-revDialerDone
+		isDead.Lock()
+		defer isDead.Unlock()
+		if !isDead.v {
+			client.Close()
+		}
+	}()
+	tstatus := time.Now()
+	status, err := client.Status(context.Background())
+	if err != nil {
+		log.Printf("Reverse connection %s/%s for %s did not answer status after %v: %v",
+			hostname, conn.RemoteAddr(), hostType, time.Since(tstatus), err)
+		conn.Close()
+		return nil, err
+	}
+	log.Printf("Buildlet %s/%s: %+v for %s", hostname, conn.RemoteAddr(), status, hostType)
+	return client, nil
+}
+
+// validateLUCIIDToken verifies that the token is valid and contains the expected fields.
+func validateLUCIIDToken(ctx context.Context, jwt string) bool {
+	payload, err := idtoken.Validate(ctx, jwt, "https://gomote.golang.org")
+	if err != nil {
+		log.Printf("rendezvous: unable to validate authentication token: %s", err)
+		return false
+	}
+	if payload.Issuer != "https://accounts.google.com" {
+		log.Printf("rendezvous: incorrect issuer: %q", payload.Issuer)
+		return false
+	}
+	if payload.Expires+30 < time.Now().Unix() || payload.IssuedAt-30 > time.Now().Unix() {
+		log.Printf("rendezvous: Bad JWT times: expires %v, issued %v", time.Unix(payload.Expires, 0), time.Unix(payload.IssuedAt, 0))
+		return false
+	}
+	email, ok := payload.Claims["email"]
+	if !ok || email != "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com" {
+		log.Printf("rendezvous: incorrect email=%s", email)
+		return false
+	}
+	emailVerified, ok := payload.Claims["email_verified"].(bool)
+	if !ok || !emailVerified {
+		log.Printf("rendezvous: email unverified email=%s", email)
+		return false
+	}
+	return true
 }
