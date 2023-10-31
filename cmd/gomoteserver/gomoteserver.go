@@ -60,8 +60,9 @@ func main() {
 		if err != nil {
 			log.Fatalf("metadata.ProjectID() = %v", err)
 		}
+		luciEnv := buildenv.ByProjectID("golang-ci-luci")
 		env := buildenv.ByProjectID(projectID)
-		gomoteBucket = env.GomoteTransferBucket
+		gomoteBucket = luciEnv.GomoteTransferBucket
 		var coordinatorBackend, serviceID = "coordinator-internal-iap", ""
 		if serviceID = env.IAPServiceID(coordinatorBackend); serviceID == "" {
 			log.Fatalf("unable to retrieve Service ID for backend service=%q", coordinatorBackend)
