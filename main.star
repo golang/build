@@ -292,6 +292,8 @@ BUILDER_TYPES = [
     "plan9-amd64",
     "plan9-arm",
     "solaris-amd64",
+    "wasip1-wasm_wasmtime",
+    "wasip1-wasm_wazero",
     "windows-386",
     "windows-amd64",
     "windows-amd64-longtest",
@@ -461,24 +463,27 @@ def dimensions_of(low_capacity_hosts, builder_type):
     """dimensions_of returns the bot dimensions for a builder type."""
     goos, goarch, suffix, _ = split_builder_type(builder_type)
 
-    # We run various builds on Linux.
-    goos = goos.replace("js", "linux")
+    # We run various builds on a Linux host.
+    if goos in ["js", "wasip1"]:
+        hostos, suffix = "linux", ""
+    else:
+        hostos = goos
 
-    # We run various builds on AMD64.
-    goarch = goarch.replace("386", "amd64")
-    goarch = goarch.replace("wasm", "amd64")
+    # We run various builds on an AMD64 host.
+    hostarch = goarch.replace("386", "amd64") \
+        .replace("wasm", "amd64")
 
     # TODO(mknyszek): Consider adding "_suffix" to the end of this.
-    host = "%s-%s" % (goos, goarch)
+    host = "%s-%s" % (hostos, hostarch)
 
     os = None
 
     if suffix != "":
         # Narrow down the dimensions using the suffix.
-        if goos == "linux":
+        if hostos == "linux":
             # linux-amd64_debian11 -> Debian-11
             os = suffix.replace("debian", "Debian-")
-        elif goos == "darwin":
+        elif hostos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffix
     else:
@@ -491,9 +496,9 @@ def dimensions_of(low_capacity_hosts, builder_type):
         # queue length. This *must* line up with the
         # expected_dimensions field for the botset in the
         # internal config: //starlark/common/envs/golang.star
-        if goos == "linux" and host not in low_capacity_hosts:
+        if hostos == "linux" and host not in low_capacity_hosts:
             os = "Debian-11"
-        elif goos == "windows":
+        elif hostos == "windows":
             os = "Windows-10"
 
         # TODO: Add more platforms and decide on whether we
@@ -589,24 +594,36 @@ def define_builder(env, project, go_branch_short, builder_type):
         base_props["env"]["GOARCH"] = "386"
         base_props["env"]["GOHOSTARCH"] = "386"
 
-    # We run js/wasm builds on linux/amd64 with GOOS/GOARCH set,
-    # and Node.js provided as a CIPD dependency.
+    # We run GOARCH=wasm builds on linux/amd64 with GOOS/GOARCH set,
+    # and the applicable Wasm runtime provided as a CIPD dependency.
     #
     # TODO(dmitshur): We have target_go{os,arch} and by default they would be set to js/wasm.
     # However, they're currently only for the coordinator, not build-go and test-only builders,
     # so I can't use them as is. Perhaps we'll consider changing that, and then there won't be
     # a need to set GOOS/GOARCH in the env here.
-    if os == "js" and arch == "wasm":
-        base_props["env"]["GOOS"] = "js"
+    if arch == "wasm":
+        base_props["env"]["GOOS"] = os
         base_props["env"]["GOARCH"] = "wasm"
-        node_versions = {
-            # Confirm that version is available with: cipd search infra/3pp/tools/nodejs/linux-amd64 -tag=version:{node_version}
-            18: "2@18.8.0",
-            13: "13.2.0",
-        }
-        base_props["node_version"] = node_versions[18]
-        if go_branch_short == "go1.20":
-            base_props["node_version"] = node_versions[13]
+        if os == "js":
+            if suffix != "":
+                fail("unknown GOOS=js builder suffix: %s" % suffix)
+            node_versions = {
+                # Confirm that version is available with: cipd search infra/3pp/tools/nodejs/linux-amd64 -tag=version:{node_version}
+                18: "2@18.8.0",
+                13: "13.2.0",
+            }
+            base_props["node_version"] = node_versions[18]
+            if go_branch_short == "go1.20":
+                base_props["node_version"] = node_versions[13]
+        elif os == "wasip1":
+            if suffix == "wasmtime":
+                base_props["env"]["GOWASIRUNTIME"] = "wasmtime"
+                base_props["wasmtime_version"] = "14.0.4"
+            elif suffix == "wazero":
+                base_props["env"]["GOWASIRUNTIME"] = "wazero"
+                base_props["wazero_version"] = "1.5.0"
+            else:
+                fail("unknown GOOS=wasip1 builder suffix: %s" % suffix)
 
     # Construct the basic dimensions for the build/test running part of the build.
     #
@@ -762,7 +779,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         "cipd_platform": "linux-amd64",
     }
     target_goos, target_goarch = os, arch
-    if os == "js" and arch == "wasm":
+    if arch == "wasm":
         # TODO(dmitshur): The target_go{os,arch} are currently only passed to
         # the coordinator builder, not build-go and test-only. So leaving it
         # as js/wasm will cause skew, since the build-go and test-only host OS
@@ -909,6 +926,13 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
             return False, False, False
         presubmit = presubmit and pre
         postsubmit = postsubmit and post
+
+    # TODO(dmitshur): Enable wasip1-wasm trybots after post-submit is passing.
+    # TODO(dmitshur): Add wasip1-wasm builders for the rest of repos&branches.
+    if os == "wasip1":
+        presubmit = False
+        if project != "go" or go_branch_short != "gotip":
+            return False, False, False
 
     return True, presubmit, postsubmit
 
