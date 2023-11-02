@@ -924,7 +924,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{iancottrell},
 	},
 	"tools/playground": {
-		Primary: []Owner{rakoczy},
+		Primary: []Owner{toolsTeam, rakoczy},
 	},
 	"tools/present": {
 		Primary: []Owner{rsc},
