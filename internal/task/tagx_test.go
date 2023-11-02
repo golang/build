@@ -545,7 +545,6 @@ func testTagSingleRepo(t *testing.T, dashboardStatus string, skipPostSubmit bool
 	deps := newTagXTestDeps(t, dashboardStatus, mod, foo)
 
 	wd := deps.tagXTasks.NewSingleDefinition()
-	ctx, cancel := context.WithTimeout(deps.ctx, time.Minute)
 	args := map[string]interface{}{
 		"Repository name":   "foo",
 		reviewersParam.Name: []string(nil),
@@ -559,7 +558,7 @@ func testTagSingleRepo(t *testing.T, dashboardStatus string, skipPostSubmit bool
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel()
+	ctx := deps.ctx
 	_, err = w.Run(ctx, &verboseListener{t: t})
 	if err != nil {
 		t.Fatal(err)
