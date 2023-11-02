@@ -967,10 +967,6 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         presubmit = presubmit and pre
         postsubmit = postsubmit and post
 
-    # TODO(dmitshur): Enable wasip1-wasm trybots after post-submit is passing.
-    if os == "wasip1":
-        presubmit = False
-
     return True, presubmit, postsubmit
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
