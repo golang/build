@@ -158,10 +158,13 @@ luci.binding(
     users = "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
 )
 
-# Allow the user to impersonate task service accounts and create new resources. The user must
-# have both the poolUser and taskTriggerer roles.
+# Allow gomoteserver to run Swarming tasks and BuildBucket builds in public realms.
 luci.binding(
-    roles = ["role/swarming.taskTriggerer", "role/swarming.poolUser"],
+    roles = [
+        "role/buildbucket.triggerer",
+        "role/swarming.poolUser",
+        "role/swarming.taskTriggerer",
+    ],
     realm = PUBLIC_REALMS,
     users = "gomoteserver@symbolic-datum-552.iam.gserviceaccount.com",
 )
