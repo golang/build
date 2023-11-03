@@ -960,11 +960,8 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         postsubmit = postsubmit and post
 
     # TODO(dmitshur): Enable wasip1-wasm trybots after post-submit is passing.
-    # TODO(dmitshur): Add wasip1-wasm builders for the rest of repos.
     if os == "wasip1":
         presubmit = False
-        if project != "go":
-            return False, False, False
 
     return True, presubmit, postsubmit
 
