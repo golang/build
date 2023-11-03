@@ -600,6 +600,10 @@ def define_builder(env, project, go_branch_short, builder_type):
     # We run GOARCH=wasm builds on linux/amd64 with GOOS/GOARCH set,
     # and the applicable Wasm runtime provided as a CIPD dependency.
     #
+    # The availability of a given version in CIPD can be checked with:
+    #   cipd search infra/3pp/tools/{wasm_runtime}/linux-amd64 -tag=version:{version}
+    # Where wasm_runtime is one of nodejs, wasmtime, wazero.
+    #
     # TODO(dmitshur): We have target_go{os,arch} and by default they would be set to js/wasm.
     # However, they're currently only for the coordinator, not build-go and test-only builders,
     # so I can't use them as is. Perhaps we'll consider changing that, and then there won't be
@@ -610,21 +614,16 @@ def define_builder(env, project, go_branch_short, builder_type):
         if os == "js":
             if suffix != "":
                 fail("unknown GOOS=js builder suffix: %s" % suffix)
-            node_versions = {
-                # Confirm that version is available with: cipd search infra/3pp/tools/nodejs/linux-amd64 -tag=version:{node_version}
-                18: "2@18.8.0",
-                13: "13.2.0",
-            }
-            base_props["node_version"] = node_versions[18]
+            base_props["node_version"] = "2@18.8.0"
             if go_branch_short == "go1.20":
-                base_props["node_version"] = node_versions[13]
+                base_props["node_version"] = "13.2.0"
         elif os == "wasip1":
             if suffix == "wasmtime":
                 base_props["env"]["GOWASIRUNTIME"] = "wasmtime"
-                base_props["wasmtime_version"] = "14.0.4"
+                base_props["wasmtime_version"] = "2@14.0.4"
             elif suffix == "wazero":
                 base_props["env"]["GOWASIRUNTIME"] = "wazero"
-                base_props["wazero_version"] = "1.5.0"
+                base_props["wazero_version"] = "2@1.5.0"
             else:
                 fail("unknown GOOS=wasip1 builder suffix: %s" % suffix)
 
