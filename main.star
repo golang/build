@@ -645,6 +645,8 @@ def define_builder(env, project, go_branch_short, builder_type):
             if suffix == "wasmtime":
                 base_props["env"]["GOWASIRUNTIME"] = "wasmtime"
                 base_props["wasmtime_version"] = "2@14.0.4"
+                if go_branch_short == "go1.21":
+                    base_props["wasmtime_version"] = "13.0.1"  # See go.dev/issue/63718.
             elif suffix == "wazero":
                 base_props["env"]["GOWASIRUNTIME"] = "wazero"
                 base_props["wazero_version"] = "2@1.5.0"
@@ -926,6 +928,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     pt = PROJECTS[project]
     os, arch, _, run_mods = split_builder_type(builder_type)
 
+    # Filter out new ports on old release branches.
+    if os == "wasip1" and go_branch_short == "go1.20":  # GOOS=wasip1 is new to Go 1.21.
+        return False, False, False
+
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
     enable_types = None
@@ -954,10 +960,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         postsubmit = postsubmit and post
 
     # TODO(dmitshur): Enable wasip1-wasm trybots after post-submit is passing.
-    # TODO(dmitshur): Add wasip1-wasm builders for the rest of repos&branches.
+    # TODO(dmitshur): Add wasip1-wasm builders for the rest of repos.
     if os == "wasip1":
         presubmit = False
-        if project != "go" or go_branch_short != "gotip":
+        if project != "go":
             return False, False, False
 
     return True, presubmit, postsubmit
