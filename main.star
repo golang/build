@@ -322,7 +322,7 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None):
         props["env"].update(add_env)
 
     if enabled == None:
-        enabled = lambda project, go_branch_short: (True, True, True)
+        enabled = lambda host, project, go_branch_short: (True, True, True)
     return struct(
         enabled = enabled,
         apply = apply_mod,
@@ -330,8 +330,17 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None):
 
 # enable only on release branches in the Go project.
 def presubmit_only_on_release_branches():
-    def f(project, go_branch_short):
+    def f(host, project, go_branch_short):
         presubmit = project == "go" and go_branch_short != "gotip"
+        return (True, presubmit, True)
+
+    return f
+
+# enable only on if host_of(builder_type) matches one of the provided hosts, or
+# for the release branches in the Go project.
+def presubmit_only_for_hosts_or_on_release_branches(hosts):
+    def f(host, project, go_branch_short):
+        presubmit = host in hosts or (project == "go" and go_branch_short != "gotip")
         return (True, presubmit, True)
 
     return f
@@ -339,7 +348,7 @@ def presubmit_only_on_release_branches():
 # define the builder only for the go project at versions after x, useful for
 # non-default build modes that were created at x.
 def define_for_go_starting_at(x):
-    def f(project, go_branch_short):
+    def f(host, project, go_branch_short):
         run = project == "go" and (go_branch_short == "gotip" or go_branch_short >= x)
         return (run, run, run)
 
@@ -349,7 +358,7 @@ def define_for_go_starting_at(x):
 # build and test our various projects.
 RUN_MODS = dict(
     longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}, enabled = presubmit_only_on_release_branches()),
-    race = make_run_mod({"race_mode": True}, enabled = presubmit_only_on_release_branches()),
+    race = make_run_mod({"race_mode": True}, enabled = presubmit_only_for_hosts_or_on_release_branches(["linux-amd64"])),
     boringcrypto = make_run_mod(add_env = {"GOEXPERIMENT": "boringcrypto"}),
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
@@ -461,6 +470,21 @@ def split_builder_type(builder_type):
     if "_" in arch:
         arch, suffix = arch.split("_", 2)
     return os, arch, suffix, parts[2:]
+
+def host_of(builder_type):
+    """host_of returns the builder_type stripped of any run mods.
+
+    Args:
+        builder_type: the builder type.
+
+    Returns:
+        The builder type's GOOS, GOARCH, and OS version without run mods.
+    """
+    os, arch, suffix, _ = split_builder_type(builder_type)
+    host = "%s-%s" % (os, arch)
+    if suffix != "":
+        host += "_" + suffix
+    return host
 
 def dimensions_of(low_capacity_hosts, builder_type):
     """dimensions_of returns the bot dimensions for a builder type."""
@@ -923,7 +947,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
 
     # Apply policies for each run mod.
     for mod in run_mods:
-        ex, pre, post = RUN_MODS[mod].enabled(project, go_branch_short)
+        ex, pre, post = RUN_MODS[mod].enabled(host_of(builder_type), project, go_branch_short)
         if not ex:
             return False, False, False
         presubmit = presubmit and pre
