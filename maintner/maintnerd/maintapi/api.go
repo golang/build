@@ -411,19 +411,9 @@ func parseReleaseBranchVersion(branchName string) (major, minor int32, ok bool) 
 // from internal-branch.goX-suffix or internal-branch.goX.Y-suffix internal branch names,
 // and reports whether the internal branch name is valid.
 //
-// Before Go 1.16, golang.org/x repositories used release-branch.go1.n as internal
-// branch names, so this function also accepts those branch names. See issue 36882.
-//
 // For example, "internal-branch.go1-vendor" is parsed as version 1.0,
 // and "internal-branch.go1.2-vendor" is parsed as version 1.2.
 func parseInternalBranchVersion(branchName string) (major, minor int32, ok bool) {
-	// Accept release branches as internal branches, since Go 1.15 still uses them.
-	// There was only one branch with a suffix, release-branch.go1.15-bundle in x/net, so just hardcode it.
-	// TODO: This special case can be removed when Go 1.17 is out and 1.15 is no longer supported.
-	if maj, min, ok := version.ParseReleaseBranch(strings.TrimSuffix(branchName, "-bundle")); ok {
-		return int32(maj), int32(min), ok
-	}
-
 	const prefix = "internal-branch."
 	if !strings.HasPrefix(branchName, prefix) {
 		return 0, 0, false

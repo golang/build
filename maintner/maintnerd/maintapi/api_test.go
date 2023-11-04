@@ -197,8 +197,7 @@ func TestTryWorkItem(t *testing.T) {
 		}},
 
 		// Test that a golang.org/x repo TryBot on a branch like
-		// "internal-branch.go1.N-suffix", "release-branch.go1.N", or "release-branch.go1.N-suffix"
-		// tests with Go 1.N (rather than tip + two supported releases).
+		// "internal-branch.go1.N-suffix" tests with Go 1.N (rather than tip + two supported releases).
 		// See issues 28891, 42127, and 36882.
 		{"net", 314649, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
 			Project:     "net",
@@ -209,26 +208,6 @@ func TestTryWorkItem(t *testing.T) {
 			GoCommit:    []string{"e67a58b7cb2b228e04477dfdb1aacd8348e63534"},
 			GoBranch:    []string{"release-branch.go1.16"},
 			GoVersion:   []*apipb.MajorMinor{{Major: 1, Minor: 16}},
-		}},
-		{"net", 258478, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
-			Project:     "net",
-			Branch:      "release-branch.go1.15",
-			ChangeId:    "I546597cedf3715e6617babcb3b62140bf1857a27",
-			Commit:      "a5fa9d4b7c91aa1c3fecbeb6358ec1127b910dd6",
-			AuthorEmail: "michael.fraenkel@gmail.com",
-			GoCommit:    []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
-			GoBranch:    []string{"release-branch.go1.15"},
-			GoVersion:   []*apipb.MajorMinor{{Major: 1, Minor: 15}},
-		}},
-		{"net", 264058, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
-			Project:     "net",
-			Branch:      "release-branch.go1.15-bundle",
-			ChangeId:    "I546597cedf3715e6617babcb3b62140bf1857a27",
-			Commit:      "abf26a14a65b111d492067f407f32455c5b1048c",
-			AuthorEmail: "michael.fraenkel@gmail.com",
-			GoCommit:    []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
-			GoBranch:    []string{"release-branch.go1.15"},
-			GoVersion:   []*apipb.MajorMinor{{Major: 1, Minor: 15}},
 		}},
 
 		// Test that TryBots run on branches of the x/ repositories, other than
@@ -469,11 +448,6 @@ func TestParseInternalBranchVersion(t *testing.T) {
 		{"not-internal-branch", 0, 0, false},
 		{"internal-branch.go1.16.2", 0, 0, false},
 		{"internal-branch.go42-suffix", 42, 0, true}, // Be ready in case Go 42 is released after 7.5 million years.
-
-		// Old naming scheme for internal branches. See issue 36882.
-		{"release-branch.go1.15", 1, 15, true},
-		{"release-branch.go1.15-bundle", 1, 15, true},
-		{"release-branch.go1.15-other", 0, 0, false}, // There are no other branches that need to be supported for now.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
