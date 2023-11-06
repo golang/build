@@ -18,6 +18,9 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
 	"go.chromium.org/luci/auth"
+	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
+	"go.chromium.org/luci/grpc/prpc"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"go.chromium.org/luci/swarming/client/swarming"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/internal/access"
@@ -28,7 +31,6 @@ import (
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/rendezvous"
 	"golang.org/x/build/internal/secret"
-	"golang.org/x/build/internal/swarmclient"
 	"golang.org/x/build/revdial/v2"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -72,7 +74,7 @@ func main() {
 	}
 	grpcServer := grpc.NewServer(opts...)
 	rdv := rendezvous.New(ctx)
-	gomoteServer, err := gomote.NewSwarming(sp, sshCA, gomoteBucket, mustStorageClient(), mustLUCIConfigClient(), rdv, mustSwarmingClient(ctx))
+	gomoteServer, err := gomote.NewSwarming(sp, sshCA, gomoteBucket, mustStorageClient(), rdv, mustSwarmingClient(ctx), mustBuildersClient(ctx))
 	if err != nil {
 		log.Fatalf("unable to create gomote server: %s", err)
 	}
@@ -109,16 +111,6 @@ func main() {
 		}()
 	}
 	log.Fatalln(https.ListenAndServe(context.Background(), mux))
-}
-
-func mustLUCIConfigClient() *swarmclient.ConfigClient {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	c, err := swarmclient.NewConfigClient(ctx)
-	if err != nil {
-		log.Fatalf("unable to create LUCI config client: %s", err)
-	}
-	return c
 }
 
 func mustRetrieveSSHCertificateAuthority() (privateKey []byte) {
@@ -181,4 +173,13 @@ func mustSwarmingClient(ctx context.Context) swarming.Client {
 		log.Fatalf("unable to create swarming client: %s", err)
 	}
 	return c
+}
+
+func mustBuildersClient(ctx context.Context) buildbucketpb.BuildersClient {
+	httpC, err := auth.NewAuthenticator(ctx, auth.SilentLogin, auth.Options{Method: auth.GCEMetadataMethod}).Client()
+	if err != nil {
+		log.Fatalf("unable to create buildbucket authenticator: %s", err)
+	}
+	prpcC := prpc.Client{C: httpC, Host: chromeinfra.BuildbucketHost}
+	return buildbucketpb.NewBuildersClient(&prpcC)
 }

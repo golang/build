@@ -19,6 +19,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/google/uuid"
+	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
 	"go.chromium.org/luci/swarming/client/swarming"
 	swarmpb "go.chromium.org/luci/swarming/proto/api_v2"
 	"golang.org/x/build/buildlet"
@@ -27,8 +28,8 @@ import (
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/rendezvous"
-	"golang.org/x/build/internal/swarmclient"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -40,31 +41,37 @@ type rendezvousClient interface {
 	WaitForInstance(ctx context.Context, id string) (buildlet.Client, error)
 }
 
+// BuildersClient is a partial interface of the buildbuicketpb.BuildersClient interface.
+type BuildersClient interface {
+	GetBuilder(ctx context.Context, in *buildbucketpb.GetBuilderRequest, opts ...grpc.CallOption) (*buildbucketpb.BuilderItem, error)
+	ListBuilders(ctx context.Context, in *buildbucketpb.ListBuildersRequest, opts ...grpc.CallOption) (*buildbucketpb.ListBuildersResponse, error)
+}
+
 // SwarmingServer is a gomote server implementation which supports LUCI swarming bots.
 type SwarmingServer struct {
 	// embed the unimplemented server.
 	protos.UnimplementedGomoteServiceServer
 
 	bucket                  bucketHandle
+	buildersClient          BuildersClient
 	buildlets               *remote.SessionPool
 	gceBucketName           string
-	luciConfigClient        *swarmclient.ConfigClient
 	rendezvous              rendezvousClient
 	sshCertificateAuthority ssh.Signer
 	swarmingClient          swarming.Client
 }
 
 // NewSwarming creates a gomote server. If the rawCAPriKey is invalid, the program will exit.
-func NewSwarming(rsp *remote.SessionPool, rawCAPriKey []byte, gomoteGCSBucket string, storageClient *storage.Client, configClient *swarmclient.ConfigClient, rdv *rendezvous.Rendezvous, swarmClient swarming.Client) (*SwarmingServer, error) {
+func NewSwarming(rsp *remote.SessionPool, rawCAPriKey []byte, gomoteGCSBucket string, storageClient *storage.Client, rdv *rendezvous.Rendezvous, swarmClient swarming.Client, buildersClient buildbucketpb.BuildersClient) (*SwarmingServer, error) {
 	signer, err := ssh.ParsePrivateKey(rawCAPriKey)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse raw certificate authority private key into signer=%w", err)
 	}
 	return &SwarmingServer{
 		bucket:                  storageClient.Bucket(gomoteGCSBucket),
+		buildersClient:          buildersClient,
 		buildlets:               rsp,
 		gceBucketName:           gomoteGCSBucket,
-		luciConfigClient:        configClient,
 		rendezvous:              rdv,
 		sshCertificateAuthority: signer,
 		swarmingClient:          swarmClient,
@@ -92,19 +99,14 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 	if req.GetBuilderType() == "" {
 		return status.Errorf(codes.InvalidArgument, "invalid builder type")
 	}
-	bots, err := ss.luciConfigClient.ListSwarmingBots(stream.Context())
+	builder, err := ss.buildersClient.GetBuilder(stream.Context(), &buildbucketpb.GetBuilderRequest{
+		Id: &buildbucketpb.BuilderID{
+			Project: "golang",
+			Bucket:  "ci-workers",
+			Builder: req.GetBuilderType() + "-test_only",
+		},
+	})
 	if err != nil {
-		log.Printf("luciConfigClient.ListSwarmingBots(ctx) = %s", err)
-		return err
-	}
-	var botDesc *swarmclient.SwarmingBot
-	for _, bot := range bots {
-		if bot.BucketName == "ci" && req.GetBuilderType() == bot.Name {
-			botDesc = bot
-			break
-		}
-	}
-	if botDesc == nil {
 		return status.Errorf(codes.InvalidArgument, "unknown builder type")
 	}
 	userName, err := emailToUser(creds.Email)
@@ -117,7 +119,8 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 	}
 	rc := make(chan result, 1)
 	dimensions := make(map[string]string)
-	for _, bd := range botDesc.Dimensions {
+
+	for _, bd := range builder.GetConfig().GetDimensions() {
 		k, v, ok := strings.Cut(bd, ":")
 		if ok {
 			dimensions[k] = v
@@ -152,7 +155,7 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 				log.Printf("error creating gomote buildlet instance=%s: %s", name, r.err)
 				return status.Errorf(codes.Internal, "gomote creation failed instance=%s", name)
 			}
-			gomoteID := ss.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), "swarming task", r.buildletClient)
+			gomoteID := ss.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), req.GetBuilderType(), r.buildletClient)
 			log.Printf("created buildlet %s for %s (%s)", gomoteID, userName, r.buildletClient.String())
 			session, err := ss.buildlets.Session(gomoteID)
 			if err != nil {
@@ -305,16 +308,30 @@ func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.
 		log.Printf("ListSwarmingInstances access.IAPFromContext(ctx) = nil, %s", err)
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	bots, err := ss.luciConfigClient.ListSwarmingBots(ctx)
+	buildersResp, err := ss.buildersClient.ListBuilders(ctx, &buildbucketpb.ListBuildersRequest{
+		Project:  "golang",
+		Bucket:   "ci-workers",
+		PageSize: 1000,
+	})
 	if err != nil {
-		log.Printf("luciConfigClient.ListSwarmingBots(ctx) = %s", err)
+		log.Printf("buildersClient.ListBuilders(ctx) = nil, %s", err)
 		return nil, status.Errorf(codes.Internal, "unable to query for bots")
 	}
 	var builders []string
-	for _, bot := range bots {
-		if bot.BucketName == "ci" && strings.HasPrefix(bot.Name, "gotip") {
-			builders = append(builders, bot.Name)
+	bs := buildersResp.GetBuilders()
+	for _, builder := range bs {
+		bID := builder.GetId()
+		if bID == nil {
+			continue
 		}
+		name := bID.GetBuilder()
+		if !strings.HasPrefix(name, "gotip") {
+			continue
+		}
+		if !strings.HasSuffix(name, "-test_only") {
+			continue
+		}
+		builders = append(builders, strings.TrimSuffix(name, "-test_only"))
 	}
 	return &protos.ListSwarmingBuildersResponse{Builders: builders}, nil
 }
@@ -626,7 +643,7 @@ func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string,
 	log.Printf("gomote: swarming task requested name=%s taskID=%s", name, taskID)
 	condRun(opts.OnInstanceRequested)
 
-	queryCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	queryCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
 	defer cancel()
 	var taskUp bool
 	tryThenPeriodicallyDo(queryCtx, 5*time.Second, func(ctx context.Context, _ time.Time) {
@@ -728,15 +745,43 @@ func (ss *SwarmingServer) waitForInstanceOrFailure(ctx context.Context, taskID, 
 }
 
 func buildletStartup(goos, goarch string) string {
-	return fmt.Sprintf(`
-export GO_TASK_ROOT=$(pwd) &&
-export GO_BIN=$GO_TASK_ROOT/bin &&
-mkdir $GO_BIN &&
-export PATH=$PATH:$GO_BIN &&
-curl -s https://storage.googleapis.com/go-builder-data/buildlet.%s-%s -L --output $GO_BIN/buildlet &&
-chmod +x $GO_BIN/buildlet &&
-$GO_BIN/buildlet --coordinator=gomotessh.golang.org:443 --reverse-type swarming-task -swarming-bot -halt=false
-`, goos, goarch)
+	cmd := `#!/usr/bin/env python3
+
+import urllib.request
+import sys
+import platform
+import subprocess
+import os
+import stat
+
+def add_os_file_ext(filename):
+    if sys.platform == "win32":
+        return filename+".exe"
+    return filename
+
+def sep():
+    if sys.platform == "win32":
+        return "\\"
+    else:
+        return "/"
+
+def delete_if_exists(file_path):
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+def make_executable(file_path):
+    st = os.stat(file_path)
+    os.chmod(file_path, st.st_mode | stat.S_IEXEC)
+
+if __name__ == "__main__":
+    buildlet_name = add_os_file_ext("buildlet")
+    delete_if_exists(buildlet_name)
+    urllib.request.urlretrieve("https://storage.googleapis.com/go-builder-data/buildlet.%s-%s", buildlet_name)
+    make_executable(os.getcwd() + sep() + buildlet_name)
+    buildlet_name = "."+sep()+buildlet_name
+    subprocess.run([buildlet_name, "--coordinator=gomotessh.golang.org:443", "--reverse-type=swarming-task", "-swarming-bot", "-halt=false"], shell=False, env=os.environ.copy())
+`
+	return fmt.Sprintf(cmd, goos, goarch)
 }
 
 func createStringPairs(m map[string]string) []*swarmpb.StringPair {
@@ -755,7 +800,7 @@ func platformToGoValues(platform string) (goos string, goarch string, err error)
 	if !ok {
 		return "", "", fmt.Errorf("cipd_platform not in proper format=%s", platform)
 	}
-	if goos == "Mac" {
+	if goos == "Mac" || goos == "mac" {
 		goos = "darwin"
 	}
 	return goos, goarch, nil
@@ -773,21 +818,19 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 	req := &swarmpb.NewTaskRequest{
 		ExpirationSecs: 86400,
 		Name:           name,
-		Priority:       30,
+		Priority:       20, // 30 is the priority for builds
 		Properties: &swarmpb.TaskProperties{
-			Caches: []*swarmpb.CacheEntry{},
 			CipdInput: &swarmpb.CipdInput{
 				Packages: []*swarmpb.CipdPackage{
 					{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
 					{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: "latest"},
-					{Path: "tools", PackageName: "infra/3pp/tools/gcloud/" + cipdPlatform, Version: "latest"},
-					{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"},
+					{Path: "tools", PackageName: "infra/experimental/golangbuild/" + cipdPlatform, Version: "latest"},
 				},
 			},
 			EnvPrefixes: []*swarmpb.StringListPair{
 				{Key: "PATH", Value: []string{"tools/bin"}},
 			},
-			Command:     []string{"bash", "-cx", buildletStartup(goos, goarch)},
+			Command:     []string{"python3", "-c", buildletStartup(goos, goarch)},
 			RelativeCwd: "",
 			Dimensions:  createStringPairs(dimensions),
 			Env: []*swarmpb.StringPair{

@@ -8,6 +8,7 @@ package gomote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
+	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
 	"go.chromium.org/luci/swarming/client/swarming"
 	"go.chromium.org/luci/swarming/client/swarming/swarmingtest"
 	swarmpb "go.chromium.org/luci/swarming/proto/api_v2"
@@ -27,7 +29,6 @@ import (
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/rendezvous"
-	"golang.org/x/build/internal/swarmclient"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/nettest"
 	"google.golang.org/grpc"
@@ -38,7 +39,7 @@ import (
 
 const testSwarmingBucketName = "unit-testing-bucket-swarming"
 
-func fakeGomoteSwarmingServer(t *testing.T, ctx context.Context, configClient *swarmclient.ConfigClient, swarmClient swarming.Client, rdv rendezvousClient) protos.GomoteServiceServer {
+func fakeGomoteSwarmingServer(t *testing.T, ctx context.Context, swarmClient swarming.Client, rdv rendezvousClient) protos.GomoteServiceServer {
 	signer, err := ssh.ParsePrivateKey([]byte(devCertCAPrivate))
 	if err != nil {
 		t.Fatalf("unable to parse raw certificate authority private key into signer=%s", err)
@@ -48,20 +49,13 @@ func fakeGomoteSwarmingServer(t *testing.T, ctx context.Context, configClient *s
 		buildlets:               remote.NewSessionPool(ctx),
 		gceBucketName:           testSwarmingBucketName,
 		sshCertificateAuthority: signer,
-		luciConfigClient:        configClient,
 		rendezvous:              rdv,
 		swarmingClient:          swarmClient,
+		buildersClient:          &FakeBuildersClient{},
 	}
 }
 
 func setupGomoteSwarmingTest(t *testing.T, ctx context.Context, swarmClient swarming.Client) protos.GomoteServiceClient {
-	contents, err := os.ReadFile("../swarmclient/testdata/bb-sample.cfg")
-	if err != nil {
-		t.Fatalf("unable to read test buildbucket config: %s", err)
-	}
-	configClient := swarmclient.NewMemoryConfigClient(ctx, []*swarmclient.ConfigEntry{
-		&swarmclient.ConfigEntry{"cr-buildbucket.cfg", contents},
-	})
 	lis, err := nettest.NewLocalListener("tcp")
 	if err != nil {
 		t.Fatalf("unable to create net listener: %s", err)
@@ -69,7 +63,7 @@ func setupGomoteSwarmingTest(t *testing.T, ctx context.Context, swarmClient swar
 	rdv := rendezvous.NewFake(context.Background(), func(ctx context.Context, jwt string) bool { return true })
 	sopts := access.FakeIAPAuthInterceptorOptions()
 	s := grpc.NewServer(sopts...)
-	protos.RegisterGomoteServiceServer(s, fakeGomoteSwarmingServer(t, ctx, configClient, swarmClient, rdv))
+	protos.RegisterGomoteServiceServer(s, fakeGomoteSwarmingServer(t, ctx, swarmClient, rdv))
 	go s.Serve(lis)
 
 	// create GRPC client
@@ -1067,10 +1061,10 @@ func TestStartNewSwarmingTask(t *testing.T) {
 		bucket:                           nil,
 		buildlets:                        &remote.SessionPool{},
 		gceBucketName:                    "",
-		luciConfigClient:                 &swarmclient.ConfigClient{},
 		sshCertificateAuthority:          nil,
 		rendezvous:                       rdv,
 		swarmingClient:                   msc,
+		buildersClient:                   &FakeBuildersClient{},
 	}
 	id := "task-123"
 	errCh := make(chan error, 2)
@@ -1196,4 +1190,61 @@ func mustCreateSwarmingInstance(t *testing.T, client protos.GomoteServiceClient,
 		}
 	}
 	return gomoteID
+}
+
+type FakeBuildersClient struct{}
+
+func (fbc *FakeBuildersClient) GetBuilder(ctx context.Context, in *buildbucketpb.GetBuilderRequest, opts ...grpc.CallOption) (*buildbucketpb.BuilderItem, error) {
+	builders := map[string]bool{
+		"gotip-linux-amd64-boringcrypto-test_only": true,
+	}
+	name := in.GetId().GetBuilder()
+	_, ok := builders[name]
+	if !ok {
+		return nil, errors.New("builder type not found")
+	}
+	return &buildbucketpb.BuilderItem{
+		Id: &buildbucketpb.BuilderID{
+			Project: "golang",
+			Bucket:  "ci-workers",
+			Builder: name,
+		},
+		Config: &buildbucketpb.BuilderConfig{
+			Name: name,
+			Dimensions: []string{
+				"cipd_platform:linux-amd64",
+			},
+		},
+	}, nil
+}
+
+func (fbc *FakeBuildersClient) ListBuilders(ctx context.Context, in *buildbucketpb.ListBuildersRequest, opts ...grpc.CallOption) (*buildbucketpb.ListBuildersResponse, error) {
+	out := &buildbucketpb.ListBuildersResponse{
+		Builders: []*buildbucketpb.BuilderItem{
+			&buildbucketpb.BuilderItem{
+				Id: &buildbucketpb.BuilderID{
+					Project: "golang",
+					Bucket:  "ci-workers",
+					Builder: "gotip-linux-amd64-boringcrypto",
+				},
+				Config: &buildbucketpb.BuilderConfig{
+					Name:       "gotip-linux-amd64-boringcrypto",
+					Dimensions: []string{},
+				},
+			},
+			&buildbucketpb.BuilderItem{
+				Id: &buildbucketpb.BuilderID{
+					Project: "golang",
+					Bucket:  "ci-workers",
+					Builder: "gotip-linux-amd64-boringcrypto-test_only",
+				},
+				Config: &buildbucketpb.BuilderConfig{
+					Name:       "gotip-linux-amd64-boringcrypto-test_only",
+					Dimensions: []string{},
+				},
+			},
+		},
+		NextPageToken: "",
+	}
+	return out, nil
 }
