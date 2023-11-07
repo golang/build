@@ -382,6 +382,7 @@ PROJECTS = {
     "build": PT.TOOL,
     "crypto": PT.CORE,
     "debug": PT.LIBRARY,
+    "dl": PT.CORE,
     "exp": PT.SPECIAL,
     "image": PT.LIBRARY,
     "mobile": PT.SPECIAL,
@@ -573,6 +574,10 @@ def builder_name(project, go_branch_short, builder_type):
         # The branch short name already has a "go" prefix so
         # it's clear what the builder is building and testing.
         return "%s-%s" % (go_branch_short, builder_type)
+
+    elif project == "dl":
+        # A special case. Like golang.org/x/* repos, without /x/.
+        return "dl-%s-%s" % (go_branch_short, builder_type)
 
     # Add an x_ prefix to the project to help make it clear that
     # we're testing a golang.org/x/* repository. These repositories
