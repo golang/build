@@ -391,6 +391,7 @@ PROJECTS = {
     "perf": PT.TOOL,
     "pkgsite": PT.TOOL,
     "pkgsite-metrics": PT.TOOL,
+    "protobuf": PT.SPECIAL,
     "review": PT.TOOL,
     "sync": PT.CORE,
     "sys": PT.CORE,
@@ -942,6 +943,8 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     elif project == "exp":
         # Not quite sure what to do with exp/shiny. For now just run on major platforms.
         enable_types = ["linux-386", "linux-amd64", "linux-arm64", "windows-386", "windows-amd64", "darwin-amd64"]
+    elif project == "protobuf":
+        enable_types = ["linux-amd64"]  # See issue go.dev/issue/63597.
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
