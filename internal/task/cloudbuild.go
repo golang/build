@@ -92,39 +92,41 @@ export PATH=/workspace/released_go/bin:$PATH
 	var saveOutputsScript strings.Builder
 	saveOutputsScript.WriteString(scriptPrefix)
 	for _, out := range outputs {
-		saveOutputsScript.WriteString(fmt.Sprintf("gsutil cp %q %q\n", out, resultURL+"/"+out))
+		saveOutputsScript.WriteString(fmt.Sprintf("gsutil cp %q %q\n", out, resultURL+"/"+strings.TrimPrefix(out, "./")))
+	}
+
+	var steps []*cloudbuildpb.BuildStep
+	var dir string
+	if gerritProject != "" {
+		steps = append(steps, &cloudbuildpb.BuildStep{
+			Name: "gcr.io/cloud-builders/git",
+			Args: []string{"clone", "https://go.googlesource.com/" + gerritProject, "checkout"},
+		})
+		dir = "checkout"
 	}
 
 	build := &cloudbuildpb.Build{
-		Steps: []*cloudbuildpb.BuildStep{
-			{
+		Steps: append(steps,
+			&cloudbuildpb.BuildStep{
 				Name:   "bash",
 				Script: downloadGoScript,
 			},
-			{
+			&cloudbuildpb.BuildStep{
 				Name:   "gcr.io/cloud-builders/gsutil",
 				Script: scriptPrefix + script,
+				Dir:    dir,
 			},
-			{
+			&cloudbuildpb.BuildStep{
 				Name:   "gcr.io/cloud-builders/gsutil",
 				Script: saveOutputsScript.String(),
+				Dir:    dir,
 			},
-		},
+		),
 		Options: &cloudbuildpb.BuildOptions{
 			MachineType: cloudbuildpb.BuildOptions_E2_HIGHCPU_8,
 			Logging:     cloudbuildpb.BuildOptions_CLOUD_LOGGING_ONLY,
 		},
 		ServiceAccount: c.ScriptAccount,
-	}
-	if gerritProject != "" {
-		build.Source = &cloudbuildpb.Source{
-			Source: &cloudbuildpb.Source_GitSource{
-				GitSource: &cloudbuildpb.GitSource{
-					Url:      "https://go.googlesource.com/" + gerritProject,
-					Revision: "HEAD",
-				},
-			},
-		}
 	}
 	op, err := c.BuildClient.CreateBuild(ctx, &cloudbuildpb.CreateBuildRequest{
 		ProjectId: c.ScriptProject,
