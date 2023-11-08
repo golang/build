@@ -586,6 +586,19 @@ def builder_name(project, go_branch_short, builder_type):
     # do not have an "internal" counterpart.
     return "x_%s-%s-%s" % (project, go_branch_short, builder_type)
 
+# project_title produces a short title for the given project.
+def project_title(project):
+    if project == "go":
+        fail("project_title isn't expected to be used for 'go'")
+    elif project == "dl":
+        return "golang.org/dl"
+    elif project == "protobuf":
+        return "google.golang.org/protobuf"
+    else:
+        # A golang.org/x/* repository. Since these are very common,
+        # the 'golang.org/' prefix is left out for brevity.
+        return "x/" + project
+
 # Enum values for golangbuild's "mode" property.
 GOLANGBUILD_MODES = {
     "ALL": 0,
@@ -1181,16 +1194,20 @@ def _define_go_ci():
                     },
                 )
             else:
-                console_title = "x/" + project + "-" + go_branch_short
+                console_title = project_title(project) + "-" + go_branch_short
+                sort_letter = "x"
+                if not console_title.startswith("x/"):
+                    # Put "z" at the beginning to sort this at the bottom of the page.
+                    sort_letter = "z"
                 luci.console_view(
-                    name = "x-%s-%s" % (project, go_branch_short),
+                    name = "%s-%s-%s" % (sort_letter, project, go_branch_short),
                     repo = "https://go.googlesource.com/%s" % project,
                     title = console_title,
                     refs = ["refs/heads/master"],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
                 luci.console_view(
-                    name = "x-%s-%s-by-go" % (project, go_branch_short),
+                    name = "%s-%s-%s-by-go" % (sort_letter, project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
                     title = console_title + "-by-go-commit",
                     refs = ["refs/heads/" + go_branch.branch],
