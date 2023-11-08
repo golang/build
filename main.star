@@ -328,15 +328,16 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None):
         apply = apply_mod,
     )
 
-# enable only on release branches in the Go project.
-def presubmit_only_on_release_branches():
+# enable only if project matches one of the provided projects, or
+# for the release branches in the Go project.
+def presubmit_only_for_projs_or_on_release_branches(projects):
     def f(host, project, go_branch_short):
-        presubmit = project == "go" and go_branch_short != "gotip"
+        presubmit = project in projects or (project == "go" and go_branch_short != "gotip")
         return (True, presubmit, True)
 
     return f
 
-# enable only on if host_of(builder_type) matches one of the provided hosts, or
+# enable only if host_of(builder_type) matches one of the provided hosts, or
 # for the release branches in the Go project.
 def presubmit_only_for_hosts_or_on_release_branches(hosts):
     def f(host, project, go_branch_short):
@@ -357,7 +358,7 @@ def define_for_go_starting_at(x):
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
-    longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}, enabled = presubmit_only_on_release_branches()),
+    longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}, enabled = presubmit_only_for_projs_or_on_release_branches(["protobuf"])),
     race = make_run_mod({"race_mode": True}, enabled = presubmit_only_for_hosts_or_on_release_branches(["linux-amd64"])),
     boringcrypto = make_run_mod(add_env = {"GOEXPERIMENT": "boringcrypto"}),
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
