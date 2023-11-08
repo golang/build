@@ -576,9 +576,10 @@ def builder_name(project, go_branch_short, builder_type):
         # it's clear what the builder is building and testing.
         return "%s-%s" % (go_branch_short, builder_type)
 
-    elif project == "dl":
-        # A special case. Like golang.org/x/* repos, without /x/.
-        return "dl-%s-%s" % (go_branch_short, builder_type)
+    elif project in ["dl", "protobuf"]:
+        # A special, non-golang.org/x/* repository.
+        # Put "z" at the beginning to sort this at the bottom of the builder list.
+        return "z_%s-%s-%s" % (project, go_branch_short, builder_type)
 
     # Add an x_ prefix to the project to help make it clear that
     # we're testing a golang.org/x/* repository. These repositories
