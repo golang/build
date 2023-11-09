@@ -23,18 +23,21 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	pb "go.chromium.org/luci/buildbucket/proto"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/untar"
 	wf "golang.org/x/build/internal/workflow"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // ServeTarball serves files as a .tar.gz to w, only if path contains pathMatch.
@@ -433,8 +436,8 @@ func (repo *FakeRepo) ReadFile(commit, file string) ([]byte, error) {
 
 var _ GerritClient = (*FakeGerrit)(nil)
 
-func (g *FakeGerrit) ArchiveURL(project, rev string) string {
-	return fmt.Sprintf("%s/%s/+archive/%s.tar.gz", g.serverURL, project, rev)
+func (g *FakeGerrit) GitilesURL() string {
+	return g.serverURL
 }
 
 func (g *FakeGerrit) ListProjects(ctx context.Context) ([]string, error) {
@@ -912,6 +915,77 @@ func (c *FakeSwarmingClient) RunTask(ctx context.Context, dims map[string]string
 }
 
 func (c *FakeSwarmingClient) Completed(ctx context.Context, id string) (string, bool, error) {
+	c.mu.Lock()
+	result, ok := c.results[id]
+	c.mu.Unlock()
+	if !ok {
+		return "", false, fmt.Errorf("unknown task ID %q", id)
+	}
+	return "here's some build detail", true, result
+}
+
+func NewFakeBuildBucketClient(major int, url, project string) *FakeBuildBucketClient {
+	return &FakeBuildBucketClient{
+		major:         major,
+		GerritURL:     url,
+		GerritProject: project,
+		results:       map[int64]error{},
+	}
+}
+
+type FakeBuildBucketClient struct {
+	FailBuilds                             []string
+	major                                  int
+	GerritURL, GerritProject, GerritBranch string
+
+	mu      sync.Mutex
+	results map[int64]error
+}
+
+var _ BuildBucketClient = (*FakeBuildBucketClient)(nil)
+
+func (c *FakeBuildBucketClient) ListBuilders(ctx context.Context, bucket string) ([]string, error) {
+	if bucket != "security-try" {
+		return nil, fmt.Errorf("unexpected bucket %q", bucket)
+	}
+	var res []string
+	for _, v := range []string{"gotip", fmt.Sprintf("go1.%v", c.major)} {
+		for _, b := range []string{"linux-amd64", "linux-amd64-longtest", "darwin-amd64_13"} {
+			res = append(res, v+"-"+b)
+		}
+	}
+	return res, nil
+}
+
+func (c *FakeBuildBucketClient) RunBuild(ctx context.Context, bucket string, builder string, commit *pb.GitilesCommit, properties map[string]*structpb.Value) (int64, error) {
+	if bucket != "security-try" {
+		return 0, fmt.Errorf("unexpected bucket %q", bucket)
+	}
+	match := regexp.MustCompile(`.*://(.+)`).FindStringSubmatch(c.GerritURL)
+	if commit.Host != match[1] || commit.Project != c.GerritProject {
+		return 0, fmt.Errorf("unexpected host or project: got %q, %q want %q, %q", commit.Host, commit.Project, match[1], c.GerritProject)
+	}
+	// It would be nice to validate the commit hash and branch, but it's
+	// tricky to get the right value because it depends on the release type.
+	// At least validate the commit is a commit.
+	if len(commit.Id) != 40 {
+		return 0, fmt.Errorf("malformed Git commit hash %q", commit.Id)
+	}
+	var runErr error
+	for _, failBuild := range c.FailBuilds {
+		if strings.Contains(builder, failBuild) {
+			runErr = fmt.Errorf("run of %q is specified to fail", builder)
+		}
+	}
+
+	id := rand.Int63()
+	c.mu.Lock()
+	c.results[id] = runErr
+	c.mu.Unlock()
+	return id, nil
+}
+
+func (c *FakeBuildBucketClient) Completed(ctx context.Context, id int64) (string, bool, error) {
 	c.mu.Lock()
 	result, ok := c.results[id]
 	c.mu.Unlock()

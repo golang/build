@@ -29,6 +29,8 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shurcooL/githubv4"
 	"go.chromium.org/luci/auth"
+	pb "go.chromium.org/luci/buildbucket/proto"
+	"go.chromium.org/luci/grpc/prpc"
 	"go.chromium.org/luci/swarming/client/swarming"
 	"go.opencensus.io/plugin/ochttp"
 	"golang.org/x/build/buildlet"
@@ -122,12 +124,12 @@ func main() {
 		log.Fatalf("reading GCP credentials: %v", err)
 	}
 	gerritClient := &task.RealGerritClient{
-		GitilesURL: "https://go.googlesource.com",
-		Client:     gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
+		Gitiles: "https://go.googlesource.com",
+		Client:  gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
 	privateGerritClient := &task.RealGerritClient{
-		GitilesURL: "https://team.googlesource.com",
-		Client:     gerrit.NewClient("https://team-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
+		Gitiles: "https://go-internal.googlesource.com",
+		Client:  gerrit.NewClient("https://go-internal-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
 	mailFunc := task.NewSendGridMailClient(*sendgridAPIKey).SendMail
 	commTasks := task.CommunicationTasks{
@@ -178,6 +180,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, auth.Options{GCEAllowAsDefault: true}).Client()
+	if err != nil {
+		log.Fatal(err)
+	}
+	buildsClient := pb.NewBuildsPRPCClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
+	buildersClient := pb.NewBuildersPRPCClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
+
 	var dbPool db.PGDBTX
 	dbPool, err = pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
@@ -221,6 +236,10 @@ func main() {
 		DownloadURL:      *edgeCacheURL,
 		ProxyPrefix:      "https://proxy.golang.org/golang.org/toolchain/@v",
 		CloudBuildClient: cloudBuildClient,
+		BuildBucketClient: &task.RealBuildBucketClient{
+			BuildersClient: buildersClient,
+			BuildsClient:   buildsClient,
+		},
 		SwarmingClient: &task.RealSwarmingClient{
 			SwarmingClient: swarmingClient,
 			ServiceAccount: *swarmingAccount,
@@ -283,7 +302,7 @@ func main() {
 	git.UseOAuth2Auth(creds.TokenSource)
 	privateSyncTask := &task.PrivateMasterSyncTask{
 		Git:              git,
-		PrivateGerritURL: "https://team.googlesource.com/golang/go-private",
+		PrivateGerritURL: "https://go-internal.googlesource.com/golang/go-private",
 		Ref:              "public",
 	}
 	dh.RegisterDefinition("Sync go-private master branch with public", privateSyncTask.NewDefinition())

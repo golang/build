@@ -16,8 +16,8 @@ import (
 )
 
 type GerritClient interface {
-	// ArchiveURL returns a URL that serves a .tar.gz of revision of project.
-	ArchiveURL(project, revision string) string
+	// GitilesURL returns the URL to the Gitiles server for this Gerrit instance.
+	GitilesURL() string
 	// CreateAutoSubmitChange creates a change with the given metadata and
 	// contents, starts trybots with auto-submit enabled, and returns its change ID.
 	// If the content of a file is empty, that file will be deleted from the repository.
@@ -52,12 +52,12 @@ type GerritClient interface {
 }
 
 type RealGerritClient struct {
-	GitilesURL string
-	Client     *gerrit.Client
+	Gitiles string
+	Client  *gerrit.Client
 }
 
-func (c *RealGerritClient) ArchiveURL(project, rev string) string {
-	return fmt.Sprintf("%s/%s/+archive/%s.tar.gz", c.GitilesURL, project, rev)
+func (c *RealGerritClient) GitilesURL() string {
+	return c.Gitiles
 }
 
 func (c *RealGerritClient) CreateAutoSubmitChange(ctx *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, files map[string]string) (_ string, err error) {

@@ -108,6 +108,7 @@ type releaseTestDeps struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
 	buildlets      *task.FakeBuildlets
+	buildBucket    *task.FakeBuildBucketClient
 	goRepo         *task.FakeRepo
 	gerrit         *reviewerCheckGerrit
 	versionTasks   *task.VersionTasks
@@ -215,6 +216,7 @@ esac
 			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 		},
 	}
+	buildBucket := task.NewFakeBuildBucketClient(major, fakeGerrit.GerritURL(), "go")
 
 	const dockerProject, dockerTrigger = "docker-build-project", "docker-build-trigger"
 
@@ -235,6 +237,7 @@ esac
 		PublishFile:              publishFile,
 		GoogleDockerBuildProject: dockerProject,
 		GoogleDockerBuildTrigger: dockerTrigger,
+		BuildBucketClient:        buildBucket,
 		CloudBuildClient:         task.NewFakeCloudBuild(t, fakeGerrit, dockerProject, map[string]map[string]string{dockerTrigger: {"_GO_VERSION": wantVersion[2:]}}, ""),
 		SwarmingClient:           task.NewFakeSwarmingClient(t, fakeGo),
 		ApproveAction: func(ctx *workflow.TaskContext) error {
@@ -251,6 +254,7 @@ esac
 		ctx:            ctx,
 		cancel:         cancel,
 		buildlets:      fakeBuildlets,
+		buildBucket:    buildBucket,
 		goRepo:         goRepo,
 		gerrit:         gerrit,
 		versionTasks:   versionTasks,
@@ -430,7 +434,10 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	privateRepo.Commit(goFiles)
 	securityFix := map[string]string{"security.txt": "This file makes us secure"}
 	privateRef := privateRepo.Commit(securityFix)
-	deps.buildTasks.PrivateGerritClient = task.NewFakeGerrit(t, privateRepo)
+	privateGerrit := task.NewFakeGerrit(t, privateRepo)
+	deps.buildBucket.GerritURL = privateGerrit.GerritURL()
+	deps.buildBucket.GerritProject = "go-private"
+	deps.buildTasks.PrivateGerritClient = privateGerrit
 	deps.buildTasks.PrivateGerritProject = "go-private"
 
 	defaultApprove := deps.buildTasks.ApproveAction
@@ -472,13 +479,14 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	})
 }
 
-func TestAdvisoryTrybotFail(t *testing.T) {
+func TestAdvisoryTestsFail(t *testing.T) {
 	deps := newReleaseTestDeps(t, "go1.17", 18, "go1.18rc1")
+	deps.buildBucket.FailBuilds = append(deps.buildBucket.FailBuilds, "linux-amd64-longtest")
 	defaultApprove := deps.buildTasks.ApproveAction
-	var trybotApprovals atomic.Int32
+	var testApprovals atomic.Int32
 	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Run advisory TryBot") {
-			trybotApprovals.Add(1)
+		if strings.Contains(ctx.TaskName, "Run advisory") {
+			testApprovals.Add(1)
 			return nil
 		}
 		return defaultApprove(ctx)
@@ -499,7 +507,7 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	if _, err := w.Run(deps.ctx, &verboseListener{t: t}); err != nil {
 		t.Fatal(err)
 	}
-	if trybotApprovals.Load() == 0 {
+	if testApprovals.Load() != 2 {
 		t.Errorf("advisory trybots didn't need approval")
 	}
 }

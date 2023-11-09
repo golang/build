@@ -17,7 +17,9 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -25,6 +27,7 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
+	pb "go.chromium.org/luci/buildbucket/proto"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/gcsfs"
@@ -35,6 +38,7 @@ import (
 	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/net/context/ctxhttp"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // DefinitionHolder holds workflow definitions.
@@ -362,8 +366,10 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 	timestamp := wf.Task0(wd, "Timestamp release", now)
 	versionFile := wf.Task3(wd, "Generate VERSION file", version.GenerateVersionFile, distpackVal, nextVersion, timestamp)
 	wf.Output(wd, "VERSION file", versionFile)
-	source := wf.Task4(wd, "Build source archive", build.buildSource, distpackVal, branchVal, wf.Const(""), versionFile)
-	artifacts, mods := build.addBuildTasks(wd, major, nextVersion, timestamp, source)
+	head := wf.Task1(wd, "Read branch head", version.ReadBranchHead, branchVal)
+	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, head, wf.Const(""), versionFile)
+	source, artifacts, mods := build.addBuildTasks(wd, major, kind, nextVersion, timestamp, srcSpec)
+	wf.Output(wd, "Source", source)
 	wf.Output(wd, "Artifacts", artifacts)
 	wf.Output(wd, "Modules", mods)
 
@@ -429,10 +435,11 @@ func addSingleReleaseWorkflow(
 	checked := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
 
 	securityRef := wf.Param(wd, wf.ParamDef[string]{Name: "Ref from the private repository to build from (optional)"})
-	source := wf.Task4(wd, "Build source archive", build.buildSource, distpackVal, startingHead, securityRef, versionFile, wf.After(checked))
+	securityCommit := wf.Task1(wd, "Read security ref", build.readSecurityRef, securityRef)
+	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, startingHead, securityCommit, versionFile, wf.After(checked))
 
 	// Build, test, and sign release.
-	signedAndTestedArtifacts, modules := build.addBuildTasks(wd, major, nextVersion, timestamp, source)
+	source, signedAndTestedArtifacts, modules := build.addBuildTasks(wd, major, kind, nextVersion, timestamp, srcSpec)
 	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
 
 	dlcl := wf.Task5(wd, "Mail DL CL", version.MailDLCL, wf.Const(major), kindVal, nextVersion, coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
@@ -471,6 +478,16 @@ func addSingleReleaseWorkflow(
 	return published
 }
 
+// sourceSpec encapsulates all the information that describes a source archive.
+type sourceSpec struct {
+	GitilesURL, Project, Branch, Revision string
+	VersionFile                           string
+}
+
+func (s *sourceSpec) ArchiveURL() string {
+	return fmt.Sprintf("%s/%s/+archive/%s.tar.gz", s.GitilesURL, s.Project, s.Revision)
+}
+
 type moduleArtifact struct {
 	// The target for this module.
 	Target *releasetargets.Target
@@ -481,11 +498,12 @@ type moduleArtifact struct {
 }
 
 // addBuildTasks registers tasks to build, test, and sign the release onto wd.
-// It returns the output from the last task, a slice of signed and tested artifacts.
-func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, version wf.Value[string], timestamp wf.Value[time.Time], source wf.Value[artifact]) (wf.Value[[]artifact], wf.Value[[]moduleArtifact]) {
+// It returns the resulting artifacts of various kinds.
+func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind task.ReleaseKind, version wf.Value[string], timestamp wf.Value[time.Time], sourceSpec wf.Value[sourceSpec]) (wf.Value[artifact], wf.Value[[]artifact], wf.Value[[]moduleArtifact]) {
 	targets := releasetargets.TargetsForGo1Point(major)
 	skipTests := wf.Param(wd, wf.ParamDef[[]string]{Name: "Targets to skip testing (or 'all') (optional)", ParamType: wf.SliceShort})
 
+	source := wf.Task2(wd, "Build source archive", tasks.buildSource, wf.Const(enableDistpack(major)), sourceSpec)
 	artifacts := []wf.Value[artifact]{source}
 	var mods []wf.Value[moduleArtifact]
 	var blockers []wf.Dependency
@@ -551,13 +569,23 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 	signedArtifacts := wf.Task1(wd, "Compute GPG signature for artifacts", tasks.computeGPG, wf.Slice(artifacts...))
 
 	// Run advisory trybots.
-	var advisoryResults []wf.Value[tryBotResult]
+	var advisoryResults []wf.Value[testResult]
 	for _, bc := range advisoryTryBots(major) {
 		result := wf.Task3(wd, "Run advisory TryBot "+bc.Name, tasks.runAdvisoryTryBot, wf.Const(bc), skipTests, source)
 		advisoryResults = append(advisoryResults, result)
 	}
-	tryBotsApproved := wf.Action1(wd, "Wait for advisory TryBots", tasks.checkAdvisoryTrybots, wf.Slice(advisoryResults...))
-	blockers = append(blockers, tryBotsApproved)
+	tryBotsApproved := wf.Action1(wd, "Wait for advisory TryBots", tasks.checkTestResults, wf.Slice(advisoryResults...))
+	builders := wf.Task2(wd, "Read builders", tasks.readRelevantBuilders, wf.Const(major), wf.Const(kind))
+	builderResults := wf.Expand1(wd, "Plan builders", func(wd *wf.Definition, builders []string) (wf.Value[[]testResult], error) {
+		var results []wf.Value[testResult]
+		for _, b := range builders {
+			res := wf.Task3(wd, "Run advisory builder "+b, tasks.runAdvisoryBuildBucket, wf.Const(b), skipTests, sourceSpec)
+			results = append(results, res)
+		}
+		return wf.Slice(results...), nil
+	}, builders)
+	buildersApproved := wf.Action1(wd, "Wait for advisory builders", tasks.checkTestResults, builderResults)
+	blockers = append(blockers, tryBotsApproved, buildersApproved)
 
 	signedAndTested := wf.Task2(wd, "Wait for signing and tests", func(ctx *wf.TaskContext, artifacts []artifact, version string) ([]artifact, error) {
 		// Note: Note this needs to happen somewhere, doesn't matter where. Maybe move it to a nicer place later.
@@ -571,7 +599,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, vers
 
 		return artifacts, nil
 	}, signedArtifacts, version, wf.After(blockers...), wf.After(wf.Slice(mods...)))
-	return signedAndTested, wf.Slice(mods...)
+	return source, signedAndTested, wf.Slice(mods...)
 }
 
 func advisoryTryBots(major int) []*dashboard.BuildConfig {
@@ -612,32 +640,58 @@ type BuildReleaseTasks struct {
 	GoogleDockerBuildProject string
 	GoogleDockerBuildTrigger string
 	CloudBuildClient         task.CloudBuildClient
+	BuildBucketClient        task.BuildBucketClient
 	SwarmingClient           task.SwarmingClient
 	ApproveAction            func(*wf.TaskContext) error
 }
 
-func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, distpack bool, revision, securityRevision, versionFile string) (artifact, error) {
-	client, project, rev := b.GerritClient, b.GerritProject, revision
-	if securityRevision != "" {
-		client, project, rev = b.PrivateGerritClient, b.PrivateGerritProject, securityRevision
+var commitRE = regexp.MustCompile(`[a-f0-9]{40}`)
+
+func (b *BuildReleaseTasks) readSecurityRef(ctx *wf.TaskContext, ref string) (string, error) {
+	if ref == "" {
+		return "", nil
 	}
-	tarURL := client.ArchiveURL(project, rev)
-	resp, err := b.GerritHTTPClient.Get(tarURL)
+	if commitRE.MatchString(ref) {
+		return ref, nil
+	}
+	commit, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, ref)
+	if err != nil {
+		return "", fmt.Errorf("%q doesn't appear to be a commit hash, but resolving it as a branch failed: %v", ref, err)
+	}
+	return commit, nil
+}
+
+func (b *BuildReleaseTasks) getGitSource(ctx *wf.TaskContext, branch, commit, securityCommit, versionFile string) (sourceSpec, error) {
+	client, project, rev := b.GerritClient, b.GerritProject, commit
+	if securityCommit != "" {
+		client, project, rev = b.PrivateGerritClient, b.PrivateGerritProject, securityCommit
+	}
+	return sourceSpec{
+		GitilesURL:  client.GitilesURL(),
+		Project:     project,
+		Branch:      branch,
+		Revision:    rev,
+		VersionFile: versionFile,
+	}, nil
+}
+
+func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, distpack bool, source sourceSpec) (artifact, error) {
+	resp, err := b.GerritHTTPClient.Get(source.ArchiveURL())
 	if err != nil {
 		return artifact{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return artifact{}, fmt.Errorf("failed to fetch %q: %v", tarURL, resp.Status)
+		return artifact{}, fmt.Errorf("failed to fetch %q: %v", source.ArchiveURL(), resp.Status)
 	}
 	defer resp.Body.Close()
 
 	if distpack {
 		return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
-			return b.buildSourceGCB(ctx, resp.Body, versionFile, w)
+			return b.buildSourceGCB(ctx, resp.Body, source.VersionFile, w)
 		})
 	}
 	return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
-		return task.WriteSourceArchive(ctx, resp.Body, versionFile, w)
+		return task.WriteSourceArchive(ctx, resp.Body, source.VersionFile, w)
 	})
 }
 
@@ -688,7 +742,11 @@ func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, distpack bool,
 	if err != nil {
 		return "", err
 	}
-	branchArchive, err := b.buildSource(ctx, distpack, head, "", versionFile)
+	spec, err := b.getGitSource(ctx, branch, head, "", versionFile)
+	if err != nil {
+		return "", err
+	}
+	branchArchive, err := b.buildSource(ctx, distpack, spec)
 	if err != nil {
 		return "", err
 	}
@@ -1263,42 +1321,97 @@ func (b *BuildReleaseTasks) runTests(ctx *wf.TaskContext, build *dashboard.Build
 	return err
 }
 
-type tryBotResult struct {
+func (b *BuildReleaseTasks) readRelevantBuilders(ctx *wf.TaskContext, major int, kind task.ReleaseKind) ([]string, error) {
+	prefix := fmt.Sprintf("go1.%v-", major)
+	if kind == task.KindBeta {
+		prefix = "gotip-"
+	}
+	resp, err := b.BuildBucketClient.ListBuilders(ctx, "security-try")
+	if err != nil {
+		return nil, err
+	}
+	var builders []string
+	for _, b := range resp {
+		if strings.HasPrefix(b, prefix) {
+			builders = append(builders, b)
+		}
+	}
+	return builders, nil
+}
+
+type testResult struct {
 	Name   string
 	Passed bool
 }
 
-func (b *BuildReleaseTasks) runAdvisoryTryBot(ctx *wf.TaskContext, bc *dashboard.BuildConfig, skipTests []string, source artifact) (tryBotResult, error) {
-	for _, skip := range skipTests {
-		if skip == "all" || bc.Name == skip {
-			ctx.Printf("Skipping test")
-			return tryBotResult{bc.Name, true}, nil
-		}
-	}
-	passed := false
-	for attempt := 1; attempt <= workflow.MaxRetries && !passed; attempt++ {
-		ctx.Printf("======== Trybot Attempt %d of %d ========\n", attempt, workflow.MaxRetries)
+func (b *BuildReleaseTasks) runAdvisoryTryBot(ctx *wf.TaskContext, bc *dashboard.BuildConfig, skipTests []string, source artifact) (testResult, error) {
+	return b.runAdvisoryTest(ctx, bc.Name, skipTests, func() (bool, error) {
+		var passed bool
 		_, err := b.runBuildStep(ctx, nil, bc, source, "", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
 			var err error
 			passed, err = bs.RunTryBot(ctx, r)
 			return err
 		})
+		return passed, err
+	})
+}
+
+func (b *BuildReleaseTasks) runAdvisoryBuildBucket(ctx *wf.TaskContext, name string, skipTests []string, source sourceSpec) (testResult, error) {
+	return b.runAdvisoryTest(ctx, name, skipTests, func() (bool, error) {
+		u, err := url.Parse(source.GitilesURL)
 		if err != nil {
-			ctx.Printf("Trybot Attempt failed: %v\n", err)
+			return false, err
+		}
+		commit := &pb.GitilesCommit{
+			Host:    u.Host,
+			Project: source.Project,
+			Id:      source.Revision,
+			Ref:     "refs/heads/" + source.Branch,
+		}
+		id, err := b.BuildBucketClient.RunBuild(ctx, "security-try", name, commit, map[string]*structpb.Value{
+			"version_file": structpb.NewStringValue(source.VersionFile),
+		})
+		if err != nil {
+			return false, err
+		}
+		_, err = task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
+			return b.BuildBucketClient.Completed(ctx, id)
+		})
+		// Our BuildBucket abstraction doesn't distinguish between infra and
+		// test failures. The user can read the error text.
+		return err == nil, err
+	})
+}
+
+func (b *BuildReleaseTasks) runAdvisoryTest(ctx *wf.TaskContext, name string, skipTests []string, run func() (bool, error)) (testResult, error) {
+	for _, skip := range skipTests {
+		if skip == "all" || name == skip {
+			ctx.Printf("Skipping test")
+			return testResult{name, true}, nil
+		}
+	}
+	passed := false
+	for attempt := 1; attempt <= workflow.MaxRetries && !passed; attempt++ {
+		ctx.Printf("======== Attempt %d of %d ========\n", attempt, workflow.MaxRetries)
+		var err error
+		passed, err = run()
+		if err != nil {
+			ctx.Printf("Attempt failed: %v\n", err)
 		}
 	}
 	if errors.Is(ctx.Context.Err(), context.Canceled) {
-		ctx.Printf("Advisory TryBot timed out or was canceled\n")
-		return tryBotResult{bc.Name, passed}, nil
+		ctx.Printf("Advisory test timed out or was canceled\n")
+		return testResult{name, passed}, nil
 	}
 	if !passed {
-		ctx.Printf("Advisory TryBot failed. Check the logs and approve this task if it's okay:\n")
-		return tryBotResult{bc.Name, passed}, b.ApproveAction(ctx)
+		ctx.Printf("Advisory test failed. Check the logs and approve this task if it's okay:\n")
+		return testResult{name, passed}, b.ApproveAction(ctx)
 	}
-	return tryBotResult{bc.Name, passed}, nil
+	return testResult{name, passed}, nil
+
 }
 
-func (b *BuildReleaseTasks) checkAdvisoryTrybots(ctx *wf.TaskContext, results []tryBotResult) error {
+func (b *BuildReleaseTasks) checkTestResults(ctx *wf.TaskContext, results []testResult) error {
 	var fails []string
 	for _, r := range results {
 		if !r.Passed {
@@ -1307,7 +1420,7 @@ func (b *BuildReleaseTasks) checkAdvisoryTrybots(ctx *wf.TaskContext, results []
 	}
 	if len(fails) != 0 {
 		sort.Strings(fails)
-		ctx.Printf("Some advisory TryBots failed and their failures have been approved:\n%v", strings.Join(fails, "\n"))
+		ctx.Printf("Some advisory tests failed and their failures have been approved:\n%v", strings.Join(fails, "\n"))
 		return nil
 	}
 	return nil
