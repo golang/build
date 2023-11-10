@@ -308,18 +308,34 @@ func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.
 		log.Printf("ListSwarmingInstances access.IAPFromContext(ctx) = nil, %s", err)
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	buildersResp, err := ss.buildersClient.ListBuilders(ctx, &buildbucketpb.ListBuildersRequest{
-		Project:  "golang",
-		Bucket:   "ci-workers",
-		PageSize: 1000,
-	})
+	listBuilders := func() ([]*buildbucketpb.BuilderItem, error) {
+		var builders []*buildbucketpb.BuilderItem
+		var nextToken string
+		for {
+			buildersResp, err := ss.buildersClient.ListBuilders(ctx, &buildbucketpb.ListBuildersRequest{
+				Project:   "golang",
+				Bucket:    "ci-workers",
+				PageSize:  1000,
+				PageToken: nextToken,
+			})
+			if err != nil {
+				return nil, err
+			}
+			builders = append(builders, buildersResp.GetBuilders()...)
+			if tok := buildersResp.GetNextPageToken(); tok != "" {
+				nextToken = tok
+				continue
+			}
+			return builders, nil
+		}
+	}
+	builderResponse, err := listBuilders()
 	if err != nil {
 		log.Printf("buildersClient.ListBuilders(ctx) = nil, %s", err)
 		return nil, status.Errorf(codes.Internal, "unable to query for bots")
 	}
 	var builders []string
-	bs := buildersResp.GetBuilders()
-	for _, builder := range bs {
+	for _, builder := range builderResponse {
 		bID := builder.GetId()
 		if bID == nil {
 			continue
@@ -745,9 +761,7 @@ func (ss *SwarmingServer) waitForInstanceOrFailure(ctx context.Context, taskID, 
 }
 
 func buildletStartup(goos, goarch string) string {
-	cmd := `#!/usr/bin/env python3
-
-import urllib.request
+	cmd := `import urllib.request
 import sys
 import platform
 import subprocess
@@ -770,8 +784,9 @@ def delete_if_exists(file_path):
         os.remove(file_path)
 
 def make_executable(file_path):
-    st = os.stat(file_path)
-    os.chmod(file_path, st.st_mode | stat.S_IEXEC)
+    if sys.platform != "win32":
+        st = os.stat(file_path)
+        os.chmod(file_path, st.st_mode | stat.S_IEXEC)
 
 if __name__ == "__main__":
     buildlet_name = add_os_file_ext("buildlet")
@@ -815,34 +830,49 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 	if err != nil {
 		return "", err
 	}
+
+	packages := []*swarmpb.CipdPackage{
+		{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
+		{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: "latest"},
+		{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"},
+	}
+	pythonBin := "python3"
+	if goos == "windows" {
+		pythonBin = `tools\bin\python3.exe`
+	} else if goos == "darwin" {
+		pythonBin = `tools/bin/python3`
+		packages = append(packages, &swarmpb.CipdPackage{Path: "tools/bin", PackageName: "infra/tools/mac_toolchain/" + cipdPlatform, Version: "latest"})
+	}
+
 	req := &swarmpb.NewTaskRequest{
-		ExpirationSecs: 86400,
 		Name:           name,
 		Priority:       20, // 30 is the priority for builds
-		Properties: &swarmpb.TaskProperties{
-			CipdInput: &swarmpb.CipdInput{
-				Packages: []*swarmpb.CipdPackage{
-					{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
-					{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: "latest"},
-					{Path: "tools", PackageName: "infra/experimental/golangbuild/" + cipdPlatform, Version: "latest"},
-				},
-			},
-			EnvPrefixes: []*swarmpb.StringListPair{
-				{Key: "PATH", Value: []string{"tools/bin"}},
-			},
-			Command:     []string{"python3", "-c", buildletStartup(goos, goarch)},
-			RelativeCwd: "",
-			Dimensions:  createStringPairs(dimensions),
-			Env: []*swarmpb.StringPair{
-				&swarmpb.StringPair{
-					Key:   "GOMOTEID",
-					Value: name,
-				},
-			},
-			ExecutionTimeoutSecs: 86400,
-		},
 		ServiceAccount: "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
-		Realm:          "golang:ci",
+		TaskSlices: []*swarmpb.TaskSlice{
+			&swarmpb.TaskSlice{
+				Properties: &swarmpb.TaskProperties{
+					CipdInput: &swarmpb.CipdInput{
+						Packages: packages,
+					},
+					EnvPrefixes: []*swarmpb.StringListPair{
+						{Key: "PATH", Value: []string{"tools/bin"}},
+					},
+					Command:    []string{pythonBin, "-c", buildletStartup(goos, goarch)},
+					Dimensions: createStringPairs(dimensions),
+					Env: []*swarmpb.StringPair{
+						&swarmpb.StringPair{
+							Key:   "GOMOTEID",
+							Value: name,
+						},
+					},
+					ExecutionTimeoutSecs: 86400,
+				},
+				ExpirationSecs:  86400,
+				WaitForCapacity: false,
+			},
+		},
+		Tags:  []string{"golang_mode:gomote"},
+		Realm: "golang:ci",
 	}
 	taskMD, err := ss.swarmingClient.NewTask(ctx, req)
 	if err != nil {
