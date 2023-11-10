@@ -596,9 +596,10 @@ func advisoryTryBots(major int) []*dashboard.BuildConfig {
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
 	GerritClient             task.GerritClient
-	GerritHTTPClient         *http.Client
-	GerritURL                string
-	PrivateGerritURL         string
+	GerritProject            string
+	GerritHTTPClient         *http.Client // GerritHTTPClient is an HTTP client that authenticates to Gerrit instances. (Both public and private.)
+	PrivateGerritClient      task.GerritClient
+	PrivateGerritProject     string
 	GCSClient                *storage.Client
 	ScratchFS                *task.ScratchFS
 	SignedURL                string // SignedURL is a gs:// or file:// URL, no trailing slash.
@@ -616,13 +617,11 @@ type BuildReleaseTasks struct {
 }
 
 func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, distpack bool, revision, securityRevision, versionFile string) (artifact, error) {
-	url := b.GerritURL
-	rev := revision
+	client, project, rev := b.GerritClient, b.GerritProject, revision
 	if securityRevision != "" {
-		url = b.PrivateGerritURL
-		rev = securityRevision
+		client, project, rev = b.PrivateGerritClient, b.PrivateGerritProject, securityRevision
 	}
-	tarURL := url + "/+archive/" + rev + ".tar.gz"
+	tarURL := client.ArchiveURL(project, rev)
 	resp, err := b.GerritHTTPClient.Get(tarURL)
 	if err != nil {
 		return artifact{}, err
@@ -685,7 +684,7 @@ mv go/pkg/distpack/*.src.tar.gz src.tar.gz
 }
 
 func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, distpack bool, branch, versionFile string, source artifact) (head string, _ error) {
-	head, err := b.GerritClient.ReadBranchHead(ctx, "go", branch)
+	head, err := b.GerritClient.ReadBranchHead(ctx, b.GerritProject, branch)
 	if err != nil {
 		return "", err
 	}

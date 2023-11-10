@@ -433,6 +433,10 @@ func (repo *FakeRepo) ReadFile(commit, file string) ([]byte, error) {
 
 var _ GerritClient = (*FakeGerrit)(nil)
 
+func (g *FakeGerrit) ArchiveURL(project, rev string) string {
+	return fmt.Sprintf("%s/%s/+archive/%s.tar.gz", g.serverURL, project, rev)
+}
+
 func (g *FakeGerrit) ListProjects(ctx context.Context) ([]string, error) {
 	var names []string
 	for k := range g.repos {

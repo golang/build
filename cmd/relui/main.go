@@ -122,7 +122,12 @@ func main() {
 		log.Fatalf("reading GCP credentials: %v", err)
 	}
 	gerritClient := &task.RealGerritClient{
-		Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
+		GitilesURL: "https://go.googlesource.com",
+		Client:     gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
+	}
+	privateGerritClient := &task.RealGerritClient{
+		GitilesURL: "https://team.googlesource.com",
+		Client:     gerrit.NewClient("https://team-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
 	mailFunc := task.NewSendGridMailClient(*sendgridAPIKey).SendMail
 	commTasks := task.CommunicationTasks{
@@ -199,13 +204,14 @@ func main() {
 	signServer := sign.NewServer()
 	protos.RegisterReleaseServiceServer(grpcServer, signServer)
 	buildTasks := &relui.BuildReleaseTasks{
-		GerritClient:     gerritClient,
-		GerritHTTPClient: oauth2.NewClient(ctx, creds.TokenSource),
-		GerritURL:        "https://go.googlesource.com/go",
-		PrivateGerritURL: "https://team.googlesource.com/golang/go-private",
-		CreateBuildlet:   coordinator.CreateBuildlet,
-		SignService:      signServer,
-		GCSClient:        gcsClient,
+		GerritClient:         gerritClient,
+		GerritProject:        "go",
+		GerritHTTPClient:     oauth2.NewClient(ctx, creds.TokenSource),
+		PrivateGerritClient:  privateGerritClient,
+		PrivateGerritProject: "golang/go-private",
+		CreateBuildlet:       coordinator.CreateBuildlet,
+		SignService:          signServer,
+		GCSClient:            gcsClient,
 		ScratchFS: &task.ScratchFS{
 			BaseURL: *scratchFilesBase,
 			GCS:     gcsClient,

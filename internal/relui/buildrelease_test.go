@@ -222,8 +222,8 @@ esac
 
 	buildTasks := &BuildReleaseTasks{
 		GerritClient:             gerrit,
+		GerritProject:            "go",
 		GerritHTTPClient:         http.DefaultClient,
-		GerritURL:                fakeGerrit.GerritURL() + "/go",
 		GCSClient:                nil,
 		ScratchFS:                &task.ScratchFS{BaseURL: "file://" + scratchDir},
 		SignedURL:                "file://" + scratchDir + "/signed/outputs",
@@ -430,8 +430,8 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	privateRepo.Commit(goFiles)
 	securityFix := map[string]string{"security.txt": "This file makes us secure"}
 	privateRef := privateRepo.Commit(securityFix)
-	privateGerrit := task.NewFakeGerrit(t, privateRepo)
-	deps.buildTasks.PrivateGerritURL = privateGerrit.GerritURL() + "/go-private"
+	deps.buildTasks.PrivateGerritClient = task.NewFakeGerrit(t, privateRepo)
+	deps.buildTasks.PrivateGerritProject = "go-private"
 
 	defaultApprove := deps.buildTasks.ApproveAction
 	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext) error {
