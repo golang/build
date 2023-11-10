@@ -43,6 +43,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/cloud"
 	"golang.org/x/build/internal/envutil"
@@ -130,6 +131,7 @@ const (
 
 func main() {
 	builderEnv := os.Getenv("GO_BUILDER_ENV")
+	defer teardownOnce()
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {
 	case "plan9":
@@ -274,6 +276,20 @@ func main() {
 			time.Sleep(5 * time.Second)
 		}
 		os.Exit(0)
+	}
+}
+
+type teardownFunc func()
+
+var (
+	tdOnce        sync.Once
+	teardownOnce  func() = func() { tdOnce.Do(teardown) }
+	teardownFuncs []teardownFunc
+)
+
+func teardown() {
+	for _, f := range teardownFuncs {
+		f()
 	}
 }
 
@@ -1210,6 +1226,7 @@ func handleHalt(w http.ResponseWriter, r *http.Request) {
 	// remaining second.
 	log.Printf("Halting in 1 second.")
 	time.AfterFunc(1*time.Second, func() {
+		teardownOnce()
 		if *rebootOnHalt {
 			doReboot()
 		}
@@ -1433,6 +1450,10 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func useBuildletSSHServer() bool {
+	return *swarmingBot && runtime.GOOS != "plan9" && runtime.GOOS != "windows"
+}
+
 func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "requires POST method", http.StatusBadRequest)
@@ -1500,8 +1521,16 @@ func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
 	<-errc
 }
 
+var buildletSSHServer *ssh.Server
+var buldletAuthKeys []byte
+
 // sshPort returns the port to use for the local SSH server.
 func sshPort() string {
+	// use port 2222 regardless of where the buildlet is running.
+	if useBuildletSSHServer() {
+		return "2222"
+	}
+
 	// runningInCOS is whether we're running under GCE's Container-Optimized OS (COS).
 	const runningInCOS = runtime.GOOS == "linux" && runtime.GOARCH == "amd64"
 
@@ -1518,6 +1547,10 @@ var sshServerOnce sync.Once
 
 // startSSHServer starts an SSH server.
 func startSSHServer() {
+	if useBuildletSSHServer() {
+		startSSHServerSwarming()
+		return
+	}
 	if inLinuxContainer() {
 		startSSHServerLinux()
 		return
@@ -1798,6 +1831,10 @@ func makeBSDFilesystemFast() {
 }
 
 func appendSSHAuthorizedKey(sshUser, authKey string) error {
+	if *swarmingBot {
+		buldletAuthKeys = append(buldletAuthKeys, []byte(fmt.Sprintf("%s\n%s\n", sshUser, authKey))...)
+		return nil
+	}
 	var homeRoot string
 	switch runtime.GOOS {
 	case "darwin":
