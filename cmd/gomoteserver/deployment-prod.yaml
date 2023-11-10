@@ -21,7 +21,14 @@ spec:
       - name: gomoteserver
         image: gcr.io/symbolic-datum-552/gomoteserver:latest
         imagePullPolicy: Always
-        command: ["/gomoteserver", "-listen-http=:80", "-listen-https-autocert=:443", "-autocert-bucket=gomote-golang-org-autocert-cache", "-listen-https-selfsigned=:444"]
+        command:
+          - "/gomoteserver"
+          - "-listen-http=:80"
+          - "-listen-https-autocert=:443"
+          - "-autocert-bucket=gomote-golang-org-autocert-cache"
+          - "-listen-https-selfsigned=:444"
+          - "-private-host-key=secret:symbolic-datum-552/gomoteserver-private-host-key"
+          - "-public-host-key=secret:symbolic-datum-552/gomoteserver-public-host-key"
         ports:
         - containerPort: 80
         - containerPort: 443

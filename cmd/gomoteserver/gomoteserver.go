@@ -13,7 +13,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
@@ -44,10 +43,13 @@ var (
 
 func main() {
 	https.RegisterFlags(flag.CommandLine)
-	flag.Parse()
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
+	hostKey := secret.Flag("private-host-key", "Gomote SSH Server host private key")
+	pubKey := secret.Flag("public-host-key", "Gomote SSH Server host public key")
+	flag.Parse()
+
 	log.Println("starting gomote server")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -85,16 +87,7 @@ func main() {
 	mux.Handle("/revdial", revdial.ConnHandler())
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page.
 
-	configureSSHServer := func() (*remote.SSHServer, error) {
-		// Always generate a gomote SSH key pair. If the server is restarted then the existing
-		// instances will be destroyed and a new pair of keys can be used.
-		priKey, pubKey, err := remote.SSHKeyPair()
-		if err != nil {
-			return nil, fmt.Errorf("unable to generate development SSH key pair: %s", err)
-		}
-		return remote.NewSSHServer(*sshAddr, priKey, pubKey, sshCA, sp)
-	}
-	sshServ, err := configureSSHServer()
+	sshServ, err := remote.NewSSHServer(*sshAddr, []byte(*hostKey), []byte(*pubKey), sshCA, sp)
 	if err != nil {
 		log.Printf("unable to configure SSH server: %s", err)
 	} else {
@@ -134,12 +127,6 @@ func mustStorageClient() *storage.Client {
 		log.Fatalf("unable to create unauthenticated storage client: %s", err)
 	}
 	return sc
-}
-
-func fromSecret(ctx context.Context, sc *secret.Client, secretName string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return sc.Retrieve(ctx, secretName)
 }
 
 // grpcHandlerFunc creates handler which intercepts requests intended for a GRPC server and directs the calls to the server.
