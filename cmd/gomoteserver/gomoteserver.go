@@ -87,7 +87,7 @@ func main() {
 	mux.Handle("/revdial", revdial.ConnHandler())
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page.
 
-	sshServ, err := remote.NewSSHServer(*sshAddr, []byte(*hostKey), []byte(*pubKey), sshCA, sp)
+	sshServ, err := remote.NewSSHServer(*sshAddr, []byte(*hostKey), []byte(*pubKey), sshCA, sp, remote.EnableLUCIOption())
 	if err != nil {
 		log.Printf("unable to configure SSH server: %s", err)
 	} else {
