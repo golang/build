@@ -1345,22 +1345,19 @@ type testResult struct {
 }
 
 func (b *BuildReleaseTasks) runAdvisoryTryBot(ctx *wf.TaskContext, bc *dashboard.BuildConfig, skipTests []string, source artifact) (testResult, error) {
-	return b.runAdvisoryTest(ctx, bc.Name, skipTests, func() (bool, error) {
-		var passed bool
+	return b.runAdvisoryTest(ctx, bc.Name, skipTests, func() error {
 		_, err := b.runBuildStep(ctx, nil, bc, source, "", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-			var err error
-			passed, err = bs.RunTryBot(ctx, r)
-			return err
+			return bs.RunTryBot(ctx, r)
 		})
-		return passed, err
+		return err
 	})
 }
 
 func (b *BuildReleaseTasks) runAdvisoryBuildBucket(ctx *wf.TaskContext, name string, skipTests []string, source sourceSpec) (testResult, error) {
-	return b.runAdvisoryTest(ctx, name, skipTests, func() (bool, error) {
+	return b.runAdvisoryTest(ctx, name, skipTests, func() error {
 		u, err := url.Parse(source.GitilesURL)
 		if err != nil {
-			return false, err
+			return err
 		}
 		commit := &pb.GitilesCommit{
 			Host:    u.Host,
@@ -1372,42 +1369,35 @@ func (b *BuildReleaseTasks) runAdvisoryBuildBucket(ctx *wf.TaskContext, name str
 			"version_file": structpb.NewStringValue(source.VersionFile),
 		})
 		if err != nil {
-			return false, err
+			return err
 		}
 		_, err = task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
 			return b.BuildBucketClient.Completed(ctx, id)
 		})
-		// Our BuildBucket abstraction doesn't distinguish between infra and
-		// test failures. The user can read the error text.
-		return err == nil, err
+		return err
 	})
 }
 
-func (b *BuildReleaseTasks) runAdvisoryTest(ctx *wf.TaskContext, name string, skipTests []string, run func() (bool, error)) (testResult, error) {
+func (b *BuildReleaseTasks) runAdvisoryTest(ctx *wf.TaskContext, name string, skipTests []string, run func() error) (testResult, error) {
 	for _, skip := range skipTests {
 		if skip == "all" || name == skip {
 			ctx.Printf("Skipping test")
 			return testResult{name, true}, nil
 		}
 	}
-	passed := false
-	for attempt := 1; attempt <= workflow.MaxRetries && !passed; attempt++ {
+	err := errors.New("untested") // prime the loop
+	for attempt := 1; attempt <= workflow.MaxRetries && err != nil; attempt++ {
 		ctx.Printf("======== Attempt %d of %d ========\n", attempt, workflow.MaxRetries)
-		var err error
-		passed, err = run()
+		err = run()
 		if err != nil {
 			ctx.Printf("Attempt failed: %v\n", err)
 		}
 	}
-	if errors.Is(ctx.Context.Err(), context.Canceled) {
-		ctx.Printf("Advisory test timed out or was canceled\n")
-		return testResult{name, passed}, nil
-	}
-	if !passed {
+	if err != nil {
 		ctx.Printf("Advisory test failed. Check the logs and approve this task if it's okay:\n")
-		return testResult{name, passed}, b.ApproveAction(ctx)
+		return testResult{name, false}, b.ApproveAction(ctx)
 	}
-	return testResult{name, passed}, nil
+	return testResult{name, true}, nil
 
 }
 

@@ -521,31 +521,29 @@ func (b *BuildletStep) TestTarget(ctx *workflow.TaskContext, binaryArchive io.Re
 	})
 }
 
-func (b *BuildletStep) RunTryBot(ctx *workflow.TaskContext, sourceArchive io.Reader) (bool, error) {
+func (b *BuildletStep) RunTryBot(ctx *workflow.TaskContext, sourceArchive io.Reader) error {
 	ctx.Printf("Pushing source to buildlet.")
 	if err := b.Buildlet.PutTar(ctx, sourceArchive, ""); err != nil {
-		return false, fmt.Errorf("failed to put generated source tarball: %v", err)
+		return fmt.Errorf("failed to put generated source tarball: %v", err)
 	}
 
 	if u := b.BuildConfig.GoBootstrapURL(buildenv.Production); u != "" {
 		ctx.Printf("Installing go1.4.")
 		if err := b.Buildlet.PutTarFromURL(ctx, u, go14); err != nil {
-			return false, err
+			return err
 		}
 	}
 
 	if b.BuildConfig.CompileOnly {
 		ctx.Printf("Building toolchain (make.bash).")
 		if err := b.exec(ctx, goDir+"/"+b.BuildConfig.MakeScript(), b.BuildConfig.MakeScriptArgs(), buildlet.ExecOpts{}); err != nil {
-			ctx.Printf("building toolchain failed: %v", err)
-			return false, nil
+			return fmt.Errorf("building toolchain failed: %v", err)
 		}
 		ctx.Printf("Compiling-only tests (via BuildConfig.CompileOnly).")
 		if err := b.runGo(ctx, []string{"tool", "dist", "test", "-compile-only"}, buildlet.ExecOpts{}); err != nil {
-			ctx.Printf("building tests failed: %v", err)
-			return false, nil
+			return fmt.Errorf("building tests failed: %v", err)
 		}
-		return true, nil
+		return nil
 	}
 
 	ctx.Printf("Testing (all.bash).")
@@ -554,7 +552,7 @@ func (b *BuildletStep) RunTryBot(ctx *workflow.TaskContext, sourceArchive io.Rea
 	if err != nil {
 		ctx.Printf("testing failed: %v", err)
 	}
-	return err == nil, nil
+	return err
 }
 
 // exec runs cmd with args. Its working dir is opts.Dir, or the directory of cmd.
