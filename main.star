@@ -1264,20 +1264,23 @@ def _define_go_internal_ci():
         )
 
         for builder_type in BUILDER_TYPES:
-            exists, presubmit, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
+            exists, _, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
+
+            # The internal host only has access to some machines. As of
+            # writing, that means all the GCE-hosted (high-capacity) builders
+            # and that's it.
+            exists = exists and not is_capacity_constrained(LOW_CAPACITY_HOSTS, builder_type)
             if not exists:
                 continue
 
-            # Define presubmit builders.
+            # Define presubmit builders. Since there's no postsubmit to monitor,
+            # all possible builders are required.
             name = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
-                includable_only = not presubmit,
                 disable_reuse = True,
             )
-
-            # TODO(yifany): Define postsubmit builders if needed.
 
 _define_go_ci()
 _define_go_internal_ci()
