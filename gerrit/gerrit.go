@@ -777,7 +777,7 @@ func (c *Client) CreateProject(ctx context.Context, name string, p ...ProjectInp
 		pi = p[0]
 	}
 	var res ProjectInfo
-	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s", name), reqBodyJSON{&pi}, wantResStatus(http.StatusCreated))
+	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s", url.PathEscape(name)), reqBodyJSON{&pi}, wantResStatus(http.StatusCreated))
 	return res, err
 }
 
@@ -803,7 +803,7 @@ type ChangeInput struct {
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#put-edit-file.
 func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID string, path string, content string) error {
-	return c.do(ctx, nil, "PUT", "/changes/"+changeID+"/edit/"+url.QueryEscape(path),
+	return c.do(ctx, nil, "PUT", "/changes/"+changeID+"/edit/"+url.PathEscape(path),
 		reqBodyRaw{strings.NewReader(content)}, wantResStatus(http.StatusNoContent))
 }
 
@@ -812,7 +812,7 @@ func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID str
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#delete-edit-file.
 func (c *Client) DeleteFileInChangeEdit(ctx context.Context, changeID string, path string) error {
-	return c.do(ctx, nil, "DELETE", "/changes/"+changeID+"/edit/"+url.QueryEscape(path), wantResStatus(http.StatusNoContent))
+	return c.do(ctx, nil, "DELETE", "/changes/"+changeID+"/edit/"+url.PathEscape(path), wantResStatus(http.StatusNoContent))
 }
 
 // PublishChangeEdit promotes the change edit to a regular patch set.
@@ -825,7 +825,7 @@ func (c *Client) PublishChangeEdit(ctx context.Context, changeID string) error {
 // GetProjectInfo returns info about a project.
 func (c *Client) GetProjectInfo(ctx context.Context, name string) (ProjectInfo, error) {
 	var res ProjectInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s", name))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s", url.PathEscape(name)))
 	return res, err
 }
 
@@ -841,7 +841,7 @@ type BranchInfo struct {
 // keyed by reference.
 func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[string]BranchInfo, error) {
 	var res []BranchInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/", name))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/", url.PathEscape(name)))
 	if err != nil {
 		return nil, err
 	}
@@ -857,7 +857,7 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-branch.
 func (c *Client) GetBranch(ctx context.Context, project, branch string) (BranchInfo, error) {
 	var res BranchInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s", project, branch))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s", url.PathEscape(project), branch))
 	return res, err
 }
 
@@ -866,7 +866,7 @@ func (c *Client) GetBranch(ctx context.Context, project, branch string) (BranchI
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-content-from-commit.
 func (c *Client) GetFileContent(ctx context.Context, project, commit, path string) (io.ReadCloser, error) {
 	var body io.ReadCloser
-	err := c.do(ctx, nil, "GET", fmt.Sprintf("/projects/%s/commits/%s/files/%s/content", project, commit, url.QueryEscape(path)), respBodyRaw{&body})
+	err := c.do(ctx, nil, "GET", fmt.Sprintf("/projects/%s/commits/%s/files/%s/content", url.PathEscape(project), commit, url.PathEscape(path)), respBodyRaw{&body})
 	if err != nil {
 		return nil, err
 	}
@@ -935,7 +935,7 @@ func (ti *TagInfo) Equal(v *TagInfo) bool {
 // reference.
 func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]TagInfo, error) {
 	var res []TagInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/", name))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/", url.PathEscape(name)))
 	if err != nil {
 		return nil, err
 	}
@@ -951,7 +951,7 @@ func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]Ta
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-tag.
 func (c *Client) GetTag(ctx context.Context, project, tag string) (TagInfo, error) {
 	var res TagInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/%s", project, url.PathEscape(tag)))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/%s", url.PathEscape(project), url.PathEscape(tag)))
 	return res, err
 }
 
@@ -1168,6 +1168,6 @@ func (c *Client) GetCommitsInRefs(ctx context.Context, project string, commits, 
 	vals := url.Values{}
 	vals["commit"] = commits
 	vals["ref"] = refs
-	err := c.do(ctx, &result, "GET", "/projects/"+project+"/commits:in", urlValues(vals))
+	err := c.do(ctx, &result, "GET", "/projects/"+url.PathEscape(project)+"/commits:in", urlValues(vals))
 	return result, err
 }
