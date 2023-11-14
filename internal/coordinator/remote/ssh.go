@@ -449,7 +449,6 @@ func (ss *SSHServer) setupRemoteSSHEnvSwarm(workDir string, f io.Writer) {
 	fmt.Fprintf(f, "GOPATH=%s/gopath\n", workDir)
 	fmt.Fprintf(f, "PATH=$PATH:%s/go/bin\n", workDir)
 	fmt.Fprintf(f, "export GOPATH PATH\n")
-	fmt.Fprintf(f, "cd %s/go/src\n", workDir)
 }
 
 // setupRemoteSSHEnv sets up environment variables on the remote system.
