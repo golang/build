@@ -158,7 +158,7 @@ func (c *RealCloudBuildClient) Completed(ctx context.Context, build CloudBuild) 
 		return "", false, nil
 	}
 	if b.Status != cloudbuildpb.Build_SUCCESS {
-		return "", false, fmt.Errorf("build %q failed: %v", build.ID, b.FailureInfo)
+		return "", false, fmt.Errorf("build %q failed, see %v: %v", build.ID, build.ResultURL, b.FailureInfo)
 	}
 	return b.StatusDetail, true, nil
 }

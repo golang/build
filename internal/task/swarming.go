@@ -25,8 +25,8 @@ type SwarmingClient interface {
 }
 
 type RealSwarmingClient struct {
-	SwarmingClient              swarming.Client
-	ServiceAccount, Realm, Pool string
+	SwarmingClient                           swarming.Client
+	SwarmingURL, ServiceAccount, Realm, Pool string
 }
 
 func (c *RealSwarmingClient) RunTask(ctx context.Context, dims map[string]string, script string, env map[string]string) (string, error) {
@@ -89,7 +89,7 @@ func (c *RealSwarmingClient) Completed(ctx context.Context, id string) (string, 
 		return "", false, nil
 	}
 	if result.State != apipb.TaskState_COMPLETED || result.ExitCode != 0 {
-		return "", true, fmt.Errorf("build failed with state %v and exit code %v: ", result.State, result.ExitCode)
+		return "", true, fmt.Errorf("build failed with state %v and exit code %v, see %v/task?id=%v", result.State, result.ExitCode, c.SwarmingURL, id)
 	}
 	return "", true, nil
 }

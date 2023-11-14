@@ -242,6 +242,7 @@ func main() {
 		},
 		SwarmingClient: &task.RealSwarmingClient{
 			SwarmingClient: swarmingClient,
+			SwarmingURL:    *swarmingURL,
 			ServiceAccount: *swarmingAccount,
 			Realm:          *swarmingRealm,
 			Pool:           *swarmingPool,

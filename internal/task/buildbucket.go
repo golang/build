@@ -73,7 +73,7 @@ func (c *RealBuildBucketClient) Completed(ctx context.Context, id int64) (string
 		return "", false, nil
 	}
 	if build.Status&pb.Status_ENDED_MASK != 0 && build.Status != pb.Status_SUCCESS {
-		return "", true, fmt.Errorf("build failed with status %v: %v", build.Status, build.SummaryMarkdown)
+		return "", true, fmt.Errorf("build failed with status %v, see https://ci.chromium.org/b/%v: %v", build.Status, id, build.SummaryMarkdown)
 	}
 	return build.SummaryMarkdown, true, nil
 }
