@@ -47,7 +47,6 @@ fi
 mkdir -p ${SITE}/etc
 cat >${SITE}/install.site <<EOF
 #!/bin/sh
-touch /firstboot
 echo 'set tty com0' > boot.conf
 EOF
 
@@ -58,13 +57,18 @@ cat >${SITE}/etc/rc.firsttime <<EOF
 set -x
 cat > /etc/login.conf.d/moreres <<'EOLOGIN'
 moreres:\
+  :datasize-max=infinity: \
+  :datasize-cur=infinity: \
+  :vmemoryuse-max=infinity: \
+  :vmemoryuse-cur=infinity: \
+  :memoryuse-max=infinity: \
+  :memoryuse-cur=infinity: \
   :maxproc-max=1024: \
   :maxproc-cur=1024: \
   :openfiles-max=4096: \
   :openfiles-cur=4096: \
   :tc=default:
 EOLOGIN
-cap_mkdb
 usermod -L moreres swarming
 syspatch
 # Run syspatch twice in case syspatch itself needs patching (this is the case with OpenBSD
@@ -93,7 +97,8 @@ cat >${SITE}/etc/rc.local <<EOF
     case "\$project" in
       *luci*)
         gcehost=\$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/hostname | cut -d . -f 1)
-        su -l swarming -c "/usr/local/bin/bootstrapswarm --hostname \$gcehost"
+        swarming=\$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/swarming | cut -d . -f 1)
+        su -l swarming -c "/usr/local/bin/bootstrapswarm --hostname \$gcehost --swarming \${swarming}.appspot.com"
       ;;
       *)
         /usr/local/bin/curl -o /buildlet \$(/usr/local/bin/curl --fail -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
@@ -120,7 +125,7 @@ EOF
 chmod +x ${SITE}/install.site
 mkdir -p ${SITE}/usr/local/bin
 CGO_ENABLED=0 GOOS=openbsd GOARCH=${ARCH/i386/386} go1.21.0 build -o ${SITE}/usr/local/bin/bootstrapswarm golang.org/x/build/cmd/bootstrapswarm
-tar -C ${SITE} -zcf ${WORK}/site${RELNO}.tgz .
+tar --mode a=rx,u=rwx --owner root:0 --group wheel:0 -C ${SITE} -zcf ${WORK}/site${RELNO}.tgz .
 
 # Autoinstall script.
 cat >${WORK}/auto_install.conf <<EOF
