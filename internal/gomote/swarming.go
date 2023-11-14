@@ -830,20 +830,21 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 	if err != nil {
 		return "", err
 	}
-
 	packages := []*swarmpb.CipdPackage{
 		{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
 		{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: "latest"},
-		{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"},
 	}
 	pythonBin := "python3"
-	if goos == "windows" {
-		pythonBin = `tools\bin\python3.exe`
-	} else if goos == "darwin" {
+	switch goos {
+	case "darwin":
 		pythonBin = `tools/bin/python3`
-		packages = append(packages, &swarmpb.CipdPackage{Path: "tools/bin", PackageName: "infra/tools/mac_toolchain/" + cipdPlatform, Version: "latest"})
+		packages = append(packages,
+			&swarmpb.CipdPackage{Path: "tools/bin", PackageName: "infra/tools/mac_toolchain/" + cipdPlatform, Version: "latest"},
+			&swarmpb.CipdPackage{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"})
+	case "windows":
+		pythonBin = `tools\bin\python3.exe`
+		packages = append(packages, &swarmpb.CipdPackage{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"})
 	}
-
 	req := &swarmpb.NewTaskRequest{
 		Name:           name,
 		Priority:       20, // 30 is the priority for builds
