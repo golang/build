@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build go1.21
+
 // The relnote command summarizes the Go changes in Gerrit marked with
 // RELNOTE annotations for the release notes.
 package main
@@ -18,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -138,6 +141,7 @@ func main() {
 		log.Fatal(err)
 	}
 	changes := map[string][]change{} // keyed by pkg
+	unclosed := map[int32][]int32{}  // from issue number to CL numbers
 	gh := corpus.GitHub().Repo("golang", "go")
 	addedIssue := make(map[int32]bool)
 	corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
@@ -160,15 +164,20 @@ func main() {
 				if bytes.Contains(existingHTML, []byte(fmt.Sprintf("https://go.dev/issue/%d", num))) || addedIssue[num] {
 					continue
 				}
-				if issue := gh.Issue(num); issue != nil && !issue.ClosedAt.Before(cutoff) && hasLabel(issue, "Proposal-Accepted") {
+				if issue := gh.Issue(num); issue != nil && hasLabel(issue, "Proposal-Accepted") {
 					if *verbose {
 						log.Printf("CL %d mentions accepted proposal #%d (%s)", cl.Number, num, issue.Title)
 					}
-					pkg := issuePackage(issue)
-					changes[pkg] = append(changes[pkg], change{Issue: issue})
-					addedIssue[num] = true
+					if !issue.ClosedAt.Before(cutoff) {
+						pkg := issuePackage(issue)
+						changes[pkg] = append(changes[pkg], change{Issue: issue})
+						addedIssue[num] = true
+					} else if issue.Closed {
+						unclosed[num] = append(unclosed[num], cl.Number)
+					}
 				}
 			}
+
 			if bytes.Contains(existingHTML, []byte(fmt.Sprintf("CL %d", cl.Number))) {
 				return nil
 			}
@@ -247,6 +256,13 @@ func main() {
 				change.ID(), change.URL(), change.URL(), html.EscapeString(change.TextLine()))
 		}
 		fmt.Printf("  </dd>\n</dl><!-- %s -->\n", pkg)
+	}
+	for issue, cls := range unclosed {
+		var s []string
+		for _, cl := range cls {
+			s = append(s, strconv.Itoa(int(cl)))
+		}
+		fmt.Fprintf(os.Stderr, "Warning: accepted proposal #%d is not closed but has these CLs: %s\n", issue, strings.Join(s, ", "))
 	}
 }
 
@@ -378,5 +394,7 @@ func issueNumbers(cl *maintner.GerritCL) []int32 {
 			list = append(list, int32(n))
 		}
 	}
-	return list
+	// Remove duplicates.
+	slices.Sort(list)
+	return slices.Compact(list)
 }
