@@ -8,6 +8,7 @@ package gomote
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -87,6 +88,58 @@ func (ss *SwarmingServer) Authenticate(ctx context.Context, req *protos.Authenti
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
 	return &protos.AuthenticateResponse{}, nil
+}
+
+// AddBootstrap adds the bootstrap version of Go to an instance and returns the URL for the bootstrap version. If no
+// bootstrap version is defined then the returned version URL will be empty.
+func (ss *SwarmingServer) AddBootstrap(ctx context.Context, req *protos.AddBootstrapRequest) (*protos.AddBootstrapResponse, error) {
+	creds, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("AddBootstrap access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	ses, bc, err := ss.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
+	if err != nil {
+		// the helper function returns meaningful GRPC error.
+		return nil, err
+	}
+	builder, err := ss.buildersClient.GetBuilder(ctx, &buildbucketpb.GetBuilderRequest{
+		Id: &buildbucketpb.BuilderID{
+			Project: "golang",
+			Bucket:  "ci-workers",
+			Builder: ses.BuilderType + "-test_only",
+		},
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unknown builder type")
+	}
+	type ConfigProperties struct {
+		BootstrapVersion string `json:"bootstrap_version, omitempty"`
+	}
+	var cp ConfigProperties
+	if err := json.Unmarshal([]byte(builder.GetConfig().GetProperties()), &cp); err != nil {
+		return &protos.AddBootstrapResponse{}, nil
+	}
+	if cp.BootstrapVersion == "" {
+		return &protos.AddBootstrapResponse{}, nil
+	}
+	var cipdPlatform string
+	for _, bd := range builder.GetConfig().GetDimensions() {
+		if !strings.HasPrefix(bd, "cipd_platform:") {
+			continue
+		}
+		var ok bool
+		_, cipdPlatform, ok = strings.Cut(bd, ":")
+		if !ok {
+			return nil, status.Errorf(codes.Internal, "unknown builder type")
+		}
+		break
+	}
+	url := fmt.Sprintf("https://storage.googleapis.com/go-builder-data/gobootstrap-%s-go%s.tar.gz", cipdPlatform, cp.BootstrapVersion)
+	if err = bc.PutTarFromURL(ctx, url, cp.BootstrapVersion); err != nil {
+		return nil, status.Errorf(codes.Internal, "unable to download bootstrap Go")
+	}
+	return &protos.AddBootstrapResponse{BootstrapGoUrl: url}, nil
 }
 
 // CreateInstance will create a gomote instance within a swarming task for the authenticated user.

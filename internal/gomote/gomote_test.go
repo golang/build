@@ -94,7 +94,7 @@ func TestAuthenticateError(t *testing.T) {
 	}
 }
 
-func TestAddBootstrapAlive(t *testing.T) {
+func TestAddBootstrap(t *testing.T) {
 	client := setupGomoteTest(t, context.Background())
 	gomoteID := mustCreateInstance(t, client, fakeIAP())
 	req := &protos.AddBootstrapRequest{
