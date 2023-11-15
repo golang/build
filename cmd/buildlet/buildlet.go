@@ -1451,7 +1451,7 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 }
 
 func useBuildletSSHServer() bool {
-	return *swarmingBot && runtime.GOOS != "plan9" && runtime.GOOS != "windows"
+	return *swarmingBot && runtime.GOOS != "plan9"
 }
 
 func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
@@ -2029,4 +2029,15 @@ func serveReverseHealth() error {
 	m := &http.ServeMux{}
 	m.HandleFunc("/healthz", handleHealthz)
 	return http.ListenAndServe(*healthAddr, m)
+}
+
+func shell() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "bash"
+	case "windows":
+		return `C:\Windows\System32\cmd.exe`
+	default:
+		return os.Getenv("SHELL")
+	}
 }

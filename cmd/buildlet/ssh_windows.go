@@ -2,19 +2,15 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build !plan9 && !windows
-
 package main
 
 import (
 	"fmt"
 	"io"
 	"log"
-	"os/exec"
 
-	"github.com/creack/pty"
+	"github.com/UserExistsError/conpty"
 	"github.com/gliderlabs/ssh"
-	"golang.org/x/build/internal/envutil"
 )
 
 func startSSHServerSwarming() {
@@ -48,11 +44,7 @@ func sshHandler(s ssh.Session) {
 		fmt.Fprint(s, "scp is not supported\n")
 		return
 	}
-	var cmd *exec.Cmd
-	cmd = exec.Command(shell())
-
-	envutil.SetEnv(cmd, "TERM="+ptyReq.Term)
-	f, err := pty.Start(cmd)
+	f, err := conpty.Start(shell(), conpty.ConPtyDimensions(ptyReq.Window.Width, ptyReq.Window.Height))
 	if err != nil {
 		fmt.Fprintf(s, "unable to start shell %q: %s\n", shell(), err)
 		log.Printf("unable to start shell: %s", err)
@@ -61,16 +53,17 @@ func sshHandler(s ssh.Session) {
 	defer f.Close()
 	go func() {
 		for win := range winCh {
-			pty.Setsize(f, &pty.Winsize{
-				Rows: uint16(win.Height),
-				Cols: uint16(win.Width),
-			})
+			err := f.Resize(win.Width, win.Height)
+			if err != nil {
+				log.Printf("error resizing pty: %s", err)
+			}
 		}
 	}()
-	go func() {
-		io.Copy(f, s) // stdin
-	}()
-	io.Copy(s, f) // stdout
-	cmd.Process.Kill()
-	cmd.Wait()
+	go io.Copy(f, s) // stdin
+	go io.Copy(s, f) // stdout
+	_, err = f.Wait(s.Context())
+	if err != nil {
+		log.Printf("Error: %s", err)
+		return
+	}
 }
