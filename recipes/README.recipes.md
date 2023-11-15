@@ -3,34 +3,32 @@
 ## Table of Contents
 
 **[Recipes](#Recipes)**
-  * [hello_world](#recipes-hello_world) (Python3 ✅)
-  * [tricium_simple](#recipes-tricium_simple) (Python3 ✅)
+  * [hello_world](#recipes-hello_world)
+  * [tricium_simple](#recipes-tricium_simple)
 ## Recipes
 
 ### *recipes* / [hello\_world](/recipes/recipes/hello_world.py)
 
 [DEPS](/recipes/recipes/hello_world.py#7): [recipe\_engine/step][recipe_engine/recipe_modules/step]
 
-PYTHON_VERSION_COMPATIBILITY: PY3
 
 &mdash; **def [RunSteps](/recipes/recipes/hello_world.py#11)(api):**
 ### *recipes* / [tricium\_simple](/recipes/recipes/tricium_simple.py)
 
 [DEPS](/recipes/recipes/tricium_simple.py#7): [depot\_tools/gerrit][depot_tools/recipe_modules/gerrit], [depot\_tools/git][depot_tools/recipe_modules/git], [depot\_tools/tryserver][depot_tools/recipe_modules/tryserver], [recipe\_engine/buildbucket][recipe_engine/recipe_modules/buildbucket], [recipe\_engine/context][recipe_engine/recipe_modules/context], [recipe\_engine/path][recipe_engine/recipe_modules/path], [recipe\_engine/platform][recipe_engine/recipe_modules/platform], [recipe\_engine/tricium][recipe_engine/recipe_modules/tricium]
 
-PYTHON_VERSION_COMPATIBILITY: PY3
 
 &mdash; **def [RunSteps](/recipes/recipes/tricium_simple.py#18)(api):**
 
 This recipe runs quick analyzers for Go repos.
   
 
-[depot_tools/recipe_modules/gerrit]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/0d6cb8fa70c61b13dd2341c220fafdd1db2c30fe/recipes/README.recipes.md#recipe_modules-gerrit
-[depot_tools/recipe_modules/git]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/0d6cb8fa70c61b13dd2341c220fafdd1db2c30fe/recipes/README.recipes.md#recipe_modules-git
-[depot_tools/recipe_modules/tryserver]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/0d6cb8fa70c61b13dd2341c220fafdd1db2c30fe/recipes/README.recipes.md#recipe_modules-tryserver
-[recipe_engine/recipe_modules/buildbucket]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/5a794c03981b2750ddc6a76c80e303832eae0a93/README.recipes.md#recipe_modules-buildbucket
-[recipe_engine/recipe_modules/context]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/5a794c03981b2750ddc6a76c80e303832eae0a93/README.recipes.md#recipe_modules-context
-[recipe_engine/recipe_modules/path]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/5a794c03981b2750ddc6a76c80e303832eae0a93/README.recipes.md#recipe_modules-path
-[recipe_engine/recipe_modules/platform]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/5a794c03981b2750ddc6a76c80e303832eae0a93/README.recipes.md#recipe_modules-platform
-[recipe_engine/recipe_modules/step]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/5a794c03981b2750ddc6a76c80e303832eae0a93/README.recipes.md#recipe_modules-step
-[recipe_engine/recipe_modules/tricium]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/5a794c03981b2750ddc6a76c80e303832eae0a93/README.recipes.md#recipe_modules-tricium
+[depot_tools/recipe_modules/gerrit]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/fba0ae4a3815f379514572b04e9cd215eaf54849/recipes/README.recipes.md#recipe_modules-gerrit
+[depot_tools/recipe_modules/git]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/fba0ae4a3815f379514572b04e9cd215eaf54849/recipes/README.recipes.md#recipe_modules-git
+[depot_tools/recipe_modules/tryserver]: https://chromium.googlesource.com/chromium/tools/depot_tools.git/+/fba0ae4a3815f379514572b04e9cd215eaf54849/recipes/README.recipes.md#recipe_modules-tryserver
+[recipe_engine/recipe_modules/buildbucket]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/9dea1246fd8548d96decbcc0718e1c95fa1d985f/README.recipes.md#recipe_modules-buildbucket
+[recipe_engine/recipe_modules/context]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/9dea1246fd8548d96decbcc0718e1c95fa1d985f/README.recipes.md#recipe_modules-context
+[recipe_engine/recipe_modules/path]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/9dea1246fd8548d96decbcc0718e1c95fa1d985f/README.recipes.md#recipe_modules-path
+[recipe_engine/recipe_modules/platform]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/9dea1246fd8548d96decbcc0718e1c95fa1d985f/README.recipes.md#recipe_modules-platform
+[recipe_engine/recipe_modules/step]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/9dea1246fd8548d96decbcc0718e1c95fa1d985f/README.recipes.md#recipe_modules-step
+[recipe_engine/recipe_modules/tricium]: https://chromium.googlesource.com/infra/luci/recipes-py.git/+/9dea1246fd8548d96decbcc0718e1c95fa1d985f/README.recipes.md#recipe_modules-tricium
