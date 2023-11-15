@@ -1,30 +1,22 @@
-# Copyright 2017 The Go Authors. All rights reserved.
+# Copyright 2023 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.20-bookworm AS build
+FROM golang:1.21-bookworm AS build
 LABEL maintainer="golang-dev@googlegroups.com"
-
-RUN mkdir /gocache
-ENV GOCACHE /gocache
 
 COPY go.mod /go/src/golang.org/x/build/go.mod
 COPY go.sum /go/src/golang.org/x/build/go.sum
 
 WORKDIR /go/src/golang.org/x/build
 
-# Optimization for iterative docker build speed, not necessary for correctness:
-# TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
-RUN go install cloud.google.com/go/compute/metadata
-RUN go install github.com/bradfitz/go-smtpd/smtpd
-RUN go install github.com/jellevandenhooff/dkim
-RUN go install go4.org/types
-RUN go install golang.org/x/crypto/acme/autocert
+# Download module dependencies to improve speed of re-building the
+# Docker image during minor code changes.
+RUN go mod download
 
 COPY . /go/src/golang.org/x/build/
 
-# Install binary to /go/bin:
-RUN go install golang.org/x/build/cmd/pubsubhelper
+RUN go install golang.org/x/build/cmd/makemac
 
 FROM debian:bookworm
 LABEL maintainer="golang-dev@googlegroups.com"
@@ -42,5 +34,5 @@ RUN apt-get update && apt-get install -y \
 	psmisc \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /go/bin/pubsubhelper /
-ENTRYPOINT ["/pubsubhelper"]
+COPY --from=build /go/bin/makemac /
+ENTRYPOINT ["/makemac"]

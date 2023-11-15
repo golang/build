@@ -90,6 +90,9 @@ const (
 	// The secret value encodes relevant keys and their secrets as
 	// a JSON object that can be unmarshaled into TwitterCredentials.
 	NameStagingTwitterAPISecret = "staging-" + NameTwitterAPISecret
+
+	// NameMacServiceAPIKey is the secret name for the MacService API key.
+	NameMacServiceAPIKey = "macservice-api-key"
 )
 
 // TwitterCredentials holds Twitter API credentials.

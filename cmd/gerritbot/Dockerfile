@@ -37,7 +37,7 @@ COPY . /go/src/golang.org/x/build/
 RUN go install golang.org/x/build/cmd/gerritbot
 
 FROM alpine
-LABEL maintainer "golang-dev@googlegroups.com"
+LABEL maintainer="golang-dev@googlegroups.com"
 # See https://github.com/golang/go/issues/23705 for why tini is needed
 RUN apk add --no-cache git tini
 RUN git config --global user.email "letsusegerrit@gmail.com"
