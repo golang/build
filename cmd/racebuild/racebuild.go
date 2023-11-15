@@ -36,7 +36,7 @@ var (
 	flagCheckout   = flag.String("checkout", "", "go.googlesource.com CL reference to check out on top of Go repo (takes form 'refs/changes/NNN/<CL number>/<patchset number>') (optional)")
 	flagCopyOnFail = flag.Bool("copyonfail", false, "Attempt to copy newly built race syso into Go repo even if script fails.")
 	flagGoRev      = flag.String("gorev", "HEAD", "Go repository revision to use; HEAD is relative to --goroot")
-	flagPlatforms  = flag.String("platforms", "all", `comma-separated platforms (such as "linux/amd64") to rebuild, or "all"`)
+	flagPlatforms  = flag.String("platforms", "all", `comma-separated platforms (such as "darwin/arm64" or "linux/amd64v1") to rebuild, or "all"`)
 )
 
 // goRev is the resolved commit ID of flagGoRev.
@@ -45,9 +45,11 @@ var goRev string
 // TODO: use buildlet package instead of calling out to gomote.
 var platforms = []*Platform{
 	&Platform{
-		OS:   "openbsd",
-		Arch: "amd64",
-		Type: "openbsd-amd64-70",
+		OS:      "openbsd",
+		Arch:    "amd64",
+		SubArch: "v1",
+		Skip:    true, // openbsd support is removed from TSAN, see issue #52090
+		Type:    "openbsd-amd64-72",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -58,17 +60,23 @@ if [ "$GOGITOP" != "" ]; then
   git $GOGITOP FETCH_HEAD
 fi
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_openbsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_openbsd.syso
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_openbsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_openbsd.syso
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_openbsd_amd64.syso outdir/race_openbsd.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
 	&Platform{
-		OS:   "freebsd",
-		Arch: "amd64",
-		Type: "freebsd-amd64-race",
+		OS:      "freebsd",
+		Arch:    "amd64",
+		SubArch: "v1",
+		Type:    "freebsd-amd64-race",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -79,10 +87,15 @@ if [ "$GOGITOP" != "" ]; then
   git $GOGITOP FETCH_HEAD
 fi
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_freebsd.syso
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_freebsd.syso
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_freebsd_amd64.syso outdir/race_freebsd.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -101,10 +114,15 @@ if [ "$GOGITOP" != "" ]; then
   git $GOGITOP FETCH_HEAD
 fi
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race/internal/amd64v1/race_darwin.syso
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race/internal/amd64v1/race_darwin.syso
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso outdir/race_darwin.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -112,6 +130,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/ra
 		OS:      "darwin",
 		Arch:    "amd64",
 		SubArch: "v3",
+		Skip:    true,
 		Type:    "darwin-amd64-12_0",
 		Script: `#!/usr/bin/env bash
 set -e
@@ -119,10 +138,15 @@ git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang GOAMD64=v3 ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race/internal/amd64v3/race_darwin.syso
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang GOAMD64=v3 ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race/internal/amd64v3/race_darwin.syso
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso outdir/race_darwin.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && GOAMD64=v3 ./race.bash)
 			`,
 	},
@@ -140,10 +164,15 @@ if [ "$GOGITOP" != "" ]; then
   git $GOGITOP FETCH_HEAD
 fi
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_arm64.syso go/src/runtime/race
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_arm64.syso go/src/runtime/race
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_arm64.syso outdir/race_darwin_arm64.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -155,7 +184,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_darwin_arm64.syso go/src/runtime/ra
 		Script: `#!/usr/bin/env bash
 set -e
 apt-get update --allow-releaseinfo-change
-apt-get install -y git g++
+apt-get install -y git g++ unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -164,10 +193,15 @@ if [ "$GOGITOP" != "" ]; then
   git $GOGITOP FETCH_HEAD
 fi
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race/internal/amd64v1/race_linux.syso
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race/internal/amd64v1/race_linux.syso
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_amd64.syso outdir/race_linux.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -179,15 +213,20 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/rac
 		Script: `#!/usr/bin/env bash
 set -e
 apt-get update
-apt-get install -y git g++
+apt-get install -y git g++ unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && GOAMD64=v3 ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race/internal/amd64v3/race_linux.syso
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && GOAMD64=v3 ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race/internal/amd64v3/race_linux.syso
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_amd64.syso outdir/race_linux.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && GOAMD64=v3 ./race.bash)
 			`,
 	},
@@ -198,7 +237,7 @@ cp llvm-project/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/rac
 		Script: `#!/usr/bin/env bash
 set -e
 apt-get update --allow-releaseinfo-change
-apt-get install -y git g++
+apt-get install -y git g++ unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -208,24 +247,27 @@ if [ "$GOGITOP" != "" ]; then
 fi
 popd
 workdir=$(pwd)
-pushd /tmp
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso $workdir/go/src/runtime/race
-popd
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso $workdir/go/src/runtime/race
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso outdir/race_linux_ppc64le.syso
 # TODO(#23731): Uncomment to test the syso file before accepting it.
+# free some disk space
+# rm -r llvm.zip llvm-project-${REV}
 # (cd go/src && ./race.bash)
 			`,
 	},
 	&Platform{
 		OS:   "linux",
 		Arch: "arm64",
-		Type: "linux-arm64",
+		Type: "linux-arm64-race",
 		Script: `#!/usr/bin/env bash
 set -e
 apt-get update --allow-releaseinfo-change
-apt-get install -y git g++
+apt-get install -y git g++ unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -234,17 +276,23 @@ if [ "$GOGITOP" != "" ]; then
   git $GOGITOP FETCH_HEAD
 fi
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_linux_arm64.syso go/src/runtime/race
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_arm64.syso go/src/runtime/race
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_arm64.syso outdir/race_linux_arm64.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
 	&Platform{
-		OS:   "netbsd",
-		Arch: "amd64",
-		Type: "netbsd-amd64-9_3",
+		OS:      "netbsd",
+		Arch:    "amd64",
+		SubArch: "v1",
+		Type:    "netbsd-amd64-9_3",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -255,18 +303,24 @@ if [ "$GOGITOP" != "" ]; then
   git $GOGITOP FETCH_HEAD
 fi
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_netbsd.syso
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_netbsd.syso
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso outdir/race_netbsd.syso
 # TODO(#24322): Uncomment to test the syso file before accepting it.
+# free some disk space
+# rm -r llvm.zip llvm-project-${REV}
 # (cd go/src && ./race.bash)
 			`,
 	},
 	&Platform{
-		OS:   "windows",
-		Arch: "amd64",
-		Type: "windows-amd64-race",
+		OS:      "windows",
+		Arch:    "amd64",
+		SubArch: "v1",
+		Type:    "windows-amd64-race",
 		Script: `
 @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "[System.net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
 choco install git -y
@@ -301,6 +355,11 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 cd ../../../../..
 xcopy llvm-project\compiler-rt\lib\tsan\go\race_windows_amd64.syso go\src\runtime\race\internal\amd64v1\race_windows.syso /Y
 if %errorlevel% neq 0 exit /b %errorlevel%
+rem work around gomote gettar issue #64195
+mkdir outdir
+if %errorlevel% neq 0 exit /b %errorlevel%
+copy llvm-project\compiler-rt\lib\tsan\go\race_windows_amd64.syso outdir\race_windows.syso
+if %errorlevel% neq 0 exit /b %errorlevel%
 cd go/src
 call race.bat
 if %errorlevel% neq 0 exit /b %errorlevel%
@@ -313,7 +372,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 		Script: `#!/usr/bin/env bash
 set -e
 cat /etc/os-release
-yum install -y gcc-c++ git golang-bin
+yum install -y gcc-c++ git golang-bin unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -322,10 +381,15 @@ if [ "$GOGITOP" != "" ]; then
   git $GOGITOP FETCH_HEAD
 fi
 popd
-git clone https://github.com/llvm/llvm-project
-(cd llvm-project && git checkout $REV)
-(cd llvm-project/compiler-rt/lib/tsan/go && ./buildgo.sh)
-cp llvm-project/compiler-rt/lib/tsan/go/race_linux_s390x.syso go/src/runtime/race
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_s390x.syso go/src/runtime/race
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_s390x.syso outdir/race_linux_s390x.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
@@ -347,7 +411,9 @@ var platformEnabled = make(map[string]bool)
 func parsePlatformsFlag() {
 	if *flagPlatforms == "all" {
 		for _, p := range platforms {
-			platformEnabled[p.Name()] = true
+			if !p.Skip {
+				platformEnabled[p.Name()] = true
+			}
 		}
 		return
 	}
@@ -433,6 +499,7 @@ type Platform struct {
 	Type    string // gomote instance type
 	Inst    string // actual gomote instance name
 	Script  string
+	Skip    bool // disabled by default
 }
 
 func (p *Platform) Name() string {
@@ -523,13 +590,13 @@ func (p *Platform) Build(ctx context.Context) error {
 
 	// The script is supposed to leave updated runtime at that path. Copy it out.
 	syso := p.Basename()
-	targz, err := p.Gomote(ctx, "gettar", "-dir=go/src/runtime/race/"+syso, p.Inst)
+	_, err = p.Gomote(ctx, "gettar", "-dir=outdir", p.Inst)
 	if err != nil {
 		return err
 	}
 
 	// Untar the runtime and write it to goroot.
-	if err := p.WriteSyso(filepath.Join(*flagGoroot, "src", "runtime", "race", syso), targz); err != nil {
+	if err := p.WriteSyso(filepath.Join(*flagGoroot, "src", "runtime", "race", syso), p.Inst+".tar.gz"); err != nil {
 		return fmt.Errorf("%v", err)
 	}
 	if scriptRunErr != nil {
@@ -540,9 +607,14 @@ func (p *Platform) Build(ctx context.Context) error {
 	return nil
 }
 
-func (p *Platform) WriteSyso(sysof string, targz []byte) error {
+func (p *Platform) WriteSyso(sysof string, targz string) error {
 	// Ungzip.
-	gzipr, err := gzip.NewReader(bytes.NewReader(targz))
+	targzf, err := os.Open(targz)
+	if err != nil {
+		return fmt.Errorf("failed to open targz file %s: %v", targz, err)
+	}
+	defer targzf.Close()
+	gzipr, err := gzip.NewReader(targzf)
 	if err != nil {
 		return fmt.Errorf("failed to read gzip archive: %v", err)
 	}
@@ -604,13 +676,7 @@ func (p *Platform) Gomote(ctx context.Context, args ...string) ([]byte, error) {
 
 	cmd := exec.CommandContext(ctx, "gomote", args...)
 	outBuf := new(bytes.Buffer)
-
-	// Combine stderr and stdout for everything except gettar: gettar's output is
-	// huge, so we only want to log stderr for it.
 	errBuf := outBuf
-	if args[0] == "gettar" {
-		errBuf = new(bytes.Buffer)
-	}
 
 	cmd.Stdout = outBuf
 	cmd.Stderr = errBuf
