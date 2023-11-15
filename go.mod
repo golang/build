@@ -156,4 +156,5 @@ require (
 	google.golang.org/genproto/googleapis/bytestream v0.0.0-20230807174057-1744710a1577 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230807174057-1744710a1577 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	rsc.io/markdown v0.0.0-20231114125513-6fc7bf989e0c // indirect
 )
