@@ -435,7 +435,7 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 		}
 	}()
 	go func() {
-		ss.setupRemoteSSHEnvSwarm(workDir, f)
+		ss.setupRemoteSSHEnvSwarm(rs.BuilderType, workDir, f)
 		io.Copy(f, s) // stdin
 	}()
 	io.Copy(s, f) // stdout
@@ -445,7 +445,13 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 
 // setupRemoteSSHEnvSwarm prints environmental details to the writer.
 // This makes the new SSH session easier to use for Go testing.
-func (ss *SSHServer) setupRemoteSSHEnvSwarm(workDir string, f io.Writer) {
+func (ss *SSHServer) setupRemoteSSHEnvSwarm(builderType, workDir string, f io.Writer) {
+	if strings.Contains(builderType, "windows") {
+		fmt.Fprintf(f, `set GOPATH=%s\gopath`+"\n", workDir)
+		fmt.Fprintf(f, `set PATH=%%PATH%%;%s\go\bin`+"\n", workDir)
+		fmt.Fprintf(f, `cd %s\go\src`+"\n", workDir)
+		return
+	}
 	fmt.Fprintf(f, "GOPATH=%s/gopath\n", workDir)
 	fmt.Fprintf(f, "PATH=$PATH:%s/go/bin\n", workDir)
 	fmt.Fprintf(f, "export GOPATH PATH\n")
