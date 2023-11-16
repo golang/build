@@ -9,7 +9,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/gomote"
 	gomotepb "golang.org/x/build/internal/gomote/protos"
+	"golang.org/x/build/internal/gomoteserver/ui"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/rendezvous"
 	"golang.org/x/build/internal/secret"
@@ -85,7 +85,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/reverse", rdv.HandleReverse)
 	mux.Handle("/revdial", revdial.ConnHandler())
-	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page.
+	mux.HandleFunc("/style.css", ui.HandleStyleCSS)
+	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, ui.HandleStatusFunc(sp))) // Serve a status page.
 
 	sshServ, err := remote.NewSSHServer(*sshAddr, []byte(*hostKey), []byte(*pubKey), sshCA, sp, remote.EnableLUCIOption())
 	if err != nil {
@@ -139,15 +140,6 @@ func grpcHandlerFunc(gs *grpc.Server, h http.HandlerFunc) http.HandlerFunc {
 		}
 		h(w, r)
 	}
-}
-
-func handleStatus(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/plain")
-	fmt.Fprintf(w, "gomote status page placeholder")
 }
 
 func mustSwarmingClient(ctx context.Context) swarming.Client {
