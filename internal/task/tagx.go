@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/http"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -18,11 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/build/dashboard"
+	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/releasetargets"
 	wf "golang.org/x/build/internal/workflow"
-	"golang.org/x/build/types"
 	"golang.org/x/exp/slices"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/semver"
@@ -31,8 +29,8 @@ import (
 type TagXReposTasks struct {
 	IgnoreProjects map[string]bool // project name -> ignore
 	Gerrit         GerritClient
-	DashboardURL   string
 	CloudBuild     CloudBuildClient
+	BuildBucket    BuildBucketClient
 }
 
 func (x *TagXReposTasks) NewDefinition() *wf.Definition {
@@ -474,154 +472,96 @@ func (x *TagXReposTasks) AwaitGreen(ctx *wf.TaskContext, repo TagRepo, commit st
 		return commit, nil
 	}
 
-	// Wait for a green commit.
-	return AwaitCondition(ctx, time.Minute, func() (string, bool, error) {
-		return x.findGreen(ctx, repo, commit, false)
-	})
+	head, err := x.Gerrit.ReadBranchHead(ctx, repo.Name, "master")
+	if err != nil {
+		return "", err
+	}
+	ctx.Printf("Checking if %v is green", head)
+	missing, err := x.findMissingBuilders(ctx, repo, head)
+	if err != nil {
+		return "", err
+	}
+	return head, x.runMissingBuilders(ctx, repo, head, missing)
 }
 
-func (x *TagXReposTasks) findGreen(ctx *wf.TaskContext, repo TagRepo, commit string, verbose bool) (string, bool, error) {
-	// Read the front status page to discover live Go release branches.
-	frontStatus, err := x.getBuildStatus("")
+func (x *TagXReposTasks) findMissingBuilders(ctx *wf.TaskContext, repo TagRepo, head string) (map[string]bool, error) {
+	builders, err := x.BuildBucket.ListBuilders(ctx, "ci")
 	if err != nil {
-		return "", false, fmt.Errorf("reading dashboard front page: %v", err)
-	}
-	branchSet := map[string]bool{}
-	for _, rev := range frontStatus.Revisions {
-		if rev.GoBranch != "" {
-			branchSet[rev.GoBranch] = true
-		}
-	}
-	var refs []string
-	for b := range branchSet {
-		refs = append(refs, "refs/heads/"+b)
+		return nil, err
 	}
 
-	// Read the page for the given repo to get the list of commits and statuses.
-	repoStatus, err := x.getBuildStatus(repo.ModPath)
-	if err != nil {
-		return "", false, fmt.Errorf("reading dashboard for %q: %v", repo.ModPath, err)
+	type port struct {
+		GOOS   string `json:"goos"`
+		GOARCH string `json:"goarch"`
 	}
-	// Some slow-moving repos have years of Go history. Throw away old stuff.
-	firstRev := repoStatus.Revisions[0].Revision
-	for i, rev := range repoStatus.Revisions {
-		ts, err := time.Parse(time.RFC3339, rev.Date)
+	type projectProp struct {
+		Project  string `json:"project"`
+		IsGoogle bool   `json:"is_google"`
+		Target   port   `json:"target"`
+	}
+
+	wantBuilders := map[string]bool{}
+	for id, b := range builders {
+		props := &projectProp{}
+		if err := json.Unmarshal([]byte(b.Properties), &props); err != nil {
+			return nil, fmt.Errorf("error unmarshaling properties for %v: %v", id, err)
+		}
+		if props.Project == repo.Name && props.IsGoogle && releasetargets.IsFirstClass(props.Target.GOOS, props.Target.GOARCH) {
+			wantBuilders[id] = true
+		}
+	}
+
+	for id := range wantBuilders {
+		pred := &buildbucketpb.BuildPredicate{
+			Builder: &buildbucketpb.BuilderID{Project: "golang", Bucket: "ci", Builder: id},
+			Tags: []*buildbucketpb.StringPair{
+				{Key: "buildset", Value: fmt.Sprintf("commit/gitiles/%s/%s/+/%s", hostFromURL(x.Gerrit.GitilesURL()), repo.Name, head)},
+			},
+			Status: buildbucketpb.Status_SUCCESS,
+		}
+		succesfulBuilds, err := x.BuildBucket.SearchBuilds(ctx, pred)
 		if err != nil {
-			return "", false, fmt.Errorf("parsing date of rev %#v: %v", rev, err)
+			return nil, err
 		}
-		if i == 200 || (rev.Revision != firstRev && ts.Add(6*7*24*time.Hour).Before(time.Now())) {
-			repoStatus.Revisions = repoStatus.Revisions[:i]
-			break
+		if len(succesfulBuilds) != 0 {
+			ctx.Printf("%v: found successful builds: %v", id, succesfulBuilds)
+			delete(wantBuilders, id)
+		} else {
+			ctx.Printf("%v: no successful builds", id)
 		}
 	}
+	return wantBuilders, nil
+}
 
-	// Associate Go revisions with branches.
-	var goCommits []string
-	for _, rev := range repoStatus.Revisions {
-		goCommits = append(goCommits, rev.GoRevision)
+func (x *TagXReposTasks) runMissingBuilders(ctx *wf.TaskContext, repo TagRepo, head string, builders map[string]bool) error {
+	wantBuilds := map[string]int64{}
+	for id := range builders {
+		buildID, err := x.BuildBucket.RunBuild(ctx, "ci", id, &buildbucketpb.GitilesCommit{
+			Host:    hostFromURL(x.Gerrit.GitilesURL()),
+			Project: repo.Name,
+			Id:      head,
+			Ref:     "refs/heads/master",
+		}, nil)
+		if err != nil {
+			return err
+		}
+		wantBuilds[id] = buildID
+		ctx.Printf("%v: scheduled build %v", id, buildID)
 	}
-	commitsInRefs, err := x.Gerrit.GetCommitsInRefs(ctx, "go", goCommits, refs)
-	if err != nil {
-		return "", false, err
-	}
-
-	// Determine which builders have to pass to consider a CL green.
-	firstClass := releasetargets.LatestFirstClassPorts()
-	required := map[string][]bool{}
-	for goBranch := range branchSet {
-		required[goBranch] = make([]bool, len(repoStatus.Builders))
-		for i, b := range repoStatus.Builders {
-			cfg, ok := dashboard.Builders[b]
-			if !ok {
+	_, err := AwaitCondition(ctx, time.Minute, func() (string, bool, error) {
+		for builderID, buildID := range wantBuilds {
+			_, done, err := x.BuildBucket.Completed(ctx, buildID)
+			if !done {
 				continue
 			}
-			runs := cfg.BuildsRepoPostSubmit(repo.Name, "master", goBranch)
-			ki := len(cfg.KnownIssues) != 0
-			fc := firstClass[releasetargets.OSArch{OS: cfg.GOOS(), Arch: cfg.GOARCH()}]
-			google := cfg.HostConfig().IsGoogle()
-			required[goBranch][i] = runs && !ki && fc && google
+			if err != nil {
+				return "", true, fmt.Errorf("at least one build failed: %v: %v", builderID, err)
+			}
+			delete(wantBuilds, builderID)
 		}
-	}
-
-	foundCommit := false
-	for _, rev := range repoStatus.Revisions {
-		if rev.Revision == commit {
-			foundCommit = true
-			break
-		}
-	}
-	if !foundCommit {
-		ctx.Printf("commit %v not found on first page of results; too old or too new?", commit)
-		return "", false, nil
-	}
-
-	// x/ repo statuses are:
-	// <x commit> <go commit>
-	//            <go commit>
-	//            <go commit>
-	// Process one x/ commit at a time, looking for green go commits from
-	// each release branch.
-	var currentRevision, earliestGreen string
-	greenOnBranches := map[string]bool{}
-	for i := 0; i <= len(repoStatus.Revisions); i++ {
-		if currentRevision != "" && (i == len(repoStatus.Revisions) || repoStatus.Revisions[i].Revision != currentRevision) {
-			// Finished an x/ commit.
-			if verbose {
-				ctx.Printf("rev %v green = %v", currentRevision, len(greenOnBranches) == len(branchSet))
-			}
-			if len(greenOnBranches) == len(branchSet) {
-				// All the branches were green, so this is a candidate.
-				earliestGreen = currentRevision
-			}
-			if currentRevision == commit {
-				// We've passed the desired commit. Stop.
-				break
-			}
-			greenOnBranches = map[string]bool{}
-		}
-		if i == len(repoStatus.Revisions) {
-			break
-		}
-
-		rev := repoStatus.Revisions[i]
-		currentRevision = rev.Revision
-
-		for _, ref := range commitsInRefs[rev.GoRevision] {
-			branch := strings.TrimPrefix(ref, "refs/heads/")
-			allOK := true
-			var missing []string
-			for i, result := range rev.Results {
-				ok := result == "ok" || !required[branch][i]
-				if !ok {
-					missing = append(missing, repoStatus.Builders[i])
-				}
-				allOK = allOK && ok
-			}
-			if allOK {
-				greenOnBranches[branch] = true
-			}
-			if verbose {
-				ctx.Printf("branch %v at %v: green = %v (missing: %v)", branch, rev.GoRevision, allOK, missing)
-			}
-		}
-	}
-	return earliestGreen, earliestGreen != "", nil
-}
-
-func (x *TagXReposTasks) getBuildStatus(modPath string) (*types.BuildStatus, error) {
-	resp, err := http.Get(x.DashboardURL + "/?mode=json&repo=" + url.QueryEscape(modPath))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %v", resp.Status)
-	}
-	status := &types.BuildStatus{}
-	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
-		return nil, err
-	}
-	return status, nil
+		return "", len(wantBuilds) == 0, nil
+	})
+	return err
 }
 
 // MaybeTag tags repo at commit with the next version, unless commit is already
@@ -684,4 +624,9 @@ func nextMinor(version string) (string, error) {
 		return "", fmt.Errorf("malformatted version %q (%v)", version, err)
 	}
 	return fmt.Sprintf("v%s.%d.0", parts[1], minor+1), nil
+}
+
+func hostFromURL(s string) string {
+	u, _ := url.Parse(s)
+	return u.Host
 }

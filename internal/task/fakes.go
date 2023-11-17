@@ -37,6 +37,7 @@ import (
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/untar"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -924,19 +925,23 @@ func (c *FakeSwarmingClient) Completed(ctx context.Context, id string) (string, 
 	return "here's some build detail", true, result
 }
 
-func NewFakeBuildBucketClient(major int, url, project string) *FakeBuildBucketClient {
+func NewFakeBuildBucketClient(major int, url, bucket string, projects []string) *FakeBuildBucketClient {
 	return &FakeBuildBucketClient{
-		major:         major,
-		GerritURL:     url,
-		GerritProject: project,
-		results:       map[int64]error{},
+		Bucket:    bucket,
+		major:     major,
+		GerritURL: url,
+		Projects:  projects,
+		results:   map[int64]error{},
 	}
 }
 
 type FakeBuildBucketClient struct {
-	FailBuilds                             []string
-	major                                  int
-	GerritURL, GerritProject, GerritBranch string
+	Bucket            string
+	FailBuilds        []string
+	MissingBuilds     []string
+	major             int
+	GerritURL, Branch string
+	Projects          []string
 
 	mu      sync.Mutex
 	results map[int64]error
@@ -944,26 +949,35 @@ type FakeBuildBucketClient struct {
 
 var _ BuildBucketClient = (*FakeBuildBucketClient)(nil)
 
-func (c *FakeBuildBucketClient) ListBuilders(ctx context.Context, bucket string) ([]string, error) {
-	if bucket != "security-try" {
+func (c *FakeBuildBucketClient) ListBuilders(ctx context.Context, bucket string) (map[string]*pb.BuilderConfig, error) {
+	if bucket != c.Bucket {
 		return nil, fmt.Errorf("unexpected bucket %q", bucket)
 	}
-	var res []string
-	for _, v := range []string{"gotip", fmt.Sprintf("go1.%v", c.major)} {
-		for _, b := range []string{"linux-amd64", "linux-amd64-longtest", "darwin-amd64_13"} {
-			res = append(res, v+"-"+b)
+	res := map[string]*pb.BuilderConfig{}
+	for _, proj := range c.Projects {
+		prefix := ""
+		if proj != "go" {
+			prefix = "x_" + proj + "-"
+		}
+		for _, v := range []string{"gotip", fmt.Sprintf("go1.%v", c.major)} {
+			for _, b := range []string{"linux-amd64", "linux-amd64-longtest", "darwin-amd64_13"} {
+				parts := strings.FieldsFunc(b, func(r rune) bool { return r == '-' || r == '_' })
+				res[prefix+v+"-"+b] = &pb.BuilderConfig{
+					Properties: fmt.Sprintf(`{"project":%q, "is_google":true, "target":{"goos":%q, "goarch":%q}}`, proj, parts[0], parts[1]),
+				}
+			}
 		}
 	}
 	return res, nil
 }
 
 func (c *FakeBuildBucketClient) RunBuild(ctx context.Context, bucket string, builder string, commit *pb.GitilesCommit, properties map[string]*structpb.Value) (int64, error) {
-	if bucket != "security-try" {
+	if bucket != c.Bucket {
 		return 0, fmt.Errorf("unexpected bucket %q", bucket)
 	}
 	match := regexp.MustCompile(`.*://(.+)`).FindStringSubmatch(c.GerritURL)
-	if commit.Host != match[1] || commit.Project != c.GerritProject {
-		return 0, fmt.Errorf("unexpected host or project: got %q, %q want %q, %q", commit.Host, commit.Project, match[1], c.GerritProject)
+	if commit.Host != match[1] || !slices.Contains(c.Projects, commit.Project) {
+		return 0, fmt.Errorf("unexpected host or project: got %q, %q want %q, %q", commit.Host, commit.Project, match[1], c.Projects)
 	}
 	// It would be nice to validate the commit hash and branch, but it's
 	// tricky to get the right value because it depends on the release type.
@@ -993,4 +1007,11 @@ func (c *FakeBuildBucketClient) Completed(ctx context.Context, id int64) (string
 		return "", false, fmt.Errorf("unknown task ID %q", id)
 	}
 	return "here's some build detail", true, result
+}
+
+func (c *FakeBuildBucketClient) SearchBuilds(ctx context.Context, pred *pb.BuildPredicate) ([]int64, error) {
+	if slices.Contains(c.MissingBuilds, pred.GetBuilder().GetBuilder()) {
+		return nil, nil
+	}
+	return []int64{rand.Int63()}, nil
 }

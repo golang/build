@@ -1331,7 +1331,7 @@ func (b *BuildReleaseTasks) readRelevantBuilders(ctx *wf.TaskContext, major int,
 		return nil, err
 	}
 	var builders []string
-	for _, b := range resp {
+	for b := range resp {
 		if strings.HasPrefix(b, prefix) {
 			builders = append(builders, b)
 		}

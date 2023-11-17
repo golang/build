@@ -192,6 +192,10 @@ func main() {
 		C:    luciHTTPClient,
 		Host: "cr-buildbucket.appspot.com",
 	})
+	buildBucketClient := &task.RealBuildBucketClient{
+		BuildersClient: buildersClient,
+		BuildsClient:   buildsClient,
+	}
 
 	var dbPool db.PGDBTX
 	dbPool, err = pgxpool.Connect(ctx, *pgConnect)
@@ -231,15 +235,12 @@ func main() {
 			BaseURL: *scratchFilesBase,
 			GCS:     gcsClient,
 		},
-		SignedURL:        *signedFilesBase,
-		ServingURL:       *servingFilesBase,
-		DownloadURL:      *edgeCacheURL,
-		ProxyPrefix:      "https://proxy.golang.org/golang.org/toolchain/@v",
-		CloudBuildClient: cloudBuildClient,
-		BuildBucketClient: &task.RealBuildBucketClient{
-			BuildersClient: buildersClient,
-			BuildsClient:   buildsClient,
-		},
+		SignedURL:         *signedFilesBase,
+		ServingURL:        *servingFilesBase,
+		DownloadURL:       *edgeCacheURL,
+		ProxyPrefix:       "https://proxy.golang.org/golang.org/toolchain/@v",
+		CloudBuildClient:  cloudBuildClient,
+		BuildBucketClient: buildBucketClient,
 		SwarmingClient: &task.RealSwarmingClient{
 			SwarmingClient: swarmingClient,
 			SwarmingURL:    *swarmingURL,
@@ -280,8 +281,8 @@ func main() {
 	tagTasks := &task.TagXReposTasks{
 		IgnoreProjects: ignoreProjects,
 		Gerrit:         gerritClient,
-		DashboardURL:   "https://build.golang.org",
 		CloudBuild:     cloudBuildClient,
+		BuildBucket:    buildBucketClient,
 	}
 	dh.RegisterDefinition("Tag x/ repos", tagTasks.NewDefinition())
 	dh.RegisterDefinition("Tag a single x/ repo", tagTasks.NewSingleDefinition())

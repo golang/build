@@ -216,7 +216,7 @@ esac
 			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 		},
 	}
-	buildBucket := task.NewFakeBuildBucketClient(major, fakeGerrit.GerritURL(), "go")
+	buildBucket := task.NewFakeBuildBucketClient(major, fakeGerrit.GerritURL(), "security-try", []string{"go"})
 
 	const dockerProject, dockerTrigger = "docker-build-project", "docker-build-trigger"
 
@@ -436,7 +436,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	privateRef := privateRepo.Commit(securityFix)
 	privateGerrit := task.NewFakeGerrit(t, privateRepo)
 	deps.buildBucket.GerritURL = privateGerrit.GerritURL()
-	deps.buildBucket.GerritProject = "go-private"
+	deps.buildBucket.Projects = []string{"go-private"}
 	deps.buildTasks.PrivateGerritClient = privateGerrit
 	deps.buildTasks.PrivateGerritProject = "go-private"
 
