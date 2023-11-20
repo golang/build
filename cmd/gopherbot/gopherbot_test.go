@@ -353,11 +353,10 @@ func TestRemoveLabels(t *testing.T) {
 	}
 }
 
-func TestHumanReviewersInMetas(t *testing.T) {
+func TestReviewersInMetas(t *testing.T) {
 	testCases := []struct {
 		desc      string
 		commitMsg string
-		hasHuman  bool
 		wantIDs   []string
 	}{
 		{
@@ -365,16 +364,14 @@ func TestHumanReviewersInMetas(t *testing.T) {
 			commitMsg: `Patch-set: 6
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			hasHuman: true,
-			wantIDs:  []string{"22285"},
+			wantIDs: []string{"22285"},
 		},
 		{
 			desc: "one human CC",
 			commitMsg: `Patch-set: 6
 CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			hasHuman: true,
-			wantIDs:  []string{"22285"},
+			wantIDs: []string{"22285"},
 		},
 		{
 			desc: "gobot reviewer",
@@ -389,8 +386,7 @@ Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			hasHuman: true,
-			wantIDs:  []string{"5976", "22285"},
+			wantIDs: []string{"5976", "22285"},
 		},
 		{
 			desc: "gobot reviewer and human reviewer",
@@ -398,8 +394,7 @@ CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			hasHuman: true,
-			wantIDs:  []string{"5976", "22285"},
+			wantIDs: []string{"5976", "22285"},
 		},
 		{
 			desc: "gobot reviewer and two human reviewers",
@@ -408,16 +403,14 @@ Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Rebecca Stambler <16140@62eb7196-b449-3ce5-99f1-c037f21e1705>
 				`,
-			hasHuman: true,
-			wantIDs:  []string{"5976", "22285", "16140"},
+			wantIDs: []string{"5976", "22285", "16140"},
 		},
 		{
 			desc: "reviewersInMetas should not return duplicate IDs", // Happened in go.dev/cl/534975.
 			commitMsg: `Reviewer: Gerrit User 5190 <5190@62eb7196-b449-3ce5-99f1-c037f21e1705>
 CC: Gerrit User 60063 <60063@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Gerrit User 60063 <60063@62eb7196-b449-3ce5-99f1-c037f21e1705>`,
-			hasHuman: false,
-			wantIDs:  []string{"5190", "60063"},
+			wantIDs: []string{"5190", "60063"},
 		},
 	}
 

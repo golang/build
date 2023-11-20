@@ -81,6 +81,7 @@ const (
 	gerritbotGerritID = "12446"
 	kokoroGerritID    = "37747"
 	goLUCIGerritID    = "60063"
+	triciumGerritID   = "62045"
 )
 
 // GitHub Label IDs for the golang/go repo.
@@ -2070,10 +2071,10 @@ var assignReviewersOptOut = map[string]bool{
 	"mdempsky@google.com": true,
 }
 
-// assignReviewersToCLs looks for CLs with no humans in the reviewer or cc fields
+// assignReviewersToCLs looks for CLs with no humans in the reviewer or CC fields
 // that have been open for a short amount of time (enough of a signal that the
-// author does not intend to add anyone to the review), then assigns reviewers/ccs
-// using the golang.org/s/owners API.
+// author does not intend to add anyone to the review), then assigns reviewers/CCs
+// using the go.dev/s/owners API.
 func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 	const tagNoOwners = "no-owners"
 	b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
@@ -2112,7 +2113,7 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 			if ok {
 				return nil
 			}
-			log.Printf("humanReviewersOnChange reported insufficient reviewers or cc on CL %d, attempting to add some", cl.Number)
+			log.Printf("humanReviewersOnChange reported insufficient reviewers or CC on CL %d, attempting to add some", cl.Number)
 
 			changeURL := fmt.Sprintf("https://go-review.googlesource.com/c/%s/+/%d", gp.Project(), cl.Number)
 			files, err := b.gerrit.ListFiles(ctx, gc.ID(), cl.Commit.Hash.String())
@@ -2309,15 +2310,16 @@ func (b *gopherbot) whoNeedsAccess(ctx context.Context) error {
 	return nil
 }
 
-// humanReviewersOnChange reports whether there is (or was) a sufficient number
-// of human reviewers in the given change. It also returns the IDs of the
-// current human reviewers. The given gerritChange must be used because it’s
-// used as a key to deletedChanges and the ID returned by cl.ChangeID() can be
-// associated with multiple changes (cherry-picks, for example).
+// humanReviewersOnChange reports whether there is (or was) a sufficient
+// number of human reviewers in the given change, and returns the IDs of
+// the current human reviewers. It includes reviewers in REVIEWER and CC
+// states.
+//
+// The given gerritChange works as a key for deletedChanges.
 func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritChange, cl *maintner.GerritCL) ([]string, bool) {
 	// The CL's owner will be GerritBot if it is imported from a PR.
 	// In that case, if the CL's author has a Gerrit account, they will be
-	// added as a reviewer (golang.org/issue/30265). Otherwise, no reviewers
+	// added as a reviewer (go.dev/issue/30265). Otherwise, no reviewers
 	// will be added. Work around this by requiring 2 human reviewers on PRs.
 	ownerID := strconv.Itoa(cl.OwnerID())
 	isPR := ownerID == gerritbotGerritID
@@ -2325,7 +2327,7 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 	if isPR {
 		minHumans = 2
 	}
-	reject := []string{gobotGerritID, gerritbotGerritID, kokoroGerritID, goLUCIGerritID, ownerID}
+	reject := []string{gobotGerritID, gerritbotGerritID, kokoroGerritID, goLUCIGerritID, triciumGerritID, ownerID}
 	ownerOrRobot := func(gerritID string) bool {
 		for _, r := range reject {
 			if gerritID == r {
@@ -2530,7 +2532,9 @@ var reviewerRe = regexp.MustCompile(`.* <(?P<id>\d+)@.*>`)
 
 const gerritInstanceID = "@62eb7196-b449-3ce5-99f1-c037f21e1705"
 
-// reviewersInMetas returns the unique Gerrit IDs of any reviewers in the metadata.
+// reviewersInMetas returns the unique Gerrit IDs of reviewers
+// (in REVIEWER and CC states) that were at some point added
+// to the given Gerrit CL, even if they've been since removed.
 func reviewersInMetas(metas []*maintner.GerritMeta) []string {
 	var ids []string
 	for _, m := range metas {
@@ -2546,7 +2550,7 @@ func reviewersInMetas(metas []*maintner.GerritMeta) []string {
 			if match == nil {
 				return nil
 			}
-			// Extract the human's Gerrit ID.
+			// Extract the reviewer's Gerrit ID.
 			for i, name := range reviewerRe.SubexpNames() {
 				if name != "id" {
 					continue
