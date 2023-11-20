@@ -311,8 +311,8 @@ NO_NETWORK_BUILDERS = [
 ]
 
 # make_run_mod returns a run_mod that adds the given properties and environment
-# variables. If set, enabled is a function receives the project and branch, and
-# returns three booleans to affect the builder it's being added to:
+# variables. If set, enabled is a function that returns three booleans to
+# affect the builder it's being added to:
 # - exists, whether the builder should be created at all
 # - presubmit, whether the builder should be run in presubmit by default
 # - postsubmit, whether the builder should run in postsubmit
@@ -322,7 +322,7 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None):
         props["env"].update(add_env)
 
     if enabled == None:
-        enabled = lambda host, project, go_branch_short: (True, True, True)
+        enabled = lambda port, project, go_branch_short: (True, True, True)
     return struct(
         enabled = enabled,
         apply = apply_mod,
@@ -331,17 +331,17 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None):
 # enable only if project matches one of the provided projects, or
 # for the release branches in the Go project.
 def presubmit_only_for_projs_or_on_release_branches(projects):
-    def f(host, project, go_branch_short):
+    def f(port, project, go_branch_short):
         presubmit = project in projects or (project == "go" and go_branch_short != "gotip")
         return (True, presubmit, True)
 
     return f
 
-# enable only if host_of(builder_type) matches one of the provided hosts, or
+# enable only if port_of(builder_type) matches one of the provided ports, or
 # for the release branches in the Go project.
-def presubmit_only_for_hosts_or_on_release_branches(hosts):
-    def f(host, project, go_branch_short):
-        presubmit = host in hosts or (project == "go" and go_branch_short != "gotip")
+def presubmit_only_for_ports_or_on_release_branches(ports):
+    def f(port, project, go_branch_short):
+        presubmit = port in ports or (project == "go" and go_branch_short != "gotip")
         return (True, presubmit, True)
 
     return f
@@ -349,7 +349,7 @@ def presubmit_only_for_hosts_or_on_release_branches(hosts):
 # define the builder only for the go project at versions after x, useful for
 # non-default build modes that were created at x.
 def define_for_go_starting_at(x):
-    def f(host, project, go_branch_short):
+    def f(port, project, go_branch_short):
         run = project == "go" and (go_branch_short == "gotip" or go_branch_short >= x)
         return (run, run, run)
 
@@ -359,7 +359,7 @@ def define_for_go_starting_at(x):
 # build and test our various projects.
 RUN_MODS = dict(
     longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}, enabled = presubmit_only_for_projs_or_on_release_branches(["protobuf"])),
-    race = make_run_mod({"race_mode": True}, enabled = presubmit_only_for_hosts_or_on_release_branches(["linux-amd64"])),
+    race = make_run_mod({"race_mode": True}, enabled = presubmit_only_for_ports_or_on_release_branches(["linux-amd64"])),
     boringcrypto = make_run_mod(add_env = {"GOEXPERIMENT": "boringcrypto"}),
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
@@ -474,8 +474,8 @@ def split_builder_type(builder_type):
         arch, suffix = arch.split("_", 2)
     return os, arch, suffix, parts[2:]
 
-def host_of(builder_type):
-    """host_of returns the builder_type stripped of any run mods.
+def port_of(builder_type):
+    """port_of returns the builder_type stripped of any run mods.
 
     Args:
         builder_type: the builder type.
@@ -483,37 +483,49 @@ def host_of(builder_type):
     Returns:
         The builder type's GOOS, GOARCH, and OS version without run mods.
     """
-    os, arch, suffix, _ = split_builder_type(builder_type)
-    host = "%s-%s" % (os, arch)
-    if suffix != "":
-        host += "_" + suffix
-    return host
+    os, arch, _, _ = split_builder_type(builder_type)
+    return "%s-%s" % (os, arch)
 
-def dimensions_of(low_capacity_hosts, builder_type):
-    """dimensions_of returns the bot dimensions for a builder type."""
+def host_of(builder_type):
+    """host_of returns the host builder type for builder_type.
+
+    For example, linux-amd64 is the host for js-wasm as of writing.
+
+    Args:
+        builder_type: the builder type.
+
+    Returns:
+        The host builder type.
+    """
     goos, goarch, suffix, _ = split_builder_type(builder_type)
 
     # We run various builds on a Linux host.
-    if goos in ["js", "wasip1"]:
-        hostos, suffix = "linux", ""
-    else:
-        hostos = goos
+    if goarch == "wasm":
+        return "linux-amd64"
 
-    # We run various builds on an AMD64 host.
-    hostarch = goarch.replace("386", "amd64") \
-        .replace("wasm", "amd64")
+    port = "%s-%s" % (goos, goarch)
+    if suffix != "":
+        return port + "_" + suffix
+    return port
 
-    # TODO(mknyszek): Consider adding "_suffix" to the end of this.
-    host = "%s-%s" % (hostos, hostarch)
+def dimensions_of(low_capacity_hosts, host_type):
+    """dimensions_of returns the bot dimensions for a host type."""
+    goos, goarch, suffix, _ = split_builder_type(host_type)
+
+    host = "%s-%s" % (goos, goarch)
+
+    # We run some 386 ports on amd64 machines.
+    if goarch == "386" and goos in ("linux", "windows"):
+        host = host.replace("386", "amd64")
 
     os = None
 
     if suffix != "":
         # Narrow down the dimensions using the suffix.
-        if hostos == "linux":
+        if goos == "linux":
             # linux-amd64_debian11 -> Debian-11
             os = suffix.replace("debian", "Debian-")
-        elif hostos == "darwin":
+        elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffix
     else:
@@ -526,9 +538,9 @@ def dimensions_of(low_capacity_hosts, builder_type):
         # queue length. This *must* line up with the
         # expected_dimensions field for the botset in the
         # internal config: //starlark/common/envs/golang.star
-        if hostos == "linux" and host not in low_capacity_hosts:
+        if goos == "linux" and host not in low_capacity_hosts:
             os = "Debian-11"
-        elif hostos == "windows":
+        elif goos == "windows":
             os = "Windows-10"
 
         # TODO: Add more platforms and decide on whether we
@@ -620,6 +632,10 @@ def define_builder(env, project, go_branch_short, builder_type):
         The full name including a bucket prefix.
     """
 
+    os, arch, suffix, run_mods = split_builder_type(builder_type)
+    host_type = host_of(builder_type)
+    hostos, hostarch, _, _ = split_builder_type(host_type)
+
     # Contruct the basic properties that will apply to all builders for
     # this combination.
     known_go_branches = dict(GO_BRANCHES)
@@ -632,12 +648,13 @@ def define_builder(env, project, go_branch_short, builder_type):
         # convenience.
         "go_branch": known_go_branches[go_branch_short].branch,
         "bootstrap_version": known_go_branches[go_branch_short].bootstrap,
+        "host": {"goos": hostos, "goarch": hostarch},
+        "target": {"goos": os, "goarch": arch},
         "env": {},
     }
 
-    os, arch, suffix, run_mods = split_builder_type(builder_type)
-
     # We run 386 builds on amd64 with GO[HOST]ARCH set.
+    # TODO(heschi): delete after https://crrev.com/c/5047151 lands.
     if arch == "386":
         base_props["env"]["GOARCH"] = "386"
         base_props["env"]["GOHOSTARCH"] = "386"
@@ -649,10 +666,8 @@ def define_builder(env, project, go_branch_short, builder_type):
     #   cipd search infra/3pp/tools/{wasm_runtime}/linux-amd64 -tag=version:{version}
     # Where wasm_runtime is one of nodejs, wasmtime, wazero.
     #
-    # TODO(dmitshur): We have target_go{os,arch} and by default they would be set to js/wasm.
-    # However, they're currently only for the coordinator, not build-go and test-only builders,
-    # so I can't use them as is. Perhaps we'll consider changing that, and then there won't be
-    # a need to set GOOS/GOARCH in the env here.
+    # TODO(heschi): The use of GOOS and GOARCH here are obsolete.
+    # Delete after https://crrev.com/c/5047151 lands.
     if arch == "wasm":
         base_props["env"]["GOOS"] = os
         base_props["env"]["GOARCH"] = "wasm"
@@ -677,9 +692,9 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Construct the basic dimensions for the build/test running part of the build.
     #
     # Note that these should generally live in the worker pools.
-    base_dims = dimensions_of(env.low_capacity_hosts, builder_type)
+    base_dims = dimensions_of(env.low_capacity_hosts, host_type)
     base_dims["pool"] = env.worker_pool
-    if is_capacity_constrained(env.low_capacity_hosts, builder_type):
+    if is_capacity_constrained(env.low_capacity_hosts, host_type):
         # Scarce resources live in the shared-workers pool.
         base_dims["pool"] = env.shared_worker_pool
 
@@ -827,14 +842,11 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         "pool": env.coordinator_pool,
         "cipd_platform": "linux-amd64",
     }
+
+    # TODO(heschi): target_goos and arch are obsoleted by https://crrev.com/c/5047151.
+    # Clean up.
     target_goos, target_goarch = os, arch
     if arch == "wasm":
-        # TODO(dmitshur): The target_go{os,arch} are currently only passed to
-        # the coordinator builder, not build-go and test-only. So leaving it
-        # as js/wasm will cause skew, since the build-go and test-only host OS
-        # is going to be linux/amd64, and it doesn't yet know the intended target OS.
-        # Something needs to be done here. To make progress, for now,
-        # just override the coordinator to use the linux/amd64 toolchain.
         target_goos, target_goarch = "linux", "amd64"
     coord_props = dict(base_props)
     coord_props.update({
@@ -976,7 +988,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
 
     # Apply policies for each run mod.
     for mod in run_mods:
-        ex, pre, post = RUN_MODS[mod].enabled(host_of(builder_type), project, go_branch_short)
+        ex, pre, post = RUN_MODS[mod].enabled(port_of(builder_type), project, go_branch_short)
         if not ex:
             return False, False, False
         presubmit = presubmit and pre
