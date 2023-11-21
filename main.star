@@ -755,7 +755,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     executable = luci.executable(
         name = "golangbuild",
         cipd_package = "infra/experimental/golangbuild/${platform}",
-        cipd_version = "latest",
+        cipd_version = "git_revision:bf67b5a31d9bdc00da2c27b4e9422692812f1d3a", # pinned while deploying https://crrev.com/c/5047151
         cmd = ["golangbuild"],
     )
 
