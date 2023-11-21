@@ -218,9 +218,10 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
         low_capacity_hosts = low_capacity,
     )
 
-# LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
-# They need to match the builder type, excluding any run mods.
-LOW_CAPACITY_HOSTS = [
+
+# GOOGLE_LOW_CAPACITY_HOSTS are low-capacity hosts that happen to be operated
+# by Google, so we can rely on them being available.
+GOOGLE_LOW_CAPACITY_HOSTS = [
     "darwin-amd64_10.15",
     "darwin-amd64_11",
     "darwin-amd64_12",
@@ -229,6 +230,11 @@ LOW_CAPACITY_HOSTS = [
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
+]
+
+# LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
+# They need to match the builder type, excluding any run mods.
+LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + [
     "freebsd-riscv64",
     "linux-ppc64le",
     "linux-riscv64",
@@ -552,8 +558,8 @@ def dimensions_of(low_capacity_hosts, host_type):
         dims["os"] = os
     return dims
 
-def is_capacity_constrained(low_capacity_hosts, builder_type):
-    dims = dimensions_of(low_capacity_hosts, builder_type)
+def is_capacity_constrained(low_capacity_hosts, host_type):
+    dims = dimensions_of(low_capacity_hosts, host_type)
     return any([dimensions_of(low_capacity_hosts, x) == dims for x in low_capacity_hosts])
 
 def is_fully_supported(dims):
@@ -651,6 +657,7 @@ def define_builder(env, project, go_branch_short, builder_type):
         "host": {"goos": hostos, "goarch": hostarch},
         "target": {"goos": os, "goarch": arch},
         "env": {},
+        "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type)
     }
 
     # We run 386 builds on amd64 with GO[HOST]ARCH set.
@@ -778,7 +785,7 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     # Determine if we should be sharding tests, and how many shards.
     test_shards = 1
-    if project == "go" and not is_capacity_constrained(env.low_capacity_hosts, builder_type) and go_branch_short != "go1.20":
+    if project == "go" and not is_capacity_constrained(env.low_capacity_hosts, host_type) and go_branch_short != "go1.20":
         # TODO(mknyszek): Remove the exception for the go1.20 branch once it
         # is no longer supported.
         test_shards = 4
@@ -960,6 +967,7 @@ def display_for_builder_type(builder_type):
 def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     pt = PROJECTS[project]
     os, arch, _, run_mods = split_builder_type(builder_type)
+    host_type = host_of(builder_type)
 
     # Filter out new ports on old release branches.
     if os == "wasip1" and go_branch_short == "go1.20":  # GOOS=wasip1 is new to Go 1.21.
@@ -981,7 +989,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
     presubmit = postsubmit  # Default to running in presubmit if and only if running in postsubmit.
-    presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, builder_type)  # Capacity.
+    presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
     presubmit = presubmit and "openbsd" not in builder_type  # Not yet enabled. See CL 526255.
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
         presubmit = presubmit and os not in ["js", "wasip1"]
@@ -1281,7 +1289,7 @@ def _define_go_internal_ci():
             # The internal host only has access to some machines. As of
             # writing, that means all the GCE-hosted (high-capacity) builders
             # and that's it.
-            exists = exists and not is_capacity_constrained(LOW_CAPACITY_HOSTS, builder_type)
+            exists = exists and not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_of(builder_type))
             if not exists:
                 continue
 
