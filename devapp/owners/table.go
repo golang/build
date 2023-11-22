@@ -41,7 +41,6 @@ var (
 	filippo      = gh("FiloSottile")
 	findleyr     = gh("findleyr")
 	gri          = gh("griesemer")
-	heschi       = gh("heschi")
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
 	iancottrell  = gh("ianthehat")
@@ -739,7 +738,7 @@ var entries = map[string]*Entry{
 	},
 	"build": {
 		Primary:   []Owner{releaseTeam},
-		Secondary: []Owner{dmitshur, amedee, heschi},
+		Secondary: []Owner{dmitshur, amedee},
 	},
 	"build/maintner/cmd/maintserve": {
 		Primary: []Owner{dmitshur},
@@ -838,7 +837,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
 	},
 	"tools/cmd/goimports": {
-		Primary:   []Owner{heschi},
+		Primary:   []Owner{toolsTeam},
 		Secondary: []Owner{bradfitz},
 	},
 	"tools/cmd/present2md": {
@@ -888,7 +887,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{bcmills, matloob},
 	},
 	"tools/imports": {
-		Primary: []Owner{heschi},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/analysisinternal": {
 		Primary:   []Owner{matloob},
@@ -899,16 +898,16 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{matloob, bcmills},
 	},
 	"tools/internal/fastwalk": {
-		Primary: []Owner{heschi},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/gocommand": {
-		Primary: []Owner{heschi},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/gopathwalk": {
-		Primary: []Owner{heschi},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/imports": {
-		Primary: []Owner{heschi},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/jsonrpc2": {
 		Primary:   []Owner{iancottrell},
@@ -1024,5 +1023,5 @@ var wasmOwners = []Owner{neelance, cherryyz}
 
 var modProxyOwners = &Entry{
 	Primary:   []Owner{toolsTeam},
-	Secondary: []Owner{suzmue, heschi, findleyr, hyangah},
+	Secondary: []Owner{suzmue, findleyr, hyangah},
 }
