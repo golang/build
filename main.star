@@ -660,13 +660,24 @@ def define_builder(env, project, go_branch_short, builder_type):
         "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type)
     }
 
+    # We run 386 builds on amd64 with GO[HOST]ARCH set.
+    # TODO(heschi): delete after https://crrev.com/c/5047151 lands.
+    if arch == "386":
+        base_props["env"]["GOARCH"] = "386"
+        base_props["env"]["GOHOSTARCH"] = "386"
+
     # We run GOARCH=wasm builds on linux/amd64 with GOOS/GOARCH set,
     # and the applicable Wasm runtime provided as a CIPD dependency.
     #
     # The availability of a given version in CIPD can be checked with:
     #   cipd search infra/3pp/tools/{wasm_runtime}/linux-amd64 -tag=version:{version}
     # Where wasm_runtime is one of nodejs, wasmtime, wazero.
+    #
+    # TODO(heschi): The use of GOOS and GOARCH here are obsolete.
+    # Delete after https://crrev.com/c/5047151 lands.
     if arch == "wasm":
+        base_props["env"]["GOOS"] = os
+        base_props["env"]["GOARCH"] = "wasm"
         if os == "js":
             if suffix != "":
                 fail("unknown GOOS=js builder suffix: %s" % suffix)
@@ -744,7 +755,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     executable = luci.executable(
         name = "golangbuild",
         cipd_package = "infra/experimental/golangbuild/${platform}",
-        cipd_version = "latest",
+        cipd_version = "git_revision:bf67b5a31d9bdc00da2c27b4e9422692812f1d3a", # pinned while deploying https://crrev.com/c/5047151
         cmd = ["golangbuild"],
     )
 
@@ -839,6 +850,11 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         "cipd_platform": "linux-amd64",
     }
 
+    # TODO(heschi): target_goos and arch are obsoleted by https://crrev.com/c/5047151.
+    # Clean up.
+    target_goos, target_goarch = os, arch
+    if arch == "wasm":
+        target_goos, target_goarch = "linux", "amd64"
     coord_props = dict(base_props)
     coord_props.update({
         "mode": GOLANGBUILD_MODES["COORDINATOR"],
@@ -847,6 +863,8 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
             "test_builder": "golang/" + env.worker_bucket + "/" + test_name,
             "num_test_shards": test_shards,
             "builders_to_trigger_after_toolchain_build": builders_to_trigger,
+            "target_goos": target_goos,
+            "target_goarch": target_goarch,
         },
     })
     emit_builder(
