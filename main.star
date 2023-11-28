@@ -607,7 +607,7 @@ def builder_name(project, go_branch_short, builder_type):
 # project_title produces a short title for the given project.
 def project_title(project):
     if project == "go":
-        fail("project_title isn't expected to be used for 'go'")
+        fail("project_title doesn't have support for the 'go' project")
     elif project == "dl":
         return "golang.org/dl"
     elif project == "protobuf":
@@ -616,6 +616,16 @@ def project_title(project):
         # A golang.org/x/* repository. Since these are very common,
         # the 'golang.org/' prefix is left out for brevity.
         return "x/" + project
+
+# console_name produces the console name for the given project and branch.
+def console_name(project, go_branch_short, suffix):
+    if project == "go":
+        fail("console_name doesn't have support for the 'go' project")
+    sort_letter = "x"
+    if not project_title(project).startswith("x/"):
+        # Put "z" at the beginning to sort this at the bottom of the page.
+        sort_letter = "z"
+    return "%s-%s-%s" % (sort_letter, project, go_branch_short) + suffix
 
 # Enum values for golangbuild's "mode" property.
 GOLANGBUILD_MODES = {
@@ -1205,7 +1215,7 @@ def _define_go_ci():
                                     # but because they have the same builder set and these
                                     # bubbles show just the latest build, it doesn't actually
                                     # matter.
-                                    "golang/x-%s-%s" % (project, go_branch_short)
+                                    "golang/" + console_name(project, go_branch_short, "")
                                     for project in PROJECTS
                                     if project != "go"
                                 ],
@@ -1215,19 +1225,15 @@ def _define_go_ci():
                 )
             else:
                 console_title = project_title(project) + "-" + go_branch_short
-                sort_letter = "x"
-                if not console_title.startswith("x/"):
-                    # Put "z" at the beginning to sort this at the bottom of the page.
-                    sort_letter = "z"
                 luci.console_view(
-                    name = "%s-%s-%s" % (sort_letter, project, go_branch_short),
+                    name = console_name(project, go_branch_short, ""),
                     repo = "https://go.googlesource.com/%s" % project,
                     title = console_title,
                     refs = ["refs/heads/master"],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
                 luci.console_view(
-                    name = "%s-%s-%s-by-go" % (sort_letter, project, go_branch_short),
+                    name = console_name(project, go_branch_short, "-by-go"),
                     repo = "https://go.googlesource.com/go",
                     title = console_title + "-by-go-commit",
                     refs = ["refs/heads/" + go_branch.branch],
