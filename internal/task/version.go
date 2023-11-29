@@ -24,6 +24,7 @@ type VersionTasks struct {
 	Gerrit     GerritClient
 	CloudBuild CloudBuildClient
 	GoProject  string
+	UpdateProxyTestRepoTasks
 }
 
 // GetCurrentMajor returns the most recent major Go version, and the time at

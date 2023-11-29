@@ -19,16 +19,6 @@ type UpdateProxyTestRepoTasks struct {
 	Branch    string
 }
 
-func (t *UpdateProxyTestRepoTasks) NewDefinition() *wf.Definition {
-	wd := wf.New()
-	p := Published{
-		Version: "go1.21.3",
-	}
-	done := wf.Task1(wd, "update", t.UpdateProxyTestRepo, wf.Const(p))
-	wf.Output(wd, fmt.Sprintf("Updated proxy test repo to %s", p.Version), done)
-	return wd
-}
-
 func (t *UpdateProxyTestRepoTasks) UpdateProxyTestRepo(ctx *wf.TaskContext, published Published) (string, error) {
 	version := strings.TrimPrefix(published.Version, "go")
 

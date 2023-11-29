@@ -131,6 +131,8 @@ func main() {
 		Gitiles: "https://go-internal.googlesource.com",
 		Client:  gerrit.NewClient("https://go-internal-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
+	gitClient := &task.Git{}
+	gitClient.UseOAuth2Auth(creds.TokenSource)
 	mailFunc := task.NewSendGridMailClient(*sendgridAPIKey).SendMail
 	commTasks := task.CommunicationTasks{
 		AnnounceMailTasks: task.AnnounceMailTasks{
@@ -269,6 +271,11 @@ func main() {
 		Gerrit:     gerritClient,
 		CloudBuild: cloudBuildClient,
 		GoProject:  "go",
+		UpdateProxyTestRepoTasks: task.UpdateProxyTestRepoTasks{
+			Git:       gitClient,
+			GerritURL: "https://golang-modproxy-test.googlesource.com/latest-go-version",
+			Branch:    "main",
+		},
 	}
 	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, commTasks); err != nil {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)
@@ -299,21 +306,12 @@ func main() {
 	}
 	dh.RegisterDefinition("Tag a new version of x/telemetry/config (if necessary)", tagTelemetryTasks.NewDefinition())
 
-	git := &task.Git{}
-	git.UseOAuth2Auth(creds.TokenSource)
 	privateSyncTask := &task.PrivateMasterSyncTask{
-		Git:              git,
+		Git:              gitClient,
 		PrivateGerritURL: "https://go-internal.googlesource.com/golang/go-private",
 		Ref:              "public",
 	}
 	dh.RegisterDefinition("Sync go-private master branch with public", privateSyncTask.NewDefinition())
-
-	updateProxyTest := &task.UpdateProxyTestRepoTasks{
-		Git:       git,
-		GerritURL: "https://golang-modproxy-test.googlesource.com/latest-go-version",
-		Branch:    "main",
-	}
-	dh.RegisterDefinition("Update mod proxy test case", updateProxyTest.NewDefinition())
 
 	var base *url.URL
 	if *baseURL != "" {
