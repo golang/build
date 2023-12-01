@@ -218,7 +218,6 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
         low_capacity_hosts = low_capacity,
     )
 
-
 # GOOGLE_LOW_CAPACITY_HOSTS are low-capacity hosts that happen to be operated
 # by Google, so we can rely on them being available.
 GOOGLE_LOW_CAPACITY_HOSTS = [
@@ -652,6 +651,7 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     Returns:
         The full name including a bucket prefix.
+        A list of the builders this builder will trigger (by full name).
     """
 
     os, arch, suffix, run_mods = split_builder_type(builder_type)
@@ -673,7 +673,7 @@ def define_builder(env, project, go_branch_short, builder_type):
         "host": {"goos": hostos, "goarch": hostarch},
         "target": {"goos": os, "goarch": arch},
         "env": {},
-        "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type)
+        "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type),
     }
 
     # We run GOARCH=wasm builds on linux/amd64 with GOOS/GOARCH set,
@@ -790,7 +790,8 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     # Determine if we should be sharding tests, and how many shards.
     test_shards = 1
-    if project == "go" and not is_capacity_constrained(env.low_capacity_hosts, host_type) and go_branch_short != "go1.20":
+    capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
+    if project == "go" and not capacity_constrained and go_branch_short != "go1.20":
         # TODO(mknyszek): Remove the exception for the go1.20 branch once it
         # is no longer supported.
         test_shards = 4
@@ -801,14 +802,15 @@ def define_builder(env, project, go_branch_short, builder_type):
             test_shards = 3
 
     # Emit the builder definitions.
-    if project == "go" or test_shards > 1:
-        define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
+    downstream_builders = []
+    if test_shards > 1 or (project == "go" and not capacity_constrained):
+        downstream_builders = define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
     elif test_shards == 1:
         define_allmode_builder(env, name, base_props, base_dims, emit_builder)
     else:
         fail("unhandled builder definition")
 
-    return env.bucket + "/" + name
+    return env.bucket + "/" + name, downstream_builders
 
 def define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
     os, arch, _, _ = split_builder_type(builder_type)
@@ -840,7 +842,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
     builders_to_trigger = []
     if project == "go" and env.bucket == "ci":
         builders_to_trigger = [
-            "golang/%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
+            "%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
             for project in PROJECTS
             if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[2]
         ]
@@ -862,7 +864,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
             "build_builder": "golang/" + env.worker_bucket + "/" + build_name,
             "test_builder": "golang/" + env.worker_bucket + "/" + test_name,
             "num_test_shards": test_shards,
-            "builders_to_trigger_after_toolchain_build": builders_to_trigger,
+            "builders_to_trigger_after_toolchain_build": ["golang/%s" % name for name in builders_to_trigger],
         },
     })
     emit_builder(
@@ -911,6 +913,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         service_account = env.worker_sa,
         allowed_property_overrides = ["go_commit", "test_shard"],
     )
+    return builders_to_trigger
 
 def define_allmode_builder(env, name, base_props, base_dims, emit_builder):
     # Create an "ALL" mode builder which just performs the full build serially.
@@ -1031,6 +1034,8 @@ POST_ACTIONS = [
 
 def _define_go_ci():
     postsubmit_builders_by_port = {}
+    postsubmit_builders_by_project_and_branch = {}
+    postsubmit_builders_with_go_repo_trigger = {}
     for project in PROJECTS:
         for go_branch_short, go_branch in GO_BRANCHES.items():
             # Set up a CQ group for the builder definitions below.
@@ -1075,7 +1080,7 @@ def _define_go_ci():
                     continue
 
                 # Define presubmit builders.
-                name = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
+                name, _ = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
                 luci.cq_tryjob_verifier(
                     builder = name,
                     cq_group = cq_group.name,
@@ -1105,38 +1110,42 @@ def _define_go_ci():
 
                 # Define post-submit builders.
                 if postsubmit:
-                    name = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
+                    name, triggers = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
                     postsubmit_builders[name] = builder_type
+
+                    # Collect all the builders that have triggers from the Go repository. Every builder needs at least one.
+                    if project == "go":
+                        postsubmit_builders_with_go_repo_trigger[name] = True
+                        for name in triggers:
+                            postsubmit_builders_with_go_repo_trigger[name] = True
 
             # For golang.org/x/tools, also include coverage for extra Go versions.
             if project == "tools" and go_branch_short == "gotip":
                 for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
                     builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
-                    try_builder = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
+                    try_builder, _ = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
                     luci.cq_tryjob_verifier(
                         builder = try_builder,
                         cq_group = cq_group.name,
                         disable_reuse = True,
                     )
-                    ci_builder = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
+                    ci_builder, _ = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
                     postsubmit_builders[ci_builder] = builder_type
 
-            # Collect all the postsubmit builders by port.
+            # Collect all the postsubmit builders by port and project.
             for name, builder_type in postsubmit_builders.items():
                 os, arch, _, _ = split_builder_type(builder_type)
                 port = "%s/%s" % (os, arch)
-                postsubmit_builders_by_port.setdefault(port, [])
-                postsubmit_builders_by_port[port].append(name)
+                postsubmit_builders_by_port.setdefault(port, []).append(name)
+                postsubmit_builders_by_project_and_branch.setdefault((project, go_branch.branch, go_branch_short), []).append(name)
 
             # Create the gitiles_poller last because we need the full set of builders to
             # trigger at the point of definition.
             #
-            # N.B. A gitiles poller is only necessary for the subrepo itself.
-            # Builds against go on different branches will be triggered by the
-            # corresponding main Go repo builders (e.g. go1.20-linux-amd64 will
-            # trigger x_build-go1.20-linux-amd64 against the same go1.20 branch commit).
-            # This is controlled by the "builders_to_trigger" property on those
-            # builders.
+            # This is the poller for commits coming in from the target repo. Subrepo builders are
+            # also triggered by the main Go repo builds in one of two ways. Either the main repo builds
+            # trigger them directly once the toolchain builder is done, or that builder is not added to
+            # list of builders with triggers and we generate pollers for those builders at the end.
             if project == "go":
                 poller_branch = go_branch.branch
             else:
@@ -1228,6 +1237,26 @@ def _define_go_ci():
                     entries = make_console_view_entries(postsubmit_builders),
                 )
 
+    # Collect all the postsubmit builders that still need triggers.
+    postsubmit_builders_need_triggers = {}
+    for target, builders in postsubmit_builders_by_project_and_branch.items():
+        for name in builders:
+            if name not in postsubmit_builders_with_go_repo_trigger:
+                postsubmit_builders_need_triggers.setdefault(target, []).append(name)
+
+    # Emit gitiles_pollers for all the builders who don't have triggers.
+    for target, builders in postsubmit_builders_need_triggers.items():
+        project, go_branch, go_branch_short = target
+        if project == "go":
+            fail("discovered main Go repo builders without triggers: %s" % builders)
+        luci.gitiles_poller(
+            name = "%s-%s-go-trigger" % (project, go_branch_short),
+            bucket = "ci",
+            repo = "https://go.googlesource.com/go",
+            refs = ["refs/heads/" + go_branch],
+            triggers = builders,
+        )
+
     # Emit builder groups for each port.
     for port, builders in postsubmit_builders_by_port.items():
         luci.list_view(
@@ -1289,7 +1318,7 @@ def _define_go_internal_ci():
 
             # Define presubmit builders. Since there's no postsubmit to monitor,
             # all possible builders are required.
-            name = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
+            name, _ = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
