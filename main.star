@@ -469,6 +469,19 @@ PROJECTS = {
     "website": PT.TOOL,
 }
 
+# EXTRA_DEPENDENCIES specifies custom additional dependencies
+# to append when applies(project, port, run_mods) matches.
+EXTRA_DEPENDENCIES = [
+    # The protobuf repo needs extra dependencies for its integration test.
+    # See its integration_test.go file and go.dev/issue/64066.
+    struct(
+        applies = lambda project, port, run_mods: project == "protobuf" and port == "linux-amd64" and "longtest" in run_mods,
+        test_deps = """@Subdir bin
+golang/third_party/protoc_with_conformance/${platform} version:25.0-rc2
+""",
+    ),
+]
+
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
@@ -538,13 +551,13 @@ def split_builder_type(builder_type):
     return os, arch, suffix, parts[2:]
 
 def port_of(builder_type):
-    """port_of returns the builder_type stripped of any run mods.
+    """port_of returns the builder_type stripped of OS version and run mods.
 
     Args:
         builder_type: the builder type.
 
     Returns:
-        The builder type's GOOS, GOARCH, and OS version without run mods.
+        The builder type's GOOS and GOARCH, without OS version and run mods.
     """
     os, arch, _, _ = split_builder_type(builder_type)
     return "%s-%s" % (os, arch)
@@ -737,6 +750,11 @@ def define_builder(env, project, go_branch_short, builder_type):
         "env": {},
         "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type),
     }
+    for d in EXTRA_DEPENDENCIES:
+        if not d.applies(project, port_of(builder_type), run_mods):
+            continue
+        if d.test_deps != "":
+            base_props["tools_extra_test"] = d.test_deps
 
     # We run GOARCH=wasm builds on linux/amd64 with GOOS/GOARCH set,
     # and the applicable Wasm runtime provided as a CIPD dependency.
