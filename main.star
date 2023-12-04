@@ -247,10 +247,15 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + [
     "solaris-amd64",
 ]
 
-# DEFAULT_PLATFORM_SUFFIX defines the default host suffixes for builder types which
-# do not have one.
-DEFAULT_PLATFORM_SUFFIX = {
+# DEFAULT_HOST_SUFFIX defines the default host suffixes for builder types which
+# do not specify one.
+DEFAULT_HOST_SUFFIX = {
     "darwin-amd64": "14",
+    "linux-amd64": "debian11",
+    "linux-arm64": "debian11",
+    "openbsd-amd64": "7.2",
+    "windows-386": "10",
+    "windows-amd64": "10",
 }
 
 # The try bucket will include builders which work on pre-commit or pre-review
@@ -513,11 +518,6 @@ def split_builder_type(builder_type):
     if "_" in arch:
         arch, suffix = arch.split("_", 2)
 
-    # Set the default suffix, if we don't have one and one exists.
-    platform = "%s-%s" % (os, arch)
-    if not suffix and platform in DEFAULT_PLATFORM_SUFFIX:
-        suffix = DEFAULT_PLATFORM_SUFFIX[platform]
-
     return os, arch, suffix, parts[2:]
 
 def port_of(builder_type):
@@ -554,7 +554,7 @@ def host_of(builder_type):
         return port + "_" + suffix
     return port
 
-def dimensions_of(low_capacity_hosts, host_type):
+def dimensions_of(host_type):
     """dimensions_of returns the bot dimensions for a host type."""
     goos, goarch, suffix, _ = split_builder_type(host_type)
 
@@ -566,32 +566,42 @@ def dimensions_of(low_capacity_hosts, host_type):
 
     os = None
 
+    # Narrow down the dimensions using the suffix.
+
+    # Set the default suffix, if we don't have one and one exists.
+    if suffix == "" and host in DEFAULT_HOST_SUFFIX:
+        suffix = DEFAULT_HOST_SUFFIX[host]
+
+    # Fail if we don't have a suffix and this isn't a low capacity host.
+    #
+    # It's really important that we specify an OS version so that
+    # robocrop can correctly and precisely identify task queue length
+    # for different types of machines. This *must* line up with the
+    # expected_dimensions field for the botset in the internal config:
+    # //starlark/common/envs/golang.star
+    #
+    # Low capacity hosts don't require a suffix because the OS versions are
+    # manually managed and we don't always control them, so we want to be
+    # as general as possible to avoid downtime.
+    #
+    # Note: it's a little odd that we don't rely on a low_capacity_hosts
+    # passed down to us from an environment, but that's because we care about
+    # the broadest possible definition of "low capacity" here for OS version
+    # specification.
+    if suffix == "" and host not in LOW_CAPACITY_HOSTS:
+        fail("failed to find required OS version for host %s" % host)
+
     if suffix != "":
-        # Narrow down the dimensions using the suffix.
         if goos == "linux":
             # linux-amd64_debian11 -> Debian-11
             os = suffix.replace("debian", "Debian-")
         elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffix
-    else:
-        # Set the default dimensions for each platform, but only
-        # if it's not a low-capacity host. Low-capacity hosts
-        # need their dimensions to be as general as possible.
-        #
-        # Even without a suffix, we need to narrow down the
-        # dimensions so robocrop can correctly identify the
-        # queue length. This *must* line up with the
-        # expected_dimensions field for the botset in the
-        # internal config: //starlark/common/envs/golang.star
-        if goos == "linux" and host not in low_capacity_hosts:
-            os = "Debian-11"
         elif goos == "windows":
-            os = "Windows-10"
-
-        # TODO: Add more platforms and decide on whether we
-        # even want this concept of a "default", suffixless
-        # builder.
+            os = "Windows-" + suffix
+        elif goos == "openbsd":
+            os = "openbsd-" + suffix
 
     dims = {"cipd_platform": host.replace("darwin", "mac")}
     if os != None:
@@ -599,8 +609,8 @@ def dimensions_of(low_capacity_hosts, host_type):
     return dims
 
 def is_capacity_constrained(low_capacity_hosts, host_type):
-    dims = dimensions_of(low_capacity_hosts, host_type)
-    return any([dimensions_of(low_capacity_hosts, x) == dims for x in low_capacity_hosts])
+    dims = dimensions_of(host_type)
+    return any([dimensions_of(x) == dims for x in low_capacity_hosts])
 
 def is_fully_supported(dims):
     """Reports whether dims identifies a platform fully supported by LUCI.
@@ -739,7 +749,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Construct the basic dimensions for the build/test running part of the build.
     #
     # Note that these should generally live in the worker pools.
-    base_dims = dimensions_of(env.low_capacity_hosts, host_type)
+    base_dims = dimensions_of(host_type)
     base_dims["pool"] = env.worker_pool
     if is_capacity_constrained(env.low_capacity_hosts, host_type):
         # Scarce resources live in the shared-workers pool.
@@ -759,7 +769,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             13: "14c18",  # released Dec 2022, macOS 13 released Oct 2022
             14: "15a240d",  # released Sep 2023, macOS 14 released Sep 2023
         }
-        base_props["xcode_version"] = xcode_versions[int(suffix.split(".")[0])]
+        base_props["xcode_version"] = xcode_versions[int(dimensions_of(host_type)["os"].split(".")[0].replace("Mac-", ""))]
 
     # Turn on the no-network check.
     if builder_type in NO_NETWORK_BUILDERS:
