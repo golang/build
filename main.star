@@ -247,6 +247,12 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + [
     "solaris-amd64",
 ]
 
+# DEFAULT_PLATFORM_SUFFIX defines the default host suffixes for builder types which
+# do not have one.
+DEFAULT_PLATFORM_SUFFIX = {
+    "darwin-amd64": "14",
+}
+
 # The try bucket will include builders which work on pre-commit or pre-review
 # code.
 PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-builder", "public-worker-builder", LOW_CAPACITY_HOSTS)
@@ -280,6 +286,7 @@ BUILDER_TYPES = [
     "darwin-amd64_12",
     "darwin-amd64_13",
     "darwin-amd64_14",
+    "darwin-amd64-nocgo",
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
@@ -293,6 +300,7 @@ BUILDER_TYPES = [
     "linux-amd64-longtest-race",
     "linux-amd64-misccompile",
     "linux-amd64-newinliner",
+    "linux-amd64-nocgo",
     "linux-amd64-race",
     "linux-arm64",
     "linux-ppc64le",
@@ -366,6 +374,14 @@ def define_for_go_starting_at(x):
 
     return f
 
+# define the builder only for postsubmit of the go project.
+def define_for_go_postsubmit():
+    def f(port, project, go_branch_short):
+        run = project == "go"
+        return (run, False, run)
+
+    return f
+
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
@@ -376,6 +392,7 @@ RUN_MODS = dict(
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
     misccompile = make_run_mod({"compile_only": True, "misc_ports": True}),
     newinliner = make_run_mod(add_env = {"GOEXPERIMENT": "newinliner"}, enabled = define_for_go_starting_at("go1.22")),
+    nocgo = make_run_mod(add_env = {"CGO_ENABLED": "0"}, enabled = define_for_go_postsubmit()),
 )
 
 # PT is Project Type, a classification of a project.
@@ -483,6 +500,12 @@ def split_builder_type(builder_type):
     suffix = ""
     if "_" in arch:
         arch, suffix = arch.split("_", 2)
+
+    # Set the default suffix, if we don't have one and one exists.
+    platform = "%s-%s" % (os, arch)
+    if not suffix and platform in DEFAULT_PLATFORM_SUFFIX:
+        suffix = DEFAULT_PLATFORM_SUFFIX[platform]
+
     return os, arch, suffix, parts[2:]
 
 def port_of(builder_type):
