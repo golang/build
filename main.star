@@ -302,6 +302,7 @@ BUILDER_TYPES = [
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
     "linux-amd64-race",
+    "linux-amd64-staticlockranking",
     "linux-arm64",
     "linux-ppc64le",
     "linux-riscv64",
@@ -335,13 +336,14 @@ NO_NETWORK_BUILDERS = [
 # - exists, whether the builder should be created at all
 # - presubmit, whether the builder should be run in presubmit by default
 # - postsubmit, whether the builder should run in postsubmit
+# - presubmit location filters, any cq.location_filter to apply to presubmit
 def make_run_mod(add_props = {}, add_env = {}, enabled = None):
     def apply_mod(props):
         props.update(add_props)
         props["env"].update(add_env)
 
     if enabled == None:
-        enabled = lambda port, project, go_branch_short: (True, True, True)
+        enabled = lambda port, project, go_branch_short: (True, True, True, [])
     return struct(
         enabled = enabled,
         apply = apply_mod,
@@ -352,7 +354,7 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None):
 def presubmit_only_for_projs_or_on_release_branches(projects):
     def f(port, project, go_branch_short):
         presubmit = project in projects or (project == "go" and go_branch_short != "gotip")
-        return (True, presubmit, True)
+        return (True, presubmit, True, [])
 
     return f
 
@@ -361,7 +363,7 @@ def presubmit_only_for_projs_or_on_release_branches(projects):
 def presubmit_only_for_ports_or_on_release_branches(ports):
     def f(port, project, go_branch_short):
         presubmit = port in ports or (project == "go" and go_branch_short != "gotip")
-        return (True, presubmit, True)
+        return (True, presubmit, True, [])
 
     return f
 
@@ -370,7 +372,7 @@ def presubmit_only_for_ports_or_on_release_branches(ports):
 def define_for_go_starting_at(x):
     def f(port, project, go_branch_short):
         run = project == "go" and (go_branch_short == "gotip" or go_branch_short >= x)
-        return (run, run, run)
+        return (run, run, run, [])
 
     return f
 
@@ -378,7 +380,16 @@ def define_for_go_starting_at(x):
 def define_for_go_postsubmit():
     def f(port, project, go_branch_short):
         run = project == "go"
-        return (run, False, run)
+        return (run, False, run, [])
+
+    return f
+
+# define the builder only for postsubmit of the go project, or for presubmit
+# of the go project if a particular location is touched.
+def define_for_go_postsubmit_or_presubmit_with_filters(filters):
+    def f(port, project, go_branch_short):
+        run = project == "go"
+        return (run, run, run, filters)
 
     return f
 
@@ -393,6 +404,7 @@ RUN_MODS = dict(
     misccompile = make_run_mod({"compile_only": True, "misc_ports": True}),
     newinliner = make_run_mod(add_env = {"GOEXPERIMENT": "newinliner"}, enabled = define_for_go_starting_at("go1.22")),
     nocgo = make_run_mod(add_env = {"CGO_ENABLED": "0"}, enabled = define_for_go_postsubmit()),
+    staticlockranking = make_run_mod(add_env = {"GOEXPERIMENT": "staticlockranking"}, enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/.+"])),
 )
 
 # PT is Project Type, a classification of a project.
@@ -984,10 +996,11 @@ def display_for_builder_type(builder_type):
     category = "|".join(components[:2])
     return category, short_name  # Produces: "$GOOS|$GOARCH", $HOST_SPECIFIER(-$RUN_MOD)*
 
-# enabled returns three boolean values: the first one indicates if this
-# builder_type should exist at all for the given project and branch, the
-# second whether it should run in presubmit by default, and the third if it
-# should run in postsubmit.
+# enabled returns three boolean values and a list or None. The first boolean value
+# indicates if this builder_type should exist at all for the given project
+# and branch, the second whether it should run in presubmit by default, and
+# the third if it should run in postsubmit. The final list is a list of cq.location_filters
+# if the builder should run in presubmit by default.
 def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     pt = PROJECTS[project]
     os, arch, _, run_mods = split_builder_type(builder_type)
@@ -995,7 +1008,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
 
     # Filter out new ports on old release branches.
     if os == "wasip1" and go_branch_short == "go1.20":  # GOOS=wasip1 is new to Go 1.21.
-        return False, False, False
+        return False, False, False, []
 
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
@@ -1019,14 +1032,17 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
         presubmit = presubmit and os not in ["js", "wasip1"]
 
     # Apply policies for each run mod.
+    presubmit_filters = []
     for mod in run_mods:
-        ex, pre, post = RUN_MODS[mod].enabled(port_of(builder_type), project, go_branch_short)
+        ex, pre, post, prefilt = RUN_MODS[mod].enabled(port_of(builder_type), project, go_branch_short)
         if not ex:
-            return False, False, False
+            return False, False, False, []
         presubmit = presubmit and pre
         postsubmit = postsubmit and post
+        if prefilt:
+            presubmit_filters.extend(prefilt)
 
-    return True, presubmit, postsubmit
+    return True, presubmit, postsubmit, presubmit_filters
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
 #
@@ -1098,7 +1114,7 @@ def _define_go_ci():
             # Define builders.
             postsubmit_builders = {}
             for builder_type in BUILDER_TYPES:
-                exists, presubmit, postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
+                exists, presubmit, postsubmit, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
                 if not exists:
                     continue
 
@@ -1109,6 +1125,14 @@ def _define_go_ci():
                     cq_group = cq_group.name,
                     includable_only = not presubmit,
                     disable_reuse = True,
+                    location_filters = [
+                        cq.location_filter(
+                            gerrit_host_regexp = "go-review.googlesource.com",
+                            gerrit_project_regexp = "^%s$" % project,
+                            path_regexp = filter,
+                        )
+                        for filter in presubmit_filters
+                    ],
                 )
 
                 # For golang.org/x repos, include the ability to run presubmit
@@ -1330,7 +1354,7 @@ def _define_go_internal_ci():
         )
 
         for builder_type in BUILDER_TYPES:
-            exists, _, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
+            exists, _, _, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
 
             # The internal host only has access to some machines. As of
             # writing, that means all the GCE-hosted (high-capacity) builders
@@ -1346,6 +1370,14 @@ def _define_go_internal_ci():
                 builder = name,
                 cq_group = cq_group_name,
                 disable_reuse = True,
+                location_filters = [
+                    cq.location_filter(
+                        gerrit_host_regexp = "go-internal-review.googlesource.com",
+                        gerrit_project_regexp = "^go$",
+                        path_regexp = filter,
+                    )
+                    for filter in presubmit_filters
+                ],
             )
 
 _define_go_ci()
