@@ -354,12 +354,21 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None):
         apply = apply_mod,
     )
 
-# enable only if project matches one of the provided projects, or
-# for the release branches in the Go project.
+# enable only if project matches one of the provided projects and certain source
+# locations are modified by the CL, or always for the release branches of the go project.
+# projects is a dict mapping a project name to filters.
 def presubmit_only_for_projs_or_on_release_branches(projects):
     def f(port, project, go_branch_short):
-        presubmit = project in projects or (project == "go" and go_branch_short != "gotip")
-        return (True, presubmit, True, [])
+        filters = []
+        if project == "go":
+            presubmit = project in projects or go_branch_short != "gotip"
+            if project in projects and go_branch_short == "gotip":
+                filters = projects[project]
+        else:
+            presubmit = project in projects
+            if presubmit:
+                filters = projects[project]
+        return (True, presubmit, True, filters)
 
     return f
 
@@ -401,7 +410,15 @@ def define_for_go_postsubmit_or_presubmit_with_filters(filters):
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
-    longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}, enabled = presubmit_only_for_projs_or_on_release_branches(["protobuf"])),
+    longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}, enabled = presubmit_only_for_projs_or_on_release_branches({
+        "protobuf": [],
+        "go": [
+            # Enable longtest builders on go against tip if files related to vendored code are modified.
+            "src/{,cmd/}go[.]{mod,sum}",
+            "src/{,cmd/}vendor/.+",
+            "src/.+_bundle.go",
+        ],
+    })),
     race = make_run_mod({"race_mode": True}, enabled = presubmit_only_for_ports_or_on_release_branches(["linux-amd64"])),
     boringcrypto = make_run_mod(add_env = {"GOEXPERIMENT": "boringcrypto"}),
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
@@ -1364,7 +1381,7 @@ def _define_go_internal_ci():
         )
 
         for builder_type in BUILDER_TYPES:
-            exists, _, _, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
+            exists, _, _, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
 
             # The internal host only has access to some machines. As of
             # writing, that means all the GCE-hosted (high-capacity) builders
@@ -1380,14 +1397,6 @@ def _define_go_internal_ci():
                 builder = name,
                 cq_group = cq_group_name,
                 disable_reuse = True,
-                location_filters = [
-                    cq.location_filter(
-                        gerrit_host_regexp = "go-internal-review.googlesource.com",
-                        gerrit_project_regexp = "^go$",
-                        path_regexp = filter,
-                    )
-                    for filter in presubmit_filters
-                ],
             )
 
 _define_go_ci()
