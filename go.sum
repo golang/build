@@ -1446,6 +1446,8 @@ modernc.org/z v1.0.1-0.20210308123920-1f282aa71362/go.mod h1:8/SRk5C/HgiQWCgXdfp
 modernc.org/z v1.0.1/go.mod h1:8/SRk5C/HgiQWCgXdfpb+1RvhORdkz5sw72d3jjtyqA=
 modernc.org/zappy v1.0.0/go.mod h1:hHe+oGahLVII/aTTyWK/b53VDHMAGCBYYeZ9sn83HC4=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
+rsc.io/github v0.3.0 h1:SxddQ4yzzaxyZGbyfaXP0qeqp2VLgFdvJs60bWqCV4w=
+rsc.io/github v0.3.0/go.mod h1:sfdP6cCYDjTBOwHSu579zk9KnSkyBCryjecSeffMKXs=
 rsc.io/markdown v0.0.0-20240117044121-669d2fdf1650 h1:fuOABZYWclLVNotDsHVaFixLdtoC7+UQZJ0KSC1ocm0=
 rsc.io/markdown v0.0.0-20240117044121-669d2fdf1650/go.mod h1:8xcPgWmwlZONN1D9bjxtHEjrUtSEa3fakVF8iaewYKQ=
 rsc.io/pdf v0.1.1 h1:k1MczvYDUvJBe93bYd7wrZLLUEcLZAuF824/I4e5Xr4=
