@@ -229,6 +229,7 @@ GOOGLE_LOW_CAPACITY_HOSTS = [
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
+    "windows-arm64",
 ]
 
 # LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
@@ -326,6 +327,7 @@ BUILDER_TYPES = [
     "windows-amd64",
     "windows-amd64-longtest",
     "windows-amd64-race",
+    "windows-arm64",
 ]
 
 # NO_NETWORK_BUILDERS are a subset of builder types
