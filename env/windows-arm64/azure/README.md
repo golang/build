@@ -49,7 +49,7 @@ Notes:
 * the "image" argument above is arm-specific, and in addition "size" argument also encodes the arm64-ness of the VM (strangely)
 
 
-## VM setup
+## VM setup (part 1 of 2)
 
 Once a VM has been created, you can apply Go-specific configuration to it by running the setup script in this directory (startup.ps1), using this command:
 
@@ -70,9 +70,31 @@ Notes:
 * exit status of the "az" command does NOT accurately reflect exit status of the powershell script.
 * errors about things already existing are expected
 
+## VM setup (part 2 of 2)
+
+After running "startup.ps1" in step 1, you will need to distribute a copy of the private builder key to the VM (for details on keys, see https://github.com/golang/go/wiki/DashboardBuilders#luci-builders).  Because the VM created in step 1 does not have a public IP, we can't use ssh/scp to copy in the file, so instead the recommendation is to do the transfer using "writefilegenpowerscript.go", steps below.
+
+```
+# Copy key from valentine to a local file
+$ cp ... windows-arm64-azure-key.txt
+# Encode into powershell script
+$ go build writefilegenpowerscript.go
+$ ./writefilegenpowerscript -input-file windows-arm64-azure-key.txt -output-file transferFile.ps1 -windows-target-path "C:\tokend\windows-arm64-azure-key.txt" -set-owner tokend -deny-user-read swarming
+$ ls transferFile.ps1
+transferFile.ps1
+$ az vm run-command invoke \
+    --command-id=RunPowerShellScript \
+    --name="MyNewVM" \
+    --subscription=<Development/Production> \
+    --resource-group=<dev/prod>_buildlets \
+    --scripts @transferFile.ps1
+```
+
 ## First login
 
-Log into the new builder as "gopher" at least once so as to go through the "initial login" Windows workflow. Find the VM in the Azure portal, and enter the login in the Bastion section. Choose "no" on all the setup prompts.
+Log into the new builder as "swarming" at least once so as to go through the "initial login" Windows workflow. Find the VM in the Azure portal, and enter the login in the Bastion section. Choose "no" on all the setup prompts.
+
+Check to make sure that the scheduled task to run "luci_machine_tokend.exe" every 10 minutes is working properly. You can do this by looking for the presence of the "C:\golang\token.json" file.
 
 ## Follow-ons to disable antivirus
 
@@ -87,19 +109,6 @@ az vm run-command invoke \
     --subscription=<Development/Production> \
     --resource-group=<prod/dev>_buildlets \
     --scripts @antivirusadditions.ps1
-```
-
-## Builder key
-
-Generate a builder key for the VMs according to the directions in [x/build/cmd/genbuilderkey](https://go.googlesource.com/build/+/fdfb99e1de1f68b555502056567be459d98a0e71/cmd/genbuilderkey/README.md).
-
-Once the key is available, write it to the builder (via "az vm run-command invoke" as above) using a PowerShell script of the form
-
-```
-Write-Host "writing builder key"
-
-$key = "<insert key here>"
-$key | Out-File -Encoding ascii -FilePath C:\Users\gopher\.gobuildkey-host-windows11-arm64-azure
 ```
 
 ## Debugging/testing VM creation
@@ -122,6 +131,6 @@ az vm create \
 Notes:
 
 * be sure to pick a very strong password
-* configure the VM once created as in `VM Setup` above, but with the section that starts the stage0 buildlet commented out (since we don't want the VM to connect to the coordinator)
+* configure the VM once created as in `VM Setup` above, but with the section that starts boostrapswarm on login commented out (since we don't want the VM to connect to the LUCI)
 * delete VM when you are finished with it
 
