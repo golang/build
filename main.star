@@ -1143,6 +1143,7 @@ def _define_go_ci():
                 ],
                 watch = cq_group.watch,
                 allow_submit_with_open_deps = True,
+                trust_dry_runner_deps = True,
                 verifiers = [
                     luci.cq_tryjob_verifier(
                         builder = "try/tricium",
@@ -1385,6 +1386,7 @@ def _define_go_internal_ci():
                 refs = ["refs/heads/%s" % go_branch.branch],
             ),
             allow_submit_with_open_deps = True,
+            trust_dry_runner_deps = True,
             verifiers = [
                 luci.cq_tryjob_verifier(
                     builder = "try/tricium",
