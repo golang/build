@@ -236,6 +236,7 @@ GOOGLE_LOW_CAPACITY_HOSTS = [
 # They need to match the builder type, excluding any run mods.
 LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + [
     "freebsd-riscv64",
+    "linux-ppc64",
     "linux-ppc64le",
     "linux-riscv64",
     "netbsd-arm",
@@ -287,12 +288,12 @@ luci.list_view(
 #
 # The format of a builder type is thus $GOOS-$GOARCH(_osversion)?(-$RUN_MOD)*.
 BUILDER_TYPES = [
+    "darwin-amd64-nocgo",
     "darwin-amd64_10.15",
     "darwin-amd64_11",
     "darwin-amd64_12",
     "darwin-amd64_13",
     "darwin-amd64_14",
-    "darwin-amd64-nocgo",
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
@@ -310,6 +311,7 @@ BUILDER_TYPES = [
     "linux-amd64-race",
     "linux-amd64-staticlockranking",
     "linux-arm64",
+    "linux-ppc64",
     "linux-ppc64le",
     "linux-riscv64",
     "netbsd-arm",
