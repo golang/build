@@ -1675,6 +1675,7 @@ func init() {
 	addMiscCompile("freebsd", "386")
 	addMiscCompile("freebsd", "arm")
 	addMiscCompile("freebsd", "arm64")
+	addMiscCompile("freebsd", "riscv64")
 	addMiscCompile("netbsd", "386")
 	addMiscCompile("netbsd", "amd64")
 	addMiscCompile("netbsd", "arm")
@@ -1683,6 +1684,7 @@ func init() {
 	// openbsd-mips64 go.dev/issue/58110
 	addMiscCompile("openbsd", "arm")
 	addMiscCompile("openbsd", "arm64")
+	addMiscCompileGo1(22, "openbsd", "ppc64", "-go1.22")
 	addMiscCompile("plan9", "386")
 	addMiscCompile("plan9", "amd64")
 	addMiscCompile("plan9", "arm")
@@ -1694,7 +1696,6 @@ func init() {
 	addMiscCompile("linux", "s390x")
 	addMiscCompile("linux", "arm")
 	addMiscCompileGo1(0, "linux", "arm", "-arm5", "GOARM=5")
-	addMiscCompileGo1(20, "freebsd", "riscv64", "-go1.20")
 
 	// TODO: Issue 25963, get the misc-compile trybots for Android/iOS.
 	// Then consider subrepos too, so "mobile" can at least be included
@@ -2126,7 +2127,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "openbsd-ppc64-n2vi",
 		HostType:     "host-openbsd-ppc64-n2vi",
-		KnownIssues:  []int{56001},
 		SkipSnapshot: true,
 		FlakyNet:     true,
 		buildsRepo: func(repo, branch, goBranch string) bool {

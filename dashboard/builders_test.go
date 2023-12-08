@@ -117,6 +117,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-freebsd-386",
 				"misc-compile-freebsd-arm",
 				"misc-compile-freebsd-arm64",
+				"misc-compile-freebsd-riscv64",
 				"misc-compile-netbsd-386",
 				"misc-compile-netbsd-amd64",
 				"misc-compile-netbsd-arm",
@@ -124,6 +125,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-386",
 				"misc-compile-openbsd-arm",
 				"misc-compile-openbsd-arm64",
+				"misc-compile-openbsd-ppc64-go1.22",
 				"misc-compile-plan9-386",
 				"misc-compile-plan9-amd64",
 				"misc-compile-plan9-arm",
@@ -135,7 +137,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-linux-s390x",
 				"misc-compile-linux-arm",
 				"misc-compile-linux-arm-arm5",
-				"misc-compile-freebsd-riscv64-go1.20",
 			},
 		},
 		{
@@ -168,6 +169,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-freebsd-386",
 				"misc-compile-freebsd-arm",
 				"misc-compile-freebsd-arm64",
+				"misc-compile-freebsd-riscv64",
 				"misc-compile-netbsd-386",
 				"misc-compile-netbsd-amd64",
 				"misc-compile-netbsd-arm",
@@ -186,7 +188,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-linux-s390x",
 				"misc-compile-linux-arm",
 				"misc-compile-linux-arm-arm5",
-				"misc-compile-freebsd-riscv64-go1.20",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
@@ -227,6 +228,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-freebsd-386",
 				"misc-compile-freebsd-arm",
 				"misc-compile-freebsd-arm64",
+				"misc-compile-freebsd-riscv64",
 				"misc-compile-netbsd-386",
 				"misc-compile-netbsd-amd64",
 				"misc-compile-netbsd-arm",
@@ -245,7 +247,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-linux-s390x",
 				"misc-compile-linux-arm",
 				"misc-compile-linux-arm-arm5",
-				"misc-compile-freebsd-riscv64-go1.20",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
@@ -296,6 +297,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-freebsd-386",
 				"misc-compile-freebsd-arm",
 				"misc-compile-freebsd-arm64",
+				"misc-compile-freebsd-riscv64",
 				"misc-compile-netbsd-386",
 				"misc-compile-netbsd-amd64",
 				"misc-compile-netbsd-arm",
@@ -303,6 +305,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-386",
 				"misc-compile-openbsd-arm",
 				"misc-compile-openbsd-arm64",
+				"misc-compile-openbsd-ppc64-go1.22",
 				"misc-compile-plan9-386",
 				"misc-compile-plan9-amd64",
 				"misc-compile-plan9-arm",
@@ -314,7 +317,6 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-linux-s390x",
 				"misc-compile-linux-arm",
 				"misc-compile-linux-arm-arm5",
-				"misc-compile-freebsd-riscv64-go1.20",
 			},
 		},
 		{
@@ -1005,7 +1007,6 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	// when the work of adding a new port is actively underway.
 	knownMissing := map[string]bool{
 		"openbsd-mips64": true, // go.dev/issue/58110
-		"openbsd-ppc64":  true, // go.dev/issue/56001
 	}
 
 	var done = make(map[string]bool)
