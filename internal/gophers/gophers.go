@@ -1930,6 +1930,7 @@ func init() {
 	addPerson("Matthieu Sarter", "matthieu.sarter.external@atos.net", "16325@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Matthieu Sarter", "matthieu.sarter.external@atos.net", "@MatthieuSarter")
 	addPerson("Matthijs Kooijman", "matthijs@stdin.nl", "@matthijskooijman")
+	addPerson("Mauri de Souza Meneguzzo", "mauri870@gmail.com", "@mauri870")
 	addPerson("Max Moroz", "maxmoroz@gmail.com")
 	addPerson("Max Renaud", "maxrd@google.com")
 	addPerson("Max Riveiro", "kavu13@gmail.com", "@kavu")

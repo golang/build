@@ -56,6 +56,7 @@ var (
 	khr          = gh("randall77")
 	martisch     = gh("martisch")
 	matloob      = gh("matloob")
+	mauri870     = gh("mauri870")
 	mdempsky     = gh("mdempsky")
 	mdlayher     = gh("mdlayher")
 	minux        = gh("minux")
@@ -633,7 +634,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/runtime/internal/atomic": {
 		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{austin, khr, mknyszek},
+		Secondary: []Owner{austin, khr, mknyszek, mauri870},
 	},
 	"go/src/runtime/internal/sys": {
 		Primary:   []Owner{runtimeTeam},
@@ -679,7 +680,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/sync/atomic": {
 		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{rsc, iant, dvyukov, austin},
+		Secondary: []Owner{rsc, iant, dvyukov, austin, mauri870},
 	},
 	"go/src/syscall": {
 		Primary:   []Owner{runtimeTeam},
