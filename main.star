@@ -311,7 +311,7 @@ BUILDER_TYPES = [
     "linux-amd64-race",
     "linux-amd64-staticlockranking",
     "linux-arm64",
-    "linux-ppc64",
+    "linux-ppc64-power10",
     "linux-ppc64le",
     "linux-riscv64",
     "netbsd-arm",
@@ -431,6 +431,7 @@ RUN_MODS = dict(
     newinliner = make_run_mod(add_env = {"GOEXPERIMENT": "newinliner"}, enabled = define_for_go_starting_at("go1.22")),
     nocgo = make_run_mod(add_env = {"CGO_ENABLED": "0"}, enabled = define_for_go_postsubmit()),
     staticlockranking = make_run_mod(add_env = {"GOEXPERIMENT": "staticlockranking"}, enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"])),
+    power10 = make_run_mod(add_env = {"GOPPC64": "power10"}),
 )
 
 # PT is Project Type, a classification of a project.
