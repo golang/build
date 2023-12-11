@@ -48,9 +48,8 @@ import (
 )
 
 var (
-	tokenFilePath = flag.String("token-file-path", defaultTokenLocation(), "Path to the token file (used when not on GCE)")
-	hostname      = flag.String("hostname", os.Getenv("HOSTNAME"), "Hostname of machine to bootstrap")
-	swarming      = flag.String("swarming", "chromium-swarm.appspot.com", "Swarming server to connect to")
+	hostname = flag.String("hostname", os.Getenv("HOSTNAME"), "Hostname of machine to bootstrap")
+	swarming = flag.String("swarming", "chromium-swarm.appspot.com", "Swarming server to connect to")
 )
 
 func main() {
@@ -64,14 +63,14 @@ func main() {
 		os.Exit(2)
 	}
 	ctx := context.Background()
-	if err := bootstrap(ctx, *hostname, *tokenFilePath); err != nil {
+	if err := bootstrap(ctx, *hostname); err != nil {
 		log.Fatal(err)
 	}
 }
 
 var httpClient = http.DefaultClient
 
-func bootstrap(ctx context.Context, hostname, tokenPath string) error {
+func bootstrap(ctx context.Context, hostname string) error {
 	httpHeaders := map[string]string{}
 	if metadata.OnGCE() {
 		log.Println("Bootstrapping the swarming bot with GCE authentication")
@@ -91,7 +90,8 @@ func bootstrap(ctx context.Context, hostname, tokenPath string) error {
 		hostname = strings.Split(fullHost, ".")[0]
 	} else {
 		log.Println("Bootstrapping the swarming bot with certificate authentication")
-		log.Println("retrieving the luci-machine-token from the token file")
+		tokenPath, desc := tokenFile()
+		log.Printf("retrieving the luci-machine-token from the token file %s (%s)\n", tokenPath, desc)
 		tokBytes, err := os.ReadFile(tokenPath)
 		if err != nil {
 			return fmt.Errorf("unable to read file %q: %w", tokenPath, err)
@@ -186,12 +186,14 @@ func retrieveGCEVMToken(ctx context.Context) (string, error) {
 	return string(b), nil
 }
 
-func defaultTokenLocation() string {
+// tokenFile reports the path of the LUCI machine token file (used when not on GCE),
+// and a description of where that value came from.
+func tokenFile() (path, desc string) {
 	if v := os.Getenv("LUCI_MACHINE_TOKEN"); v != "" {
-		return v
+		return v, "via LUCI_MACHINE_TOKEN env var"
 	}
 	if runtime.GOOS == "windows" {
-		return `C:\luci_machine_tokend\token.json`
+		return `C:\luci_machine_tokend\token.json`, "default path for GOOS == windows"
 	}
-	return "/var/lib/luci_machine_tokend/token.json"
+	return "/var/lib/luci_machine_tokend/token.json", "default path for GOOS != windows"
 }
