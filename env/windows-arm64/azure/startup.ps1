@@ -170,6 +170,7 @@ pip install pywin32
 # "bootstrapswarm" requires that "python3" be on the path, not just "python",
 # and annoyingly, choco only installed python.exe. Create a symbolic link
 # by hand.
+$here = Get-Location
 Set-Location C:\Python311
 New-Item -ItemType SymbolicLink -Path "python3.exe" -Target "python.exe"
 Set-Location $here
