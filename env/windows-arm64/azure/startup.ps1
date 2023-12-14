@@ -239,12 +239,15 @@ $cmd | Out-File -Encoding ascii $run_tokend_batfile
 Add-Content -Encoding ascii -Path $run_tokend_batfile -Value "echo %date% %time% >> $cert_dir\lastrun.txt"
 
 # Create a scheduled task to run 'luci_machine_tokend.exe' every 10
-# minutes (as tokend user) to regenerated token.json. 
+# minutes to regenerate token.json.  Note that this scheduled task
+# has to be run even when user "tokend" is not logged in, which requires
+# a bit of extra work (via -LogonType option to New-ScheduledTaskPrincipal).
 $task_action = New-ScheduledTaskAction -Execute $run_tokend_batfile
-$task_trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
-$task_settings = New-ScheduledTaskSettingsSet
-$task = New-ScheduledTask -Action $task_action -Trigger $task_trigger -Settings $task_settings
-Register-ScheduledTask -TaskName 'Token Generator' -InputObject $task -User 'tokend'
+$task_trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 10)
+$task_settings = New-ScheduledTaskSettingsSet -MultipleInstances Parallel
+$principal = New-ScheduledTaskPrincipal -LogonType ServiceAccount -UserID "NT AUTHORITY\SYSTEM" -RunLevel Highest
+$task = New-ScheduledTask -Action $task_action -Trigger $task_trigger -Settings $task_settings -Principal $principal
+Register-ScheduledTask -TaskName 'Token Generator' -InputObject $task
 
 # Run the swarming loop script on login
 Write-Host "setting bootstrapswarm to run on start"
