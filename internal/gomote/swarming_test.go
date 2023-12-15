@@ -184,7 +184,7 @@ func TestSwarmingListSwarmingBuilders(t *testing.T) {
 		t.Fatalf("client.ListSwarmingBuilders = nil, %s; want no error", err)
 	}
 	got := response.GetBuilders()
-	if diff := cmp.Diff([]string{"gotip-linux-amd64-boringcrypto"}, got); diff != "" {
+	if diff := cmp.Diff([]string{"gotip-linux-amd64", "gotip-linux-amd64-boringcrypto", "gotip-linux-arm"}, got); diff != "" {
 		t.Errorf("ListBuilders() mismatch (-want, +got):\n%s", diff)
 	}
 }
@@ -1137,7 +1137,7 @@ func TestStartNewSwarmingTask(t *testing.T) {
 	}
 	id := "task-123"
 	errCh := make(chan error, 2)
-	if _, err := ss.startNewSwarmingTask(ctx, id, map[string]string{"cipd_platform": "linux-amd64"}, &SwarmOpts{
+	if _, err := ss.startNewSwarmingTask(ctx, id, map[string]string{"cipd_platform": "linux-amd64"}, &configProperties{}, &SwarmOpts{
 		OnInstanceRegistration: func() {
 			client := ts.Client()
 			req, err := http.NewRequest("GET", ts.URL, nil)
@@ -1288,31 +1288,37 @@ func (fbc *FakeBuildersClient) GetBuilder(ctx context.Context, in *buildbucketpb
 }
 
 func (fbc *FakeBuildersClient) ListBuilders(ctx context.Context, in *buildbucketpb.ListBuildersRequest, opts ...grpc.CallOption) (*buildbucketpb.ListBuildersResponse, error) {
+	makeBuilderItem := func(bucket string, builders ...string) []*buildbucketpb.BuilderItem {
+		out := make([]*buildbucketpb.BuilderItem, 0, len(builders))
+		for _, b := range builders {
+			out = append(out, &buildbucketpb.BuilderItem{
+				Id: &buildbucketpb.BuilderID{
+					Project: "golang",
+					Bucket:  bucket,
+					Builder: b,
+				},
+				Config: &buildbucketpb.BuilderConfig{
+					Name: b,
+					Dimensions: []string{
+						"cipd_platform:linux-amd64",
+					},
+					Properties: `{"mode": 0, "bootstrap_version":"latest"}`,
+				},
+			})
+		}
+		return out
+	}
+	var builders []*buildbucketpb.BuilderItem
+	switch bucket := in.GetBucket(); bucket {
+	case "ci-workers":
+		builders = makeBuilderItem(bucket, "gotip-linux-amd64-boringcrypto", "gotip-linux-amd64-boringcrypto-test_only")
+	case "ci":
+		builders = makeBuilderItem(bucket, "gotip-linux-arm", "gotip-linux-amd64")
+	default:
+		builders = []*buildbucketpb.BuilderItem{}
+	}
 	out := &buildbucketpb.ListBuildersResponse{
-		Builders: []*buildbucketpb.BuilderItem{
-			&buildbucketpb.BuilderItem{
-				Id: &buildbucketpb.BuilderID{
-					Project: "golang",
-					Bucket:  "ci-workers",
-					Builder: "gotip-linux-amd64-boringcrypto",
-				},
-				Config: &buildbucketpb.BuilderConfig{
-					Name:       "gotip-linux-amd64-boringcrypto",
-					Dimensions: []string{},
-				},
-			},
-			&buildbucketpb.BuilderItem{
-				Id: &buildbucketpb.BuilderID{
-					Project: "golang",
-					Bucket:  "ci-workers",
-					Builder: "gotip-linux-amd64-boringcrypto-test_only",
-				},
-				Config: &buildbucketpb.BuilderConfig{
-					Name:       "gotip-linux-amd64-boringcrypto-test_only",
-					Dimensions: []string{},
-				},
-			},
-		},
+		Builders:      builders,
 		NextPageToken: "",
 	}
 	return out, nil

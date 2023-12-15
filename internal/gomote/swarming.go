@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -103,24 +104,20 @@ func (ss *SwarmingServer) AddBootstrap(ctx context.Context, req *protos.AddBoots
 		// the helper function returns meaningful GRPC error.
 		return nil, err
 	}
-	builder, err := ss.buildersClient.GetBuilder(ctx, &buildbucketpb.GetBuilderRequest{
-		Id: &buildbucketpb.BuilderID{
-			Project: "golang",
-			Bucket:  "ci-workers",
-			Builder: ses.BuilderType + "-test_only",
-		},
-	})
+	bs, err := ss.validBuilders(ctx)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unknown builder type")
+		return nil, err
 	}
-	type ConfigProperties struct {
-		BootstrapVersion string `json:"bootstrap_version, omitempty"`
+	builder, ok := bs[ses.BuilderType]
+	if !ok {
+		return nil, status.Errorf(codes.Internal, "unable to determine builder definition")
 	}
-	var cp ConfigProperties
-	if err := json.Unmarshal([]byte(builder.GetConfig().GetProperties()), &cp); err != nil {
+	cp, err := builderProperties(builder)
+	if err != nil {
+		log.Printf("AddBootstrap: bootstrap version not found for %s: %s", builder.GetId().GetBuilder(), err)
 		return &protos.AddBootstrapResponse{}, nil
 	}
-	if cp.BootstrapVersion == "" {
+	if cp.BootstrapVersion == "latest" {
 		return &protos.AddBootstrapResponse{}, nil
 	}
 	var cipdPlatform string
@@ -135,7 +132,11 @@ func (ss *SwarmingServer) AddBootstrap(ctx context.Context, req *protos.AddBoots
 		}
 		break
 	}
-	url := fmt.Sprintf("https://storage.googleapis.com/go-builder-data/gobootstrap-%s-go%s.tar.gz", cipdPlatform, cp.BootstrapVersion)
+	goos, goarch, err := platformToGoValues(cipdPlatform)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "unknown platform type")
+	}
+	url := fmt.Sprintf("https://storage.googleapis.com/go-builder-data/gobootstrap-%s-%s-go%s.tar.gz", goos, goarch, cp.BootstrapVersion)
 	if err = bc.PutTarFromURL(ctx, url, cp.BootstrapVersion); err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to download bootstrap Go")
 	}
@@ -152,14 +153,12 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 	if req.GetBuilderType() == "" {
 		return status.Errorf(codes.InvalidArgument, "invalid builder type")
 	}
-	builder, err := ss.buildersClient.GetBuilder(stream.Context(), &buildbucketpb.GetBuilderRequest{
-		Id: &buildbucketpb.BuilderID{
-			Project: "golang",
-			Bucket:  "ci-workers",
-			Builder: req.GetBuilderType() + "-test_only",
-		},
-	})
+	bs, err := ss.validBuilders(stream.Context())
 	if err != nil {
+		return err
+	}
+	builder, ok := bs[req.GetBuilderType()]
+	if !ok {
 		return status.Errorf(codes.InvalidArgument, "unknown builder type")
 	}
 	userName, err := emailToUser(creds.Email)
@@ -182,8 +181,13 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 		}
 	}
 	name := fmt.Sprintf("gomote-%s-%s", userName, uuid.NewString())
+	cp, err := builderProperties(builder)
+	if err != nil {
+		log.Printf("CreateInstance: builder configuration not found for %s: %s", builder.GetId().GetBuilder(), err)
+		return status.Errorf(codes.Internal, "invalid builder configuration")
+	}
 	go func() {
-		bc, err := ss.startNewSwarmingTask(stream.Context(), name, dimensions, &SwarmOpts{})
+		bc, err := ss.startNewSwarmingTask(stream.Context(), name, dimensions, cp, &SwarmOpts{})
 		if err != nil {
 			log.Printf("startNewSwarmingTask() = %s", err)
 		}
@@ -354,20 +358,20 @@ func (ss *SwarmingServer) ListDirectory(ctx context.Context, req *protos.ListDir
 	}, nil
 }
 
-// ListSwarmingBuilders lists all of the swarming builders which run for gotip. The requester must be authenticated.
-func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.ListSwarmingBuildersRequest) (*protos.ListSwarmingBuildersResponse, error) {
-	_, err := access.IAPFromContext(ctx)
-	if err != nil {
-		log.Printf("ListSwarmingInstances access.IAPFromContext(ctx) = nil, %s", err)
-		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
-	}
-	listBuilders := func() ([]*buildbucketpb.BuilderItem, error) {
+// golangbuildModeAll is golangbuild's MODE_ALL mode that
+// builds and tests the project all within the same build.
+//
+// See https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/experimental/golangbuild/golangbuildpb/params.proto;l=148-149;drc=4e874bfb4ff7ff0620940712983ca82e8ea81028.
+const golangbuildModeAll = 0
+
+func (ss *SwarmingServer) validBuilders(ctx context.Context) (map[string]*buildbucketpb.BuilderItem, error) {
+	listBuilders := func(bucket string) ([]*buildbucketpb.BuilderItem, error) {
 		var builders []*buildbucketpb.BuilderItem
 		var nextToken string
 		for {
 			buildersResp, err := ss.buildersClient.ListBuilders(ctx, &buildbucketpb.ListBuildersRequest{
 				Project:   "golang",
-				Bucket:    "ci-workers",
+				Bucket:    bucket,
 				PageSize:  1000,
 				PageToken: nextToken,
 			})
@@ -382,26 +386,73 @@ func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.
 			return builders, nil
 		}
 	}
-	builderResponse, err := listBuilders()
+	// list all the valid builders in ci-workers
+	builderBucket := "ci-workers"
+	builderResponse, err := listBuilders(builderBucket)
 	if err != nil {
-		log.Printf("buildersClient.ListBuilders(ctx) = nil, %s", err)
-		return nil, status.Errorf(codes.Internal, "unable to query for bots")
+		log.Printf("buildersClient.ListBuilders(ctx, %s) = nil, %s", builderBucket, err)
+		return nil, status.Errorf(codes.Internal, "unable to query for builders")
 	}
-	var builders []string
+	builders := make(map[string]*buildbucketpb.BuilderItem)
 	for _, builder := range builderResponse {
 		bID := builder.GetId()
 		if bID == nil {
 			continue
 		}
 		name := bID.GetBuilder()
-		if !strings.HasPrefix(name, "gotip") {
+		if !strings.HasPrefix(name, "go") {
 			continue
 		}
 		if !strings.HasSuffix(name, "-test_only") {
 			continue
 		}
-		builders = append(builders, strings.TrimSuffix(name, "-test_only"))
+		builders[strings.TrimSuffix(name, "-test_only")] = builder
 	}
+	// list all the valid builders in ci
+	builderBucket = "ci"
+	builderResponse, err = listBuilders(builderBucket)
+	if err != nil {
+		log.Printf("buildersClient.ListBuilders(ctx, %s) = nil, %s", builderBucket, err)
+		return nil, status.Errorf(codes.Internal, "unable to query for builders")
+	}
+	for _, builder := range builderResponse {
+		bID := builder.GetId()
+		if bID == nil {
+			continue
+		}
+		name := bID.GetBuilder()
+		if !strings.HasPrefix(name, "go") {
+			continue
+		}
+		if _, ok := builders[name]; ok {
+			// should not happen
+			continue
+		}
+		config, err := builderProperties(builder)
+		if err != nil || config.Mode != golangbuildModeAll {
+			continue
+		}
+		builders[name] = builder
+	}
+	return builders, nil
+}
+
+// ListSwarmingBuilders lists all of the swarming builders which run for the Go master or release branches. The requester must be authenticated.
+func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.ListSwarmingBuildersRequest) (*protos.ListSwarmingBuildersResponse, error) {
+	_, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("ListSwarmingInstances access.IAPFromContext(ctx) = nil, %s", err)
+		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
+	}
+	bs, err := ss.validBuilders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var builders []string
+	for builder, _ := range bs {
+		builders = append(builders, builder)
+	}
+	sort.Strings(builders)
 	return &protos.ListSwarmingBuildersResponse{Builders: builders}, nil
 }
 
@@ -700,11 +751,11 @@ type SwarmOpts struct {
 // running on it. It returns a buildlet client configured to speak to it.
 // The request will last as long as the lifetime of the context. The dimensions
 // are a set of key value pairs used to describe what instance type to create.
-func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string, dimensions map[string]string, opts *SwarmOpts) (buildlet.Client, error) {
+func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts) (buildlet.Client, error) {
 	ss.rendezvous.RegisterInstance(ctx, name, 10*time.Minute)
 	condRun(opts.OnInstanceRegistration)
 
-	taskID, err := ss.newSwarmingTask(ctx, name, dimensions, opts)
+	taskID, err := ss.newSwarmingTask(ctx, name, dimensions, properties, opts)
 	if err != nil {
 		ss.rendezvous.DeregisterInstance(ctx, name)
 		return nil, err
@@ -874,7 +925,7 @@ func platformToGoValues(platform string) (goos string, goarch string, err error)
 	return goos, goarch, nil
 }
 
-func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dimensions map[string]string, opts *SwarmOpts) (string, error) {
+func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts) (string, error) {
 	cipdPlatform, ok := dimensions["cipd_platform"]
 	if !ok {
 		return "", fmt.Errorf("dimensions require cipd_platform: instance=%s", name)
@@ -885,7 +936,7 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 	}
 	packages := []*swarmpb.CipdPackage{
 		{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
-		{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: "latest"},
+		{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: properties.BootstrapVersion},
 	}
 	pythonBin := "python3"
 	switch goos {
@@ -947,4 +998,20 @@ func condRun(fn func()) {
 func tryThenPeriodicallyDo(ctx context.Context, period time.Duration, f func(context.Context, time.Time)) {
 	f(ctx, time.Now())
 	internal.PeriodicallyDo(ctx, period, f)
+}
+
+type configProperties struct {
+	BootstrapVersion string `json:"bootstrap_version"`
+	Mode             int    `json:"mode"`
+}
+
+func builderProperties(builder *buildbucketpb.BuilderItem) (*configProperties, error) {
+	cp := new(configProperties)
+	if err := json.Unmarshal([]byte(builder.GetConfig().GetProperties()), cp); err != nil {
+		return nil, fmt.Errorf("builder property unmarshal error: %s", err)
+	}
+	if cp.BootstrapVersion == "" {
+		cp.BootstrapVersion = "latest"
+	}
+	return cp, nil
 }
