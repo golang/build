@@ -311,6 +311,7 @@ BUILDER_TYPES = [
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
     "linux-amd64-race",
+    "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
     "linux-arm64",
     "linux-ppc64-power10",
@@ -435,6 +436,7 @@ RUN_MODS = dict(
     staticlockranking = make_run_mod(add_env = {"GOEXPERIMENT": "staticlockranking"}, enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"])),
     power10 = make_run_mod(add_env = {"GOPPC64": "power10"}),
     goamd64v3 = make_run_mod(add_env = {"GOAMD64": "v3"}, enabled = define_for_go_postsubmit()),
+    ssacheck = make_run_mod({"compile_only": True}, add_env = {"GO_GCFLAGS": "-d=ssa/check/on"}, enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/{ssa,ssagen}/.+"])),
 )
 
 # PT is Project Type, a classification of a project.
