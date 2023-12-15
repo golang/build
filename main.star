@@ -289,6 +289,7 @@ luci.list_view(
 # The format of a builder type is thus $GOOS-$GOARCH(_osversion)?(-$RUN_MOD)*.
 BUILDER_TYPES = [
     "darwin-amd64-nocgo",
+    "darwin-amd64-longtest",
     "darwin-amd64_10.15",
     "darwin-amd64_11",
     "darwin-amd64_12",
@@ -1185,7 +1186,7 @@ def _define_go_ci():
                             gerrit_project_regexp = "^%s$" % project,
                             path_regexp = filter,
                         )
-                        for filter in presubmit_filters
+                        for filter in presubmit_filters if presubmit
                     ],
                 )
 
