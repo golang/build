@@ -301,6 +301,7 @@ BUILDER_TYPES = [
     "freebsd-riscv64",
     "js-wasm",
     "linux-386",
+    "linux-386-softfloat",
     "linux-386-longtest",
     "linux-amd64",
     "linux-amd64-boringcrypto",
@@ -443,6 +444,8 @@ RUN_MODS = dict(
     power10 = make_run_mod(add_env = {"GOPPC64": "power10"}),
     goamd64v3 = make_run_mod(add_env = {"GOAMD64": "v3"}, enabled = define_for_go_postsubmit()),
     ssacheck = make_run_mod({"compile_only": True}, add_env = {"GO_GCFLAGS": "-d=ssa/check/on"}, enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/{ssa,ssagen}/.+"])),
+    # TODO(mknyszek): Make softfloat less specific to GO386.
+    softfloat = make_run_mod(add_env = {"GO386": "softfloat"}, enabled = define_for_go_postsubmit()),
 )
 
 # PT is Project Type, a classification of a project.
