@@ -424,28 +424,84 @@ def define_for_go_postsubmit_or_presubmit_with_filters(filters):
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
-    longtest = make_run_mod({"long_test": True}, timeout_scale = 5, enabled = presubmit_only_for_projs_or_on_release_branches({
-        "protobuf": [],
-        "go": [
-            # Enable longtest builders on go against tip if files related to vendored code are modified.
-            "src/{,cmd/}go[.]{mod,sum}",
-            "src/{,cmd/}vendor/.+",
-            "src/.+_bundle.go",
-        ],
-    })),
-    race = make_run_mod({"race_mode": True}, timeout_scale = 2, enabled = presubmit_only_for_ports_or_on_release_branches(["linux-amd64"])),
-    boringcrypto = make_run_mod(add_env = {"GOEXPERIMENT": "boringcrypto"}),
+    # Build and test with the boringcrypto GOEXPERIMENT.
+    boringcrypto = make_run_mod(
+        add_env = {"GOEXPERIMENT": "boringcrypto"},
+    ),
+
+    # Build and test with GOAMD64=v3, which makes the compiler assume certain amd64 CPU
+    # features are always available.
+    goamd64v3 = make_run_mod(
+        add_env = {"GOAMD64": "v3"},
+        enabled = define_for_go_postsubmit(),
+    ),
+
+    # Run a larger set of tests.
+    longtest = make_run_mod(
+        add_props = {"long_test": True},
+        timeout_scale = 5,
+        enabled = presubmit_only_for_projs_or_on_release_branches({
+            "protobuf": [],
+            "go": [
+                # Enable longtest builders on go against tip if files related to vendored code are modified.
+                "src/{,cmd/}go[.]{mod,sum}",
+                "src/{,cmd/}vendor/.+",
+                "src/.+_bundle.go",
+            ],
+        }),
+    ),
+
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
-    misccompile = make_run_mod({"compile_only": True, "misc_ports": True}),
-    newinliner = make_run_mod(add_env = {"GOEXPERIMENT": "newinliner"}, enabled = define_for_go_starting_at("go1.22")),
-    nocgo = make_run_mod(add_env = {"CGO_ENABLED": "0"}, enabled = define_for_go_postsubmit()),
-    staticlockranking = make_run_mod(add_env = {"GOEXPERIMENT": "staticlockranking"}, enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"])),
-    power10 = make_run_mod(add_env = {"GOPPC64": "power10"}),
-    goamd64v3 = make_run_mod(add_env = {"GOAMD64": "v3"}, enabled = define_for_go_postsubmit()),
-    ssacheck = make_run_mod({"compile_only": True}, add_env = {"GO_GCFLAGS": "-d=ssa/check/on"}, enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/{ssa,ssagen}/.+"])),
-    # TODO(mknyszek): Make softfloat less specific to GO386.
-    softfloat = make_run_mod(add_env = {"GO386": "softfloat"}, enabled = define_for_go_postsubmit()),
+    misccompile = make_run_mod(
+        add_props = {"compile_only": True, "misc_ports": True},
+    ),
+
+    # Build and test with the newinliner GOEXPERIMENT.
+    newinliner = make_run_mod(
+        add_env = {"GOEXPERIMENT": "newinliner"},
+        enabled = define_for_go_starting_at("go1.22"),
+    ),
+
+    # Build and test with cgo disabled.
+    nocgo = make_run_mod(
+        add_env = {"CGO_ENABLED": "0"},
+        enabled = define_for_go_postsubmit(),
+    ),
+
+    # Build and test with GOPPC64=power10, which makes the compiler assume certain ppc64 CPU
+    # features are always available.
+    power10 = make_run_mod(
+        add_env = {"GOPPC64": "power10"},
+    ),
+
+    # Build and test with race mode enabled.
+    race = make_run_mod(
+        add_props = {"race_mode": True},
+        timeout_scale = 2,
+        enabled = presubmit_only_for_ports_or_on_release_branches(["linux-amd64"]),
+    ),
+
+    # Build and test with GO386=softfloat, which makes the compiler emit non-floating-point
+    # CPU instructions to perform floating point operations.
+    softfloat = make_run_mod(
+        add_env = {"GO386": "softfloat"},
+        enabled = define_for_go_postsubmit(),
+    ),
+
+    # Build with ssacheck mode enabled in the compiler.
+    ssacheck = make_run_mod(
+        add_props = {"compile_only": True},
+        add_env = {"GO_GCFLAGS": "-d=ssa/check/on"},
+        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/{ssa,ssagen}/.+"]),
+    ),
+
+    # Build and test with the staticlockranking GOEXPERIMENT, which validates the runtime's
+    # dynamic lock usage against a static ranking to detect possible deadlocks before they happen.
+    staticlockranking = make_run_mod(
+        add_env = {"GOEXPERIMENT": "staticlockranking"},
+        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
+    ),
 )
 
 # PT is Project Type, a classification of a project.
