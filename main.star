@@ -303,6 +303,7 @@ BUILDER_TYPES = [
     "linux-386-longtest",
     "linux-amd64",
     "linux-amd64-boringcrypto",
+    "linux-amd64-goamd64v3",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-misccompile",
@@ -432,6 +433,7 @@ RUN_MODS = dict(
     nocgo = make_run_mod(add_env = {"CGO_ENABLED": "0"}, enabled = define_for_go_postsubmit()),
     staticlockranking = make_run_mod(add_env = {"GOEXPERIMENT": "staticlockranking"}, enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"])),
     power10 = make_run_mod(add_env = {"GOPPC64": "power10"}),
+    goamd64v3 = make_run_mod(add_env = {"GOAMD64": "v3"}, enabled = define_for_go_postsubmit()),
 )
 
 # PT is Project Type, a classification of a project.
