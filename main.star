@@ -491,6 +491,7 @@ golang/third_party/protoc_with_conformance/${platform} version:25.0-rc2
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
     "gotip": struct(branch = "master", bootstrap = "1.20.6"),
+    "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.17.13"),
     "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
     "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
 }
