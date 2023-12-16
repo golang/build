@@ -4,6 +4,10 @@
 
 // The gopherbot command runs Go's gopherbot role account on
 // GitHub and Gerrit.
+//
+// General documentation is at https://go.dev/wiki/gopherbot.
+// Consult the tasks slice in gopherbot.go for an up-to-date
+// list of all gopherbot tasks.
 package main
 
 import (
