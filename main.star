@@ -349,9 +349,15 @@ NO_NETWORK_BUILDERS = [
 # - presubmit, whether the builder should be run in presubmit by default
 # - postsubmit, whether the builder should run in postsubmit
 # - presubmit location filters, any cq.location_filter to apply to presubmit
-def make_run_mod(add_props = {}, add_env = {}, enabled = None):
-    def apply_mod(props):
+def make_run_mod(add_props = {}, add_env = {}, enabled = None, timeout_scale = 0):
+    def apply_mod(props, project):
         props.update(add_props)
+
+        # take max of timeouts. NB we could also consider multiplying
+        # (e.g. for longtest plus race).
+        if project == "go" and timeout_scale > props["timeout_scale"]:
+            props["timeout_scale"] = timeout_scale
+            props["env"].update({"GO_TEST_TIMEOUT_SCALE": "%d" % timeout_scale})
         props["env"].update(add_env)
 
     if enabled == None:
@@ -417,7 +423,7 @@ def define_for_go_postsubmit_or_presubmit_with_filters(filters):
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
-    longtest = make_run_mod({"long_test": True}, {"GO_TEST_TIMEOUT_SCALE": "5"}, enabled = presubmit_only_for_projs_or_on_release_branches({
+    longtest = make_run_mod({"long_test": True}, timeout_scale = 5, enabled = presubmit_only_for_projs_or_on_release_branches({
         "protobuf": [],
         "go": [
             # Enable longtest builders on go against tip if files related to vendored code are modified.
@@ -426,7 +432,7 @@ RUN_MODS = dict(
             "src/.+_bundle.go",
         ],
     })),
-    race = make_run_mod({"race_mode": True}, enabled = presubmit_only_for_ports_or_on_release_branches(["linux-amd64"])),
+    race = make_run_mod({"race_mode": True}, timeout_scale = 2, enabled = presubmit_only_for_ports_or_on_release_branches(["linux-amd64"])),
     boringcrypto = make_run_mod(add_env = {"GOEXPERIMENT": "boringcrypto"}),
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
@@ -760,6 +766,7 @@ def define_builder(env, project, go_branch_short, builder_type):
         "target": {"goos": os, "goarch": arch},
         "env": {},
         "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type),
+        "timeout_scale": 0,
     }
     for d in EXTRA_DEPENDENCIES:
         if not d.applies(project, port_of(builder_type), run_mods):
@@ -830,7 +837,10 @@ def define_builder(env, project, go_branch_short, builder_type):
     for mod in run_mods:
         if not mod in RUN_MODS:
             fail("unknown run mod: %s" % mod)
-        RUN_MODS[mod].apply(base_props)
+        RUN_MODS[mod].apply(base_props, project)
+
+    # We're done with this prop now (just used to set proper environ).
+    base_props.pop("timeout_scale")
 
     # Named cache for git clones.
     base_props["git_cache"] = "git"
@@ -1188,7 +1198,8 @@ def _define_go_ci():
                             gerrit_project_regexp = "^%s$" % project,
                             path_regexp = filter,
                         )
-                        for filter in presubmit_filters if presubmit
+                        for filter in presubmit_filters
+                        if presubmit
                     ],
                 )
 
