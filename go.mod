@@ -52,7 +52,7 @@ require (
 	go.chromium.org/luci v0.0.0-20231024170510-08aad78315cf
 	go.opencensus.io v0.24.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
-	golang.org/x/crypto v0.16.0
+	golang.org/x/crypto v0.17.0
 	golang.org/x/exp v0.0.0-20230809094429-853ea248256d
 	golang.org/x/image v0.14.0
 	golang.org/x/mod v0.14.0
