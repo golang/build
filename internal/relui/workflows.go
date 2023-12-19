@@ -995,6 +995,9 @@ func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, version stri
 func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, signed artifact) (artifact, error) {
 	return b.runBuildStep(ctx, unsigned.Target, nil, signed, "tar.gz", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
 		signedBinaries, err := loadBinaries(ctx, signed)
+		if err != nil {
+			return err
+		}
 
 		// Copy files from the tgz, overwriting with binaries from the signed tar.
 		ur, err := b.ScratchFS.OpenRead(ctx, unsigned.Scratch)
@@ -1049,6 +1052,9 @@ func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, sign
 func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version string, timestamp time.Time, mod moduleArtifact, signed artifact) (moduleArtifact, error) {
 	a, err := b.runBuildStep(ctx, nil, nil, signed, "signedmod.zip", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
 		signedBinaries, err := loadBinaries(ctx, signed)
+		if err != nil {
+			return err
+		}
 
 		// Copy files from the module zip, overwriting with binaries from the signed tar.
 		mr, err := b.ScratchFS.OpenRead(ctx, mod.ZipScratch)
