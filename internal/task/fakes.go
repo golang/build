@@ -10,6 +10,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +36,8 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gcsfs"
+	"golang.org/x/build/internal/installer/darwinpkg"
+	"golang.org/x/build/internal/installer/windowsmsi"
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/untar"
 	wf "golang.org/x/build/internal/workflow"
@@ -603,6 +607,17 @@ func (s *FakeSignService) SignArtifact(_ context.Context, bt sign.BuildType, in 
 	jobID = uuid.NewString()
 	var out []string
 	switch bt {
+	case sign.BuildMacOSConstructInstallerOnly:
+		if len(in) != 2 {
+			return "", fmt.Errorf("got %d inputs, want 2", len(in))
+		}
+		out = []string{s.fakeConstructPKG(jobID, in[0], in[1], fmt.Sprintf("-installer <%s>", bt))}
+	case sign.BuildWindowsConstructInstallerOnly:
+		if len(in) != 2 {
+			return "", fmt.Errorf("got %d inputs, want 2", len(in))
+		}
+		out = []string{s.fakeConstructMSI(jobID, in[0], in[1], fmt.Sprintf("-installer <%s>", bt))}
+
 	case sign.BuildMacOS:
 		if len(in) != 1 {
 			return "", fmt.Errorf("got %d inputs, want 1", len(in))
@@ -644,12 +659,78 @@ func (s *FakeSignService) CancelSigning(_ context.Context, jobID string) error {
 	return fmt.Errorf("intentional fake error")
 }
 
+func (s *FakeSignService) fakeConstructPKG(jobID, f, meta, msg string) string {
+	// Check installer metadata.
+	b, err := os.ReadFile(strings.TrimPrefix(meta, "file://"))
+	if err != nil {
+		panic(fmt.Errorf("fakeConstructPKG: os.ReadFile: %v", err))
+	}
+	var opt darwinpkg.InstallerOptions
+	if err := json.Unmarshal(b, &opt); err != nil {
+		panic(fmt.Errorf("fakeConstructPKG: json.Unmarshal: %v", err))
+	}
+	var errs []error
+	switch opt.GOARCH {
+	case "amd64", "arm64": // OK.
+	default:
+		errs = append(errs, fmt.Errorf("unexpected GOARCH value: %q", opt.GOARCH))
+	}
+	switch min, _ := strconv.Atoi(opt.MinMacOSVersion); {
+	case min >= 11: // macOS 11 or greater; OK.
+	case opt.MinMacOSVersion == "10.15": // OK.
+	case opt.MinMacOSVersion == "10.13": // OK. Go 1.20 has macOS 10.13 as its minimum.
+	default:
+		errs = append(errs, fmt.Errorf("unexpected MinMacOSVersion value: %q", opt.MinMacOSVersion))
+	}
+	if err := errors.Join(errs...); err != nil {
+		panic(fmt.Errorf("fakeConstructPKG: unexpected installer options %#v: %v", opt, err))
+	}
+
+	// Construct fake installer.
+	b, err = os.ReadFile(strings.TrimPrefix(f, "file://"))
+	if err != nil {
+		panic(fmt.Errorf("fakeConstructPKG: os.ReadFile: %v", err))
+	}
+	return s.writeOutput(jobID, path.Base(f)+".pkg", append([]byte("I'm a PKG!\n"), b...))
+}
+
+func (s *FakeSignService) fakeConstructMSI(jobID, f, meta, msg string) string {
+	// Check installer metadata.
+	b, err := os.ReadFile(strings.TrimPrefix(meta, "file://"))
+	if err != nil {
+		panic(fmt.Errorf("fakeConstructMSI: os.ReadFile: %v", err))
+	}
+	var opt windowsmsi.InstallerOptions
+	if err := json.Unmarshal(b, &opt); err != nil {
+		panic(fmt.Errorf("fakeConstructMSI: json.Unmarshal: %v", err))
+	}
+	var errs []error
+	switch opt.GOARCH {
+	case "386", "amd64", "arm", "arm64": // OK.
+	default:
+		errs = append(errs, fmt.Errorf("unexpected GOARCH value: %q", opt.GOARCH))
+	}
+	if err := errors.Join(errs...); err != nil {
+		panic(fmt.Errorf("fakeConstructMSI: unexpected installer options %#v: %v", opt, err))
+	}
+
+	// Construct fake installer.
+	_, err = os.ReadFile(strings.TrimPrefix(f, "file://"))
+	if err != nil {
+		panic(fmt.Errorf("fakeConstructMSI: os.ReadFile: %v", err))
+	}
+	return s.writeOutput(jobID, path.Base(f)+".msi", []byte("I'm an MSI!\n"))
+}
+
 func (s *FakeSignService) fakeSignPKG(jobID, f, msg string) string {
 	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
 	if err != nil {
 		panic(fmt.Errorf("fakeSignPKG: os.ReadFile: %v", err))
 	}
-	b = bytes.TrimPrefix(b, []byte("I'm a PKG!\n"))
+	b, ok := bytes.CutPrefix(b, []byte("I'm a PKG!\n"))
+	if !ok {
+		panic(fmt.Errorf("fakeSignPKG: input doesn't look like a PKG to be signed"))
+	}
 	files, err := tgzToMap(bytes.NewReader(b))
 	if err != nil {
 		panic(fmt.Errorf("fakeSignPKG: tgzToMap: %v", err))

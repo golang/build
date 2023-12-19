@@ -175,9 +175,12 @@ func indexPkg(log *Log, data []byte, fix Fixer) map[string]*CpioFile {
 	return ix
 }
 
-// xar parser, enough to read macOS pkg files.
-// https://en.wikipedia.org/wiki/Xar_(archiver)
-// https://github.com/mackyle/xar/wiki/xarformat
+// A minimal xar parser, enough to read macOS .pkg files.
+// Package golang.org/x/build/internal/task also has one
+// for its internal needs.
+//
+// See https://en.wikipedia.org/wiki/Xar_(archiver)
+// and https://github.com/mackyle/xar/wiki/xarformat.
 
 // xarHeader is the main XML data structure for the xar header.
 type xarHeader struct {
@@ -215,8 +218,8 @@ type xarEncoding struct {
 // pkgPayload parses data as a macOS pkg file for the Go installer
 // and returns the content of the file org.golang.go.pkg/Payload.
 func pkgPayload(log *Log, data []byte) []byte {
-	if string(data[0:4]) != "xar!" || len(data) < 28 {
-		log.Printf("not an xar! file")
+	if len(data) < 28 || string(data[0:4]) != "xar!" {
+		log.Printf("not an XAR file format (missing a 28+ byte header with 'xar!' magic number)")
 		return nil
 	}
 	be := binary.BigEndian

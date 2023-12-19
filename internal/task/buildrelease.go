@@ -7,16 +7,13 @@ package task
 import (
 	"archive/tar"
 	"archive/zip"
-	"bytes"
 	"compress/gzip"
 	"context"
-	"embed"
 	"fmt"
 	"io"
 	"path"
 	"regexp"
 	"strings"
-	"text/template"
 	"time"
 
 	"golang.org/x/build/buildenv"
@@ -302,184 +299,6 @@ func (b *BuildletStep) makeEnv() []string {
 	// Add extra vars from the target's configuration.
 	makeEnv = append(makeEnv, b.Target.ExtraEnv...)
 	return makeEnv
-}
-
-// BuildDarwinPKG builds an unsigned macOS installer
-// for the given Go version and binary archive.
-// It writes the result to pkg.
-func (b *BuildletStep) BuildDarwinPKG(ctx *workflow.TaskContext, binaryArchive io.Reader, goVersion string, pkg io.Writer) error {
-	ctx.Printf("Building inner .pkg with pkgbuild.")
-	if err := b.exec(ctx, "mkdir", []string{"pkg-intermediate"}, buildlet.ExecOpts{SystemLevel: true}); err != nil {
-		return err
-	}
-	if err := b.Buildlet.PutTar(ctx, binaryArchive, "pkg-root/usr/local"); err != nil {
-		return err
-	}
-	if err := b.Buildlet.Put(ctx, strings.NewReader("/usr/local/go/bin\n"), "pkg-root/etc/paths.d/go", 0644); err != nil {
-		return err
-	}
-	if err := b.Buildlet.Put(ctx, strings.NewReader(`#!/bin/bash
-
-GOROOT=/usr/local/go
-echo "Removing previous installation"
-if [ -d $GOROOT ]; then
-	rm -r $GOROOT
-fi
-`), "pkg-scripts/preinstall", 0755); err != nil {
-		return err
-	}
-	if err := b.Buildlet.Put(ctx, strings.NewReader(`#!/bin/bash
-
-GOROOT=/usr/local/go
-echo "Fixing permissions"
-cd $GOROOT
-find . -exec chmod ugo+r \{\} \;
-find bin -exec chmod ugo+rx \{\} \;
-find . -type d -exec chmod ugo+rx \{\} \;
-chmod o-w .
-`), "pkg-scripts/postinstall", 0755); err != nil {
-		return err
-	}
-	if err := b.exec(ctx, "pkgbuild", []string{
-		"--identifier=org.golang.go",
-		"--version", goVersion,
-		"--scripts=pkg-scripts",
-		"--root=pkg-root",
-		"pkg-intermediate/org.golang.go.pkg",
-	}, buildlet.ExecOpts{SystemLevel: true}); err != nil {
-		return err
-	}
-
-	ctx.Printf("Building outer .pkg with productbuild.")
-	if err := b.exec(ctx, "mkdir", []string{"pkg-out"}, buildlet.ExecOpts{SystemLevel: true}); err != nil {
-		return err
-	}
-	bg, err := darwinPKGBackground(b.Target.GOARCH)
-	if err != nil {
-		return err
-	}
-	if err := b.Buildlet.Put(ctx, bytes.NewReader(bg), "pkg-resources/bg-light.png", 0644); err != nil {
-		return err
-	}
-	if err := b.Buildlet.Put(ctx, bytes.NewReader(bg), "pkg-resources/bg-dark.png", 0644); err != nil {
-		return err
-	}
-	var buf bytes.Buffer
-	distData := darwinDistData{
-		HostArchs: map[string]string{"amd64": "x86_64", "arm64": "arm64"}[b.Target.GOARCH],
-		MinOS:     b.Target.MinMacOSVersion,
-	}
-	if err := darwinDistTmpl.ExecuteTemplate(&buf, "dist.xml", distData); err != nil {
-		return err
-	}
-	if err := b.Buildlet.Put(ctx, &buf, "pkg-distribution", 0644); err != nil {
-		return err
-	}
-	if err := b.exec(ctx, "productbuild", []string{
-		"--distribution=pkg-distribution",
-		"--resources=pkg-resources",
-		"--package-path=pkg-intermediate",
-		"pkg-out/" + goVersion + ".pkg",
-	}, buildlet.ExecOpts{SystemLevel: true}); err != nil {
-		return err
-	}
-
-	return fetchFile(ctx, b.Buildlet, pkg, "pkg-out")
-}
-
-//go:embed _data/darwinpkg
-var darwinPKGData embed.FS
-
-func darwinPKGBackground(goarch string) ([]byte, error) {
-	switch goarch {
-	case "arm64":
-		return darwinPKGData.ReadFile("_data/darwinpkg/blue-bg.png")
-	case "amd64":
-		return darwinPKGData.ReadFile("_data/darwinpkg/brown-bg.png")
-	default:
-		return nil, fmt.Errorf("no background for GOARCH %q", goarch)
-	}
-}
-
-var darwinDistTmpl = template.Must(template.New("").ParseFS(darwinPKGData, "_data/darwinpkg/dist.xml"))
-
-type darwinDistData struct {
-	HostArchs string // hostArchitectures option value.
-	MinOS     string // Minimum required system.version.ProductVersion.
-}
-
-// ConvertPKGToTGZ converts a macOS installer (.pkg) to a .tar.gz tarball.
-func (b *BuildletStep) ConvertPKGToTGZ(ctx *workflow.TaskContext, in io.Reader, out io.Writer) error {
-	if err := b.Buildlet.Put(ctx, in, "go.pkg", 0400); err != nil {
-		return err
-	}
-
-	ctx.Printf("Expanding PKG installer payload.")
-	if err := b.exec(ctx, "pkgutil", []string{"--expand-full", "go.pkg", "pkg-expanded"}, buildlet.ExecOpts{SystemLevel: true}); err != nil {
-		return err
-	}
-
-	ctx.Printf("Compressing into a tarball.")
-	input, err := b.Buildlet.GetTar(ctx, "pkg-expanded/org.golang.go.pkg/Payload/usr/local/go")
-	if err != nil {
-		return err
-	}
-	defer input.Close()
-
-	gzReader, err := gzip.NewReader(input)
-	if err != nil {
-		return err
-	}
-	defer gzReader.Close()
-	reader := tar.NewReader(gzReader)
-	gzWriter := gzip.NewWriter(out)
-	writer := tar.NewWriter(gzWriter)
-	if err := adjustTar(reader, writer, "go/", nil); err != nil {
-		return err
-	}
-	if err := writer.Close(); err != nil {
-		return err
-	}
-	return gzWriter.Close()
-}
-
-//go:embed releaselet/releaselet.go
-var releaselet string
-
-func (b *BuildletStep) BuildWindowsMSI(ctx *workflow.TaskContext, binaryArchive io.Reader, msi io.Writer) error {
-	ctx.Printf("Installing bootstrap go")
-	if err := b.Buildlet.PutTarFromURL(ctx, b.BuildConfig.GoBootstrapURL(buildenv.Production), "bootstrap_go"); err != nil {
-		return err
-	}
-	if err := b.Buildlet.PutTar(ctx, binaryArchive, ""); err != nil {
-		return err
-	}
-	ctx.Printf("Pushing and running releaselet.")
-	if err := b.Buildlet.Put(ctx, strings.NewReader(releaselet), "releaselet.go", 0666); err != nil {
-		return err
-	}
-	if err := b.exec(ctx, "bootstrap_go/bin/go", []string{"run", "releaselet.go"}, buildlet.ExecOpts{
-		Dir: ".", // root of buildlet work directory
-	}); err != nil {
-		ctx.Printf("releaselet failed: %v", err)
-		b.Buildlet.ListDir(ctx, ".", buildlet.ListDirOpts{Recursive: true}, func(ent buildlet.DirEntry) {
-			ctx.Printf("remote: %v", ent)
-		})
-		return err
-	}
-	return fetchFile(ctx, b.Buildlet, msi, "msi")
-}
-
-// fetchFile fetches the specified directory from the given buildlet, and
-// writes the first file it finds in that directory to dest.
-func fetchFile(ctx *workflow.TaskContext, client buildlet.RemoteClient, dest io.Writer, dir string) error {
-	ctx.Printf("Downloading file from %q.", dir)
-	tgz, err := client.GetTar(context.Background(), dir)
-	if err != nil {
-		return err
-	}
-	defer tgz.Close()
-	return ExtractFile(tgz, dest, "*")
 }
 
 // ExtractFile copies the first file in tgz matching glob to dest.

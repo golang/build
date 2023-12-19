@@ -12,6 +12,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,12 +32,15 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/gcsfs"
+	"golang.org/x/build/internal/installer/darwinpkg"
+	"golang.org/x/build/internal/installer/windowsmsi"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/exp/maps"
 	"golang.org/x/net/context/ctxhttp"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -548,12 +552,11 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 		// include the signed binaries.
 		switch target.GOOS {
 		case "darwin":
-			pkg := wf.Task2(wd, "Build PKG installer", tasks.buildDarwinPKG, version, tar)
+			pkg := wf.Task1(wd, "Build PKG installer", tasks.buildDarwinPKG, tar)
 			signedPKG := wf.Task2(wd, "Sign PKG installer", tasks.signArtifact, pkg, wf.Const(sign.BuildMacOS))
-			signedTGZ := wf.Task1(wd, "Convert PKG to .tgz", tasks.convertPKGToTGZ, signedPKG)
-			mergedTGZ := wf.Task2(wd, "Merge signed files into .tgz", tasks.mergeSignedToTGZ, tar, signedTGZ)
-			mod = wf.Task4(wd, "Merge signed files into module zip", tasks.mergeSignedToModule, version, timestamp, mod, signedTGZ)
-			artifacts = append(artifacts, signedPKG, mergedTGZ)
+			signedTGZ := wf.Task2(wd, "Merge signed files into .tgz", tasks.mergeSignedToTGZ, tar, signedPKG)
+			mod = wf.Task4(wd, "Merge signed files into module zip", tasks.mergeSignedToModule, version, timestamp, mod, signedPKG)
+			artifacts = append(artifacts, signedPKG, signedTGZ)
 		case "windows":
 			msi := wf.Task1(wd, "Build MSI installer", tasks.buildWindowsMSI, tar)
 			signedMSI := wf.Task2(wd, "Sign MSI installer", tasks.signArtifact, msi, wf.Const(sign.BuildWindows))
@@ -994,9 +997,11 @@ func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, version stri
 
 func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, signed artifact) (artifact, error) {
 	return b.runBuildStep(ctx, unsigned.Target, nil, signed, "tar.gz", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
-		signedBinaries, err := loadBinaries(ctx, signed)
+		signedBinaries, err := task.ReadBinariesFromPKG(signed)
 		if err != nil {
 			return err
+		} else if _, ok := signedBinaries["go/bin/go"]; !ok {
+			return fmt.Errorf("didn't find go/bin/go among %d signed binaries %+q", len(signedBinaries), maps.Keys(signedBinaries))
 		}
 
 		// Copy files from the tgz, overwriting with binaries from the signed tar.
@@ -1051,9 +1056,11 @@ func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, sign
 
 func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version string, timestamp time.Time, mod moduleArtifact, signed artifact) (moduleArtifact, error) {
 	a, err := b.runBuildStep(ctx, nil, nil, signed, "signedmod.zip", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
-		signedBinaries, err := loadBinaries(ctx, signed)
+		signedBinaries, err := task.ReadBinariesFromPKG(signed)
 		if err != nil {
 			return err
+		} else if _, ok := signedBinaries["go/bin/go"]; !ok {
+			return fmt.Errorf("didn't find go/bin/go among %d signed binaries %+q", len(signedBinaries), maps.Keys(signedBinaries))
 		}
 
 		// Copy files from the module zip, overwriting with binaries from the signed tar.
@@ -1109,39 +1116,6 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 	return mod, nil
 }
 
-// loadBinaries reads binaries that we expect to have been signed by the
-// macOS signing process from tgz.
-func loadBinaries(ctx *wf.TaskContext, tgz io.Reader) (map[string][]byte, error) {
-	zr, err := gzip.NewReader(tgz)
-	if err != nil {
-		return nil, err
-	}
-	defer zr.Close()
-	tr := tar.NewReader(zr)
-
-	binaries := map[string][]byte{}
-	for {
-		th, err := tr.Next()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return nil, err
-		}
-		if !strings.HasPrefix(th.Name, "go/bin/") && !strings.HasPrefix(th.Name, "go/pkg/tool/") {
-			continue
-		}
-		if th.Typeflag != tar.TypeReg || th.Mode&0100 == 0 {
-			continue
-		}
-		contents, err := io.ReadAll(tr)
-		if err != nil {
-			return nil, err
-		}
-		binaries[th.Name] = contents
-	}
-	return binaries, nil
-}
-
 func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
 	bc := dashboard.Builders[target.Builder]
 	return b.runBuildStep(ctx, target, bc, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
@@ -1149,23 +1123,72 @@ func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, target *releasetarg
 	})
 }
 
-func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, version string, binary artifact) (artifact, error) {
-	bc := dashboard.Builders[binary.Target.Builder]
-	return b.runBuildStep(ctx, binary.Target, bc, binary, "pkg", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-		return bs.BuildDarwinPKG(ctx, r, version, w)
-	})
-}
-func (b *BuildReleaseTasks) convertPKGToTGZ(ctx *wf.TaskContext, pkg artifact) (tgz artifact, _ error) {
-	bc := dashboard.Builders[pkg.Target.Builder]
-	return b.runBuildStep(ctx, pkg.Target, bc, pkg, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-		return bs.ConvertPKGToTGZ(ctx, r, w)
+// buildDarwinPKG constructs an installer for the given binary artifact, to be signed.
+func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, binary artifact) (artifact, error) {
+	return b.runBuildStep(ctx, binary.Target, nil, artifact{}, "pkg", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+		metadataFile, err := jsonEncodeScratchFile(ctx, b.ScratchFS, darwinpkg.InstallerOptions{
+			GOARCH:          binary.Target.GOARCH,
+			MinMacOSVersion: binary.Target.MinMacOSVersion,
+		})
+		if err != nil {
+			return err
+		}
+		installerPaths, err := b.signArtifacts(ctx, sign.BuildMacOSConstructInstallerOnly, []string{
+			b.ScratchFS.URL(ctx, binary.Scratch),
+			b.ScratchFS.URL(ctx, metadataFile),
+		})
+		if err != nil {
+			return err
+		} else if len(installerPaths) != 1 {
+			return fmt.Errorf("got %d outputs, want 1 macOS .pkg installer", len(installerPaths))
+		} else if ext := path.Ext(installerPaths[0]); ext != ".pkg" {
+			return fmt.Errorf("got output extension %q, want .pkg", ext)
+		}
+		resultFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.SignedURL)
+		if err != nil {
+			return err
+		}
+		r, err := resultFS.Open(installerPaths[0])
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		_, err = io.Copy(w, r)
+		return err
 	})
 }
 
+// buildWindowsMSI constructs an installer for the given binary artifact, to be signed.
 func (b *BuildReleaseTasks) buildWindowsMSI(ctx *wf.TaskContext, binary artifact) (artifact, error) {
-	bc := dashboard.Builders[binary.Target.Builder]
-	return b.runBuildStep(ctx, binary.Target, bc, binary, "msi", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-		return bs.BuildWindowsMSI(ctx, r, w)
+	return b.runBuildStep(ctx, binary.Target, nil, artifact{}, "msi", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+		metadataFile, err := jsonEncodeScratchFile(ctx, b.ScratchFS, windowsmsi.InstallerOptions{
+			GOARCH: binary.Target.GOARCH,
+		})
+		if err != nil {
+			return err
+		}
+		installerPaths, err := b.signArtifacts(ctx, sign.BuildWindowsConstructInstallerOnly, []string{
+			b.ScratchFS.URL(ctx, binary.Scratch),
+			b.ScratchFS.URL(ctx, metadataFile),
+		})
+		if err != nil {
+			return err
+		} else if len(installerPaths) != 1 {
+			return fmt.Errorf("got %d outputs, want 1 Windows .msi installer", len(installerPaths))
+		} else if ext := path.Ext(installerPaths[0]); ext != ".msi" {
+			return fmt.Errorf("got output extension %q, want .msi", ext)
+		}
+		resultFS, err := gcsfs.FromURL(ctx, b.GCSClient, b.SignedURL)
+		if err != nil {
+			return err
+		}
+		r, err := resultFS.Open(installerPaths[0])
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		_, err = io.Copy(w, r)
+		return err
 	})
 }
 
@@ -1705,4 +1728,23 @@ func (b *BuildReleaseTasks) awaitCloudBuild(ctx *wf.TaskContext, build task.Clou
 		return b.CloudBuildClient.Completed(ctx, build)
 	})
 	return detail, err
+}
+
+// jsonEncodeScratchFile JSON encodes v into a new scratch file and returns its name.
+func jsonEncodeScratchFile(ctx *wf.TaskContext, fs *task.ScratchFS, v any) (name string, _ error) {
+	name, f, err := fs.OpenWrite(ctx, "f.json")
+	if err != nil {
+		return "", err
+	}
+	e := json.NewEncoder(f)
+	e.SetIndent("", "\t")
+	e.SetEscapeHTML(false)
+	if err := e.Encode(v); err != nil {
+		f.Close()
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return name, nil
 }

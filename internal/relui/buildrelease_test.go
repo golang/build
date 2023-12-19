@@ -68,20 +68,6 @@ func TestSecurity(t *testing.T) {
 const fakeGo = `#!/bin/bash -eu
 
 case "$1" in
-"run")
-  case "$2" in
-  "releaselet.go")
-    # We're building an MSI. The command should be run in the gomote work dir.
-    ls go/src/make.bash >/dev/null
-    mkdir msi
-    echo "I'm an MSI!" > msi/thisisanmsi.msi
-    ;;
-  *)
-    echo "unknown main file $2"
-    exit 1
-    ;;
-  esac
-  ;;
 "get")
   ls go.mod go.sum >/dev/null
   for i in "${@:2}"; do
@@ -128,48 +114,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	// Set up a server that will be used to serve inputs to the build.
 	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
 	t.Cleanup(bootstrapServer.Close)
-	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, map[string]string{
-		"pkgbuild": `#!/bin/bash -eu
-case "$@" in
-"--identifier=org.golang.go --version ` + wantVersion + ` --scripts=pkg-scripts --root=pkg-root pkg-intermediate/org.golang.go.pkg")
-	# We're doing an intermediate step in building a PKG.
-	echo "I'm an intermediate PKG!" > "$6"
-	tar -cz -C pkg-root . >> "$6"
-	;;
-*)
-	echo "unexpected command $@"
-	exit 1
-	;;
-esac
-`,
-		"productbuild": `#!/bin/bash -eu
-case "$@" in
-"--distribution=pkg-distribution --resources=pkg-resources --package-path=pkg-intermediate pkg-out/` + wantVersion + `.pkg")
-	# We're building a PKG.
-	ls pkg-distribution pkg-resources/bg-light.png pkg-resources/bg-dark.png >/dev/null
-	cat pkg-intermediate/* | head -n 1 | sed "s/an intermediate PKG/a PKG/" > "$4"
-	cat pkg-intermediate/* | tail -n +2 >> "$4"
-	;;
-*)
-	echo "unexpected command $@"
-	exit 1
-	;;
-esac
-`,
-		"pkgutil": `#!/bin/bash -eu
-case "$@" in
-"--expand-full go.pkg pkg-expanded")
-	# We're expanding a PKG.
-	mkdir -p "$3/org.golang.go.pkg/Payload/usr/local/go"
-	tail -n +2 "$2" | tar -xz -C "$3/org.golang.go.pkg/Payload"
-	;;
-*)
-	echo "unexpected command $@"
-	exit 1
-	;;
-esac
-`,
-	})
+	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, nil)
 
 	// Set up the fake CDN publishing process.
 	servingDir := t.TempDir()
