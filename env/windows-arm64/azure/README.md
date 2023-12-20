@@ -48,8 +48,7 @@ and then configure as described below in VM setup. This VM will have no public I
 Notes:
 * the "image" argument above is arm-specific, and in addition "size" argument also encodes the arm64-ness of the VM (strangely)
 
-
-## VM setup (part 1 of 2)
+## VM setup (part 1 of 3)
 
 Once a VM has been created, you can apply Go-specific configuration to it by running the setup script in this directory (startup.ps1), using this command:
 
@@ -70,9 +69,52 @@ Notes:
 * exit status of the "az" command does NOT accurately reflect exit status of the powershell script.
 * errors about things already existing are expected
 
-## VM setup (part 2 of 2)
+## VM setup (part 2 of 3)
 
-After running "startup.ps1" in step 1, you will need to distribute a copy of the private builder key to the VM (for details on keys, see https://github.com/golang/go/wiki/DashboardBuilders#luci-builders).  Because the VM created in step 1 does not have a public IP, we can't use ssh/scp to copy in the file, so instead the recommendation is to do the transfer using "writefilegenpowerscript.go", steps below.
+Each VM instance needs a unique hostname; this is handled by starting with a base hostname of "windows-arm64-azure" and then tacking on a numeric "--NN" suffix.  To enable the VM to use the correct hostname, the next step is to write a "bootstrapswarm boot loop" script of the following form for the VM (where `INSTANCE` is replaced with a unique numeric value, such as "00" or "01"):
+
+```
+if %username%==swarming goto loop
+exit 0
+:loop
+@echo Invoking bootstrapswarm.exe at %date% %time% on %computername%
+C:\golang\bootstrapswarm.exe -hostname windows-arm64-azure--<INSTANCE>
+timeout 10
+goto loop
+```
+
+The following PowerShell script will write out a script of the proper form to the file "C:\golang\windows-arm64-bootstrapswarm-loop.bat" on the VM (hostname will vary of course):
+
+```
+Write-Host "Writing windows-arm64-bootstrapswarm-loop.bat"
+
+mkdir C:\golang
+
+$path = "C:\golang\windows-arm64-bootstrapswarm-loop.bat"
+$line = "rem boostrapswarm loop script"
+$hostname | Out-File -Encoding ascii -FilePath $path
+
+$line = "if %username%==swarming goto loop"
+Add-Content -Encoding ascii -Path $path -Value $line
+$line = "exit 0"
+Add-Content -Encoding ascii -Path $path -Value $line
+$line = ":loop"
+Add-Content -Encoding ascii -Path $path -Value $line
+$line = "@echo Invoking bootstrapswarm.exe at %date% %time% on %computername%"
+Add-Content -Encoding ascii -Path $path -Value $line
+$line = "C:\golang\bootstrapswarm.exe -hostname windows-arm64-azure--<INSTANCE>"
+Add-Content -Encoding ascii -Path $path -Value $line
+$line = "timeout 10"
+Add-Content -Encoding ascii -Path $path -Value $line
+$line = "goto loop"
+Add-Content -Encoding ascii -Path $path -Value $line
+```
+
+Run the script with "az vm run-command invoke" as with the startup script above.
+
+## VM setup (part 3 of 3)
+
+As a final step, you will need to distribute a copy of the private builder key to the VM (for details on keys, see https://github.com/golang/go/wiki/DashboardBuilders#luci-builders).  Because the VM created in step 1 does not have a public IP, we can't use ssh/scp to copy in the file, so instead the recommendation is to do the transfer using "writefilegenpowerscript.go", steps below.
 
 ```
 # Copy key from valentine to a local file

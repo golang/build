@@ -118,12 +118,6 @@ Write-Host "downloading luci_machine_tokend to $tokend_exe_path"
 Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/windows-arm64-luci_machine_tokend.exe' -Output $tokend_exe_path
 dir $tokend_exe_path
 
-# Download loop script.
-$loop_script_path = "$builder_dir\windows-arm64-bootstrapswarm-loop.bat"
-Write-Host "downloading loop script to $loop_script_path"
-Get-FileFromUrl -URL 'https://storage.googleapis.com/go-builder-data/windows-arm64-bootstrapswarm-loop.bat' -Output $loop_script_path
-dir $loop_script_path
-
 # Install the OpenSSH Client
 Add-WindowsCapability -Online -Name OpenSSH.Client
 # Install the OpenSSH Server
@@ -144,6 +138,8 @@ $vs_buildtools = "$builder_dir\vs_buildtools.exe"
 Get-FileFromUrl -URL "https://aka.ms/vs/16/release/vs_buildtools.exe" -Output "$vs_buildtools"
 
 Write-Host "installing Visual Studio Build Tools"
+$dep_dir = "C:\godep"
+mkdir $dep_dir
 & $vs_buildtools --quiet --wait --norestart --nocache --installPath "$dep_dir\vs" --all --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.VC.Tools.ARM
 
 # Download and install the root certificate used for crypto/x509 testing
