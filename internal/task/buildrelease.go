@@ -209,38 +209,6 @@ type BuildletStep struct {
 	LogWriter   io.Writer
 }
 
-func (b *BuildletStep) BuildDistpack(ctx *workflow.TaskContext, sourceArchive io.Reader, out io.Writer) error {
-	ctx.Printf("Pushing source to buildlet.")
-	if err := b.Buildlet.PutTar(ctx, sourceArchive, ""); err != nil {
-		return fmt.Errorf("failed to put source tarball: %v", err)
-	}
-	makeEnv := b.makeEnv()
-	makeEnv = append(makeEnv, "GOOS="+b.Target.GOOS, "GOARCH="+b.Target.GOARCH)
-	if err := b.buildDistpack(ctx, makeEnv); err != nil {
-		return err
-	}
-	tar, err := b.Buildlet.GetTar(ctx, "go/pkg/distpack")
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(out, tar)
-	return err
-}
-
-func (b *BuildletStep) buildDistpack(ctx *workflow.TaskContext, makeEnv []string) error {
-	if u := b.BuildConfig.GoBootstrapURL(buildenv.Production); u != "" {
-		ctx.Printf("Installing go1.4.")
-		if err := b.Buildlet.PutTarFromURL(ctx, u, go14); err != nil {
-			return err
-		}
-	}
-
-	ctx.Printf("Building (make.bash only) with -distpack.")
-	return b.exec(ctx, goDir+"/"+b.BuildConfig.MakeScript(), append(b.BuildConfig.MakeScriptArgs(), "-distpack"), buildlet.ExecOpts{
-		ExtraEnv: makeEnv,
-	})
-}
-
 // BuildBinary builds a binary distribution from sourceArchive and writes it to out.
 func (b *BuildletStep) BuildBinary(ctx *workflow.TaskContext, sourceArchive io.Reader, out io.Writer) error {
 	// Push source to buildlet.
