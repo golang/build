@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build !cgo
-
 // Package darwinpkg encodes the process of building a macOS PKG
 // installer from the given Go toolchain .tar.gz binary archive.
 package darwinpkg
@@ -37,20 +35,25 @@ type InstallerOptions struct {
 // ConstructInstaller constructs an installer for the provided Go toolchain .tar.gz
 // binary archive using workDir as a working directory, and returns the output path.
 //
-// It's intended to run on a macOS system with Xcode installed.
+// It's intended to run on a macOS system, with Xcode tools available in $PATH.
 func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt InstallerOptions) (pkgPath string, _ error) {
 	var errs []error
+	for _, dep := range [...]string{"pkgbuild", "productbuild"} {
+		if _, err := exec.LookPath(dep); err != nil {
+			errs = append(errs, fmt.Errorf("dependency %q is not in PATH", dep))
+		}
+	}
 	if opt.GOARCH == "" {
 		errs = append(errs, fmt.Errorf("GOARCH is empty"))
 	}
 	if opt.MinMacOSVersion == "" {
 		errs = append(errs, fmt.Errorf("MinMacOSVersion is empty"))
 	}
-	if len(errs) > 0 {
-		return "", errors.Join(errs...)
+	if err := errors.Join(errs...); err != nil {
+		return "", err
 	}
 
-	origWD, err := os.Getwd()
+	oldDir, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
@@ -58,7 +61,7 @@ func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt Installe
 		panic(err)
 	}
 	defer func() {
-		if err := os.Chdir(origWD); err != nil {
+		if err := os.Chdir(oldDir); err != nil {
 			panic(err)
 		}
 	}()

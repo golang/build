@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build !cgo
-
 package windowsmsi
 
 import (
@@ -38,18 +36,16 @@ func TestConstructInstaller(t *testing.T) {
 
 func TestSplitVersion(t *testing.T) {
 	// Test splitVersion.
-	for _, tt := range []struct {
+	for _, tc := range [...]struct {
 		v            string
-		minor, patch int
+		major, minor int
 	}{
-		{"go1", 0, 0},
-		{"go1.34", 34, 0},
+		{"go1.34.0", 34, 0},
 		{"go1.34.7", 34, 7},
 	} {
-		minor, patch := splitVersion(tt.v)
-		if minor != tt.minor || patch != tt.patch {
-			t.Errorf("splitVersion(%q) = %v, %v; want %v, %v",
-				tt.v, minor, patch, tt.minor, tt.patch)
+		major, minor := splitVersion(tc.v)
+		if major != tc.major || minor != tc.minor {
+			t.Errorf("splitVersion(%q) = %v, %v; want %v, %v", tc.v, major, minor, tc.major, tc.minor)
 		}
 	}
 }

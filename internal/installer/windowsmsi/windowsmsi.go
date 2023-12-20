@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build !cgo
-
 // Package windowsmsi encodes the process of building a Windows MSI
 // installer from the given Go toolchain .tar.gz binary archive.
 package windowsmsi
@@ -41,11 +39,11 @@ func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt Installe
 	if opt.GOARCH == "" {
 		errs = append(errs, fmt.Errorf("GOARCH is empty"))
 	}
-	if len(errs) > 0 {
-		return "", errors.Join(errs...)
+	if err := errors.Join(errs...); err != nil {
+		return "", err
 	}
 
-	origWD, err := os.Getwd()
+	oldDir, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +51,7 @@ func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt Installe
 		panic(err)
 	}
 	defer func() {
-		if err := os.Chdir(origWD); err != nil {
+		if err := os.Chdir(oldDir); err != nil {
 			panic(err)
 		}
 	}()
@@ -63,28 +61,28 @@ func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt Installe
 	version := readVERSION("go")
 
 	fmt.Println("\nInstalling WiX tools.")
-	wix := filepath.Join(workDir, "wix")
+	const wixDir = "wix"
 	switch opt.GOARCH {
 	default:
-		if err := installWix(wixRelease311, wix); err != nil {
+		if err := installWix(wixRelease311, wixDir); err != nil {
 			return "", err
 		}
 	case "arm", "arm64":
-		if err := installWix(wixRelease314, wix); err != nil {
+		if err := installWix(wixRelease314, wixDir); err != nil {
 			return "", err
 		}
 	}
 
-	fmt.Println("\nWriting out windows data used by the packaging process.")
-	win := filepath.Join(workDir, "windows")
-	if err := writeDataFiles(windowsData, win); err != nil {
+	fmt.Println("\nWriting out installer data used by the packaging process.")
+	const winDir = "windows"
+	if err := writeDataFiles(windowsData, winDir); err != nil {
 		return "", err
 	}
 
 	fmt.Println("\nGathering files (running wix heat).")
-	goDir := filepath.Join(workDir, "go")
-	appfiles := filepath.Join(win, "AppFiles.wxs")
-	if err := runDir(win, filepath.Join(wix, "heat"),
+	const goDir = "go"
+	appFiles := filepath.Join(winDir, "AppFiles.wxs")
+	if err := run(filepath.Join(wixDir, "heat"),
 		"dir", goDir,
 		"-nologo",
 		"-gg", "-g1", "-srd", "-sfrag", "-sreg",
@@ -92,7 +90,7 @@ func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt Installe
 		"-template", "fragment",
 		"-dr", "INSTALLDIR",
 		"-var", "var.SourceDir",
-		"-out", appfiles,
+		"-out", appFiles,
 	); err != nil {
 		return "", err
 	}
@@ -114,7 +112,7 @@ func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt Installe
 	default:
 		panic("unknown arch for windows " + opt.GOARCH)
 	}
-	if err := runDir(win, filepath.Join(wix, "candle"),
+	if err := run(filepath.Join(wixDir, "candle"),
 		"-nologo",
 		"-arch", msArch,
 		"-dGoVersion="+version,
@@ -122,30 +120,30 @@ func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt Installe
 		fmt.Sprintf("-dWixGoVersion=1.%v.%v", verMajor, verMinor),
 		"-dArch="+opt.GOARCH,
 		"-dSourceDir="+goDir,
-		filepath.Join(win, "installer.wxs"),
-		appfiles,
+		filepath.Join(winDir, "installer.wxs"),
+		appFiles,
 	); err != nil {
 		return "", err
 	}
 
 	fmt.Println("\nLinking the .msi installer (running wix light).")
-	msi := filepath.Join(workDir, "msi")
-	if err := os.Mkdir(msi, 0755); err != nil {
+	if err := os.Mkdir("msi-out", 0755); err != nil {
 		return "", err
 	}
-	if err := runDir(win, filepath.Join(wix, "light"),
+	if err := run(filepath.Join(wixDir, "light"),
+		"-b", winDir,
 		"-nologo",
 		"-dcl:high",
 		"-ext", "WixUIExtension",
 		"-ext", "WixUtilExtension",
 		"AppFiles.wixobj",
 		"installer.wixobj",
-		"-o", filepath.Join(msi, version+"-unsigned.msi"),
+		"-o", filepath.Join("msi-out", version+"-unsigned.msi"),
 	); err != nil {
 		return "", err
 	}
 
-	return filepath.Join(msi, version+"-unsigned.msi"), nil
+	return filepath.Join(workDir, "msi-out", version+"-unsigned.msi"), nil
 }
 
 type wixRelease struct {
@@ -238,6 +236,8 @@ func putTar(tgz, dir string) {
 	}
 }
 
+// run runs the specified command.
+// It prints the command line.
 func run(name string, args ...string) error {
 	fmt.Printf("$ %s %s\n", name, strings.Join(args, " "))
 	cmd := exec.Command(name, args...)
@@ -245,35 +245,22 @@ func run(name string, args ...string) error {
 	return cmd.Run()
 }
 
-func runDir(dir, name string, args ...string) error {
-	fmt.Printf("%s $ %s %s\n", filepath.Base(dir), name, strings.Join(args, " "))
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	if dir != "" {
-		cmd.Env = append(os.Environ(), "PWD="+dir)
-	}
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	return cmd.Run()
-}
+var versionRE = regexp.MustCompile(`^go1\.(\d+\.\d+)`)
 
-var versionRe = regexp.MustCompile(`^go1\.(\d+(\.\d+)?)`)
-
-// splitVersion splits a Go version string such as "go1.9" or "go1.10.2" (as matched by versionRe)
+// splitVersion splits a Go version string such as "go1.23.4" (as matched by versionRE)
 // into its parts: major and minor.
 func splitVersion(v string) (major, minor int) {
-	m := versionRe.FindStringSubmatch(v)
-	if m == nil {
-		return
+	m := versionRE.FindStringSubmatch(v)
+	if len(m) < 2 {
+		return 0, 0
 	}
 	parts := strings.Split(m[1], ".")
-	if len(parts) >= 1 {
-		major, _ = strconv.Atoi(parts[0])
-
-		if len(parts) >= 2 {
-			minor, _ = strconv.Atoi(parts[1])
-		}
+	if len(parts) < 2 {
+		return 0, 0
 	}
-	return
+	major, _ = strconv.Atoi(parts[0])
+	minor, _ = strconv.Atoi(parts[1])
+	return major, minor
 }
 
 const storageBase = "https://storage.googleapis.com/go-builder-data/release/"
