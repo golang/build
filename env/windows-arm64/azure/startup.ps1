@@ -102,6 +102,8 @@ Set-Service -Name 'MSDTC' -StartupType 'Disabled'
 Set-Service -Name 'IKEEXT' -StartupType 'Disabled'
 Set-Service -Name 'RemoteRegistry' -StartupType 'Disabled'
 Set-Service -Name 'lmhosts' -StartupType 'Disabled'
+Set-Service -Name 'WSearch' -StartupType 'Disabled'
+Stop-Service -Name 'WSearch'
 
 $builder_dir = "C:\golang"
 mkdir $builder_dir
@@ -213,9 +215,9 @@ icacls $cert_file /deny swarming:r
 # Set GO_BUILDER_NAME environment variable.
 [Environment]::SetEnvironmentVariable('GO_BUILDER_NAME', 'windows-arm64-azure', [System.EnvironmentVariableTarget]::Machine)
 
-# Note: uncomment this line to tell the swarming bot
-# not to reboot this machine (this is helpful for debugging).
-# [Environment]::SetEnvironmentVariable('SWARMING_NEVER_REBOOT', 'true', [System.EnvironmentVariableTarget]::Machine)
+# Tell the swarming bot not to reboot this machine. This appears to be
+# needed to avoid having to re-disable anti-tamper security measures.
+[Environment]::SetEnvironmentVariable('SWARMING_NEVER_REBOOT', 'true', [System.EnvironmentVariableTarget]::Machine)
 
 # Path to the token.json file. Written by tokend, read by swarming.
 $token_file = "$builder_dir\token.json"
