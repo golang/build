@@ -907,7 +907,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     if test_shards > 1 or (project == "go" and not capacity_constrained):
         downstream_builders = define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
     elif test_shards == 1:
-        define_allmode_builder(env, name, base_props, base_dims, emit_builder)
+        define_allmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
     else:
         fail("unhandled builder definition")
 
@@ -973,6 +973,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         bucket = env.bucket,
         dimensions = coord_dims,
         properties = coord_props,
+        triggering_policy = triggering_policy(env, builder_type),
         service_account = env.coordinator_sa,
     )
 
@@ -1016,7 +1017,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
     )
     return builders_to_trigger
 
-def define_allmode_builder(env, name, base_props, base_dims, emit_builder):
+def define_allmode_builder(env, name, builder_type, base_props, base_dims, emit_builder):
     # Create an "ALL" mode builder which just performs the full build serially.
     #
     # This builder is substantially simpler because it doesn't need to trigger any
@@ -1031,7 +1032,21 @@ def define_allmode_builder(env, name, base_props, base_dims, emit_builder):
         bucket = env.bucket,
         dimensions = base_dims,
         properties = all_props,
+        triggering_policy = triggering_policy(env, builder_type),
         service_account = env.worker_sa,
+    )
+
+# triggering_policy defines the LUCI Scheduler triggering policy for postsubmit builders.
+# Returns None for presubmit builders.
+def triggering_policy(env, builder_type):
+    if env.bucket not in ["ci", "ci-workers"]:
+        return None
+    concurrent_builds = 5
+    if is_capacity_constrained(env.low_capacity_hosts, host_of(builder_type)):
+        concurrent_builds = 1
+    return scheduler.newest_first(
+        max_concurrent_invocations = concurrent_builds,
+        pending_timeout = time.week,
     )
 
 luci.builder(
