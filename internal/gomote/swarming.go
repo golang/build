@@ -292,9 +292,10 @@ func (ss *SwarmingServer) ExecuteCommand(req *protos.ExecuteCommandRequest, stre
 			}
 			return len(p), nil
 		}},
-		Args:  req.GetArgs(),
-		Debug: req.GetDebug(),
-		Path:  req.GetPath(),
+		Args:     req.GetArgs(),
+		ExtraEnv: req.GetAppendEnvironment(),
+		Debug:    req.GetDebug(),
+		Path:     req.GetPath(),
 	})
 	if execErr != nil {
 		// there were system errors preventing the command from being started or seen to completion.
