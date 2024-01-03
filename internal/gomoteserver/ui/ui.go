@@ -22,7 +22,7 @@ var (
 
 // HandleStatusFunc gives a HTTP handler which can report the status of the instances
 // in the session pool.
-func HandleStatusFunc(pool interface{ List() []*remote.Session }) http.HandlerFunc {
+func HandleStatusFunc(pool interface{ List() []*remote.Session }, version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
@@ -33,6 +33,10 @@ func HandleStatusFunc(pool interface{ List() []*remote.Session }) http.HandlerFu
 			Created time.Duration
 			Expires time.Duration
 		}
+		type Status struct {
+			Instances []Instance
+			Version   string
+		}
 		var instances []Instance
 		sessions := pool.List()
 		for _, s := range sessions {
@@ -42,7 +46,10 @@ func HandleStatusFunc(pool interface{ List() []*remote.Session }) http.HandlerFu
 				Expires: time.Until(s.Expires),
 			})
 		}
-		statusHTMLTmpl.Execute(w, instances)
+		statusHTMLTmpl.Execute(w, Status{
+			Instances: instances,
+			Version:   version,
+		})
 	}
 }
 
@@ -56,4 +63,17 @@ var statusHTML []byte
 func HandleStyleCSS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, max-age=0")
 	http.ServeContent(w, r, "style.css", processStartTime, bytes.NewReader(styleCSS))
+}
+
+// Redirect redirects requests from the source host to the destination host if the host
+// matches the source host. If the host does not match the source host, then the request
+// will be passed to the passed in handler.
+func Redirect(hf http.HandlerFunc, srcHost, dstHost string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Host == srcHost {
+			http.Redirect(w, r, "https://"+dstHost, http.StatusSeeOther)
+			return
+		}
+		hf(w, r)
+	}
 }
