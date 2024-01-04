@@ -135,6 +135,9 @@ func cachedToken() (*oauth2.Token, error) {
 	if err := json.Unmarshal(refreshBytes, &refreshToken); err != nil {
 		return nil, err
 	}
+	if !refreshToken.Valid() {
+		return nil, nil
+	}
 	return &refreshToken, nil
 }
 
