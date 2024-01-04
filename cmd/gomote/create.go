@@ -101,17 +101,7 @@ func create(args []string) error {
 		fmt.Fprintln(os.Stderr, "added to that group.")
 		fs.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "\nValid types:")
-		if luciEnabled() {
-			swarmingBuilders, err := swarmingBuilders()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, " %s\n", err)
-			} else {
-				for _, builder := range swarmingBuilders {
-					fmt.Fprintf(os.Stderr, "  * %s\n", builder)
-				}
-			}
-			os.Exit(1)
-		} else {
+		if luciDisabled() {
 			for _, bt := range builders() {
 				var warn string
 				if bt.IsReverse {
@@ -122,6 +112,16 @@ func create(args []string) error {
 					}
 				}
 				fmt.Fprintf(os.Stderr, "  * %s%s\n", bt.Name, warn)
+			}
+			os.Exit(1)
+		} else {
+			swarmingBuilders, err := swarmingBuilders()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, " %s\n", err)
+			} else {
+				for _, builder := range swarmingBuilders {
+					fmt.Fprintf(os.Stderr, "  * %s\n", builder)
+				}
 			}
 			os.Exit(1)
 		}

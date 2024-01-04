@@ -139,10 +139,10 @@ to reproduce a rare failure, like so:
 	$ GOROOT=/path/to/goroot gomote create -setup -count=10 linux-amd64
 	$ gomote run -until='unexpected return pc' -collect go/bin/go run -run="MyFlakyTest" -count=100 runtime
 
-# Experiments
+# Legacy Infrastructure
 
-Setting the GOMOTELUCI environmental variable equal to true will set the gomote client to communicate with
-the gomote server instead of the coordinator. The gomote server uses LUCI swarming instances for gomotes.
+Setting the GOMOTEDISABLELUCI environmental variable equal to true will set the gomote client to communicate with
+the the coordinator instead of the gomote server.
 */
 package main
 
@@ -228,7 +228,7 @@ func registerCommands() {
 }
 
 var (
-	serverAddr = flag.String("server", "build.golang.org:443", "Address for GRPC server")
+	serverAddr = flag.String("server", "gomote.golang.org:443", "Address for GRPC server")
 )
 
 func main() {
@@ -242,8 +242,8 @@ func main() {
 	if len(args) == 0 {
 		usage()
 	}
-	if luciEnabled() {
-		*serverAddr = "gomote.golang.org:443"
+	if luciDisabled() {
+		*serverAddr = "build.golang.org:443"
 	}
 	// Set up globals.
 	buildEnv = buildenv.FromFlags()
@@ -305,7 +305,7 @@ func instanceDoesNotExist(err error) bool {
 	return false
 }
 
-func luciEnabled() bool {
-	on, _ := strconv.ParseBool(os.Getenv("GOMOTELUCI"))
+func luciDisabled() bool {
+	on, _ := strconv.ParseBool(os.Getenv("GOMOTEDISABLELUCI"))
 	return on
 }
