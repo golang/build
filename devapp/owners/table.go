@@ -44,15 +44,12 @@ var (
 	hyangah      = gh("hyangah")
 	iant         = gh("ianlancetaylor")
 	iancottrell  = gh("ianthehat")
-	jamalc       = gh("jamalc")
 	jba          = gh("jba")
 	jbd          = gh("rakyll")
 	joetsai      = gh("dsnet")
-	julieqiu     = gh("julieqiu")
 	kardianos    = gh("kardianos")
 	katie        = gh("katiehockman")
 	kevinburke   = gh("kevinburke")
-	kele         = gh("kele")
 	khr          = gh("randall77")
 	martisch     = gh("martisch")
 	matloob      = gh("matloob")
@@ -761,7 +758,7 @@ var entries = map[string]*Entry{
 	},
 	"debug": {
 		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{hyangah, khr},
+		Secondary: []Owner{khr},
 	},
 	"exp/vulncheck": {
 		Primary: []Owner{vulndbTeam},
@@ -978,7 +975,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{cherryyz},
 	},
 	"vscode-go": {
-		Primary: []Owner{toolsTeam},
+		Primary:   []Owner{toolsTeam},
+		Secondary: []Owner{hyangah},
 	},
 
 	// These components are domains, not Go packages.

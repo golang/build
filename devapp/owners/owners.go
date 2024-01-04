@@ -249,7 +249,7 @@ type ownerData struct {
 	ArchOSes map[string]*displayEntry
 }
 
-func serveIndex(w http.ResponseWriter, r *http.Request) {
+func serveIndex(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	indexCache.once.Do(func() {
