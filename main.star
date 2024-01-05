@@ -924,6 +924,26 @@ def define_builder(env, project, go_branch_short, builder_type):
         cmd = ["golangbuild"],
     )
 
+    # Determine how long we should wait for a machine to become available before the
+    # build expires. Only applies if there's at least one machine. Builds fail immediately
+    # if there are no machines matching the dimensions, unless the builder's wait_for_capacity
+    # field is set.
+    #
+    # For builders targeting platforms that we have plenty of resources for, wait up to 6 hours.
+    # Robocrop should scale much sooner than that to fill demand, but if we end up with more demand
+    # than our cap we'll have 6 hours for that demand to be filled before we report it as a problem.
+    #
+    # For builders that are capacity constrained, wait several times longer. Note
+    # that the time we can wait here is not usually unbounded, since according to triggering_policy there
+    # can only be at most 1 outstanding request per repo+gobranch combination in postsubmit.
+    # Therefore, this constant should generally not need to be bumped up. The only case where it
+    # might need it is a high rate of presubmit builds including such builders, but the fact
+    # that builds expire is good: it acts as a backpressure mechanism.
+    expiration_timeout = 6*time.hour
+    capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
+    if capacity_constrained:
+        expiration_timeout = time.day
+
     # Create a helper to emit builder definitions, installing common fields from
     # the current context.
     def emit_builder(name, bucket, dimensions, properties, service_account, **kwargs):
@@ -943,6 +963,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             ),
             caches = caches,
             experiments = exps,
+            expiration_timeout = expiration_timeout,
             **kwargs
         )
 
@@ -950,7 +971,6 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     # Determine if we should be sharding tests, and how many shards.
     test_shards = 1
-    capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
     if project == "go" and not capacity_constrained and go_branch_short != "go1.20":
         # TODO(mknyszek): Remove the exception for the go1.20 branch once it
         # is no longer supported.
