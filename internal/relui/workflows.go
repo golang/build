@@ -404,15 +404,17 @@ func addCommTasks(
 	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
 	kind task.ReleaseKind, published wf.Value[[]task.Published], securitySummary wf.Value[string], securityFixes, coordinators wf.Value[[]string],
 ) {
-	okayToAnnounceAndTweet := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(published))
+	okayToAnnounce := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(published))
 
 	// Announce that a new Go release has been published.
-	sentMail := wf.Task4(wd, "mail-announcement", comm.AnnounceRelease, wf.Const(kind), published, securityFixes, coordinators, wf.After(okayToAnnounceAndTweet))
+	sentMail := wf.Task4(wd, "mail-announcement", comm.AnnounceRelease, wf.Const(kind), published, securityFixes, coordinators, wf.After(okayToAnnounce))
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
-	tweetURL := wf.Task4(wd, "post-tweet", comm.TweetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounceAndTweet))
+	tweetURL := wf.Task4(wd, "post-tweet", comm.TweetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
+	mastodonURL := wf.Task4(wd, "post-mastodon", comm.TrumpetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)
+	wf.Output(wd, "Mastodon URL", mastodonURL)
 }
 
 func enableDistpack(major int) bool {

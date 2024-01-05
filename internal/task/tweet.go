@@ -22,6 +22,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/McKael/madon/v3"
 	"github.com/dghubble/oauth1"
 	"github.com/esimov/stackblur-go"
 	"golang.org/x/build/internal/secret"
@@ -69,17 +70,20 @@ type releaseTweet struct {
 	Announcement string
 }
 
-// TweetTasks contains tasks related to the release tweet.
-type TweetTasks struct {
+type Poster interface {
+	// PostTweet posts a tweet with the given text and PNG image,
+	// both of which must be non-empty, and returns the tweet URL.
+	//
+	// ErrTweetTooLong error is returned if posting fails
+	// due to the tweet text length exceeding Twitter's limit.
+	PostTweet(text string, imagePNG []byte, altText string) (tweetURL string, _ error)
+}
+
+// SocialMediaTasks contains tasks related to the release tweet.
+type SocialMediaTasks struct {
 	// TwitterClient can be used to post a tweet.
-	TwitterClient interface {
-		// PostTweet posts a tweet with the given text and PNG image,
-		// both of which must be non-empty, and returns the tweet URL.
-		//
-		// ErrTweetTooLong error is returned if posting fails
-		// due to the tweet text length exceeding Twitter's limit.
-		PostTweet(text string, imagePNG []byte) (tweetURL string, _ error)
-	}
+	TwitterClient  Poster
+	MastodonClient Poster
 
 	// RandomSeed is the pseudo-random number generator seed to use for presentational
 	// choices, such as selecting one out of many available emoji or release archives.
@@ -87,11 +91,9 @@ type TweetTasks struct {
 	RandomSeed int64
 }
 
-// TweetRelease posts a tweet announcing that a Go release has been published.
-// ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (tweetURL string, _ error) {
+func (t SocialMediaTasks) textAndImage(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (tweetText string, imagePNG []byte, imageText string, err error) {
 	if len(published) < 1 || len(published) > 2 {
-		return "", fmt.Errorf("got %d published Go releases, TweetRelease supports only 1 or 2 at once", len(published))
+		return "", nil, "", fmt.Errorf("got %d published Go releases, TweetRelease supports only 1 or 2 at once", len(published))
 	}
 
 	r := releaseTweet{
@@ -111,31 +113,55 @@ func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, kind ReleaseKind, pu
 	rnd := rand.New(rand.NewSource(seed))
 
 	// Generate tweet text.
-	tweetText, err := tweetText(r, rnd)
+	tweetText, err = r.tweetText(rnd)
 	if err != nil {
-		return "", err
+		return "", nil, "", err
 	}
 	ctx.Printf("tweet text:\n%s\n", tweetText)
 
 	// Generate tweet image.
-	imagePNG, imageText, err := tweetImage(published[0], rnd)
+	imagePNG, imageText, err = tweetImage(published[0], rnd)
+	if err != nil {
+		return "", nil, "", err
+	}
+	ctx.Printf("tweet image:\n%s\n", imageText)
+	return tweetText, imagePNG, imageText, nil
+}
+
+// TweetRelease posts a tweet announcing that a Go release has been published.
+// ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
+func (t SocialMediaTasks) TweetRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (_ string, _ error) {
+	tweetText, imagePNG, imageText, err := t.textAndImage(ctx, kind, published, security, announcement)
 	if err != nil {
 		return "", err
 	}
-	ctx.Printf("tweet image:\n%s\n", imageText)
 
 	// Post a tweet via the Twitter API.
 	if t.TwitterClient == nil {
 		return "(dry-run)", nil
 	}
 	ctx.DisableRetries()
-	tweetURL, err = t.TwitterClient.PostTweet(tweetText, imagePNG)
-	return tweetURL, err
+	return t.TwitterClient.PostTweet(tweetText, imagePNG, imageText)
+}
+
+// TrumpetRelease posts a tweet announcing that a Go release has been published.
+func (t SocialMediaTasks) TrumpetRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (_ string, _ error) {
+	tweetText, imagePNG, imageText, err := t.textAndImage(ctx, kind, published, security, announcement)
+	if err != nil {
+		return "", err
+	}
+
+	// Post via the Mastodon API.
+	if t.MastodonClient == nil {
+		return "(dry-run)", nil
+	}
+	ctx.DisableRetries()
+	return t.MastodonClient.PostTweet(tweetText, imagePNG, imageText)
 }
 
 // tweetText generates the text to use in the announcement
 // tweet for release r.
-func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
+func (r *releaseTweet) tweetText(rnd *rand.Rand) (string, error) {
 	// Parse the tweet text template
 	// using rnd for emoji selection.
 	t, err := template.New("").Funcs(template.FuncMap{
@@ -492,8 +518,49 @@ type realTwitterClient struct {
 	twitterAPI *http.Client
 }
 
+type realMastodonClient struct {
+	client        *madon.Client
+	testRecipient string
+}
+
+// PostTweet posts a message to a Mastodon account, with specified text, image, and image alt text.
+// If the "client" includes a non-empty test recipient, direct the message to that recipient in a
+// "direct message", also known as a "private mention".
+func (c realMastodonClient) PostTweet(text string, imagePNG []byte, altText string) (tweetURL string, _ error) {
+	client := c.client
+
+	visibility := "public"
+
+	// For end-to-end hand testing, send a message to a designated recipient
+	if c.testRecipient != "" {
+		text = c.testRecipient + "\n" + text
+		visibility = "direct"
+	}
+
+	// The documentation says that the name parameter can be empty, but at least one
+	// Mastodon server disagrees.  Make the name match the media format, just in case
+	// that matters.
+	att, err := client.UploadMediaReader(bytes.NewReader(imagePNG), "upload.png", altText, "")
+	if err != nil {
+		return "upload failure", err
+	}
+	postParams := madon.PostStatusParams{
+		Text:        text,
+		MediaIDs:    []string{att.ID},
+		Visibility:  visibility,
+		Sensitive:   false,
+		SpoilerText: "",
+	}
+
+	status, err := client.PostStatus(postParams)
+	if err != nil {
+		return "post failure", err
+	}
+	return status.URL, nil
+}
+
 // PostTweet implements the TweetTasks.TwitterClient interface.
-func (c realTwitterClient) PostTweet(text string, imagePNG []byte) (tweetURL string, _ error) {
+func (c realTwitterClient) PostTweet(text string, imagePNG []byte, altText string) (tweetURL string, _ error) {
 	// Make a Twitter API call to upload PNG to upload.twitter.com.
 	// See https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/api-reference/post-media-upload.
 	var buf bytes.Buffer
@@ -588,4 +655,31 @@ func NewTwitterClient(t secret.TwitterCredentials) realTwitterClient {
 	config := oauth1.NewConfig(t.ConsumerKey, t.ConsumerSecret)
 	token := oauth1.NewToken(t.AccessTokenKey, t.AccessTokenSecret)
 	return realTwitterClient{twitterAPI: config.Client(context.Background(), token)}
+}
+
+// NewMastodonClient creates a Mastodon API client authenticated
+// to make Mastodon API calls using the provided credentials.
+// The resulting client may have been permission-limited at its creation
+// (e.g., only allowed to upload media and write posts).
+// For tests, use NewTestMastodonClient, which creates private messages
+// instead.
+func NewMastodonClient(config secret.MastodonCredentials) (realMastodonClient, error) {
+	tok := madon.UserToken{AccessToken: config.AccessToken}
+	client, err := madon.RestoreApp(config.Application, config.Instance, config.ClientKey, config.ClientSecret, &tok)
+	if err != nil {
+		return realMastodonClient{}, err
+	}
+	return realMastodonClient{client, ""}, nil
+}
+
+// NewTestMastodonClient creates a client that will DM the announcement to the
+// designated recipient for end-to-end testing. config.TestRecipient cannot be empty;
+// that would result in a public message, which should not happen unintentionally.
+func NewTestMastodonClient(config secret.MastodonCredentials, pmTarget string) (realMastodonClient, error) {
+	if pmTarget == "" {
+		panic("private message target to NewTestMastodonClient cannot be empty")
+	}
+	mc, err := NewMastodonClient(config)
+	mc.testRecipient = pmTarget
+	return mc, err
 }

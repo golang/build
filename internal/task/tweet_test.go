@@ -18,36 +18,38 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/build/buildenv"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
 )
 
-func TestTweetRelease(t *testing.T) {
-	tests := [...]struct {
-		name         string
-		kind         ReleaseKind
-		published    []Published
-		security     string
-		announcement string
-		randomSeed   int64
-		wantLog      string
-	}{
-		{
-			name: "minor",
-			kind: KindMinor,
-			published: []Published{
-				{Version: "go1.17.1", Files: []WebsiteFile{{
-					OS: "linux", Arch: "arm64",
-					Filename: "go1.17.1.linux-arm64.tar.gz", Size: 102606384, Kind: "archive"}},
-				},
-				{Version: "go1.16.8"},
+var postTests = [...]struct {
+	name         string
+	kind         ReleaseKind
+	published    []Published
+	security     string
+	announcement string
+	randomSeed   int64
+	wantLog      string
+}{
+	{
+		name: "minor",
+		kind: KindMinor,
+		published: []Published{
+			{Version: "go1.17.1", Files: []WebsiteFile{{
+				OS: "linux", Arch: "arm64",
+				Filename: "go1.17.1.linux-arm64.tar.gz", Size: 102606384, Kind: "archive"}},
 			},
-			security:     "Includes security fixes for A and B.",
-			announcement: "https://groups.google.com/g/golang-announce/c/dx9d7IOseHw/m/KNH37k37AAAJ",
-			randomSeed:   234,
-			wantLog: `tweet text:
+			{Version: "go1.16.8"},
+		},
+		security:     "Includes security fixes for A and B.",
+		announcement: "https://groups.google.com/g/golang-announce/c/dx9d7IOseHw/m/KNH37k37AAAJ",
+		randomSeed:   234,
+		wantLog: `tweet text:
 🎊 Go 1.17.1 and 1.16.8 are released!
 
 🔐 Security: Includes security fixes for A and B.
@@ -67,17 +69,17 @@ Unpacking go1.17.1.linux-arm64.tar.gz ...
 Success. You may now run 'go1.17.1'
 $ go1.17.1 version
 go version go1.17.1 linux/arm64` + "\n",
-		},
-		{
-			name: "minor-solo",
-			kind: KindMinor,
-			published: []Published{{Version: "go1.11.1", Files: []WebsiteFile{{
-				OS: "darwin", Arch: "amd64",
-				Filename: "go1.11.1.darwin-amd64.tar.gz", Size: 124181190, Kind: "archive"}},
-			}},
-			announcement: "https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw",
-			randomSeed:   23,
-			wantLog: `tweet text:
+	},
+	{
+		name: "minor-solo",
+		kind: KindMinor,
+		published: []Published{{Version: "go1.11.1", Files: []WebsiteFile{{
+			OS: "darwin", Arch: "amd64",
+			Filename: "go1.11.1.darwin-amd64.tar.gz", Size: 124181190, Kind: "archive"}},
+		}},
+		announcement: "https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw",
+		randomSeed:   23,
+		wantLog: `tweet text:
 🎆 Go 1.11.1 is released!
 
 📣 Announcement: https://groups.google.com/g/golang-announce/c/pFXKAfoVJqw
@@ -95,17 +97,17 @@ Unpacking go1.11.1.darwin-amd64.tar.gz ...
 Success. You may now run 'go1.11.1'
 $ go1.11.1 version
 go version go1.11.1 darwin/amd64` + "\n",
-		},
-		{
-			name: "beta",
-			kind: KindBeta,
-			published: []Published{{Version: "go1.17beta1", Files: []WebsiteFile{{
-				OS: "darwin", Arch: "amd64",
-				Filename: "go1.17beta1.darwin-amd64.tar.gz", Size: 135610703, Kind: "archive"}},
-			}},
-			announcement: "https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ",
-			randomSeed:   678,
-			wantLog: `tweet text:
+	},
+	{
+		name: "beta",
+		kind: KindBeta,
+		published: []Published{{Version: "go1.17beta1", Files: []WebsiteFile{{
+			OS: "darwin", Arch: "amd64",
+			Filename: "go1.17beta1.darwin-amd64.tar.gz", Size: 135610703, Kind: "archive"}},
+		}},
+		announcement: "https://groups.google.com/g/golang-announce/c/i4EliPDV9Ok/m/MxA-nj53AAAJ",
+		randomSeed:   678,
+		wantLog: `tweet text:
 ⚡️ Go 1.17 Beta 1 is released!
 
 ⚙️ Try it! File bugs! https://go.dev/issue/new
@@ -125,17 +127,17 @@ Unpacking go1.17beta1.darwin-amd64.tar.gz ...
 Success. You may now run 'go1.17beta1'
 $ go1.17beta1 version
 go version go1.17beta1 darwin/amd64` + "\n",
-		},
-		{
-			name: "rc",
-			kind: KindRC,
-			published: []Published{{Version: "go1.17rc2", Files: []WebsiteFile{{
-				OS: "windows", Arch: "arm64",
-				Filename: "go1.17rc2.windows-arm64.zip", Size: 116660997, Kind: "archive"}},
-			}},
-			announcement: "https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ",
-			randomSeed:   456,
-			wantLog: `tweet text:
+	},
+	{
+		name: "rc",
+		kind: KindRC,
+		published: []Published{{Version: "go1.17rc2", Files: []WebsiteFile{{
+			OS: "windows", Arch: "arm64",
+			Filename: "go1.17rc2.windows-arm64.zip", Size: 116660997, Kind: "archive"}},
+		}},
+		announcement: "https://groups.google.com/g/golang-announce/c/yk30ovJGXWY/m/p9uUnKbbBQAJ",
+		randomSeed:   456,
+		wantLog: `tweet text:
 🎉 Go 1.17 Release Candidate 2 is released!
 
 🏖 Run it in dev! Run it in prod! File bugs! https://go.dev/issue/new
@@ -155,17 +157,17 @@ Unpacking go1.17rc2.windows-arm64.zip ...
 Success. You may now run 'go1.17rc2'
 $ go1.17rc2 version
 go version go1.17rc2 windows/arm64` + "\n",
-		},
-		{
-			name: "major",
-			kind: KindMajor,
-			published: []Published{{Version: "go1.21.0", Files: []WebsiteFile{{
-				OS: "freebsd", Arch: "amd64",
-				Filename: "go1.21.0.freebsd-amd64.tar.gz", Size: 133579378, Kind: "archive"}},
-			}},
-			security:   "Includes a super duper security fix (CVE-123).",
-			randomSeed: 123,
-			wantLog: `tweet text:
+	},
+	{
+		name: "major",
+		kind: KindMajor,
+		published: []Published{{Version: "go1.21.0", Files: []WebsiteFile{{
+			OS: "freebsd", Arch: "amd64",
+			Filename: "go1.21.0.freebsd-amd64.tar.gz", Size: 133579378, Kind: "archive"}},
+		}},
+		security:   "Includes a super duper security fix (CVE-123).",
+		randomSeed: 123,
+		wantLog: `tweet text:
 🥳 Go 1.21.0 is released!
 
 🔐 Security: Includes a super duper security fix (CVE-123).
@@ -185,15 +187,17 @@ Unpacking go1.21.0.freebsd-amd64.tar.gz ...
 Success. You may now run 'go1.21.0'
 $ go1.21.0 version
 go version go1.21.0 freebsd/amd64` + "\n",
-		},
-	}
-	for _, tc := range tests {
+	},
+}
+
+func TestTweetRelease(t *testing.T) {
+	for _, tc := range postTests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Call the tweet task function in dry-run mode so it
 			// doesn't actually try to tweet, but capture its log.
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			tweetURL, err := (TweetTasks{RandomSeed: tc.randomSeed}).TweetRelease(ctx, tc.kind, tc.published, tc.security, tc.announcement)
+			tweetURL, err := (SocialMediaTasks{RandomSeed: tc.randomSeed}).TweetRelease(ctx, tc.kind, tc.published, tc.security, tc.announcement)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}
@@ -211,6 +215,16 @@ type fmtWriter struct{ w io.Writer }
 
 func (f fmtWriter) Printf(format string, v ...interface{}) {
 	fmt.Fprintf(f.w, format, v...)
+}
+
+var mastodonAPI secret.MastodonCredentials
+var secretErr error
+var mastodonPMTarget = flag.String("mastodon", "", "Name of account to receive private message (e.g., @user@instance.suffix)")
+
+func init() {
+	secretErr = secret.InitFlagSupport(context.Background())
+	secret.JSONVarFlag(&mastodonAPI, "mastodon-api-secret", "Mastodon API secret to use for tests that post.")
+	flag.Set("mastodon-api-secret", fmt.Sprintf("secret:%s/%s", buildenv.Production.ProjectName, secret.NameMastodonAPISecret))
 }
 
 var updateFlag = flag.Bool("update", false, "Update golden files.")
@@ -286,6 +300,39 @@ func decodePNG(t *testing.T, name string) image.Image {
 	return m
 }
 
+// TestPostToMastodonUsingCredentials always passes unless some invariant is badly wrong.
+// This is intended to allow as-close-to-real testing as possible.
+// It is capable of actual activity on Mastodon, this will be a DM
+// to a specified person, so don't get cute with your example recipient.
+// DO NOT AUTOMATE THIS TEST, IT SHOULD BE RUN BY A HUMAN.
+func TestPostToMastodonUsingCredentials(t *testing.T) {
+	pmTarget := strings.TrimSpace(*mastodonPMTarget)
+	t.Logf("private message target (-mastodon)=%v", pmTarget)
+	t.Logf("mastodonAPI=%v", mastodonAPI)
+	if pmTarget == "" {
+		t.Skipf("Nothing to do here without a '-mastodon' flag")
+	}
+	if secretErr != nil {
+		t.Skipf("Nothing to do here without access to secrets, err=%v", secretErr)
+	}
+	if mastodonAPI.Application == "" {
+		t.Skipf("Nothing to do here without a valid API key")
+	}
+
+	cl, err := NewTestMastodonClient(mastodonAPI, pmTarget)
+	if err != nil {
+		t.Fatalf("NewTestMastodonClient(%v, %s) error %v", mastodonAPI, pmTarget, err)
+	}
+
+	tc := &postTests[0]
+
+	var buf bytes.Buffer
+	ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
+	tweetURL, err := (SocialMediaTasks{RandomSeed: tc.randomSeed, MastodonClient: cl}).TrumpetRelease(ctx, tc.kind, tc.published, tc.security, tc.announcement)
+	t.Logf("Mastodon post URL=%v, err=%v", tweetURL, err)
+	t.Log(buf.String())
+}
+
 func TestPostTweet(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("upload.twitter.com/1.1/media/upload.json", func(w http.ResponseWriter, req *http.Request) {
@@ -340,7 +387,7 @@ func TestPostTweet(t *testing.T) {
 	})
 	cl := realTwitterClient{twitterAPI: &http.Client{Transport: localRoundTripper{mux}}}
 
-	tweetURL, err := cl.PostTweet("tweet-text", []byte("image-png-bytes"))
+	tweetURL, err := cl.PostTweet("tweet-text", []byte("image-png-bytes"), "alt text")
 	if err != nil {
 		t.Fatal("PostTweet:", err)
 	}

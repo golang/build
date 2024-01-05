@@ -92,6 +92,8 @@ func main() {
 	addressListVarFlag(&schedMail.BCC, "schedule-mail-bcc", "The BCC address list to use for the scheduled workflow failure mail.")
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
+	var mastodonAPI secret.MastodonCredentials
+	secret.JSONVarFlag(&mastodonAPI, "mastodon-api-secret", "Mastodon API secret to use for workflows involving posting.")
 	masterKey := secret.Flag("builder-master-key", "Builder master key")
 	githubToken := secret.Flag("github-token", "GitHub API token")
 	https.RegisterFlags(flag.CommandLine)
@@ -134,13 +136,18 @@ func main() {
 	gitClient := &task.Git{}
 	gitClient.UseOAuth2Auth(creds.TokenSource)
 	mailFunc := task.NewSendGridMailClient(*sendgridAPIKey).SendMail
+	mastodonClient, err := task.NewMastodonClient(mastodonAPI)
+	if err != nil {
+		log.Fatalln(err)
+	}
 	commTasks := task.CommunicationTasks{
 		AnnounceMailTasks: task.AnnounceMailTasks{
 			SendMail:           mailFunc,
 			AnnounceMailHeader: annMail,
 		},
-		TweetTasks: task.TweetTasks{
-			TwitterClient: task.NewTwitterClient(twitterAPI),
+		SocialMediaTasks: task.SocialMediaTasks{
+			TwitterClient:  task.NewTwitterClient(twitterAPI),
+			MastodonClient: mastodonClient,
 		},
 	}
 	dh := relui.NewDefinitionHolder()

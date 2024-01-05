@@ -29,7 +29,7 @@ type Published struct {
 // CommunicationTasks combines communication tasks together.
 type CommunicationTasks struct {
 	AnnounceMailTasks
-	TweetTasks
+	SocialMediaTasks
 }
 
 var AwaitDivisor int = 1

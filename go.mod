@@ -15,6 +15,7 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.5
 	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20190129172621-c8b1d7a94ddf
+	github.com/McKael/madon/v3 v3.0.0-20230806150951-5ba59b7ca061
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/UserExistsError/conpty v0.1.1
 	github.com/ajstarks/svgo v0.0.0-20210923152817-c3b6e2f0c527
@@ -111,6 +112,7 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.4 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.5 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
