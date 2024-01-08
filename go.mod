@@ -48,7 +48,7 @@ require (
 	github.com/sendgrid/sendgrid-go v3.11.1+incompatible
 	github.com/shurcooL/githubv4 v0.0.0-20220520033151-0b4e3294ff00
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
-	github.com/yuin/goldmark v1.4.13
+	github.com/yuin/goldmark v1.6.0
 	go.chromium.org/luci v0.0.0-20231024170510-08aad78315cf
 	go.opencensus.io v0.24.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
@@ -70,7 +70,7 @@ require (
 	google.golang.org/grpc v1.58.2
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/inf.v0 v0.9.1
-	rsc.io/markdown v0.0.0-20231114125513-6fc7bf989e0c
+	rsc.io/markdown v0.0.0-20231215200646-988871efbd85
 )
 
 require (
