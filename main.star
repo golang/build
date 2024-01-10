@@ -313,6 +313,7 @@ BUILDER_TYPES = [
     "linux-amd64-nocgo",
     "linux-amd64-noopt",
     "linux-amd64-race",
+    "linux-amd64-racecompile",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
     "linux-arm64",
@@ -487,6 +488,12 @@ RUN_MODS = dict(
         add_props = {"race_mode": True},
         timeout_scale = 2,
         enabled = presubmit_only_for_ports_or_on_release_branches(["linux-amd64"]),
+    ),
+
+    # Build with a compiler and linker that are built with race mode enabled.
+    racecompile = make_run_mod(
+        add_props = {"compile_only": True, "compiler_linker_race_mode": True},
+        enabled = define_for_go_postsubmit(),
     ),
 
     # Build and test with GO386=softfloat, which makes the compiler emit non-floating-point
