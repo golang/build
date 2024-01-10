@@ -42,8 +42,13 @@ func TestSplitVersion(t *testing.T) {
 	}{
 		{"go1.34.0", 34, 0},
 		{"go1.34.7", 34, 7},
+		{"go1.35rc1", 35, 0},
 	} {
-		major, minor := splitVersion(tc.v)
+		major, minor, err := splitVersion(tc.v)
+		if err != nil {
+			t.Errorf("splitVersion(%q) returned error %v; want nil", tc.v, err)
+			continue
+		}
 		if major != tc.major || minor != tc.minor {
 			t.Errorf("splitVersion(%q) = %v, %v; want %v, %v", tc.v, major, minor, tc.major, tc.minor)
 		}

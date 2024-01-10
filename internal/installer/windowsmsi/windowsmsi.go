@@ -96,7 +96,10 @@ func ConstructInstaller(_ context.Context, workDir, tgzPath string, opt Installe
 	}
 
 	fmt.Println("\nBuilding package (running wix candle).")
-	verMajor, verMinor := splitVersion(version)
+	verMajor, verMinor, err := splitVersion(version)
+	if err != nil {
+		return "", fmt.Errorf("failed to split version %q: %v", version, err)
+	}
 	var msArch string
 	switch opt.GOARCH {
 	case "386":
@@ -245,22 +248,28 @@ func run(name string, args ...string) error {
 	return cmd.Run()
 }
 
-var versionRE = regexp.MustCompile(`^go1\.(\d+\.\d+)`)
+var versionRE = regexp.MustCompile(`^go1\.(\d+(\.\d+)?)`)
 
-// splitVersion splits a Go version string such as "go1.23.4" (as matched by versionRE)
-// into its parts: major and minor.
-func splitVersion(v string) (major, minor int) {
+// splitVersion splits a Go version string such as "go1.23.4" or "go1.24rc1"
+// (as matched by versionRE) into its parts: major and minor.
+func splitVersion(v string) (major, minor int, _ error) {
 	m := versionRE.FindStringSubmatch(v)
 	if len(m) < 2 {
-		return 0, 0
+		return 0, 0, fmt.Errorf("no regexp match")
 	}
 	parts := strings.Split(m[1], ".")
-	if len(parts) < 2 {
-		return 0, 0
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, 0, fmt.Errorf("parsing major part: %v", err)
 	}
-	major, _ = strconv.Atoi(parts[0])
-	minor, _ = strconv.Atoi(parts[1])
-	return major, minor
+	if len(parts) >= 2 {
+		var err error
+		minor, err = strconv.Atoi(parts[1])
+		if err != nil {
+			return 0, 0, fmt.Errorf("parsing minor part: %v", err)
+		}
+	}
+	return major, minor, nil
 }
 
 const storageBase = "https://storage.googleapis.com/go-builder-data/release/"
