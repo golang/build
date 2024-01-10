@@ -970,18 +970,40 @@ def define_builder(env, project, go_branch_short, builder_type):
     name = builder_name(project, go_branch_short, builder_type)
 
     # Determine if we should be sharding tests, and how many shards.
-    test_shards = 1
-    if project == "go" and not capacity_constrained and go_branch_short != "go1.20":
+    compile_only = "compile_only" in base_props
+    misccompile = "misccompile" in run_mods
+    if compile_only:
+        if misccompile:
+            if project == "go":
+                test_shards = 12
+            else:
+                test_shards = 3
+        else:
+            # Compile-only builders for a single platform should have just one shard, otherwise
+            # each shard will do repeat work.
+            test_shards = 1
+    elif project == "go" and not capacity_constrained and go_branch_short != "go1.20":
         # TODO(mknyszek): Remove the exception for the go1.20 branch once it
         # is no longer supported.
         test_shards = 4
-    if "misccompile" in run_mods:
-        if project == "go":
-            test_shards = 12
-        else:
-            test_shards = 3
+    else:
+        test_shards = 1
 
     # Emit the builder definitions.
+    #
+    # For each builder type we have two possible options for emitting a builder. Either it's going to be
+    # a sharded builder, which actually consists of 3 builders for coordination, build, and test, or a single
+    # builder all-mode which does all 3 on the same machine.
+    #
+    # The sharded builder is mainly used for sharding tests, but it is also useful for sharding misccompile
+    # builds. Even if we have only 1 shard, a sharded builder is still useful because only coordinator builders
+    # are allowed to spawn other builds, and so these coordination builders may spawn downstream builds.
+    # For example, builds of Go cache the toolchain. Triggering subrepo builds once the cache is filled is ideal,
+    # because the subrepo builds can use the cached toolchain. To actually run sharded builds we can't be
+    # capacity constrained, and we must only run for the main Go repo, because that's the only case we support
+    # for test sharding in golangbuild currently.
+    #
+    # The all-mode builder is used for everything else, but we must only select it if test_shards == 1.
     downstream_builders = []
     if test_shards > 1 or (project == "go" and not capacity_constrained):
         downstream_builders = define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
