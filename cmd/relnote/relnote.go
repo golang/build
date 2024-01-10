@@ -172,7 +172,7 @@ func main() {
 						pkg := issuePackage(issue)
 						changes[pkg] = append(changes[pkg], change{Issue: issue})
 						addedIssue[num] = true
-					} else if issue.Closed {
+					} else if !issue.Closed {
 						unclosed[num] = append(unclosed[num], cl.Number)
 					}
 				}
