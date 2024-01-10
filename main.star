@@ -311,6 +311,7 @@ BUILDER_TYPES = [
     "linux-amd64-misccompile",
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
+    "linux-amd64-noopt",
     "linux-amd64-race",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
@@ -466,6 +467,12 @@ RUN_MODS = dict(
     # Build and test with cgo disabled.
     nocgo = make_run_mod(
         add_env = {"CGO_ENABLED": "0"},
+        enabled = define_for_go_postsubmit(),
+    ),
+
+    # Build and test with optimizations disabled.
+    noopt = make_run_mod(
+        add_env = {"GO_GCFLAGS": "-N -l"},
         enabled = define_for_go_postsubmit(),
     ),
 
