@@ -5,8 +5,17 @@
 package relnote
 
 import (
+	"fmt"
+	"io/fs"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"github.com/google/go-cmp/cmp"
+	"golang.org/x/tools/txtar"
+	md "rsc.io/markdown"
 )
 
 func TestCheckFragment(t *testing.T) {
@@ -70,4 +79,70 @@ func TestCheckFragment(t *testing.T) {
 			t.Errorf("%q: got %q, want error containing %q", test.in, got, test.want)
 		}
 	}
+}
+
+func TestMerge(t *testing.T) {
+	testFiles, err := filepath.Glob(filepath.Join("testdata", "*.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range testFiles {
+		t.Run(strings.TrimSuffix(filepath.Base(f), ".txt"), func(t *testing.T) {
+			fsys, want, err := parseTestFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			gotDoc, err := Merge(fsys)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := md.ToMarkdown(gotDoc)
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("mismatch (-want, +got)\n%s", diff)
+			}
+		})
+	}
+}
+
+func parseTestFile(filename string) (fsys fs.FS, want string, err error) {
+	ar, err := txtar.ParseFile(filename)
+	if err != nil {
+		return nil, "", err
+	}
+	mfs := make(fstest.MapFS)
+	for _, f := range ar.Files {
+		if f.Name == "want" {
+			want = string(f.Data)
+		} else {
+			mfs[f.Name] = &fstest.MapFile{Data: f.Data}
+		}
+	}
+	if want == "" {
+		return nil, "", fmt.Errorf("%s: missing 'want'", filename)
+	}
+	return mfs, want, nil
+}
+
+func TestSortedMarkdownFilenames(t *testing.T) {
+	want := []string{
+		"a.md",
+		"b.md",
+		"b/a.md",
+		"b/c.md",
+		"ba/a.md",
+	}
+	mfs := make(fstest.MapFS)
+	for _, fn := range want {
+		mfs[fn] = &fstest.MapFile{}
+	}
+	mfs["README"] = &fstest.MapFile{}
+	mfs["b/other.txt"] = &fstest.MapFile{}
+	got, err := sortedMarkdownFilenames(mfs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("\ngot  %v\nwant %v", got, want)
+	}
+
 }

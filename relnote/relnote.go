@@ -29,6 +29,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"slices"
 	"strings"
 
 	md "rsc.io/markdown"
@@ -137,4 +139,112 @@ func inlineText(ins []md.Inline) string {
 		in.PrintText(&buf)
 	}
 	return buf.String()
+}
+
+// Merge combines the markdown documents (files ending in ".md") in the tree rooted
+// at fs into a single document.
+// The blocks of the documents are concatenated in lexicographic order by filename.
+// Heading with no content are removed.
+// The link keys must be unique, and are combined into a single map.
+func Merge(fsys fs.FS) (*md.Document, error) {
+	filenames, err := sortedMarkdownFilenames(fsys)
+	if err != nil {
+		return nil, err
+	}
+	doc := &md.Document{}
+	for _, filename := range filenames {
+		fd, err := parseFile(fsys, filename)
+		if err != nil {
+			return nil, err
+		}
+		if len(fd.Blocks) == 0 {
+			continue
+		}
+		if len(doc.Blocks) > 0 {
+			// Put a blank line between the current and new blocks.
+			lastLine := lastBlock(doc).Pos().EndLine
+			delta := lastLine + 2 - fd.Blocks[0].Pos().StartLine
+			for _, b := range fd.Blocks {
+				addLines(b, delta)
+			}
+		}
+		doc.Blocks = append(doc.Blocks, fd.Blocks...)
+		// TODO(jba): merge links
+		// TODO(jba): add headings for package sections under "Minor changes to the library".
+	}
+	// TODO(jba): remove headings with empty contents
+	return doc, nil
+}
+
+func sortedMarkdownFilenames(fsys fs.FS) ([]string, error) {
+	var filenames []string
+	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(path, ".md") {
+			filenames = append(filenames, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	// '.' comes before '/', which comes before alphanumeric characters.
+	// So just sorting the list will put a filename like "net.md" before
+	// the directory "net". That is what we want.
+	slices.Sort(filenames)
+	return filenames, nil
+}
+
+// lastBlock returns the last block in the document.
+// It panics if the document has no blocks.
+func lastBlock(doc *md.Document) md.Block {
+	return doc.Blocks[len(doc.Blocks)-1]
+}
+
+func addLines(b md.Block, n int) {
+	pos := position(b)
+	pos.StartLine += n
+	pos.EndLine += n
+}
+
+func position(b md.Block) *md.Position {
+	switch b := b.(type) {
+	case *md.Heading:
+		return &b.Position
+	case *md.Text:
+		return &b.Position
+	case *md.CodeBlock:
+		return &b.Position
+	case *md.HTMLBlock:
+		return &b.Position
+	case *md.List:
+		return &b.Position
+	case *md.Item:
+		return &b.Position
+	case *md.Empty:
+		return &b.Position
+	case *md.Paragraph:
+		return &b.Position
+	case *md.Quote:
+		return &b.Position
+	default:
+		panic(fmt.Sprintf("unknown block type %T", b))
+	}
+}
+
+func parseFile(fsys fs.FS, path string) (*md.Document, error) {
+	f, err := fsys.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	in := string(data)
+	doc := NewParser().Parse(in)
+	return doc, nil
 }

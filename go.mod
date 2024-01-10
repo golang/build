@@ -70,7 +70,7 @@ require (
 	google.golang.org/grpc v1.58.2
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/inf.v0 v0.9.1
-	rsc.io/markdown v0.0.0-20231215200646-988871efbd85
+	rsc.io/markdown v0.0.0-20240117044121-669d2fdf1650
 )
 
 require (
