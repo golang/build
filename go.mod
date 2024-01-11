@@ -52,18 +52,18 @@ require (
 	go.chromium.org/luci v0.0.0-20231024170510-08aad78315cf
 	go.opencensus.io v0.24.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
-	golang.org/x/crypto v0.16.0
+	golang.org/x/crypto v0.18.0
 	golang.org/x/exp v0.0.0-20230809094429-853ea248256d
-	golang.org/x/image v0.14.0
+	golang.org/x/image v0.15.0
 	golang.org/x/mod v0.14.0
-	golang.org/x/net v0.19.0
-	golang.org/x/oauth2 v0.15.0
+	golang.org/x/net v0.20.0
+	golang.org/x/oauth2 v0.16.0
 	golang.org/x/perf v0.0.0-20230717203022-1ba3a21238c9
-	golang.org/x/sync v0.5.0
-	golang.org/x/sys v0.15.0
-	golang.org/x/term v0.15.0
+	golang.org/x/sync v0.6.0
+	golang.org/x/sys v0.16.0
+	golang.org/x/term v0.16.0
 	golang.org/x/time v0.5.0
-	golang.org/x/tools v0.16.0
+	golang.org/x/tools v0.17.0
 	google.golang.org/api v0.136.0
 	google.golang.org/appengine v1.6.8-0.20221117013220-504804fb50de
 	google.golang.org/genproto/googleapis/api v0.0.0-20230803162519-f966b187b2e5
