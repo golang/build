@@ -99,7 +99,6 @@ func init() {
 	x("vuln", desc("code for the Go Vulnerability Database"))
 	x("vulndb", desc("reports for the Go Vulnerability Database"), enableCSR("go-vuln"))
 	x("website", desc("home of the golang.org and go.dev websites"), enableCSR("golang-org"))
-	x("wiki", desc("home of the go.dev/wiki"))
 	x("xerrors", noDash)
 
 	add(&Repo{GoGerritProject: "gollvm"})
