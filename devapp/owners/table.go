@@ -960,6 +960,9 @@ var entries = map[string]*Entry{
 	"website/internal/history": {
 		Primary: []Owner{dmitshur},
 	},
+	"wiki": {
+		Primary: []Owner{toolsTeam},
+	},
 
 	// Misc. other Go repositories.
 	"gccgo": {
