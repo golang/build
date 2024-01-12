@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/mod/modfile"
 )
 
 type UpdateProxyTestRepoTasks struct {
@@ -20,15 +21,30 @@ type UpdateProxyTestRepoTasks struct {
 }
 
 func (t *UpdateProxyTestRepoTasks) UpdateProxyTestRepo(ctx *wf.TaskContext, published Published) (string, error) {
-	version := strings.TrimPrefix(published.Version, "go")
-
 	repo, err := t.Git.Clone(ctx, t.GerritURL)
 	if err != nil {
 		return "", err
 	}
 
+	// Read the file and check if version is higher.
+	modFile := filepath.Join(repo.dir, "go.mod")
+	contents, err := os.ReadFile(modFile)
+	if err != nil {
+		return "", err
+	}
+	f, err := modfile.ParseLax(modFile, contents, nil)
+	if err != nil {
+		return "", err
+	}
+	// If the published version is lower than the current go.mod version, don't update.
+	// If we could parse the go.mod file, assume we should update.
+	if f.Go != nil && compareGoVersions(published.Version, "go"+f.Go.Version) < 0 {
+		return "no update", nil
+	}
+
+	version := strings.TrimPrefix(published.Version, "go")
 	// Update the go.mod file for the new release.
-	if err := os.WriteFile(filepath.Join(repo.dir, "go.mod"), []byte(fmt.Sprintf("module test\n\ngo %s\n", version)), 0666); err != nil {
+	if err := os.WriteFile(modFile, []byte(fmt.Sprintf("module test\n\ngo %s\n", version)), 0666); err != nil {
 		return "", err
 	}
 	if _, err := repo.RunCommand(ctx, "commit", "-am", fmt.Sprintf("update go version to %s", version)); err != nil {
@@ -41,6 +57,5 @@ func (t *UpdateProxyTestRepoTasks) UpdateProxyTestRepo(ctx *wf.TaskContext, publ
 	if _, err := repo.RunCommand(ctx, "push", "--force", "--tags", "origin", t.Branch); err != nil {
 		return "", fmt.Errorf("git push --tags error: %v", err)
 	}
-
-	return "finished", nil
+	return "updated", nil
 }
