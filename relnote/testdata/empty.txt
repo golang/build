@@ -1,0 +1,18 @@
+-- 0-heading.md --
+# A heading
+-- a.md --
+## A
+-- b.md --
+## B
+Something.
+-- c.md --
+## C
+
+### C1
+-- d.md --
+## D
+-- want --
+# A heading
+
+## B
+Something.

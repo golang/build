@@ -144,5 +144,44 @@ func TestSortedMarkdownFilenames(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("\ngot  %v\nwant %v", got, want)
 	}
+}
 
+func TestRemoveEmptySections(t *testing.T) {
+	doc := NewParser().Parse(`
+# h1
+not empty
+
+# h2
+
+## h3
+
+### h4
+
+#### h5
+
+### h6
+
+### h7
+
+## h8
+something
+
+## h9
+
+# h10
+`)
+	bs := removeEmptySections(doc.Blocks)
+	got := md.ToMarkdown(&md.Document{Blocks: bs})
+	want := md.ToMarkdown(NewParser().Parse(`
+# h1
+not empty
+
+# h2
+
+## h8
+something
+`))
+	if got != want {
+		t.Errorf("\ngot:\n%s\nwant:\n%s", got, want)
+	}
 }

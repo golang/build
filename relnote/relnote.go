@@ -168,12 +168,52 @@ func Merge(fsys fs.FS) (*md.Document, error) {
 				addLines(b, delta)
 			}
 		}
-		doc.Blocks = append(doc.Blocks, fd.Blocks...)
+		// Append non-empty blocks to the result document.
+		for _, b := range fd.Blocks {
+			if _, ok := b.(*md.Empty); !ok {
+				doc.Blocks = append(doc.Blocks, b)
+			}
+		}
 		// TODO(jba): merge links
 		// TODO(jba): add headings for package sections under "Minor changes to the library".
 	}
-	// TODO(jba): remove headings with empty contents
+	// Remove headings with empty contents.
+	doc.Blocks = removeEmptySections(doc.Blocks)
 	return doc, nil
+}
+
+// removeEmptySections removes headings with no content. A heading has no content
+// if there are no blocks between it and the next heading at the same level, or the
+// end of the document.
+func removeEmptySections(bs []md.Block) []md.Block {
+	res := bs[:0]
+	delta := 0 // number of lines by which to adjust positions
+
+	// Remove preceding headings at same or higher level; they are empty.
+	rem := func(level int) {
+		for len(res) > 0 {
+			last := res[len(res)-1]
+			if lh, ok := last.(*md.Heading); ok && lh.Level >= level {
+				res = res[:len(res)-1]
+				// Adjust subsequent block positions by the size of this block
+				// plus 1 for the blank line between headings.
+				delta += lh.EndLine - lh.StartLine + 2
+			} else {
+				break
+			}
+		}
+	}
+
+	for _, b := range bs {
+		if h, ok := b.(*md.Heading); ok {
+			rem(h.Level)
+		}
+		addLines(b, -delta)
+		res = append(res, b)
+	}
+	// Remove empty headings at the end of the document.
+	rem(1)
+	return res
 }
 
 func sortedMarkdownFilenames(fsys fs.FS) ([]string, error) {
@@ -203,6 +243,8 @@ func lastBlock(doc *md.Document) md.Block {
 	return doc.Blocks[len(doc.Blocks)-1]
 }
 
+// addLines adds n lines to the position of b.
+// n can be negative.
 func addLines(b md.Block, n int) {
 	pos := position(b)
 	pos.StartLine += n
@@ -247,4 +289,15 @@ func parseFile(fsys fs.FS, path string) (*md.Document, error) {
 	in := string(data)
 	doc := NewParser().Parse(in)
 	return doc, nil
+}
+
+// headingIndex returns the index in bs of the first heading at the given level,
+// or len(bs) if there isn't one.
+func headingIndex(bs []md.Block, level int) int {
+	for i, b := range bs {
+		if h, ok := b.(*md.Heading); ok && h.Level == level {
+			return i
+		}
+	}
+	return len(bs)
 }
