@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"path"
 	"slices"
 	"strings"
 
@@ -146,12 +147,16 @@ func inlineText(ins []md.Inline) string {
 // The blocks of the documents are concatenated in lexicographic order by filename.
 // Heading with no content are removed.
 // The link keys must be unique, and are combined into a single map.
+//
+// Files in the "minor changes" directory are named after the package to which they refer,
+// and will have the package heading inserted automatically.
 func Merge(fsys fs.FS) (*md.Document, error) {
 	filenames, err := sortedMarkdownFilenames(fsys)
 	if err != nil {
 		return nil, err
 	}
 	doc := &md.Document{Links: map[string]*md.Link{}}
+	var prevPkg string // previous stdlib package, if any
 	for _, filename := range filenames {
 		newdoc, err := parseFile(fsys, filename)
 		if err != nil {
@@ -161,7 +166,16 @@ func Merge(fsys fs.FS) (*md.Document, error) {
 			continue
 		}
 		if len(doc.Blocks) > 0 {
-			// Put a blank line between the current and new blocks.
+			// If this is the first file of a new stdlib package under the "Minor changes
+			// to the library" section, insert a heading for the package.
+			pkg := stdlibPackage(filename)
+			if pkg != "" && pkg != prevPkg {
+				h := stdlibPackageHeading(pkg, lastBlock(doc).Pos().EndLine)
+				doc.Blocks = append(doc.Blocks, h)
+			}
+			prevPkg = pkg
+			// Put a blank line between the current and new blocks, so that the end
+			// of a file acts as a blank line.
 			lastLine := lastBlock(doc).Pos().EndLine
 			delta := lastLine + 2 - newdoc.Blocks[0].Pos().StartLine
 			for _, b := range newdoc.Blocks {
@@ -181,18 +195,55 @@ func Merge(fsys fs.FS) (*md.Document, error) {
 			}
 			doc.Links[key] = link
 		}
-		// TODO(jba): add headings for package sections under "Minor changes to the library".
 	}
 	// Remove headings with empty contents.
 	doc.Blocks = removeEmptySections(doc.Blocks)
 	if len(doc.Blocks) > 0 && len(doc.Links) > 0 {
 		// Add a blank line to separate the links.
-		lastPos := doc.Blocks[len(doc.Blocks)-1].Pos()
+		lastPos := lastBlock(doc).Pos()
 		lastPos.StartLine += 2
 		lastPos.EndLine += 2
 		doc.Blocks = append(doc.Blocks, &md.Empty{Position: lastPos})
 	}
 	return doc, nil
+}
+
+// stdlibPackage returns the standard library package for the given filename.
+// If the filename does not represent a package, it returns the empty string.
+// A filename represents package P if it is in a directory matching the glob
+// "*stdlib/*minor/P".
+func stdlibPackage(filename string) string {
+	dir, rest, _ := strings.Cut(filename, "/")
+	if !strings.HasSuffix(dir, "stdlib") {
+		return ""
+	}
+	dir, rest, _ = strings.Cut(rest, "/")
+	if !strings.HasSuffix(dir, "minor") {
+		return ""
+	}
+	pkg := path.Dir(rest)
+	if pkg == "." {
+		return ""
+	}
+	return pkg
+}
+
+func stdlibPackageHeading(pkg string, lastLine int) *md.Heading {
+	line := lastLine + 2
+	pos := md.Position{StartLine: line, EndLine: line}
+	return &md.Heading{
+		Position: pos,
+		Level:    4,
+		Text: &md.Text{
+			Position: pos,
+			Inline: []md.Inline{
+				&md.Link{
+					Inner: []md.Inline{&md.Plain{Text: pkg}},
+					URL:   "/pkg/" + pkg + "/",
+				},
+			},
+		},
+	}
 }
 
 // removeEmptySections removes headings with no content. A heading has no content

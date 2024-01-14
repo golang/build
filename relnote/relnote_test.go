@@ -104,6 +104,47 @@ func TestMerge(t *testing.T) {
 	}
 }
 
+func TestStdlibPackage(t *testing.T) {
+	for _, test := range []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{"net/a.md", ""},
+		{"stdlib/net/a.md", ""},
+		{"stdlib/minor/net/a.md", "net"},
+		{"stdlib/minor/heading.md", ""},
+		{"stdlib/minor/net/http/a.md", "net/http"},
+	} {
+		got := stdlibPackage(test.in)
+		if w := test.want; got != w {
+			t.Errorf("%q: got %q, want %q", test.in, got, w)
+		}
+	}
+}
+
+func TestStdlibPackageHeading(t *testing.T) {
+	h := stdlibPackageHeading("net/http", 1)
+	got := md.ToMarkdown(h)
+	want := "#### [net/http](/pkg/net/http/)\n"
+	if got != want {
+		t.Errorf("\ngot  %q\nwant %q", got, want)
+	}
+}
+
+func dump(d *md.Document) {
+	for _, b := range d.Blocks {
+		fmt.Printf("## %T   %v\n", b, b.Pos())
+		switch b := b.(type) {
+		case *md.Paragraph:
+			fmt.Printf("   %q\n", text(b.Text))
+		case *md.Heading:
+			for _, in := range b.Text.Inline {
+				fmt.Printf("    %#v\n", in)
+			}
+		}
+	}
+}
 func parseTestFile(filename string) (fsys fs.FS, want string, err error) {
 	ar, err := txtar.ParseFile(filename)
 	if err != nil {

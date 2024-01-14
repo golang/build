@@ -117,8 +117,7 @@ made with the Go 1 [promise of compatibility](/doc/go1compat)
 in mind.
 There are also various performance improvements, not enumerated here.
 
--- 7-stdlib/99-minor/archive/tar.md --
-#### [archive/tar](/pkg/archive/tar/)
+-- 7-stdlib/99-minor/archive/tar/54451.md --
 
 <!-- https://go.dev/issue/54451, CL 491175 -->
 The implementation of the
@@ -128,8 +127,7 @@ interface returned by
 now implements a `String` method that calls
 [`io/fs.FormatFileInfo`](/pkg/io/fs/#FormatFileInfo).
 
--- 7-stdlib/99-minor/archive/zip.md --
-#### [archive/zip](/pkg/archive/zip/)
+-- 7-stdlib/99-minor/archive/zip/54451.md --
 
 <!-- https://go.dev/issue/54451, CL 491175 -->
 The implementation of the
@@ -139,8 +137,7 @@ interface returned by
 now implements a `String` method that calls
 [`io/fs.FormatFileInfo`](/pkg/io/fs/#FormatFileInfo).
 
--- 7-stdlib/99-minor/bytes.md --
-#### [bytes](/pkg/bytes/)
+-- 7-stdlib/99-minor/bytes/53685.md --
 
 <!-- https://go.dev/issue/53685, CL 474635 -->
 The [`Buffer`](/pkg/bytes/#Buffer) type
@@ -152,14 +149,7 @@ These may be used along with the
 method to append directly to the `Buffer`.
 ways different. 
 
--- 7-stdlib/99-minor/debug/elf.md --
-### [debug/elf](/pkg/debug/elf/)
-
-<!-- https://go.dev/issue/56892, CL 452617 -->
-The new
-[`File.DynValue`](/pkg/debug/elf/#File.DynValue)
-method may be used to retrieve the numeric values listed with a
-given dynamic tag.
+-- 7-stdlib/99-minor/debug/elf/56887.md --
 
 <!-- https://go.dev/issue/56887, CL 452496 -->
 The constant flags permitted in a `DT_FLAGS_1`
@@ -171,21 +161,29 @@ tags have names starting with `DF_1`.
 The package now defines the constant
 [`COMPRESS_ZSTD`](/pkg/debug/elf/#COMPRESS_ZSTD).
 
+-- 7-stdlib/99-minor/debug/elf/56892.md --
+
+<!-- https://go.dev/issue/56892, CL 452617 -->
+The new
+[`File.DynValue`](/pkg/debug/elf/#File.DynValue)
+method may be used to retrieve the numeric values listed with a
+given dynamic tag.
+
+-- 7-stdlib/99-minor/debug/elf/60348.md --
+
 <!-- https://go.dev/issue/60348, CL 496918 -->
 The package now defines the constant
 [`R_PPC64_REL24_P9NOTOC`](/pkg/debug/elf/#R_PPC64_REL24_P9NOTOC).
 
 
--- 7-stdlib/99-minor/net.md --
-#### [net](/pkg/net/)
+-- 7-stdlib/99-minor/net/59166.md --
 
 <!-- https://go.dev/issue/59166, https://go.dev/issue/56539 -->
 <!-- CL 471136, CL 471137, CL 471140 -->
 On Linux, the [net](/pkg/net/) package can now use
 Multipath TCP when the kernel supports it.
 
--- 7-stdlib/99-minor/net/http.md --
-#### [net/http](/pkg/net/http/)
+-- 7-stdlib/99-minor/net/http/123.md --
 
 
 <!-- CL 472636 -->
@@ -381,13 +379,7 @@ These may be used along with the
 method to append directly to the `Buffer`.
 ways different.
 
-### [debug/elf](/pkg/debug/elf/)
-
-<!-- https://go.dev/issue/56892, CL 452617 -->
-The new
-[`File.DynValue`](/pkg/debug/elf/#File.DynValue)
-method may be used to retrieve the numeric values listed with a
-given dynamic tag.
+#### [debug/elf](/pkg/debug/elf/)
 
 <!-- https://go.dev/issue/56887, CL 452496 -->
 The constant flags permitted in a `DT_FLAGS_1`
@@ -398,6 +390,12 @@ tags have names starting with `DF_1`.
 <!-- CL 473256 -->
 The package now defines the constant
 [`COMPRESS_ZSTD`](/pkg/debug/elf/#COMPRESS_ZSTD).
+
+<!-- https://go.dev/issue/56892, CL 452617 -->
+The new
+[`File.DynValue`](/pkg/debug/elf/#File.DynValue)
+method may be used to retrieve the numeric values listed with a
+given dynamic tag.
 
 <!-- https://go.dev/issue/60348, CL 496918 -->
 The package now defines the constant
@@ -411,7 +409,6 @@ On Linux, the [net](/pkg/net/) package can now use
 Multipath TCP when the kernel supports it.
 
 #### [net/http](/pkg/net/http/)
-
 
 <!-- CL 472636 -->
 The new [`ResponseController.EnableFullDuplex`](/pkg/net/http#ResponseController.EnableFullDuplex)
