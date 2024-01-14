@@ -151,34 +151,47 @@ func Merge(fsys fs.FS) (*md.Document, error) {
 	if err != nil {
 		return nil, err
 	}
-	doc := &md.Document{}
+	doc := &md.Document{Links: map[string]*md.Link{}}
 	for _, filename := range filenames {
-		fd, err := parseFile(fsys, filename)
+		newdoc, err := parseFile(fsys, filename)
 		if err != nil {
 			return nil, err
 		}
-		if len(fd.Blocks) == 0 {
+		if len(newdoc.Blocks) == 0 {
 			continue
 		}
 		if len(doc.Blocks) > 0 {
 			// Put a blank line between the current and new blocks.
 			lastLine := lastBlock(doc).Pos().EndLine
-			delta := lastLine + 2 - fd.Blocks[0].Pos().StartLine
-			for _, b := range fd.Blocks {
+			delta := lastLine + 2 - newdoc.Blocks[0].Pos().StartLine
+			for _, b := range newdoc.Blocks {
 				addLines(b, delta)
 			}
 		}
 		// Append non-empty blocks to the result document.
-		for _, b := range fd.Blocks {
+		for _, b := range newdoc.Blocks {
 			if _, ok := b.(*md.Empty); !ok {
 				doc.Blocks = append(doc.Blocks, b)
 			}
 		}
-		// TODO(jba): merge links
+		// Merge link references.
+		for key, link := range newdoc.Links {
+			if doc.Links[key] != nil {
+				return nil, fmt.Errorf("duplicate link reference %q; second in %s", key, filename)
+			}
+			doc.Links[key] = link
+		}
 		// TODO(jba): add headings for package sections under "Minor changes to the library".
 	}
 	// Remove headings with empty contents.
 	doc.Blocks = removeEmptySections(doc.Blocks)
+	if len(doc.Blocks) > 0 && len(doc.Links) > 0 {
+		// Add a blank line to separate the links.
+		lastPos := doc.Blocks[len(doc.Blocks)-1].Pos()
+		lastPos.StartLine += 2
+		lastPos.EndLine += 2
+		doc.Blocks = append(doc.Blocks, &md.Empty{Position: lastPos})
+	}
 	return doc, nil
 }
 
