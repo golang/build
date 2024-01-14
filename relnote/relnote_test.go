@@ -40,33 +40,16 @@ func TestCheckFragment(t *testing.T) {
 			"",
 		},
 		{
-			// multiple sections have what they need
-			"# H1\n\nTODO\n\n## H2\nOk.",
-			"",
-		},
-		{
 			// questions and exclamations are OK
 			"# H1\n Are questions ok? \n# H2\n Must write this note!",
 			"",
 		},
 		{
-			"TODO\n# heading",
-			"does not start with a heading",
-		},
-		{
-			"#   \t\nTODO",
-			"starts with an empty heading",
-		},
-		{
-			"# +heading\nTODO",
-			"starts with a non-matching head",
+			"",
+			"empty",
 		},
 		{
 			"# heading",
-			"needs",
-		},
-		{
-			"# H1\n non-final section has a problem\n## H2\n TODO",
 			"needs",
 		},
 	} {

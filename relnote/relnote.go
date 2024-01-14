@@ -50,56 +50,19 @@ func CheckFragment(data string) error {
 	if len(doc.Blocks) == 0 {
 		return errors.New("empty content")
 	}
-	if !isHeading(doc.Blocks[0]) {
-		return errors.New("does not start with a heading")
-	}
-	htext := text(doc.Blocks[0])
-	if strings.TrimSpace(htext) == "" {
-		return errors.New("starts with an empty heading")
-	}
-	if !headingTextMustMatch(htext) {
-		return errors.New("starts with a non-matching heading (text begins with a '+')")
-	}
-	// Check that the content of each heading either contains a TODO or at least one sentence.
-	cur := doc.Blocks[0] // the heading beginning the current section
-	found := false       // did we find the content we were looking for in this section?
-	for _, b := range doc.Blocks[1:] {
-		if isHeading(b) {
-			if !found {
-				break
-			}
-			cur = b
-			found = false
-		} else {
-			t := text(b)
-			// Check for a TODO or standard end-of-sentence punctuation
-			// (as a crude approximation to a full sentence).
-			found = strings.Contains(t, "TODO") || strings.ContainsAny(t, ".?!")
-		}
-	}
-	if !found {
-		return fmt.Errorf("section with heading %q needs a TODO or a sentence", text(cur))
+	// Check that the content of the document contains either a TODO or at least one sentence.
+	txt := text(doc)
+	if !strings.Contains(txt, "TODO") && !strings.ContainsAny(txt, ".?!") {
+		return errors.New("needs a TODO or a sentence")
 	}
 	return nil
-}
-
-// isHeading reports whether b is a Heading node.
-func isHeading(b md.Block) bool {
-	_, ok := b.(*md.Heading)
-	return ok
-}
-
-// headingTextMustMatch reports whether s is the text of a heading
-// that must be matched against another heading.
-//
-// Headings beginning with '+' don't require a match; all others do.
-func headingTextMustMatch(s string) bool {
-	return len(s) == 0 || s[0] != '+'
 }
 
 // text returns all the text in a block, without any formatting.
 func text(b md.Block) string {
 	switch b := b.(type) {
+	case *md.Document:
+		return blocksText(b.Blocks)
 	case *md.Heading:
 		return text(b.Text)
 	case *md.Text:
@@ -353,15 +316,4 @@ func parseFile(fsys fs.FS, path string) (*md.Document, error) {
 	in := string(data)
 	doc := NewParser().Parse(in)
 	return doc, nil
-}
-
-// headingIndex returns the index in bs of the first heading at the given level,
-// or len(bs) if there isn't one.
-func headingIndex(bs []md.Block, level int) int {
-	for i, b := range bs {
-		if h, ok := b.(*md.Heading); ok && h.Level == level {
-			return i
-		}
-	}
-	return len(bs)
 }
