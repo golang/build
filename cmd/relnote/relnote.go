@@ -112,6 +112,20 @@ func main() {
 	}
 	version := m[1]
 
+	// Dispatch to a subcommand if one is provided.
+	if cmd := flag.Arg(0); cmd != "" {
+		switch cmd {
+		case "generate":
+			err = generate(version)
+		default:
+			err = fmt.Errorf("unknown command %q", cmd)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	// Releases are every 6 months. Walk forward by 6 month increments to next release.
 	cutoff := time.Date(2016, time.August, 1, 00, 00, 00, 0, time.UTC)
 	now := time.Now()
