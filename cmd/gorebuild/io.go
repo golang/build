@@ -438,7 +438,7 @@ func DiffArchive[File1, File2 any](log *Log,
 		if !okr && !okp { // duplicate name
 			continue
 		}
-		if !okr {
+		if !okp {
 			log.Printf("%s: missing from posted archive", name)
 			match = false
 			continue
