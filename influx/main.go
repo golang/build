@@ -79,7 +79,7 @@ func run() error {
 }
 
 func startInflux(bindAddr string) (*exec.Cmd, error) {
-	cmd := exec.Command("/docker-entrypoint.sh", "influxd", "--http-bind-address", bindAddr)
+	cmd := exec.Command("/docker-entrypoint.sh", "influxd", "--http-bind-address", bindAddr, "--pprof-disabled")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	log.Printf("Running %v", cmd.Args)
