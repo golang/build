@@ -1,3 +1,7 @@
 This branch contains our LUCI configurations while we're prototyping.
 
 Regenerate configuration by running `./main.star`.
+
+You will need the `lucicfg` program for that. 
+See https://www.chromium.org/developers/how-tos/depottools/#installing
+to install it.

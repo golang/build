@@ -953,7 +953,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Therefore, this constant should generally not need to be bumped up. The only case where it
     # might need it is a high rate of presubmit builds including such builders, but the fact
     # that builds expire is good: it acts as a backpressure mechanism.
-    expiration_timeout = 6*time.hour
+    expiration_timeout = 6 * time.hour
     capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
     if capacity_constrained:
         expiration_timeout = time.day
@@ -1209,6 +1209,8 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
     enable_types = None
+    if project == "build" and go_branch_short == "go1.20":  # x/build stopped supporting Go 1.20 sooner.
+        return False, False, False, []
     if pt == PT.TOOL:
         enable_types = ["linux-amd64", "windows-amd64", "darwin-amd64"]
     elif project == "mobile":
@@ -1273,6 +1275,9 @@ def _define_go_ci():
     postsubmit_builders_with_go_repo_trigger = {}
     for project in PROJECTS:
         for go_branch_short, go_branch in GO_BRANCHES.items():
+            if project == "build" and go_branch_short == "go1.20":  # x/build stopped supporting Go 1.20 sooner.
+                continue
+
             # Set up a CQ group for the builder definitions below.
             cq_group = go_cq_group(project, go_branch_short)
             luci.cq_group(
