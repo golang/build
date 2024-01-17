@@ -720,10 +720,13 @@ func TestBuilderConfig(t *testing.T) {
 		// and darwin-amd64 and perhaps windows-amd64 (for stuff like gomote).
 		// No need for any other operating systems to use it.
 		{b("linux-amd64", "build"), both},
+		{b("linux-amd64@go1.20", "build"), none},
 		{b("linux-amd64-longtest", "build"), onlyPost},
+		{b("linux-amd64-longtest@go1.20", "build"), none},
 		{b("windows-amd64-2016", "build"), both},
 		{b("darwin-amd64-10_14", "build"), none},
 		{b("darwin-amd64-10_15", "build"), onlyPost},
+		{b("darwin-amd64-10_15@go1.20", "build"), none},
 		{b("linux-amd64-fedora", "build"), none},
 		{b("linux-amd64-clang", "build"), none},
 		{b("linux-amd64-sid", "build"), none},
@@ -1211,15 +1214,18 @@ func TestHostConfigIsVM(t *testing.T) {
 
 func TestDefaultPlusExpBuild(t *testing.T) {
 	for _, tc := range []struct {
-		repo string
-		want bool
+		repo     string
+		goBranch string
+		want     bool
 	}{
-		{"exp", true},
-		{"build", true},
-		{"anything", true},
-		{"vulndb", false},
+		{"exp", "master", true},
+		{"build", "master", true},
+		{"build", "release-branch.go1.21", true},
+		{"build", "release-branch.go1.20", false},
+		{"anything", "master", true},
+		{"vulndb", "master", false},
 	} {
-		got := defaultPlusExpBuild(tc.repo, "", "")
+		got := defaultPlusExpBuild(tc.repo, "", tc.goBranch)
 		if got != tc.want {
 			t.Errorf("%s: got %t, want %t", tc.repo, got, tc.want)
 		}
