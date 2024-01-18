@@ -91,9 +91,21 @@ func (c change) TextLine() string {
 	}
 }
 
+func usage() {
+	out := flag.CommandLine.Output()
+	fmt.Fprintf(out, "usage:\n")
+	fmt.Fprintf(out, "   relnote\n")
+	fmt.Fprintf(out, "      summarize the Go changes in Gerrit marked with\n")
+	fmt.Fprintf(out, "      RELNOTE annotations for the release notes (obsolete)\n")
+	fmt.Fprintf(out, "   relnote generate REPO_ROOT\n")
+	fmt.Fprintf(out, "      generate release notes from the contents of doc/next under the repo root\n")
+	flag.PrintDefaults()
+}
+
 func main() {
 	log.SetPrefix("relnote: ")
 	log.SetFlags(0)
+	flag.Usage = usage
 	flag.Parse()
 
 	goroot := runtime.GOROOT()

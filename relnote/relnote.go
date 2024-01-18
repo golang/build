@@ -101,8 +101,9 @@ func inlineText(ins []md.Inline) string {
 // Heading with no content are removed.
 // The link keys must be unique, and are combined into a single map.
 //
-// Files in the "minor changes" directory are named after the package to which they refer,
-// and will have the package heading inserted automatically.
+// Files in the "minor changes" directory (the unique directory matching the glob
+// "*stdlib/*minor") are named after the package to which they refer, and will have
+// the package heading inserted automatically.
 func Merge(fsys fs.FS) (*md.Document, error) {
 	filenames, err := sortedMarkdownFilenames(fsys)
 	if err != nil {
