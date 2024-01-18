@@ -1,0 +1,11 @@
+errors:
+- foo/123.md does not exist
+- bar/123.md does, but doesn't have the right content.
+-- api.txt --
+pkg foo, type T #123
+pkg bar, type T #123
+-- bar/123.md --
+Not a sentence
+-- want --
+bar/123.md: needs a TODO or a sentence
+foo/123.md: file does not exist

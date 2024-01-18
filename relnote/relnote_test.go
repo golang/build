@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -131,6 +132,9 @@ func dump(d *md.Document) {
 		}
 	}
 }
+
+// parseTestFile translates a txtar archive into an fs.FS, except for the
+// file "want", whose contents are returned separately.
 func parseTestFile(filename string) (fsys fs.FS, want string, err error) {
 	ar, err := txtar.ParseFile(filename)
 	if err != nil {
@@ -210,5 +214,52 @@ something
 `))
 	if got != want {
 		t.Errorf("\ngot:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestParseAPIFile(t *testing.T) {
+	fsys := fstest.MapFS{
+		"123.next": &fstest.MapFile{Data: []byte(`
+pkg p1, type T struct
+pkg p2, func F(int, bool) #123
+	`)},
+	}
+	got, err := parseAPIFile(fsys, "123.next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []APIFeature{
+		{"p1", "type T struct", 0},
+		{"p2", "func F(int, bool)", 123},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("\ngot  %+v\nwant %+v", got, want)
+	}
+}
+
+func TestCheckAPIFile(t *testing.T) {
+	testFiles, err := filepath.Glob(filepath.Join("testdata", "checkAPIFile", "*.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(testFiles) == 0 {
+		t.Fatal("no tests")
+	}
+	for _, f := range testFiles {
+		t.Run(strings.TrimSuffix(filepath.Base(f), ".txt"), func(t *testing.T) {
+			fsys, want, err := parseTestFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got string
+			gotErr := CheckAPIFile(fsys, "api.txt", fsys)
+			if gotErr != nil {
+				got = gotErr.Error()
+			}
+			want = strings.TrimSpace(want)
+			if got != want {
+				t.Errorf("\ngot  %s\nwant %s", got, want)
+			}
+		})
 	}
 }

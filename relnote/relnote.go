@@ -5,33 +5,23 @@
 // Package relnote supports working with release notes.
 //
 // Its main feature is the ability to merge Markdown fragments into a single
-// document.
+// document. (See [Merge].)
 //
 // This package has minimal imports, so that it can be vendored into the
 // main go repo.
-//
-// # Fragments
-//
-// A release note fragment is designed to be merged into a final document.
-// The merging is done by matching headings, and inserting the contents
-// of that heading (that is, the non-heading blocks following it) into
-// the merged document.
-//
-// If the text of a heading begins with '+', then it doesn't have to match
-// with an existing heading. If it doesn't match, the heading and its contents
-// are both inserted into the result.
-//
-// A fragment must begin with a non-empty matching heading.
 package relnote
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"path"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	md "rsc.io/markdown"
@@ -121,7 +111,7 @@ func Merge(fsys fs.FS) (*md.Document, error) {
 	doc := &md.Document{Links: map[string]*md.Link{}}
 	var prevPkg string // previous stdlib package, if any
 	for _, filename := range filenames {
-		newdoc, err := parseFile(fsys, filename)
+		newdoc, err := parseMarkdownFile(fsys, filename)
 		if err != nil {
 			return nil, err
 		}
@@ -303,7 +293,7 @@ func position(b md.Block) *md.Position {
 	}
 }
 
-func parseFile(fsys fs.FS, path string) (*md.Document, error) {
+func parseMarkdownFile(fsys fs.FS, path string) (*md.Document, error) {
 	f, err := fsys.Open(path)
 	if err != nil {
 		return nil, err
@@ -316,4 +306,110 @@ func parseFile(fsys fs.FS, path string) (*md.Document, error) {
 	in := string(data)
 	doc := NewParser().Parse(in)
 	return doc, nil
+}
+
+// An APIFeature is a symbol mentioned in an API file,
+// like the ones in the main go repo in the api directory.
+type APIFeature struct {
+	Package string // package that the feature is in
+	Feature string // everything about the feature other than the package
+	Issue   int    // the issue that introduced the feature, or 0 if none
+}
+
+var apiFileLineRegexp = regexp.MustCompile(`^pkg ([^,]+), ([^#]*)(#\d+)?$`)
+
+// parseAPIFile parses a file in the api format and returns a list of the file's features.
+// A feature is represented by a single line that looks like
+//
+//	PKG WORDS #ISSUE
+func parseAPIFile(fsys fs.FS, filename string) ([]APIFeature, error) {
+	f, err := fsys.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var features []APIFeature
+	scan := bufio.NewScanner(f)
+	for scan.Scan() {
+		line := strings.TrimSpace(scan.Text())
+		if line == "" {
+			continue
+		}
+		matches := apiFileLineRegexp.FindStringSubmatch(line)
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("%s: malformed line %q", filename, line)
+		}
+		f := APIFeature{
+			Package: matches[1],
+			Feature: strings.TrimSpace(matches[2]),
+		}
+		if len(matches) > 3 && len(matches[3]) > 0 {
+			var err error
+			f.Issue, err = strconv.Atoi(matches[3][1:]) // skip leading '#'
+			if err != nil {
+				return nil, err
+			}
+		}
+		features = append(features, f)
+	}
+	if scan.Err() != nil {
+		return nil, scan.Err()
+	}
+	return features, nil
+}
+
+// GroupAPIFeaturesByFile returns a map of the given features keyed by
+// the doc filename that they are associated with.
+// A feature with package P and issue N should be documented in the file
+// "P/N.md".
+func GroupAPIFeaturesByFile(fs []APIFeature) (map[string][]APIFeature, error) {
+	m := map[string][]APIFeature{}
+	for _, f := range fs {
+		if f.Issue == 0 {
+			return nil, fmt.Errorf("%+v: zero issue", f)
+		}
+		filename := fmt.Sprintf("%s/%d.md", f.Package, f.Issue)
+		m[filename] = append(m[filename], f)
+	}
+	return m, nil
+}
+
+// CheckAPIFile reads the api file at filename in apiFS, and checks the corresponding
+// release-note files under docFS. It checks that the files exist and that they have
+// some minimal content (see [CheckFragment]).
+func CheckAPIFile(apiFS fs.FS, filename string, docFS fs.FS) error {
+	features, err := parseAPIFile(apiFS, filename)
+	if err != nil {
+		return err
+	}
+	byFile, err := GroupAPIFeaturesByFile(features)
+	if err != nil {
+		return err
+	}
+	var filenames []string
+	for fn := range byFile {
+		filenames = append(filenames, fn)
+	}
+	slices.Sort(filenames)
+	var errs []error
+	for _, filename := range filenames {
+		// TODO(jba): check that the file mentions each feature?
+		if err := checkFragmentFile(docFS, filename); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %v", filename, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func checkFragmentFile(fsys fs.FS, filename string) error {
+	f, err := fsys.Open(filename)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			err = fs.ErrNotExist
+		}
+		return err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	return CheckFragment(string(data))
 }
