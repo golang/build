@@ -65,9 +65,12 @@ func TestCheckFragment(t *testing.T) {
 }
 
 func TestMerge(t *testing.T) {
-	testFiles, err := filepath.Glob(filepath.Join("testdata", "*.txt"))
+	testFiles, err := filepath.Glob(filepath.Join("testdata", "merge", "*.txt"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(testFiles) == 0 {
+		t.Fatal("no tests")
 	}
 	for _, f := range testFiles {
 		t.Run(strings.TrimSuffix(filepath.Base(f), ".txt"), func(t *testing.T) {
