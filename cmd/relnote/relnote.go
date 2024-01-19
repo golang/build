@@ -99,6 +99,8 @@ func usage() {
 	fmt.Fprintf(out, "      RELNOTE annotations for the release notes (obsolete)\n")
 	fmt.Fprintf(out, "   relnote generate [DIR]\n")
 	fmt.Fprintf(out, "      generate release notes using GOROOT/doc/next or DIR\n")
+	fmt.Fprintf(out, "   relnote todo\n")
+	fmt.Fprintf(out, "      report which release notes need to be written\n")
 	flag.PrintDefaults()
 }
 
@@ -129,6 +131,9 @@ func main() {
 		switch cmd {
 		case "generate":
 			err = generate(version, flag.Arg(1))
+		case "todo":
+			nextDir := filepath.Join(goroot, "doc", "next")
+			err = todo(os.Stdout, os.DirFS(nextDir))
 		default:
 			err = fmt.Errorf("unknown command %q", cmd)
 		}

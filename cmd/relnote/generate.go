@@ -31,7 +31,6 @@ func generate(version, dir string) error {
 	if dir == "" {
 		dir = filepath.Join(runtime.GOROOT(), "doc", "next")
 	}
-	fmt.Printf("## dir = %q", dir)
 	doc, err := relnote.Merge(os.DirFS(dir))
 	if err != nil {
 		return err
