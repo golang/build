@@ -97,8 +97,8 @@ func usage() {
 	fmt.Fprintf(out, "   relnote\n")
 	fmt.Fprintf(out, "      summarize the Go changes in Gerrit marked with\n")
 	fmt.Fprintf(out, "      RELNOTE annotations for the release notes (obsolete)\n")
-	fmt.Fprintf(out, "   relnote generate REPO_ROOT\n")
-	fmt.Fprintf(out, "      generate release notes from the contents of doc/next under the repo root\n")
+	fmt.Fprintf(out, "   relnote generate [DIR]\n")
+	fmt.Fprintf(out, "      generate release notes using GOROOT/doc/next or DIR\n")
 	flag.PrintDefaults()
 }
 
@@ -128,7 +128,7 @@ func main() {
 	if cmd := flag.Arg(0); cmd != "" {
 		switch cmd {
 		case "generate":
-			err = generate(version)
+			err = generate(version, flag.Arg(1))
 		default:
 			err = fmt.Errorf("unknown command %q", cmd)
 		}

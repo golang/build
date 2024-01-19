@@ -2,14 +2,15 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build go1.21
+
 package main
 
 import (
-	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"golang.org/x/build/relnote"
 	"rsc.io/markdown"
@@ -26,12 +27,11 @@ title: Go 1.%[1]s Release Notes
 
 // generate takes the root of the Go repo.
 // It generates release notes by combining the fragments in the repo.
-func generate(version string) error {
-	repoRoot := flag.Arg(1)
-	if repoRoot == "" {
-		return errors.New("missing Go repo root")
+func generate(version, dir string) error {
+	if dir == "" {
+		dir = filepath.Join(runtime.GOROOT(), "doc", "next")
 	}
-	dir := filepath.Join(repoRoot, "doc", "next")
+	fmt.Printf("## dir = %q", dir)
 	doc, err := relnote.Merge(os.DirFS(dir))
 	if err != nil {
 		return err
