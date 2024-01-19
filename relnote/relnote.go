@@ -71,6 +71,8 @@ func text(b md.Block) string {
 		return text(b.Text)
 	case *md.Quote:
 		return blocksText(b.Blocks)
+	case *md.ThematicBreak:
+		return "---"
 	default:
 		panic(fmt.Sprintf("unknown block type %T", b))
 	}
@@ -288,6 +290,8 @@ func position(b md.Block) *md.Position {
 	case *md.Paragraph:
 		return &b.Position
 	case *md.Quote:
+		return &b.Position
+	case *md.ThematicBreak:
 		return &b.Position
 	default:
 		panic(fmt.Sprintf("unknown block type %T", b))
