@@ -312,6 +312,8 @@ BUILDER_TYPES = [
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
     "linux-amd64-noopt",
+    "linux-amd64-perf_vs_gotip",
+    "linux-amd64-perf_vs_parent",
     "linux-amd64-race",
     "linux-amd64-racecompile",
     "linux-amd64-ssacheck",
@@ -344,6 +346,23 @@ NO_NETWORK_BUILDERS = [
     "linux-386",
     "linux-amd64",
 ]
+
+# GO_BRANCHES lists the branches of the "go" project to build and test against.
+# Keys in this map are shortened aliases while values are the git branch name.
+GO_BRANCHES = {
+    "gotip": struct(branch = "master", bootstrap = "1.20.6"),
+    "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.20.6"),
+    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
+    "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
+}
+
+# EXTRA_GO_BRANCHES are Go branches that aren't used for project-wide testing
+# because they're out of scope per https://go.dev/doc/devel/release#policy,
+# but are used by specific golang.org/x repositories.
+EXTRA_GO_BRANCHES = {
+    "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13"),
+    "go1.18": struct(branch = "release-branch.go1.18", bootstrap = "1.17.13"),
+}
 
 # make_run_mod returns a run_mod that adds the given properties and environment
 # variables. If set, enabled is a function that returns three booleans to
@@ -407,6 +426,8 @@ def define_for_go_starting_at(x):
     return f
 
 # define the builder only for postsubmit of the go project.
+#
+# Note: it will still be defined for optional inclusion in presubmit.
 def define_for_go_postsubmit():
     def f(port, project, go_branch_short):
         run = project == "go"
@@ -420,6 +441,15 @@ def define_for_go_postsubmit_or_presubmit_with_filters(filters):
     def f(port, project, go_branch_short):
         run = project == "go"
         return (run, run, run, filters)
+
+    return f
+
+# define the builder as existing, so it's includable in presubmit, but don't
+# run it anywhere by default.
+def define_for_go_optional_presubmit_only():
+    def f(port, project, go_branch_short):
+        exists = project == "go"
+        return (exists, False, False, [])
 
     return f
 
@@ -475,6 +505,26 @@ RUN_MODS = dict(
     noopt = make_run_mod(
         add_env = {"GO_GCFLAGS": "-N -l"},
         enabled = define_for_go_postsubmit(),
+    ),
+
+    # Run performance tests against gotip.
+    #
+    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
+    # environment variables will apply, but others like compile_only, race, and longtest
+    # will have no effect.
+    perf_vs_gotip = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "refs/heads/"+GO_BRANCHES["gotip"].branch}},
+        enabled = define_for_go_optional_presubmit_only(),
+    ),
+
+    # Run performance tests against the source's parent commit.
+    #
+    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
+    # environment variables will apply, but others like compile_only, race, and longtest
+    # will have no effect.
+    perf_vs_parent = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "parent"}},
+        enabled = define_for_go_optional_presubmit_only(),
     ),
 
     # Build and test with GOPPC64=power10, which makes the compiler assume certain ppc64 CPU
@@ -570,23 +620,6 @@ golang/third_party/protoc_with_conformance/${platform} version:25.0-rc2
 """,
     ),
 ]
-
-# GO_BRANCHES lists the branches of the "go" project to build and test against.
-# Keys in this map are shortened aliases while values are the git branch name.
-GO_BRANCHES = {
-    "gotip": struct(branch = "master", bootstrap = "1.20.6"),
-    "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.20.6"),
-    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
-    "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
-}
-
-# EXTRA_GO_BRANCHES are Go branches that aren't used for project-wide testing
-# because they're out of scope per https://go.dev/doc/devel/release#policy,
-# but are used by specific golang.org/x repositories.
-EXTRA_GO_BRANCHES = {
-    "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13"),
-    "go1.18": struct(branch = "release-branch.go1.18", bootstrap = "1.17.13"),
-}
 
 def go_cq_group(project, go_branch_short):
     """go_cq_group returns the CQ group name and watch for project and
@@ -803,6 +836,7 @@ GOLANGBUILD_MODES = {
     "COORDINATOR": 1,
     "BUILD": 2,
     "TEST": 3,
+    "PERF": 4,
 }
 
 def define_builder(env, project, go_branch_short, builder_type):
@@ -986,6 +1020,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Determine if we should be sharding tests, and how many shards.
     compile_only = "compile_only" in base_props
     misccompile = "misccompile" in run_mods
+    perfmode = "perf_mode" in base_props
     if compile_only:
         if misccompile:
             if project == "go":
@@ -996,6 +1031,8 @@ def define_builder(env, project, go_branch_short, builder_type):
             # Compile-only builders for a single platform should have just one shard, otherwise
             # each shard will do repeat work.
             test_shards = 1
+    elif perfmode:
+        test_shards = 1
     elif project == "go" and not capacity_constrained and go_branch_short != "go1.20":
         # TODO(mknyszek): Remove the exception for the go1.20 branch once it
         # is no longer supported.
@@ -1019,7 +1056,9 @@ def define_builder(env, project, go_branch_short, builder_type):
     #
     # The all-mode builder is used for everything else, but we must only select it if test_shards == 1.
     downstream_builders = []
-    if test_shards > 1 or (project == "go" and not capacity_constrained):
+    if perfmode:
+        define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
+    elif test_shards > 1 or (project == "go" and not capacity_constrained):
         downstream_builders = define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
     elif test_shards == 1:
         define_allmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
@@ -1149,6 +1188,27 @@ def define_allmode_builder(env, name, builder_type, base_props, base_dims, emit_
         properties = all_props,
         triggering_policy = triggering_policy(env, builder_type),
         service_account = env.worker_sa,
+    )
+
+def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit_builder):
+    # Create an "PERF" mode builder which runs benchmarks. Its operation is somewhat
+    # special, usually involving checking out two copies of a repository and possibly
+    # a third containing benchmarks.
+    #
+    # This builder is substantially simpler because it doesn't need to trigger any
+    # downstream builders, and also doesn't currently support sharding.
+    perf_props = dict(base_props)
+    perf_props.update({
+        "mode": GOLANGBUILD_MODES["PERF"],
+    })
+    emit_builder(
+        name = name,
+        bucket = env.bucket,
+        dimensions = base_dims, # TODO(mknyszek): Ask for c2-standard-16 instances once available.
+        properties = perf_props,
+        triggering_policy = triggering_policy(env, builder_type),
+        service_account = env.worker_sa,
+        execution_timeout = 12*time.hour,
     )
 
 # triggering_policy defines the LUCI Scheduler triggering policy for postsubmit builders.
