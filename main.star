@@ -980,17 +980,22 @@ def define_builder(env, project, go_branch_short, builder_type):
     # For builders targeting platforms that we have plenty of resources for, wait up to 6 hours.
     # Robocrop should scale much sooner than that to fill demand, but if we end up with more demand
     # than our cap we'll have 6 hours for that demand to be filled before we report it as a problem.
+    # We do not wait for capacity on these builders so we can find out immediately out all our
+    # capacity is drained. It is usually indicative of a bigger issue, like an outage.
     #
     # For builders that are capacity constrained, wait several times longer. Note
     # that the time we can wait here is not usually unbounded, since according to triggering_policy there
     # can only be at most 1 outstanding request per repo+gobranch combination in postsubmit.
     # Therefore, this constant should generally not need to be bumped up. The only case where it
     # might need it is a high rate of presubmit builds including such builders, but the fact
-    # that builds expire is good: it acts as a backpressure mechanism.
-    expiration_timeout = 6 * time.hour
+    # that builds expire is good: it acts as a backpressure mechanism. We wait for capacity on
+    # these builders because they frequently go down for maintenance or just because they're flaky.
     capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
+    expiration_timeout = 6 * time.hour
+    wait_for_capacity = False
     if capacity_constrained:
         expiration_timeout = time.day
+        wait_for_capacity = True
 
     # Create a helper to emit builder definitions, installing common fields from
     # the current context.
@@ -1012,6 +1017,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             caches = caches,
             experiments = exps,
             expiration_timeout = expiration_timeout,
+            wait_for_capacity = wait_for_capacity,
             **kwargs
         )
 
