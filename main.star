@@ -354,6 +354,17 @@ BUILDER_TYPES = [
     "windows-arm64",
 ]
 
+KNOWN_ISSUE_BUILDER_TYPES = {
+    "freebsd-riscv64": struct(issue_number = 63482),
+    "netbsd-arm": struct(issue_number = 63698),
+    "netbsd-arm64": struct(issue_number = 65242),
+    "openbsd-ppc64": struct(issue_number = 63480),
+    "openbsd-riscv64": struct(issue_number = 64176),
+    "plan9-386": struct(issue_number = 63599),
+    "plan9-amd64": struct(issue_number = 63600),
+    "plan9-arm": struct(issue_number = 63601),
+}
+
 # NO_NETWORK_BUILDERS are a subset of builder types
 # where we require the no-network check to run.
 NO_NETWORK_BUILDERS = [
@@ -527,7 +538,7 @@ RUN_MODS = dict(
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
     perf_vs_gotip = make_run_mod(
-        add_props = {"perf_mode": {"baseline": "refs/heads/"+GO_BRANCHES["gotip"].branch}},
+        add_props = {"perf_mode": {"baseline": "refs/heads/" + GO_BRANCHES["gotip"].branch}},
         enabled = define_for_go_optional_presubmit_only(),
     ),
 
@@ -835,14 +846,8 @@ def project_title(project):
         return "x/" + project
 
 # console_name produces the console name for the given project and branch.
-def console_name(project, go_branch_short, suffix):
-    if project == "go":
-        fail("console_name doesn't have support for the 'go' project")
-    sort_letter = "x"
-    if not project_title(project).startswith("x/"):
-        # Put "z" at the beginning to sort this at the bottom of the page.
-        sort_letter = "z"
-    return "%s-%s-%s" % (sort_letter, project, go_branch_short) + suffix
+def console_name(project, go_branch_short, suffix = "", tier = 1):
+    return "tier%d-%s-%s" % (tier, project, go_branch_short) + suffix
 
 # Enum values for golangbuild's "mode" property.
 GOLANGBUILD_MODES = {
@@ -1224,11 +1229,11 @@ def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit
     emit_builder(
         name = name,
         bucket = env.bucket,
-        dimensions = base_dims, # TODO(mknyszek): Ask for c2-standard-16 instances once available.
+        dimensions = base_dims,  # TODO(mknyszek): Ask for c2-standard-16 instances once available.
         properties = perf_props,
         triggering_policy = triggering_policy(env, builder_type),
         service_account = env.worker_sa,
-        execution_timeout = 12*time.hour,
+        execution_timeout = 12 * time.hour,
     )
 
 # triggering_policy defines the LUCI Scheduler triggering policy for postsubmit builders.
@@ -1395,6 +1400,7 @@ def _define_go_ci():
 
             # Define builders.
             postsubmit_builders = {}
+            postsubmit_builders_known_issue = {}
             for builder_type in BUILDER_TYPES:
                 exists, presubmit, postsubmit, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
                 if not exists:
@@ -1441,7 +1447,10 @@ def _define_go_ci():
                 # Define post-submit builders.
                 if postsubmit:
                     name, triggers = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
-                    postsubmit_builders[name] = builder_type
+                    if builder_type in KNOWN_ISSUE_BUILDER_TYPES:
+                        postsubmit_builders_known_issue[name] = builder_type
+                    else:
+                        postsubmit_builders[name] = builder_type
 
                     # Collect all the builders that have triggers from the Go repository. Every builder needs at least one.
                     if project == "go":
@@ -1463,7 +1472,7 @@ def _define_go_ci():
                     postsubmit_builders[ci_builder] = builder_type
 
             # Collect all the postsubmit builders by port and project.
-            for name, builder_type in postsubmit_builders.items():
+            for name, builder_type in postsubmit_builders.items() + postsubmit_builders_known_issue.items():
                 os, arch, _, _ = split_builder_type(builder_type)
                 port = "%s/%s" % (os, arch)
                 postsubmit_builders_by_port.setdefault(port, []).append(name)
@@ -1485,7 +1494,7 @@ def _define_go_ci():
                 bucket = "ci",
                 repo = "https://go.googlesource.com/%s" % project,
                 refs = ["refs/heads/" + poller_branch],
-                triggers = postsubmit_builders.keys(),
+                triggers = postsubmit_builders.keys() + postsubmit_builders_known_issue.keys(),
             )
 
             # Set up consoles for postsubmit builders.
@@ -1499,72 +1508,66 @@ def _define_go_ci():
                     for name, builder_type in builders.items()
                 ]
 
+            # Create a console header for known issue consoles.
+            def make_known_issue_console_header(builders):
+                links = []
+                for name, builder_type in builders.items():
+                    name = name.split("/")[1]  # Remove the bucket.
+                    issue = KNOWN_ISSUE_BUILDER_TYPES[builder_type].issue_number
+                    links.append({
+                        "text": "%s: go.dev/issue/%d" % (name, issue),
+                        "url": "https://go.dev/issue/%d" % issue,
+                        "alt": "Known issue link for %s" % name,
+                    })
+                return {"links": [{"name": "Known issues", "links": links}]}
+
             if project == "go":
                 luci.console_view(
-                    name = "%s-%s" % (project, go_branch_short),
+                    name = console_name(project, go_branch_short),
                     repo = "https://go.googlesource.com/go",
                     title = go_branch_short,
                     refs = ["refs/heads/" + go_branch.branch],
                     entries = make_console_view_entries(postsubmit_builders),
-                    header = {
-                        "links": [
-                            {
-                                "name": "General",
-                                "links": [
-                                    {
-                                        "text": "Contributing",
-                                        "url": "https://go.dev/doc/contribute",
-                                        "alt": "Go contribution guide",
-                                    },
-                                    {
-                                        "text": "Release cycle",
-                                        "url": "https://go.dev/s/release",
-                                        "alt": "Go release cycle overview",
-                                    },
-                                    {
-                                        "text": "Wiki",
-                                        "url": "https://go.dev/wiki",
-                                        "alt": "The Go wiki on GitHub",
-                                    },
-                                    {
-                                        "text": "Playground",
-                                        "url": "https://go.dev/play",
-                                        "alt": "Go playground",
-                                    },
-                                ],
-                            },
-                        ],
-                        "console_groups": [
-                            {
-                                "title": {"text": "golang.org/x repos on " + go_branch_short},
-                                "console_ids": [
-                                    # The *-by-go consoles would be more appropriate,
-                                    # but because they have the same builder set and these
-                                    # bubbles show just the latest build, it doesn't actually
-                                    # matter.
-                                    "golang/" + console_name(project, go_branch_short, "")
-                                    for project in PROJECTS
-                                    if project != "go"
-                                ],
-                            },
-                        ],
-                    },
+                )
+                luci.console_view(
+                    name = console_name(project, go_branch_short, tier = 3),
+                    repo = "https://go.googlesource.com/go",
+                    title = go_branch_short + " (known issue)",
+                    refs = ["refs/heads/" + go_branch.branch],
+                    entries = make_console_view_entries(postsubmit_builders_known_issue),
+                    header = make_known_issue_console_header(postsubmit_builders_known_issue),
                 )
             else:
-                console_title = project_title(project) + "-" + go_branch_short
+                console_title = project_title(project) + " (" + go_branch_short + ")"
                 luci.console_view(
-                    name = console_name(project, go_branch_short, ""),
+                    name = console_name(project, go_branch_short),
                     repo = "https://go.googlesource.com/%s" % project,
                     title = console_title,
                     refs = ["refs/heads/master"],
                     entries = make_console_view_entries(postsubmit_builders),
                 )
                 luci.console_view(
-                    name = console_name(project, go_branch_short, "-by-go"),
+                    name = console_name(project, go_branch_short, suffix = "-by-go", tier = 2),
                     repo = "https://go.googlesource.com/go",
-                    title = console_title + "-by-go-commit",
+                    title = console_title + " by go commit",
                     refs = ["refs/heads/" + go_branch.branch],
                     entries = make_console_view_entries(postsubmit_builders),
+                )
+                luci.console_view(
+                    name = console_name(project, go_branch_short, tier = 3),
+                    repo = "https://go.googlesource.com/%s" % project,
+                    title = console_title + " (known issue)",
+                    refs = ["refs/heads/master"],
+                    entries = make_console_view_entries(postsubmit_builders_known_issue),
+                    header = make_known_issue_console_header(postsubmit_builders_known_issue),
+                )
+                luci.console_view(
+                    name = console_name(project, go_branch_short, suffix = "-by-go", tier = 4),
+                    repo = "https://go.googlesource.com/go",
+                    title = console_title + " by go commit (known issue)",
+                    refs = ["refs/heads/" + go_branch.branch],
+                    entries = make_console_view_entries(postsubmit_builders_known_issue),
+                    header = make_known_issue_console_header(postsubmit_builders_known_issue),
                 )
 
     # Collect all the postsubmit builders that still need triggers.
@@ -1592,7 +1595,7 @@ def _define_go_ci():
         luci.list_view(
             # Put "z" at the beginning to sort this at the bottom of the page.
             name = "z-port-%s" % port.replace("/", "-"),
-            title = "all-%s" % port,
+            title = "all %s" % port,
             entries = builders,
         )
 
