@@ -249,6 +249,20 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + [
     "solaris-amd64",
 ]
 
+# SLOW_HOSTS lists "hosts" who are known to run slower than our typical
+# high-capacity machines. It is a mapping of the host to a test timeout scaling
+# factor.
+SLOW_HOSTS = {
+    "linux-ppc64": 2,
+    "linux-ppc64le": 2,
+}
+
+# host_timeout_scale returns the default test timeout scale for a given host.
+def host_timeout_scale(host):
+    if host in SLOW_HOSTS:
+        return SLOW_HOSTS[host]
+    return 1
+
 # DEFAULT_HOST_SUFFIX defines the default host suffixes for builder types which
 # do not specify one.
 DEFAULT_HOST_SUFFIX = {
@@ -371,15 +385,15 @@ EXTRA_GO_BRANCHES = {
 # - presubmit, whether the builder should be run in presubmit by default
 # - postsubmit, whether the builder should run in postsubmit
 # - presubmit location filters, any cq.location_filter to apply to presubmit
-def make_run_mod(add_props = {}, add_env = {}, enabled = None, timeout_scale = 0):
+def make_run_mod(add_props = {}, add_env = {}, enabled = None, timeout_scale = 1):
     def apply_mod(props, project):
         props.update(add_props)
 
-        # take max of timeouts. NB we could also consider multiplying
-        # (e.g. for longtest plus race).
-        if project == "go" and timeout_scale > props["timeout_scale"]:
-            props["timeout_scale"] = timeout_scale
-            props["env"].update({"GO_TEST_TIMEOUT_SCALE": "%d" % timeout_scale})
+        # Compose timeout scaling factors by multiplying them.
+        if project == "go":
+            props["timeout_scale"] *= timeout_scale
+            if props["timeout_scale"] != 1:
+                props["env"].update({"GO_TEST_TIMEOUT_SCALE": "%d" % props["timeout_scale"]})
         props["env"].update(add_env)
 
     if enabled == None:
@@ -873,7 +887,7 @@ def define_builder(env, project, go_branch_short, builder_type):
         "target": {"goos": os, "goarch": arch},
         "env": {},
         "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type),
-        "timeout_scale": 0,
+        "timeout_scale": host_timeout_scale(host_type),
     }
     for d in EXTRA_DEPENDENCIES:
         if not d.applies(project, port_of(builder_type), run_mods):
