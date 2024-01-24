@@ -119,20 +119,6 @@ func TestStdlibPackageHeading(t *testing.T) {
 	}
 }
 
-func dump(d *md.Document) {
-	for _, b := range d.Blocks {
-		fmt.Printf("## %T   %v\n", b, b.Pos())
-		switch b := b.(type) {
-		case *md.Paragraph:
-			fmt.Printf("   %q\n", text(b.Text))
-		case *md.Heading:
-			for _, in := range b.Text.Inline {
-				fmt.Printf("    %#v\n", in)
-			}
-		}
-	}
-}
-
 // parseTestFile translates a txtar archive into an fs.FS, except for the
 // file "want", whose contents are returned separately.
 func parseTestFile(filename string) (fsys fs.FS, want string, err error) {
@@ -261,5 +247,49 @@ func TestCheckAPIFile(t *testing.T) {
 				t.Errorf("\ngot  %s\nwant %s", got, want)
 			}
 		})
+	}
+}
+
+func TestSymbolLinks(t *testing.T) {
+	for _, test := range []struct {
+		in   string
+		want string
+	}{
+		{"a b", "a b"},
+		{"a [b", "a [b"},
+		{"a b[X]", "a b[X]"},
+		{"a [Buffer] b", "a [Buffer](/pkg/bytes#Buffer) b"},
+		{"a [Buffer]\nb", "a [Buffer](/pkg/bytes#Buffer)\nb"},
+		{"a [bytes.Buffer], b", "a [bytes.Buffer](/pkg/bytes#Buffer), b"},
+		{"[bytes.Buffer.String]", "[bytes.Buffer.String](/pkg/bytes#Buffer.String)"},
+		{"a--[encoding/json.Marshal].", "a--[encoding/json.Marshal](/pkg/encoding/json#Marshal)."},
+		{"a [math] and s[math] and [NewBuffer].", "a [math](/pkg/math) and s[math] and [NewBuffer](/pkg/bytes#NewBuffer)."},
+		{"A [*log/slog.Logger]", "A [*log/slog.Logger](/pkg/log/slog#Logger)"},
+		{"Not in code `[math]`.", "Not in code `[math]`."},
+	} {
+		doc := NewParser().Parse(test.in)
+		addSymbolLinks(doc, "bytes")
+		got := strings.TrimSpace(md.ToMarkdown(doc))
+		if got != test.want {
+			t.Errorf("\nin:   %s\ngot:  %s\nwant: %s", test.in, got, test.want)
+		}
+	}
+
+}
+
+// dump displays a markdown document's structure, for debugging.
+func dump(d *md.Document) {
+	for _, b := range d.Blocks {
+		fmt.Printf("%T   %v\n", b, b.Pos())
+		switch b := b.(type) {
+		case *md.Paragraph:
+			for _, inl := range b.Text.Inline {
+				fmt.Printf("\t%+v (%[1]T)\n", inl)
+			}
+		case *md.Heading:
+			for _, in := range b.Text.Inline {
+				fmt.Printf("    %#v\n", in)
+			}
+		}
 	}
 }

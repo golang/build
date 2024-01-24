@@ -105,7 +105,15 @@ func inlineText(ins []md.Inline) string {
 //
 // Files in the "minor changes" directory (the unique directory matching the glob
 // "*stdlib/*minor") are named after the package to which they refer, and will have
-// the package heading inserted automatically.
+// the package heading inserted automatically and links to other standard library
+// symbols expanded automatically. For example, if a file *stdlib/minor/bytes/f.md
+// contains the text
+//
+//	[Reader] implements [io.Reader].
+//
+// then that will become
+//
+//	[Reader](/pkg/bytes#Reader) implements [io.Reader](/pkg/io#Reader).
 func Merge(fsys fs.FS) (*md.Document, error) {
 	filenames, err := sortedMarkdownFilenames(fsys)
 	if err != nil {
@@ -121,10 +129,12 @@ func Merge(fsys fs.FS) (*md.Document, error) {
 		if len(newdoc.Blocks) == 0 {
 			continue
 		}
+		pkg := stdlibPackage(filename)
+		// Autolink Go symbols.
+		addSymbolLinks(newdoc, pkg)
 		if len(doc.Blocks) > 0 {
 			// If this is the first file of a new stdlib package under the "Minor changes
 			// to the library" section, insert a heading for the package.
-			pkg := stdlibPackage(filename)
 			if pkg != "" && pkg != prevPkg {
 				h := stdlibPackageHeading(pkg, lastBlock(doc).Pos().EndLine)
 				doc.Blocks = append(doc.Blocks, h)
