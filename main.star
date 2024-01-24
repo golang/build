@@ -229,6 +229,7 @@ GOOGLE_LOW_CAPACITY_HOSTS = [
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
+    "linux-arm",
     "windows-arm64",
 ]
 
@@ -332,6 +333,7 @@ BUILDER_TYPES = [
     "linux-amd64-racecompile",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
+    "linux-arm",
     "linux-arm64",
     "linux-ppc64-power10",
     "linux-ppc64le",
