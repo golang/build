@@ -1304,8 +1304,13 @@ def display_for_builder_type(builder_type):
 # if the builder should run in presubmit by default.
 def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     pt = PROJECTS[project]
-    os, arch, _, run_mods = split_builder_type(builder_type)
+    os, arch, suffix, run_mods = split_builder_type(builder_type)
     host_type = host_of(builder_type)
+
+    # Filter out old OS versions from new branches.
+    if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22", "go1.21", "go1.20"]:
+        # Go 1.22 is last to support macOS 10.15.
+        return False, False, False, []
 
     # Filter out new ports on old release branches.
     if os == "wasip1" and go_branch_short == "go1.20":  # GOOS=wasip1 is new to Go 1.21.
