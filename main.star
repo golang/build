@@ -527,7 +527,7 @@ RUN_MODS = dict(
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
     perf_vs_gotip = make_run_mod(
-        add_props = {"perf_mode": {"baseline": "refs/heads/"+GO_BRANCHES["gotip"].branch}},
+        add_props = {"perf_mode": {"baseline": "refs/heads/" + GO_BRANCHES["gotip"].branch}},
         enabled = define_for_go_optional_presubmit_only(),
     ),
 
@@ -770,9 +770,24 @@ def dimensions_of(host_type):
         elif goos == "openbsd":
             os = "openbsd-" + suffix
 
+    # Request a specific GCE machine type for certain platforms.
+    #
+    # This is very, very important for auto-scaling, it this needs to
+    # match the "expected_dimensions" field that botsets have in the
+    # internal configuration. Take care when updating this in general,
+    # it probably also requires an update to the internal configuration.
+    machine_type = None
+    if goos == "linux":
+        if goarch == "amd64":
+            machine_type = "n1-standard-16"
+        elif goarch == "arm64":
+            machine_type = "t2a-standard-8"
+
     dims = {"cipd_platform": host.replace("darwin", "mac")}
     if os != None:
         dims["os"] = os
+    if machine_type != None:
+        dims["machine_type"] = machine_type
     return dims
 
 def is_capacity_constrained(low_capacity_hosts, host_type):
@@ -1221,14 +1236,24 @@ def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit
     perf_props.update({
         "mode": GOLANGBUILD_MODES["PERF"],
     })
+
+    # Request c2-standard-16 machines for linux/amd64. This machine type provides
+    # a much more consistent hardware platform, which is useful for making a less
+    # noisy performance measurement.
+    perf_dims = dict(base_dims)
+    goos, goarch, _, _ = split_builder_type(host_of(builder_type))
+    if goos == "linux" and goarch == "amd64":
+        perf_dims.update({
+            "machine_type": "c2-standard-16",
+        })
     emit_builder(
         name = name,
         bucket = env.bucket,
-        dimensions = base_dims, # TODO(mknyszek): Ask for c2-standard-16 instances once available.
+        dimensions = perf_dims,
         properties = perf_props,
         triggering_policy = triggering_policy(env, builder_type),
         service_account = env.worker_sa,
-        execution_timeout = 12*time.hour,
+        execution_timeout = 12 * time.hour,
     )
 
 # triggering_policy defines the LUCI Scheduler triggering policy for postsubmit builders.
