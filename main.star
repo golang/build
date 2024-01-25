@@ -797,7 +797,15 @@ def dimensions_of(host_type):
         elif goarch == "arm64":
             machine_type = "t2a-standard-8"
 
-    dims = {"cipd_platform": host.replace("darwin", "mac")}
+    # cipd_platform is almost "$GOHOSTOS-$GOHOSTARCH", with some deviations.
+    if goos == "darwin":
+        cipd_platform = "mac-" + goarch  # GOHOSTOS=darwin is written as "mac".
+    elif goarch == "arm":
+        cipd_platform = goos + "-armv6l"  # GOHOSTARCH=arm is written as "armv6l".
+    else:
+        cipd_platform = host
+
+    dims = {"cipd_platform": cipd_platform}
     if os != None:
         dims["os"] = os
     if machine_type != None:
