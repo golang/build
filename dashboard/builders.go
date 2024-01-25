@@ -2154,7 +2154,6 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:         "openbsd-riscv64-jsing",
 		HostType:     "host-openbsd-riscv64-joelsing",
-		KnownIssues:  []int{55999},
 		SkipSnapshot: true,
 		FlakyNet:     true,
 		buildsRepo: func(repo, branch, goBranch string) bool {
