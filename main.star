@@ -1641,10 +1641,10 @@ def _define_go_ci():
         console.gen()
 
     # Emit builder groups for each port.
+    # These will appear last, since they're emitted last.
     for port, builders in postsubmit_builders_by_port.items():
         luci.list_view(
-            # Put "z" at the beginning to sort this at the bottom of the page.
-            name = "z-port-%s" % port.replace("/", "-"),
+            name = "port-%s" % port.replace("/", "-"),
             title = "all %s" % port,
             entries = builders,
         )
