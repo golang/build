@@ -739,11 +739,11 @@ def dimensions_of(host_type):
     """dimensions_of returns the bot dimensions for a host type."""
     goos, goarch, suffix, _ = split_builder_type(host_type)
 
-    host = "%s-%s" % (goos, goarch)
-
     # We run some 386 ports on amd64 machines.
     if goarch == "386" and goos in ("linux", "windows"):
-        host = host.replace("386", "amd64")
+        goarch = "amd64"
+
+    host = "%s-%s" % (goos, goarch)
 
     os = None
 
