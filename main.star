@@ -320,6 +320,7 @@ BUILDER_TYPES = [
     "linux-386-longtest",
     "linux-amd64",
     "linux-amd64-boringcrypto",
+    "linux-amd64-clang16",
     "linux-amd64-goamd64v3",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
@@ -489,6 +490,15 @@ RUN_MODS = dict(
         add_env = {"GOEXPERIMENT": "boringcrypto"},
     ),
 
+    # Build and test clang 16 as the C toolchain.
+    clang16 = make_run_mod(
+        # The extra dependency on clang is declared in EXTRA_DEPENDENCIES.
+        # This path must align with the installation path (@Subdir) described
+        # there, along with the directory hierarchy of the clang release.
+        add_props = {"tools_c_compiler_rel_path": "clang/bin/clang"},
+        enabled = define_for_go_postsubmit(),
+    ),
+
     # Build and test with GOAMD64=v3, which makes the compiler assume certain amd64 CPU
     # features are always available.
     goamd64v3 = make_run_mod(
@@ -639,6 +649,14 @@ PROJECTS = {
 # EXTRA_DEPENDENCIES specifies custom additional dependencies
 # to append when applies(project, port, run_mods) matches.
 EXTRA_DEPENDENCIES = [
+    # Clang builders need clang.
+    struct(
+        applies = lambda project, port, run_mods: "clang16" in run_mods,
+        test_deps = """@Subdir clang
+golang/third_party/clang/${platform} clang_version:16.0.4
+""",
+    ),
+
     # The protobuf repo needs extra dependencies for its integration test.
     # See its integration_test.go file and go.dev/issue/64066.
     struct(
