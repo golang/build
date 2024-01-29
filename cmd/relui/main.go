@@ -307,6 +307,18 @@ func main() {
 	}
 	dh.RegisterDefinition("Sync go-private master branch with public", privateSyncTask.NewDefinition())
 
+	privateXPatchTask := &task.PrivXPatch{
+		PublicGerrit:  gerritClient,
+		PrivateGerrit: privateGerritClient,
+		PublicRepoURL: func(repo string) string {
+			return "https://go.googlesource.com/" + repo
+		},
+		ApproveAction:      relui.ApproveActionDep(dbPool),
+		SendMail:           mailFunc,
+		AnnounceMailHeader: annMail,
+	}
+	dh.RegisterDefinition("Publish a private patch to a x/ repo", privateXPatchTask.NewDefinition(tagTasks))
+
 	var base *url.URL
 	if *baseURL != "" {
 		base, err = url.Parse(*baseURL)

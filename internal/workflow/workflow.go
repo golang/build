@@ -216,6 +216,9 @@ var (
 		HTMLElement:   "input",
 		HTMLInputType: "url",
 	}
+	LongString = ParamType[string]{
+		HTMLElement: "textarea",
+	}
 
 	// Slice of string parameter types.
 	SliceShort = ParamType[[]string]{

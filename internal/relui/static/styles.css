@@ -229,6 +229,11 @@ h6 {
 .NewWorkflow-parameter--string input {
   flex-grow: 1;
 }
+.NewWorkflow-parameter--string textarea {
+  font-family: inherit;
+  height: 4rem;
+  width: 100%;
+}
 .NewWorkflow-parameter--slice textarea {
   font-family: inherit;
   height: 4rem;

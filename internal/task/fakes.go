@@ -118,10 +118,15 @@ func NewFakeRepo(t *testing.T, name string) *FakeRepo {
 		t.Skip("test requires git")
 	}
 
+	tmpDir := t.TempDir()
+	repoDir := filepath.Join(tmpDir, name)
+	if err := os.Mkdir(repoDir, 0700); err != nil {
+		t.Fatalf("failed to create repository directory: %s", err)
+	}
 	r := &FakeRepo{
 		t:    t,
 		name: name,
-		dir:  &GitDir{&Git{}, t.TempDir()},
+		dir:  &GitDir{&Git{}, repoDir},
 	}
 	t.Cleanup(func() { r.dir.Close() })
 	r.runGit("init")
@@ -328,6 +333,10 @@ func (*FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.Chan
 
 func (*FakeGerrit) SetHashtags(_ context.Context, changeID string, _ gerrit.HashtagsInput) error {
 	return fmt.Errorf("pretend that SetHashtags failed")
+}
+
+func (*FakeGerrit) GetChange(_ context.Context, _ string, _ ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error) {
+	return nil, nil
 }
 
 // NewFakeSignService returns a fake signing service that can sign PKGs, MSIs,

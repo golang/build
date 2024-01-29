@@ -49,6 +49,8 @@ type GerritClient interface {
 	QueryChanges(ctx context.Context, query string) ([]*gerrit.ChangeInfo, error)
 	// SetHashtags modifies the hashtags for a CL.
 	SetHashtags(ctx context.Context, changeID string, hashtags gerrit.HashtagsInput) error
+	// GetChange gets information about a specific change.
+	GetChange(ctx context.Context, changeID string, opts ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error)
 }
 
 type RealGerritClient struct {
@@ -224,6 +226,10 @@ func ChangeLink(changeID string) string {
 
 func (c *RealGerritClient) QueryChanges(ctx context.Context, query string) ([]*gerrit.ChangeInfo, error) {
 	return c.Client.QueryChanges(ctx, query)
+}
+
+func (c *RealGerritClient) GetChange(ctx context.Context, changeID string, opts ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error) {
+	return c.Client.GetChange(ctx, changeID, opts...)
 }
 
 func (c *RealGerritClient) SetHashtags(ctx context.Context, changeID string, hashtags gerrit.HashtagsInput) error {
