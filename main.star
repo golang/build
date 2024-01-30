@@ -490,12 +490,9 @@ RUN_MODS = dict(
         add_env = {"GOEXPERIMENT": "boringcrypto"},
     ),
 
-    # Build and test clang 16 as the C toolchain.
+    # Build and test clang 15 as the C toolchain.
     clang15 = make_run_mod(
-        # The extra dependency on clang is declared in EXTRA_DEPENDENCIES.
-        # This path must align with the installation path (@Subdir) described
-        # there, along with the directory hierarchy of the clang release.
-        add_props = {"tools_c_compiler_rel_path": "clang/bin/clang"},
+        add_props = {"clang_version": "15.0.6"},
         enabled = define_for_go_postsubmit(),
     ),
 
@@ -646,26 +643,13 @@ PROJECTS = {
     "website": PT.TOOL,
 }
 
-def cipd_clang_dependency(version):
-    return """@Subdir clang
-golang/third_party/clang/${platform} clang_version:%s
-""" % version
-
 # EXTRA_DEPENDENCIES specifies custom additional dependencies
 # to append when applies(project, port, run_mods) matches.
 EXTRA_DEPENDENCIES = [
-    # Clang builders need clang.
-    struct(
-        applies = lambda project, port, run_mods: "clang15" in run_mods,
-        build_deps = cipd_clang_dependency("15.0.6"),
-        test_deps = cipd_clang_dependency("15.0.6"),
-    ),
-
     # The protobuf repo needs extra dependencies for its integration test.
     # See its integration_test.go file and go.dev/issue/64066.
     struct(
         applies = lambda project, port, run_mods: project == "protobuf" and port == "linux-amd64" and "longtest" in run_mods,
-        build_deps = None,
         test_deps = """@Subdir bin
 golang/third_party/protoc_with_conformance/${platform} version:25.0-rc2
 """,
@@ -1024,8 +1008,6 @@ def define_builder(env, project, go_branch_short, builder_type):
     for d in EXTRA_DEPENDENCIES:
         if not d.applies(project, port_of(builder_type), run_mods):
             continue
-        if d.build_deps:
-            base_props["tools_extra_build"] = d.build_deps
         if d.test_deps:
             base_props["tools_extra_test"] = d.test_deps
 
