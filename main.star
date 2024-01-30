@@ -361,7 +361,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-riscv64": struct(issue_number = 63482),
     "linux-arm": struct(issue_number = 65241),
     "netbsd-arm": struct(issue_number = 63698),
-    "netbsd-arm64": struct(issue_number = 65242),
     "openbsd-ppc64": struct(issue_number = 63480),
     "openbsd-riscv64": struct(issue_number = 64176),
     "plan9-386": struct(issue_number = 63599),
