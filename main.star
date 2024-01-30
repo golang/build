@@ -1003,7 +1003,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     host_type = host_of(builder_type)
     hostos, hostarch, _, _ = split_builder_type(host_type)
 
-    # Contruct the basic properties that will apply to all builders for
+    # Construct the basic properties that will apply to all builders for
     # this combination.
     known_go_branches = dict(GO_BRANCHES)
     known_go_branches.update(EXTRA_GO_BRANCHES)
@@ -1053,6 +1053,16 @@ def define_builder(env, project, go_branch_short, builder_type):
                 base_props["wazero_version"] = "2@1.5.0"
             else:
                 fail("unknown GOOS=wasip1 builder suffix: %s" % suffix)
+
+    # TODO(go.dev/issue/65241): Start by mirroring old infra's linux-arm env,
+    # which came from CL 390395 and that came from CL 35501 for issue 18748.
+    # Since then the default for GOARM has changed¹, so these should be unset
+    # to make the builder more representative of a common default environment.
+    # ¹ https://go.dev/doc/go1.22#arm
+    if builder_type == "linux-arm":
+        base_props["env"]["GOARM"] = "6"
+        base_props["env"]["CGO_CFLAGS"] = "-march=armv6"
+        base_props["env"]["CGO_LDFLAGS"] = "-march=armv6"
 
     # Construct the basic dimensions for the build/test running part of the build.
     #
