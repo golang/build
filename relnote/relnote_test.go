@@ -47,11 +47,11 @@ func TestCheckFragment(t *testing.T) {
 		},
 		{
 			"",
-			"empty",
+			"must contain a complete sentence",
 		},
 		{
 			"# heading",
-			"needs",
+			"must contain a complete sentence",
 		},
 	} {
 		got := CheckFragment(test.in)
@@ -252,7 +252,7 @@ func TestCheckAPIFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			var got string
-			gotErr := CheckAPIFile(fsys, "api.txt", fsys)
+			gotErr := CheckAPIFile(fsys, "api.txt", fsys, "doc/next/*stdlib/*minor")
 			if gotErr != nil {
 				got = gotErr.Error()
 			}
