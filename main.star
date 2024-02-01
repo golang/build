@@ -392,216 +392,6 @@ EXTRA_GO_BRANCHES = {
     "go1.18": struct(branch = "release-branch.go1.18", bootstrap = "1.17.13"),
 }
 
-# make_run_mod returns a run_mod that adds the given properties and environment
-# variables. If set, enabled is a function that returns three booleans to
-# affect the builder it's being added to:
-# - exists, whether the builder should be created at all
-# - presubmit, whether the builder should be run in presubmit by default
-# - postsubmit, whether the builder should run in postsubmit
-# - presubmit location filters, any cq.location_filter to apply to presubmit
-def make_run_mod(add_props = {}, add_env = {}, enabled = None, timeout_scale = 1):
-    def apply_mod(props, project):
-        props.update(add_props)
-
-        # Compose timeout scaling factors by multiplying them.
-        if project == "go":
-            props["timeout_scale"] *= timeout_scale
-            if props["timeout_scale"] != 1:
-                props["env"].update({"GO_TEST_TIMEOUT_SCALE": "%d" % props["timeout_scale"]})
-        props["env"].update(add_env)
-
-    if enabled == None:
-        enabled = lambda port, project, go_branch_short: (True, True, True, [])
-    return struct(
-        enabled = enabled,
-        apply = apply_mod,
-    )
-
-# enable only if project matches one of the provided projects and certain source
-# locations are modified by the CL, or always for the release branches of the go project.
-# projects is a dict mapping a project name to filters.
-def presubmit_only_for_projs_or_on_release_branches(projects):
-    def f(port, project, go_branch_short):
-        filters = []
-        if project == "go":
-            presubmit = project in projects or go_branch_short != "gotip"
-            if project in projects and go_branch_short == "gotip":
-                filters = projects[project]
-        else:
-            presubmit = project in projects
-            if presubmit:
-                filters = projects[project]
-        return (True, presubmit, True, filters)
-
-    return f
-
-# enable only if port_of(builder_type) matches one of the provided ports, or
-# for the release branches in the Go project.
-def presubmit_only_for_ports_or_on_release_branches(ports):
-    def f(port, project, go_branch_short):
-        presubmit = port in ports or (project == "go" and go_branch_short != "gotip")
-        return (True, presubmit, True, [])
-
-    return f
-
-# define the builder only for the go project at versions after x, useful for
-# non-default build modes that were created at x.
-def define_for_go_starting_at(x):
-    def f(port, project, go_branch_short):
-        run = project == "go" and (go_branch_short == "gotip" or go_branch_short >= x)
-        return (run, run, run, [])
-
-    return f
-
-# define the builder only for postsubmit of the go project.
-#
-# Note: it will still be defined for optional inclusion in presubmit.
-def define_for_go_postsubmit():
-    def f(port, project, go_branch_short):
-        run = project == "go"
-        return (run, False, run, [])
-
-    return f
-
-# define the builder only for postsubmit of the go project, or for presubmit
-# of the go project if a particular location is touched.
-def define_for_go_postsubmit_or_presubmit_with_filters(filters):
-    def f(port, project, go_branch_short):
-        run = project == "go"
-        return (run, run, run, filters)
-
-    return f
-
-# define the builder as existing, so it's includable in presubmit, but don't
-# run it anywhere by default.
-def define_for_go_optional_presubmit_only():
-    def f(port, project, go_branch_short):
-        exists = project == "go"
-        return (exists, False, False, [])
-
-    return f
-
-# RUN_MODS is a list of valid run-time modifications to the way we
-# build and test our various projects.
-RUN_MODS = dict(
-    # Build and test with the boringcrypto GOEXPERIMENT.
-    boringcrypto = make_run_mod(
-        add_env = {"GOEXPERIMENT": "boringcrypto"},
-    ),
-
-    # Build and test clang 15 as the C toolchain.
-    clang15 = make_run_mod(
-        add_props = {"clang_version": "15.0.6"},
-        enabled = define_for_go_postsubmit(),
-    ),
-
-    # Build and test with GOAMD64=v3, which makes the compiler assume certain amd64 CPU
-    # features are always available.
-    goamd64v3 = make_run_mod(
-        add_env = {"GOAMD64": "v3"},
-        enabled = define_for_go_postsubmit(),
-    ),
-
-    # Run a larger set of tests.
-    longtest = make_run_mod(
-        add_props = {"long_test": True},
-        timeout_scale = 5,
-        enabled = presubmit_only_for_projs_or_on_release_branches({
-            "protobuf": [],
-            "go": [
-                # Enable longtest builders on go against tip if files related to vendored code are modified.
-                "src/{,cmd/}go[.]{mod,sum}",
-                "src/{,cmd/}vendor/.+",
-                "src/.+_bundle.go",
-            ],
-        }),
-    ),
-
-    # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
-    # that is to cross-compile all non-first-class ports to quickly flag portability issues.
-    misccompile = make_run_mod(
-        add_props = {"compile_only": True, "misc_ports": True},
-    ),
-
-    # Build and test with the newinliner GOEXPERIMENT.
-    newinliner = make_run_mod(
-        add_env = {"GOEXPERIMENT": "newinliner"},
-        enabled = define_for_go_starting_at("go1.22"),
-    ),
-
-    # Build and test with cgo disabled.
-    nocgo = make_run_mod(
-        add_env = {"CGO_ENABLED": "0"},
-        enabled = define_for_go_postsubmit(),
-    ),
-
-    # Build and test with optimizations disabled.
-    noopt = make_run_mod(
-        add_env = {"GO_GCFLAGS": "-N -l"},
-        enabled = define_for_go_postsubmit(),
-    ),
-
-    # Run performance tests against gotip.
-    #
-    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
-    # environment variables will apply, but others like compile_only, race, and longtest
-    # will have no effect.
-    perf_vs_gotip = make_run_mod(
-        add_props = {"perf_mode": {"baseline": "refs/heads/" + GO_BRANCHES["gotip"].branch}},
-        enabled = define_for_go_optional_presubmit_only(),
-    ),
-
-    # Run performance tests against the source's parent commit.
-    #
-    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
-    # environment variables will apply, but others like compile_only, race, and longtest
-    # will have no effect.
-    perf_vs_parent = make_run_mod(
-        add_props = {"perf_mode": {"baseline": "parent"}},
-        enabled = define_for_go_optional_presubmit_only(),
-    ),
-
-    # Build and test with GOPPC64=power10, which makes the compiler assume certain ppc64 CPU
-    # features are always available.
-    power10 = make_run_mod(
-        add_env = {"GOPPC64": "power10"},
-    ),
-
-    # Build and test with race mode enabled.
-    race = make_run_mod(
-        add_props = {"race_mode": True},
-        timeout_scale = 2,
-        enabled = presubmit_only_for_ports_or_on_release_branches(["linux-amd64"]),
-    ),
-
-    # Build with a compiler and linker that are built with race mode enabled.
-    racecompile = make_run_mod(
-        add_props = {"compile_only": True, "compiler_linker_race_mode": True},
-        enabled = define_for_go_postsubmit(),
-    ),
-
-    # Build and test with GO386=softfloat, which makes the compiler emit non-floating-point
-    # CPU instructions to perform floating point operations.
-    softfloat = make_run_mod(
-        add_env = {"GO386": "softfloat"},
-        enabled = define_for_go_postsubmit(),
-    ),
-
-    # Build with ssacheck mode enabled in the compiler.
-    ssacheck = make_run_mod(
-        add_props = {"compile_only": True},
-        add_env = {"GO_GCFLAGS": "-d=ssa/check/on"},
-        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/{ssa,ssagen}/.+"]),
-    ),
-
-    # Build and test with the staticlockranking GOEXPERIMENT, which validates the runtime's
-    # dynamic lock usage against a static ranking to detect possible deadlocks before they happen.
-    staticlockranking = make_run_mod(
-        add_env = {"GOEXPERIMENT": "staticlockranking"},
-        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
-    ),
-)
-
 # PT is Project Type, a classification of a project.
 PT = struct(
     CORE = "core",  # The Go project or something that it depends on. Needs to be tested everywhere.
@@ -641,6 +431,224 @@ PROJECTS = {
     "vulndb": PT.TOOL,
     "website": PT.TOOL,
 }
+
+# projects_of_type returns projects of the given types.
+def projects_of_type(types):
+    return [
+        project
+        for project in PROJECTS
+        if PROJECTS[project] in types
+    ]
+
+# make_run_mod returns a run_mod that adds the given properties and environment
+# variables. If set, enabled is a function that returns three booleans to
+# affect the builder it's being added to:
+# - exists, whether the builder should be created at all
+# - presubmit, whether the builder should be run in presubmit by default
+# - postsubmit, whether the builder should run in postsubmit
+# - presubmit location filters, any cq.location_filter to apply to presubmit
+def make_run_mod(add_props = {}, add_env = {}, enabled = None, timeout_scale = 1):
+    def apply_mod(props, project):
+        props.update(add_props)
+
+        # Compose timeout scaling factors by multiplying them.
+        if project == "go":
+            props["timeout_scale"] *= timeout_scale
+            if props["timeout_scale"] != 1:
+                props["env"].update({"GO_TEST_TIMEOUT_SCALE": "%d" % props["timeout_scale"]})
+        props["env"].update(add_env)
+
+    if enabled == None:
+        enabled = lambda port, project, go_branch_short: (True, True, True, [])
+    return struct(
+        enabled = enabled,
+        apply = apply_mod,
+    )
+
+# enable only if project matches one of the provided projects and certain source
+# locations are modified by the CL, or always for the release branches of the go project.
+# projects is a dict mapping a project name to filters.
+def define_for_presubmit_only_for_projs_or_on_release_branches(projects):
+    def f(port, project, go_branch_short):
+        filters = []
+        if project == "go":
+            presubmit = project in projects or go_branch_short != "gotip"
+            if project in projects and go_branch_short == "gotip":
+                filters = projects[project]
+        else:
+            presubmit = project in projects
+            if presubmit:
+                filters = projects[project]
+        return (True, presubmit, True, filters)
+
+    return f
+
+# enable only if port_of(builder_type) matches one of the provided ports, or
+# for the release branches in the Go project.
+def define_for_presubmit_only_for_ports_or_on_release_branches(ports):
+    def f(port, project, go_branch_short):
+        presubmit = port in ports or (project == "go" and go_branch_short != "gotip")
+        return (True, presubmit, True, [])
+
+    return f
+
+# define the builder only for the go project at versions after x, useful for
+# non-default build modes that were created at x.
+def define_for_go_starting_at(x):
+    def f(port, project, go_branch_short):
+        run = project == "go" and (go_branch_short == "gotip" or go_branch_short >= x)
+        return (run, run, run, [])
+
+    return f
+
+# define the builder only for postsubmit for the specified projects.
+#
+# Note: it will still be defined for optional inclusion in presubmit.
+def define_for_postsubmit(projects):
+    def f(port, project, go_branch_short):
+        run = project in projects
+        return (run, False, run, [])
+
+    return f
+
+# define the builder only for postsubmit of the go project, or for presubmit
+# of the go project if a particular location is touched.
+def define_for_go_postsubmit_or_presubmit_with_filters(filters):
+    def f(port, project, go_branch_short):
+        run = project == "go"
+        return (run, run, run, filters)
+
+    return f
+
+# define the builder as existing for the go project, so it's includable in presubmit,
+# but don't run it anywhere by default.
+def define_for_go_optional_presubmit_only():
+    def f(port, project, go_branch_short):
+        exists = project == "go"
+        return (exists, False, False, [])
+
+    return f
+
+# RUN_MODS is a list of valid run-time modifications to the way we
+# build and test our various projects.
+RUN_MODS = dict(
+    # Build and test with the boringcrypto GOEXPERIMENT.
+    boringcrypto = make_run_mod(
+        add_env = {"GOEXPERIMENT": "boringcrypto"},
+    ),
+
+    # Build and test clang 15 as the C toolchain.
+    clang15 = make_run_mod(
+        add_props = {"clang_version": "15.0.6"},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Build and test with GOAMD64=v3, which makes the compiler assume certain amd64 CPU
+    # features are always available.
+    goamd64v3 = make_run_mod(
+        add_env = {"GOAMD64": "v3"},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Run a larger set of tests.
+    longtest = make_run_mod(
+        add_props = {"long_test": True},
+        timeout_scale = 5,
+        enabled = define_for_presubmit_only_for_projs_or_on_release_branches({
+            "protobuf": [],
+            "go": [
+                # Enable longtest builders on go against tip if files related to vendored code are modified.
+                "src/{,cmd/}go[.]{mod,sum}",
+                "src/{,cmd/}vendor/.+",
+                "src/.+_bundle.go",
+            ],
+        }),
+    ),
+
+    # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
+    # that is to cross-compile all non-first-class ports to quickly flag portability issues.
+    misccompile = make_run_mod(
+        add_props = {"compile_only": True, "misc_ports": True},
+    ),
+
+    # Build and test with the newinliner GOEXPERIMENT.
+    newinliner = make_run_mod(
+        add_env = {"GOEXPERIMENT": "newinliner"},
+        enabled = define_for_go_starting_at("go1.22"),
+    ),
+
+    # Build and test with cgo disabled.
+    nocgo = make_run_mod(
+        add_env = {"CGO_ENABLED": "0"},
+        enabled = define_for_postsubmit(projects_of_type([PT.CORE, PT.LIBRARY])),
+    ),
+
+    # Build and test with optimizations disabled.
+    noopt = make_run_mod(
+        add_env = {"GO_GCFLAGS": "-N -l"},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Run performance tests against gotip.
+    #
+    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
+    # environment variables will apply, but others like compile_only, race, and longtest
+    # will have no effect.
+    perf_vs_gotip = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "refs/heads/" + GO_BRANCHES["gotip"].branch}},
+        enabled = define_for_go_optional_presubmit_only(),
+    ),
+
+    # Run performance tests against the source's parent commit.
+    #
+    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
+    # environment variables will apply, but others like compile_only, race, and longtest
+    # will have no effect.
+    perf_vs_parent = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "parent"}},
+        enabled = define_for_go_optional_presubmit_only(),
+    ),
+
+    # Build and test with GOPPC64=power10, which makes the compiler assume certain ppc64 CPU
+    # features are always available.
+    power10 = make_run_mod(
+        add_env = {"GOPPC64": "power10"},
+    ),
+
+    # Build and test with race mode enabled.
+    race = make_run_mod(
+        add_props = {"race_mode": True},
+        timeout_scale = 2,
+        enabled = define_for_presubmit_only_for_ports_or_on_release_branches(["linux-amd64"]),
+    ),
+
+    # Build with a compiler and linker that are built with race mode enabled.
+    racecompile = make_run_mod(
+        add_props = {"compile_only": True, "compiler_linker_race_mode": True},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Build and test with GO386=softfloat, which makes the compiler emit non-floating-point
+    # CPU instructions to perform floating point operations.
+    softfloat = make_run_mod(
+        add_env = {"GO386": "softfloat"},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Build with ssacheck mode enabled in the compiler.
+    ssacheck = make_run_mod(
+        add_props = {"compile_only": True},
+        add_env = {"GO_GCFLAGS": "-d=ssa/check/on"},
+        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/{ssa,ssagen}/.+"]),
+    ),
+
+    # Build and test with the staticlockranking GOEXPERIMENT, which validates the runtime's
+    # dynamic lock usage against a static ranking to detect possible deadlocks before they happen.
+    staticlockranking = make_run_mod(
+        add_env = {"GOEXPERIMENT": "staticlockranking"},
+        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
+    ),
+)
 
 # EXTRA_DEPENDENCIES specifies custom additional dependencies
 # to append when applies(project, port, run_mods) matches.
