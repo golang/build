@@ -381,7 +381,9 @@ func GroupAPIFeaturesByFile(fs []APIFeature) (map[string][]APIFeature, error) {
 
 // CheckAPIFile reads the api file at filename in apiFS, and checks the corresponding
 // release-note files under docFS. It checks that the files exist and that they have
-// some minimal content (see [CheckFragment]). The docRoot argument is used in error messages.
+// some minimal content (see [CheckFragment]).
+// The docRoot argument is the path from the repo or project root to the root of docFS.
+// It is used only for error messages.
 func CheckAPIFile(apiFS fs.FS, filename string, docFS fs.FS, docRoot string) error {
 	features, err := parseAPIFile(apiFS, filename)
 	if err != nil {
@@ -396,15 +398,40 @@ func CheckAPIFile(apiFS fs.FS, filename string, docFS fs.FS, docRoot string) err
 		filenames = append(filenames, fn)
 	}
 	slices.Sort(filenames)
+	mcDir, err := minorChangesDir(docFS)
+	if err != nil {
+		return err
+	}
 	var errs []error
 	for _, fn := range filenames {
+		// Use path.Join for consistency with io/fs pathnames.
+		fn = path.Join(mcDir, fn)
 		// TODO(jba): check that the file mentions each feature?
 		if err := checkFragmentFile(docFS, fn); err != nil {
-			// Use path.Join for consistency with io/fs pathnames.
 			errs = append(errs, fmt.Errorf("%s: %v\nSee doc/README.md for more information.", path.Join(docRoot, fn), err))
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// minorChangesDir returns the unique directory in docFS that corresponds to the
+// "Minor changes to the standard library" section of the release notes.
+func minorChangesDir(docFS fs.FS) (string, error) {
+	dirs, err := fs.Glob(docFS, "*stdlib/*minor")
+	if err != nil {
+		return "", err
+	}
+	var bad string
+	if len(dirs) == 0 {
+		bad = "No"
+	} else if len(dirs) > 1 {
+		bad = "More than one"
+	}
+	if bad != "" {
+		return "", fmt.Errorf("%s directory matches *stdlib/*minor.\nThis shouldn't happen; please file a bug at https://go.dev/issues/new.",
+			bad)
+	}
+	return dirs[0], nil
 }
 
 func checkFragmentFile(fsys fs.FS, filename string) error {

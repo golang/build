@@ -4,10 +4,10 @@ errors:
 -- api.txt --
 pkg foo, type T #123
 pkg bar, type T #123
--- bar/123.md --
+-- 7-stdlib/99-minor/bar/123.md --
 Not a sentence
 -- want --
-doc/next/*stdlib/*minor/bar/123.md: File must contain a complete sentence or a TODO.
+doc/next/7-stdlib/99-minor/bar/123.md: File must contain a complete sentence or a TODO.
 See doc/README.md for more information.
-doc/next/*stdlib/*minor/foo/123.md: File does not exist. Every API change must have a corresponding release note file.
+doc/next/7-stdlib/99-minor/foo/123.md: File does not exist. Every API change must have a corresponding release note file.
 See doc/README.md for more information.

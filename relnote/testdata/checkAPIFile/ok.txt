@@ -1,9 +1,9 @@
 -- api.txt --
 pkg foo, type T #123
 pkg bar, type T #123
--- foo/123.md --
+-- stdlib/minor/foo/123.md --
 TODO
--- bar/123.md --
+-- stdlib/minor/bar/123.md --
 A sentence.
 -- want --
 

@@ -252,7 +252,7 @@ func TestCheckAPIFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			var got string
-			gotErr := CheckAPIFile(fsys, "api.txt", fsys, "doc/next/*stdlib/*minor")
+			gotErr := CheckAPIFile(fsys, "api.txt", fsys, "doc/next")
 			if gotErr != nil {
 				got = gotErr.Error()
 			}
