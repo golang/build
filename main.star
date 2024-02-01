@@ -1050,8 +1050,6 @@ def define_builder(env, project, go_branch_short, builder_type):
     # ¹ https://go.dev/doc/go1.22#arm
     if builder_type == "linux-arm":
         base_props["env"]["GOARM"] = "6"
-        base_props["env"]["CGO_CFLAGS"] = "-march=armv6"
-        base_props["env"]["CGO_LDFLAGS"] = "-march=armv6"
 
     # Construct the basic dimensions for the build/test running part of the build.
     #
