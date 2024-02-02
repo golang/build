@@ -819,23 +819,6 @@ def dimensions_of(host_type):
     else:
         cipd_platform = host
 
-    # We run some arm ports on arm64 machines.
-    #
-    # This is done late in dimensions_of to handle that linux-arm64 instances on AWS can
-    # test the linux/arm port, but linux-arm64 instances on GCE cannot at this time, yet
-    # the Swarming Bot reports the same cipd_platform value of 'linux-arm64' in both cases.
-    # This approach takes advantage of the linux-arm builder being low-capacity at this time,
-    # while the linux-arm64 builder is definitely not low-capacity, causing their pool dimension
-    # to be different and letting the linux-{arm,arm64} builder definitions filter appropriately.
-    # (In addition to their pool dimension being different, there are more dimensions like machine_type
-    # that might also differ, but the pool dimension difference is more stable and deemed load-bearing.)
-    #
-    # TODO(dmitshur): This and the similar case for 386 on amd64 can be handled closer together and
-    # in a more formal way, but that is likely blocked on us getting more fine grained control to
-    # reported dimensions without each individual one requiring a Swarming Bot change and deploy.
-    if goarch == "arm" and goos in ("linux"):
-        cipd_platform = "linux-arm64"
-
     dims = {"cipd_platform": cipd_platform}
     if os != None:
         dims["os"] = os
@@ -858,13 +841,12 @@ def is_fully_supported(dims):
         dims: The dimensions of a task/bot.
     """
 
-    # Note that the linux-arm builder currently runs on a linux-arm64 host
-    # (i.e., its cipd_platform value is linux-arm64), which results in it
-    # being marked as fully supported, which is unusual for low-capacity
-    # builders but doesn't cause problems for linux-arm.
-
-    supported = ["%s-%s" % (os, arch) for os in ["linux", "mac", "windows"] for arch in ["amd64", "arm64"]]
-    return dims["cipd_platform"] in supported
+    supported_cipd_platforms = [
+        "%s-%s" % (os, arch)
+        for os in ["linux", "mac", "windows"]
+        for arch in ["armv6l", "amd64", "arm64"]
+    ]
+    return dims["cipd_platform"] in supported_cipd_platforms
 
 # builder_name produces the final builder name.
 def builder_name(project, go_branch_short, builder_type):
