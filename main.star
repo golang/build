@@ -329,8 +329,10 @@ BUILDER_TYPES = [
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
     "linux-amd64-noopt",
-    "linux-amd64-perf_vs_gotip",
     "linux-amd64-perf_vs_parent",
+    "linux-amd64-perf_vs_release",
+    "linux-amd64-perf_vs_tip",
+    "linux-amd64-perf_vs_v0_11_0",
     "linux-amd64-race",
     "linux-amd64-racecompile",
     "linux-amd64-ssacheck",
@@ -378,10 +380,15 @@ NO_NETWORK_BUILDERS = [
     "linux-amd64",
 ]
 
+# MAIN_BRANCH_NAME is the name of the main branch for every repository. This
+# exists so we can change it more easily in the future, and avoid propagating
+# the existing one everywhere.
+MAIN_BRANCH_NAME = "master"
+
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
-    "gotip": struct(branch = "master", bootstrap = "1.20.6"),
+    "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.20.6"),
     "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.20.6"),
     "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
     "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
@@ -507,9 +514,9 @@ def define_for_go_starting_at(x):
 # define the builder only for postsubmit for the specified projects.
 #
 # Note: it will still be defined for optional inclusion in presubmit.
-def define_for_postsubmit(projects):
+def define_for_postsubmit(projects, go_branches = GO_BRANCHES.keys()):
     def f(port, project, go_branch_short):
-        run = project in projects
+        run = project in projects and go_branch_short in go_branches
         return (run, False, run, [])
 
     return f
@@ -525,9 +532,9 @@ def define_for_go_postsubmit_or_presubmit_with_filters(filters):
 
 # define the builder as existing for the go project, so it's includable in presubmit,
 # but don't run it anywhere by default.
-def define_for_go_optional_presubmit_only():
+def define_for_optional_presubmit_only(projects):
     def f(port, project, go_branch_short):
-        exists = project == "go"
+        exists = project in projects
         return (exists, False, False, [])
 
     return f
@@ -592,14 +599,30 @@ RUN_MODS = dict(
         enabled = define_for_postsubmit(["go"]),
     ),
 
-    # Run performance tests against gotip.
+    # Run performance tests against the latest Go release as a baseline. Only makes sense
+    # for the main Go repository.
+    #
+    # When run against a commit or change on tip, it will pick the latest overall release.
+    # When run against a commit or change on a release branch, it will pick the latest
+    # release on that release branch.
     #
     # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
-    perf_vs_gotip = make_run_mod(
-        add_props = {"perf_mode": {"baseline": "refs/heads/" + GO_BRANCHES["gotip"].branch}},
-        enabled = define_for_go_optional_presubmit_only(),
+    perf_vs_release = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "latest_go_release"}},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Run performance tests against the tip of the main branch for whatever repository
+    # we're targeting.
+    #
+    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
+    # environment variables will apply, but others like compile_only, race, and longtest
+    # will have no effect.
+    perf_vs_tip = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "refs/heads/" + MAIN_BRANCH_NAME}},
+        enabled = define_for_optional_presubmit_only(["go", "tools"]),
     ),
 
     # Run performance tests against the source's parent commit.
@@ -609,7 +632,20 @@ RUN_MODS = dict(
     # will have no effect.
     perf_vs_parent = make_run_mod(
         add_props = {"perf_mode": {"baseline": "parent"}},
-        enabled = define_for_go_optional_presubmit_only(),
+        enabled = define_for_optional_presubmit_only(["go", "tools"]),
+    ),
+
+    # Run performance tests against the v0.11.0 tag as a baseline. Only makes sense for
+    # the x/tools repository. Excludes gotip as a branch for testing since the same toolchain
+    # tool be chosen as the baseline by golangbuild for gotip and the latest release branch,
+    # making it redundant (and also misleading).
+    #
+    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
+    # environment variables will apply, but others like compile_only, race, and longtest
+    # will have no effect.
+    perf_vs_v0_11_0 = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "refs/tags/v0.11.0"}},
+        enabled = define_for_postsubmit(["tools"], go_branches=[branch for branch in GO_BRANCHES.keys() if branch != "gotip"]),
     ),
 
     # Build and test with GOPPC64=power10, which makes the compiler assume certain ppc64 CPU
@@ -1742,10 +1778,12 @@ def _define_go_internal_ci():
             # Define presubmit builders. Since there's no postsubmit to monitor,
             # all possible builders are required.
             name, _ = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
+            _, _, _, run_mods = split_builder_type(builder_type)
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
                 disable_reuse = True,
+                includable_only = any([r.startswith("perf") for r in run_mods]),
             )
 
 _define_go_ci()
