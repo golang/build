@@ -240,6 +240,7 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + [
     "linux-ppc64",
     "linux-ppc64le",
     "linux-riscv64",
+    "linux-loong64",
     "netbsd-arm",
     "netbsd-arm64",
     "openbsd-ppc64",
@@ -336,6 +337,7 @@ BUILDER_TYPES = [
     "linux-amd64-staticlockranking",
     "linux-arm",
     "linux-arm64",
+    "linux-loong64",
     "linux-ppc64-power10",
     "linux-ppc64le",
     "linux-riscv64",
@@ -360,6 +362,7 @@ BUILDER_TYPES = [
 KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-riscv64": struct(issue_number = 63482),
     "linux-arm": struct(issue_number = 65241),
+    "linux-loong64": struct(issue_number = 65398),
     "netbsd-arm": struct(issue_number = 63698),
     "openbsd-ppc64": struct(issue_number = 63480),
     "openbsd-riscv64": struct(issue_number = 64176),
