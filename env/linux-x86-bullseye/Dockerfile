@@ -30,6 +30,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # strace: optionally used by some net/http tests
 # subversion: subversion VCS supported by cmd/go
 # swig: used for c/c++ interop related tests
+# zlib1g: used for ASAN symbolization with clang
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	bzr \
@@ -60,6 +61,7 @@ RUN apt-get update && apt-get install -y \
 	subversion \
 	sudo \
 	swig \
+	zlib1g \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \
