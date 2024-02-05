@@ -1137,13 +1137,6 @@ def define_builder(env, project, go_branch_short, builder_type):
         cipd_version = "latest",
         cmd = ["golangbuild"],
     )
-    if host_type == "linux-arm":  # TODO(go.dev/issue/65241)
-        executable = luci.executable(
-            name = "golangbuild-devel",
-            cipd_package = "golang/devel/golangbuild/${platform}",
-            cipd_version = "latest",
-            cmd = ["golangbuild"],
-        )
 
     # Determine how long we should wait for a machine to become available before the
     # build expires. Only applies if there's at least one machine. Builds fail immediately
