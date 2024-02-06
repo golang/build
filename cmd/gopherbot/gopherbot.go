@@ -364,7 +364,7 @@ func main() {
 			{goRepo, 45082}: true,
 			{goRepo, 45201}: true,
 			{goRepo, 45202}: true,
-			{goRepo, 47141}: true,
+			{goRepo, 47140}: true,
 
 			{vscode, 298}:  true,
 			{vscode, 524}:  true,
