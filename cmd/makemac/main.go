@@ -18,6 +18,7 @@ import (
 
 var (
 	apiKey = secret.Flag("api-key", "MacService API key")
+	dryRun = flag.Bool("dry-run", false, "Print the actions that would be taken without actually performing them")
 	period = flag.Duration("period", 2*time.Hour, "How often to check leases. As a special case, -period=0 checks exactly once and then exits")
 )
 
@@ -63,6 +64,9 @@ func checkAndRenewLeases(c *macservice.Client) {
 
 	for _, i := range resp.Instances {
 		log.Printf("Renewing lease ID: %s; currently expires: %v...", i.Lease.LeaseID, i.Lease.Expires)
+		if *dryRun {
+			continue
+		}
 
 		rr, err := c.Renew(macservice.RenewRequest{
 			LeaseID:  i.Lease.LeaseID,
