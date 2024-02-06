@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	privateca "cloud.google.com/go/security/privateca/apiv1"
@@ -110,7 +111,7 @@ func generateCert(ctx context.Context, hostname, csrPath string) error {
 		return fmt.Errorf("unable to parse certificate request: %w", err)
 	}
 	if cr.Subject.CommonName != fmt.Sprintf("%s.bots.golang.org", hostname) {
-		return fmt.Errorf("certificate signing request does not match hostname: want %q, got %q", hostname, cr.Subject.CommonName)
+		return fmt.Errorf("certificate signing request hostname does not match the expected hostname: expected %q, csr hostname: %q", hostname, strings.TrimSuffix(cr.Subject.CommonName, ".bots.golang.org"))
 	}
 	certID := fmt.Sprintf("%s-%d", hostname, time.Now().Unix()) // A unique name for the certificate.
 	caClient, err := privateca.NewCertificateAuthorityClient(ctx)
