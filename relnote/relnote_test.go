@@ -276,20 +276,3 @@ func TestSymbolLinks(t *testing.T) {
 	}
 
 }
-
-// dump displays a markdown document's structure, for debugging.
-func dump(d *md.Document) {
-	for _, b := range d.Blocks {
-		fmt.Printf("%T   %v\n", b, b.Pos())
-		switch b := b.(type) {
-		case *md.Paragraph:
-			for _, inl := range b.Text.Inline {
-				fmt.Printf("\t%+v (%[1]T)\n", inl)
-			}
-		case *md.Heading:
-			for _, in := range b.Text.Inline {
-				fmt.Printf("    %#v\n", in)
-			}
-		}
-	}
-}
