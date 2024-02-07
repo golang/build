@@ -60,11 +60,20 @@ func (c *Client) do(method, endpoint string, input, output any) error {
 		return fmt.Errorf("response error %s: %s", resp.Status, body)
 	}
 
-	if json.Unmarshal(body, output); err != nil {
+	if err := json.Unmarshal(body, output); err != nil {
 		return fmt.Errorf("error decoding response: %w; body: %s", err, body)
 	}
 
 	return nil
+}
+
+// Lease creates a new lease.
+func (c *Client) Lease(req LeaseRequest) (LeaseResponse, error) {
+	var resp LeaseResponse
+	if err := c.do("POST", "leases:create", req, &resp); err != nil {
+		return LeaseResponse{}, fmt.Errorf("error sending request: %w", err)
+	}
+	return resp, nil
 }
 
 // Renew updates the expiration time of a lease. Note that
@@ -76,6 +85,15 @@ func (c *Client) Renew(req RenewRequest) (RenewResponse, error) {
 		return RenewResponse{}, fmt.Errorf("error sending request: %w", err)
 	}
 	return resp, nil
+}
+
+// Vacate vacates a lease.
+func (c *Client) Vacate(req VacateRequest) error {
+	var resp struct{} // no response body
+	if err := c.do("POST", "leases:vacate", req, &resp); err != nil {
+		return fmt.Errorf("error sending request: %w", err)
+	}
+	return nil
 }
 
 // Find searches for leases.

@@ -21,7 +21,7 @@ spec:
       - name: makemac
         image: gcr.io/symbolic-datum-552/makemac:latest
         imagePullPolicy: Always
-        command: ["/makemac", "-api-key=secret:macservice-api-key"]
+        command: ["/makemac", "-macservice-api-key=secret:macservice-api-key"]
         resources:
           requests:
             cpu: "1"
