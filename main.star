@@ -391,13 +391,13 @@ GO_BRANCHES = {
     "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.20.6"),
     "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.20.6"),
     "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
-    "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
 }
 
 # EXTRA_GO_BRANCHES are Go branches that aren't used for project-wide testing
 # because they're out of scope per https://go.dev/doc/devel/release#policy,
 # but are used by specific golang.org/x repositories.
 EXTRA_GO_BRANCHES = {
+    "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
     "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13"),
     "go1.18": struct(branch = "release-branch.go1.18", bootstrap = "1.17.13"),
 }
