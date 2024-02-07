@@ -1050,8 +1050,6 @@ def define_builder(env, project, go_branch_short, builder_type):
             if suffix != "":
                 fail("unknown GOOS=js builder suffix: %s" % suffix)
             base_props["node_version"] = "2@18.8.0"
-            if go_branch_short == "go1.20":
-                base_props["node_version"] = "13.2.0"
         elif os == "wasip1":
             if suffix == "wasmtime":
                 base_props["env"]["GOWASIRUNTIME"] = "wasmtime"
@@ -1104,7 +1102,7 @@ def define_builder(env, project, go_branch_short, builder_type):
         # Leave release branches out of scope, they can't work until some
         # test fixes are backported, but doing that might not be worth it.
         # TODO(dmitshur): Delete this after Go 1.21 drops off.
-        if project == "go" and (go_branch_short == "go1.21" or go_branch_short == "go1.20"):
+        if project == "go" and go_branch_short == "go1.21":
             base_props.pop("no_network")
 
     for mod in run_mods:
@@ -1205,9 +1203,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             test_shards = 1
     elif perfmode:
         test_shards = 1
-    elif project == "go" and not capacity_constrained and go_branch_short != "go1.20":
-        # TODO(mknyszek): Remove the exception for the go1.20 branch once it
-        # is no longer supported.
+    elif project == "go" and not capacity_constrained:
         test_shards = 4
     else:
         test_shards = 1
@@ -1445,19 +1441,16 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     host_type = host_of(builder_type)
 
     # Filter out old OS versions from new branches.
-    if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22", "go1.21", "go1.20"]:
+    if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22", "go1.21"]:
         # Go 1.22 is last to support macOS 10.15.
         return False, False, False, []
 
     # Filter out new ports on old release branches.
-    if os == "wasip1" and go_branch_short == "go1.20":  # GOOS=wasip1 is new to Go 1.21.
-        return False, False, False, []
+    # None at this time.
 
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
     enable_types = None
-    if project == "build" and go_branch_short == "go1.20":  # x/build stopped supporting Go 1.20 sooner.
-        return False, False, False, []
     if pt == PT.TOOL:
         enable_types = ["linux-amd64", "windows-amd64", "darwin-amd64"]
     elif project == "mobile":
@@ -1523,9 +1516,6 @@ def _define_go_ci():
     postsubmit_builders_with_go_repo_trigger = {}
     for project in PROJECTS:
         for go_branch_short, go_branch in GO_BRANCHES.items():
-            if project == "build" and go_branch_short == "go1.20":  # x/build stopped supporting Go 1.20 sooner.
-                continue
-
             # Set up a CQ group for the builder definitions below.
             cq_group = go_cq_group(project, go_branch_short)
             luci.cq_group(
