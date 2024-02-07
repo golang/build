@@ -121,6 +121,7 @@ func init() {
 	addPerson("Pkgsite Team", "@golang/pkgsite")
 	addPerson("Release Team", "@golang/release")
 	addPerson("Runtime Team", "@golang/runtime")
+	addPerson("Telemetry Team", "@golang/telemetry")
 	addPerson("Tools Team", "@golang/tools-team")
 	addPerson("Compiler Team", "@golang/compiler")
 

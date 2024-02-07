@@ -79,14 +79,15 @@ var (
 	tombergan    = gh("tombergan")
 	zpavlinovic  = gh("zpavlinovic")
 
-	compilerTeam = gh("golang/compiler")
-	fuzzingTeam  = gh("golang/fuzzing")
-	pkgsiteTeam  = gh("golang/pkgsite")
-	releaseTeam  = gh("golang/release")
-	runtimeTeam  = gh("golang/runtime")
-	securityTeam = gh("golang/security")
-	toolsTeam    = gh("golang/tools-team")
-	vulndbTeam   = gh("golang/vulndb")
+	compilerTeam  = gh("golang/compiler")
+	fuzzingTeam   = gh("golang/fuzzing")
+	pkgsiteTeam   = gh("golang/pkgsite")
+	releaseTeam   = gh("golang/release")
+	runtimeTeam   = gh("golang/runtime")
+	securityTeam  = gh("golang/security")
+	telemetryTeam = gh("golang/telemetry")
+	toolsTeam     = gh("golang/tools-team")
+	vulndbTeam    = gh("golang/vulndb")
 )
 
 // entries is a map of <repo name>/<path>, <domain>, or <branch> to Owner
@@ -816,7 +817,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{mpvl},
 	},
 	"telemetry": {
-		Primary:   []Owner{pjw, hyangah, findleyr},
+		Primary:   []Owner{telemetryTeam},
 		Secondary: []Owner{toolsTeam},
 	},
 	// default owners of x/tools/...
