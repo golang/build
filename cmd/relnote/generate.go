@@ -26,11 +26,13 @@ title: Go 1.%[1]s Release Notes
 `
 
 // generate takes the root of the Go repo.
-// It generates release notes by combining the fragments in the repo.
-func generate(version, dir string) error {
-	if dir == "" {
-		dir = filepath.Join(runtime.GOROOT(), "doc", "next")
+// It generates release notes by combining the fragments in the doc/next directory
+// of the repo.
+func generate(version, goRoot string) error {
+	if goRoot == "" {
+		goRoot = runtime.GOROOT()
 	}
+	dir := filepath.Join(goRoot, "doc", "next")
 	doc, err := relnote.Merge(os.DirFS(dir))
 	if err != nil {
 		return err
