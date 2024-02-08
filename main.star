@@ -433,7 +433,7 @@ PROJECTS = {
     "review": PT.TOOL,
     "sync": PT.CORE,
     "sys": PT.CORE,
-    "telemetry": PT.TOOL,
+    "telemetry": PT.CORE,
     "term": PT.CORE,
     "text": PT.CORE,
     "time": PT.LIBRARY,
