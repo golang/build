@@ -725,6 +725,11 @@ def go_cq_group(project, go_branch_short):
         # See go.dev/issue/46154.
         if go_branch_short == "gotip":
             refs, refs_exclude = ["^refs/heads/.+$"], ["^refs/heads/internal-branch\\..+$"]
+
+            if project == "build":
+                # Exclude the luci-config branch in x/build, it holds
+                # only LUCI configuration and no Go code to test.
+                refs_exclude.append("^refs/heads/luci-config$")
         else:
             refs, refs_exclude = ["^refs/heads/internal-branch\\.%s-.+$" % go_branch_short.replace(".", "\\.")], None
 
