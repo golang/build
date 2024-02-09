@@ -332,7 +332,7 @@ BUILDER_TYPES = [
     "linux-amd64-perf_vs_parent",
     "linux-amd64-perf_vs_release",
     "linux-amd64-perf_vs_tip",
-    "linux-amd64-perf_vs_v0_11_0",
+    "linux-amd64-perf_vs_gopls_0_11",
     "linux-amd64-race",
     "linux-amd64-racecompile",
     "linux-amd64-ssacheck",
@@ -635,17 +635,17 @@ RUN_MODS = dict(
         enabled = define_for_optional_presubmit_only(["go", "tools"]),
     ),
 
-    # Run performance tests against the v0.11.0 tag as a baseline. Only makes sense for
-    # the x/tools repository. Excludes gotip as a branch for testing since the same toolchain
-    # tool be chosen as the baseline by golangbuild for gotip and the latest release branch,
-    # making it redundant (and also misleading).
+    # Run performance tests against the gopls-release-branch.0.11 branch as a baseline. Only
+    # makes sense for the x/tools repository. Excludes gotip as a branch for testing since the
+    # same toolchain tool would be chosen as the baseline by golangbuild for gotip and the latest
+    # release branch, making it redundant (and also misleading).
     #
     # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
-    perf_vs_v0_11_0 = make_run_mod(
-        add_props = {"perf_mode": {"baseline": "refs/tags/v0.11.0"}},
-        enabled = define_for_postsubmit(["tools"], go_branches=[branch for branch in GO_BRANCHES.keys() if branch != "gotip"]),
+    perf_vs_gopls_0_11 = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "refs/heads/gopls-release-branch.0.11"}},
+        enabled = define_for_postsubmit(["tools"], go_branches = [branch for branch in GO_BRANCHES.keys() if branch != "gotip"]),
     ),
 
     # Build and test with GOPPC64=power10, which makes the compiler assume certain ppc64 CPU
