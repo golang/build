@@ -1033,6 +1033,8 @@ def define_builder(env, project, go_branch_short, builder_type):
         "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type),
         "timeout_scale": host_timeout_scale(host_type),
     }
+    if builder_type in KNOWN_ISSUE_BUILDER_TYPES:
+        base_props["known_issue"] = KNOWN_ISSUE_BUILDER_TYPES[builder_type].issue_number
     for d in EXTRA_DEPENDENCIES:
         if not d.applies(project, port_of(builder_type), run_mods):
             continue
