@@ -257,6 +257,7 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + [
 SLOW_HOSTS = {
     "linux-ppc64": 2,
     "linux-ppc64le": 2,
+    "netbsd-arm64": 2,
 }
 
 # host_timeout_scale returns the default test timeout scale for a given host.
@@ -464,8 +465,6 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None, timeout_scale = 1
         # Compose timeout scaling factors by multiplying them.
         if project == "go":
             props["timeout_scale"] *= timeout_scale
-            if props["timeout_scale"] != 1:
-                props["env"].update({"GO_TEST_TIMEOUT_SCALE": "%d" % props["timeout_scale"]})
         props["env"].update(add_env)
 
     if enabled == None:
@@ -1112,8 +1111,9 @@ def define_builder(env, project, go_branch_short, builder_type):
             fail("unknown run mod: %s" % mod)
         RUN_MODS[mod].apply(base_props, project)
 
-    # We're done with this prop now (just used to set proper environ).
-    base_props.pop("timeout_scale")
+    if base_props["timeout_scale"] != 1:
+        base_props["env"]["GO_TEST_TIMEOUT_SCALE"] = "%d" % base_props["timeout_scale"]
+    base_props.pop("timeout_scale")  # We're done with this prop now (just used to set proper environ).
 
     # Named cache for git clones.
     base_props["git_cache"] = "git"
