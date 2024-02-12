@@ -56,8 +56,10 @@ type BenchmarkJSON struct {
 }
 
 type ValueJSON struct {
-	CommitHash string
-	CommitDate time.Time
+	CommitHash           string
+	CommitDate           time.Time
+	BaselineCommitHash   string
+	BenchmarksCommitHash string
 
 	// These are pre-formatted as percent change.
 	Low    float64
@@ -86,12 +88,24 @@ func fluxRecordToValue(rec *query.FluxRecord) (ValueJSON, error) {
 		return ValueJSON{}, fmt.Errorf("record %s experiment-commit value got type %T want float64", rec, rec.ValueByKey("experiment-commit"))
 	}
 
+	baselineCommit, ok := rec.ValueByKey("baseline-commit").(string)
+	if !ok {
+		return ValueJSON{}, fmt.Errorf("record %s experiment-commit value got type %T want float64", rec, rec.ValueByKey("baseline-commit"))
+	}
+
+	benchmarksCommit, ok := rec.ValueByKey("benchmarks-commit").(string)
+	if !ok {
+		return ValueJSON{}, fmt.Errorf("record %s experiment-commit value got type %T want float64", rec, rec.ValueByKey("benchmarks-commit"))
+	}
+
 	return ValueJSON{
-		CommitDate: rec.Time(),
-		CommitHash: commit,
-		Low:        low - 1,
-		Center:     center - 1,
-		High:       high - 1,
+		CommitDate:           rec.Time(),
+		CommitHash:           commit,
+		BaselineCommitHash:   baselineCommit,
+		BenchmarksCommitHash: benchmarksCommit,
+		Low:                  low - 1,
+		Center:               center - 1,
+		High:                 high - 1,
 	}, nil
 }
 

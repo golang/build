@@ -245,11 +245,23 @@ function addTable(bench, unit, repository) {
 		return elem;
 	}
 
+	const createCommitCell = function(commit, repository) {
+		const commitHash = createCell("", false);
+		const commitLink = document.createElement("a");
+		commitLink.href = "https://go.googlesource.com/" + repository + "/+show/" + commit;
+		commitLink.textContent = commit.slice(0, 7);
+		commitHash.appendChild(commitLink);
+		commitHash.classList.add("Dashboard-table-commit");
+		return commitHash;
+	}
+
 	// Create the header.
 	const header = document.createElement("tr");
 	header.appendChild(createCell("Date", true));
-	header.appendChild(createCell("Commit", true));
+	header.appendChild(createCell("Experiment commit", true));
 	header.appendChild(createCell("Delta", true));
+	header.appendChild(createCell("Baseline commit", true));
+	header.appendChild(createCell("x/benchmarks commit", true));
 	table.appendChild(header);
 
 	// Find the min and max.
@@ -294,20 +306,21 @@ function addTable(bench, unit, repository) {
 		}).format(v.CommitDate), false));
 
 		// Commit hash.
-		const commitHash = createCell("", false);
-		const commitLink = document.createElement("a");
-		commitLink.href = "https://go.googlesource.com/" + repository + "/+show/" + v.CommitHash;
-		commitLink.id = commitToId(v.CommitHash);
-		commitLink.textContent = v.CommitHash.slice(0, 7);
-		commitHash.appendChild(commitLink);
-		commitHash.classList.add("Dashboard-table-commit")
-		row.appendChild(commitHash);
+		const commitCell = createCommitCell(v.CommitHash, repository);
+		commitCell.id = commitToId(v.CommitHash);
+		row.appendChild(commitCell);
 
 		// Range visualization.
 		const range = createCell("", false);
 		range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 48, bench.Unit, bench.HigherIsBetter));
 		range.classList.add("Dashboard-table-range")
 		row.appendChild(range);
+
+		// Baseline commit hash.
+		row.appendChild(createCommitCell(v.BaselineCommitHash, repository));
+
+		// Benchmarks commit hash.
+		row.appendChild(createCommitCell(v.BenchmarksCommitHash, "benchmarks"));
 
 		table.appendChild(row);
 	}
