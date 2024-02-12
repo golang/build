@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1363,17 +1364,44 @@ func (b *BuildReleaseTasks) readRelevantBuilders(ctx *wf.TaskContext, major int,
 	if kind == task.KindBeta {
 		prefix = "gotip-"
 	}
-	resp, err := b.BuildBucketClient.ListBuilders(ctx, "security-try")
+	builders, err := b.BuildBucketClient.ListBuilders(ctx, "security-try")
 	if err != nil {
 		return nil, err
 	}
-	var builders []string
-	for b := range resp {
-		if strings.HasPrefix(b, prefix) {
-			builders = append(builders, b)
+	var relevant []string
+	for name, b := range builders {
+		if !strings.HasPrefix(name, prefix) {
+			continue
 		}
+		var props struct {
+			BuilderMode int `json:"mode"`
+			KnownIssue  int `json:"known_issue"`
+		}
+		if err := json.Unmarshal([]byte(b.Properties), &props); err != nil {
+			return nil, fmt.Errorf("error unmarshaling properties for %v: %v", name, err)
+		}
+		var skip []string // Log-worthy causes of skip, if any.
+		// golangbuildModePerf is golangbuild's MODE_PERF mode that
+		// runs benchmarks. It's the first custom mode not relevant
+		// to building and testing, and the expectation is that any
+		// modes after it will be fine to skip for release purposes.
+		//
+		// See https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/experimental/golangbuild/golangbuildpb/params.proto;l=174-177;drc=fdea4abccf8447808d4e702c8d09fdd20fd81acb.
+		const golangbuildModePerf = 4
+		if props.BuilderMode >= golangbuildModePerf {
+			skip = append(skip, fmt.Sprintf("custom mode %d", props.BuilderMode))
+		}
+		if props.KnownIssue != 0 {
+			skip = append(skip, fmt.Sprintf("known issue %d", props.KnownIssue))
+		}
+		if len(skip) != 0 {
+			ctx.Printf("skipping %s because of %s", name, strings.Join(skip, ", "))
+			continue
+		}
+		relevant = append(relevant, name)
 	}
-	return builders, nil
+	slices.Sort(relevant)
+	return relevant, nil
 }
 
 type testResult struct {

@@ -8,7 +8,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"reflect"
 	"runtime"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"go.chromium.org/luci/auth"
 	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
 	"go.chromium.org/luci/grpc/prpc"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
@@ -142,20 +142,18 @@ var flagRunFindMissingBuildersLiveTest = flag.String("run-find-missing-builders-
 var flagRunMissingBuilds = flag.Bool("run-missing-builds", false, "run missing builds from missing builders test")
 
 func TestFindMissingBuildersLive(t *testing.T) {
-	if *flagRunFindMissingBuildersLiveTest == "" {
-		t.Skip("no module/rev specified")
+	if !testing.Verbose() || flag.Lookup("test.run").Value.String() != "^TestFindMissingBuildersLive$" {
+		t.Skip("not running a live test requiring manual verification if not explicitly requested with go test -v -run=^TestFindMissingBuildersLive$")
 	}
-
 	repo, commit, ok := strings.Cut(*flagRunFindMissingBuildersLiveTest, "@")
 	if !ok {
-		t.Fatalf("--run-find-missing-builders-test must be module@rev: %q", *flagRunFindMissingBuildersLiveTest)
+		t.Fatalf("-run-find-missing-builders-test flag must be module@rev: %q", *flagRunFindMissingBuildersLiveTest)
 	}
 
 	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
-
-	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, auth.Options{GCEAllowAsDefault: true}).Client()
+	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, chromeinfra.DefaultAuthOptions()).Client()
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal("auth.NewAuthenticator:", err)
 	}
 	buildsClient := buildbucketpb.NewBuildsPRPCClient(&prpc.Client{
 		C:    luciHTTPClient,

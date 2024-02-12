@@ -490,30 +490,49 @@ func (x *TagXReposTasks) findMissingBuilders(ctx *wf.TaskContext, repo TagRepo, 
 		return nil, err
 	}
 
-	type port struct {
-		GOOS   string `json:"goos"`
-		GOARCH string `json:"goarch"`
-	}
-	type projectProp struct {
-		Project  string `json:"project"`
-		IsGoogle bool   `json:"is_google"`
-		Target   port   `json:"target"`
-	}
-
-	wantBuilders := map[string]bool{}
-	for id, b := range builders {
-		props := &projectProp{}
+	var wantBuilders = make(map[string]bool)
+	for name, b := range builders {
+		type port struct {
+			GOOS   string `json:"goos"`
+			GOARCH string `json:"goarch"`
+		}
+		var props struct {
+			BuilderMode int    `json:"mode"`
+			Project     string `json:"project"`
+			IsGoogle    bool   `json:"is_google"`
+			KnownIssue  int    `json:"known_issue"`
+			Target      port   `json:"target"`
+		}
 		if err := json.Unmarshal([]byte(b.Properties), &props); err != nil {
-			return nil, fmt.Errorf("error unmarshaling properties for %v: %v", id, err)
+			return nil, fmt.Errorf("error unmarshaling properties for %v: %v", name, err)
 		}
-		if props.Project == repo.Name && props.IsGoogle && releasetargets.IsFirstClass(props.Target.GOOS, props.Target.GOARCH) {
-			wantBuilders[id] = true
+		if props.Project != repo.Name || !props.IsGoogle || !releasetargets.IsFirstClass(props.Target.GOOS, props.Target.GOARCH) {
+			continue
 		}
+		var skip []string // Log-worthy causes of skip, if any.
+		// golangbuildModePerf is golangbuild's MODE_PERF mode that
+		// runs benchmarks. It's the first custom mode not relevant
+		// to building and testing, and the expectation is that any
+		// modes after it will be fine to skip for release purposes.
+		//
+		// See https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/experimental/golangbuild/golangbuildpb/params.proto;l=174-177;drc=fdea4abccf8447808d4e702c8d09fdd20fd81acb.
+		const golangbuildModePerf = 4
+		if props.BuilderMode >= golangbuildModePerf {
+			skip = append(skip, fmt.Sprintf("custom mode %d", props.BuilderMode))
+		}
+		if props.KnownIssue != 0 {
+			skip = append(skip, fmt.Sprintf("known issue %d", props.KnownIssue))
+		}
+		if len(skip) != 0 {
+			ctx.Printf("skipping %s because of %s", name, strings.Join(skip, ", "))
+			continue
+		}
+		wantBuilders[name] = true
 	}
 
-	for id := range wantBuilders {
+	for name := range wantBuilders {
 		pred := &buildbucketpb.BuildPredicate{
-			Builder: &buildbucketpb.BuilderID{Project: "golang", Bucket: "ci", Builder: id},
+			Builder: &buildbucketpb.BuilderID{Project: "golang", Bucket: "ci", Builder: name},
 			Tags: []*buildbucketpb.StringPair{
 				{Key: "buildset", Value: fmt.Sprintf("commit/gitiles/%s/%s/+/%s", hostFromURL(x.Gerrit.GitilesURL()), repo.Name, head)},
 			},
@@ -524,10 +543,10 @@ func (x *TagXReposTasks) findMissingBuilders(ctx *wf.TaskContext, repo TagRepo, 
 			return nil, err
 		}
 		if len(succesfulBuilds) != 0 {
-			ctx.Printf("%v: found successful builds: %v", id, succesfulBuilds)
-			delete(wantBuilders, id)
+			ctx.Printf("%v: found successful builds: %v", name, succesfulBuilds)
+			delete(wantBuilders, name)
 		} else {
-			ctx.Printf("%v: no successful builds", id)
+			ctx.Printf("%v: no successful builds", name)
 		}
 	}
 	return wantBuilders, nil

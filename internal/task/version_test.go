@@ -19,7 +19,7 @@ var flagRunVersionTest = flag.Bool("run-version-test", false, "run version test,
 
 func TestGetNextVersionLive(t *testing.T) {
 	if !testing.Verbose() || flag.Lookup("test.run").Value.String() != "^TestGetNextVersionLive$" {
-		t.Skip("not running test requiring manual verification if not explicitly requested with go test -v -run=^TestGetNextVersionLive$")
+		t.Skip("not running a live test requiring manual verification if not explicitly requested with go test -v -run=^TestGetNextVersionLive$")
 	}
 
 	cl := gerrit.NewClient("https://go-review.googlesource.com", nil)
