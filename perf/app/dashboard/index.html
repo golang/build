@@ -50,13 +50,13 @@ license that can be found in the LICENSE file.
 					<option>go</option>
 					<option>tools</option>
 				</select>
-				Branch:
+				Go branch:
 				<select id="branch-select" name="branch">
 					<option>master</option>
-					<option>release-branch.go1.17</option>
-					<option>release-branch.go1.18</option>
 					<option>release-branch.go1.19</option>
 					<option>release-branch.go1.20</option>
+					<option>release-branch.go1.21</option>
+					<option>release-branch.go1.22</option>
 				</select>
 				Duration (days):
 				<div class="Dashboard-duration">
@@ -80,14 +80,14 @@ license that can be found in the LICENSE file.
 	<p>
 		Note that some commits are not tested, so there could be
 		multiple commits (not shown) between two points on the graph.
-		See the <code>linux-amd64-perf</code> column on the
-		<a href="https://build.golang.org/?repo=golang.org%2fx%2fbenchmarks">x/benchmarks build dashboard</a>
+		See the <code>gotip-linux-amd64-perf_vs_release</code> column on the
+		<a href="https://ci.chromium.org/p/golang/g/go-gotip/console">build dashboard</a>
 		for tested ("ok") / untested (empty) commits.
 	</p>
 	<p>
-		The 'branch' selection above is the Go branch that benchmarking
-		ran against on <a href=https://build.golang.org>the build dashboard</a>,
-		not the subrepo branch.
+		The 'Go branch' selection above is the Go branch that benchmarking
+		ran against on
+		<a href="https://ci.chromium.org/ui/p/golang">the build dashboard</a>.
 	</p>
 	<p>
 		Using the 'unit' search box above leads to a page that shows much
@@ -121,6 +121,17 @@ license that can be found in the LICENSE file.
 // the amount of noise is incredibly low.
 const minViewDeltaPercent = 0.025;
 
+// HTML to inject when there's no data found.
+const noDataHTML = `
+<grid class="Dashboard-section Dashboard-section-expand">
+	<h2 class="Dashboard-title">No data</h2>
+	<p class="Dashboard-documentation">
+		Found no data. Consider trying a different time range. Note also that subrepositories like tools have
+		no data against the Go master branch, in which case, try picking a release branch.
+	</p>
+</grid>
+`
+
 function removeLoadingMessage() {
 	let loading = document.getElementById("loading");
 	loading.parentNode.removeChild(loading);
@@ -133,6 +144,7 @@ function addCharts(benchmarks, repository) {
 
 	let prevName = "";
 	let grid = null;
+	let addedChart = false;
 	for (const b in benchmarks) {
 		const bench = benchmarks[b];
 
@@ -201,6 +213,10 @@ function addCharts(benchmarks, repository) {
 			higherIsBetter: bench.HigherIsBetter,
 		}));
 		grid.appendChild(item);
+		addedChart = true;
+	}
+	if (!addedChart) {
+		dashboard.innerHTML = noDataHTML;
 	}
 }
 
