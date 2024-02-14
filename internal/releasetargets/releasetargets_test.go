@@ -65,6 +65,9 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 		if target.LongTestBuilder != "" {
 			flags = append(flags, "Long tests on "+target.LongTestBuilder)
 		}
+		if target.MinMacOSVersion != "" {
+			flags = append(flags, "Minimum macOS version is "+target.MinMacOSVersion)
+		}
 		fmt.Fprintf(w, "%-15v %-10v %-10v %v\n", name, target.GOOS, target.GOARCH, builder)
 		if len(flags) != 0 {
 			fmt.Fprintf(w, "\t%v\n", strings.Join(flags, ", "))

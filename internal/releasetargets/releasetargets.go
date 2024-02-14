@@ -112,6 +112,13 @@ var allReleases = map[int]ReleaseTargets{
 			Builder:     "windows-arm64-11",
 		},
 	},
+	23: {
+		"darwin-amd64": &Target{
+			Builder:         "darwin-amd64-13",
+			LongTestBuilder: "darwin-amd64-longtest",
+			MinMacOSVersion: "11", // go.dev/issue/64207
+		},
+	},
 }
 
 //go:generate ./genlatestports.bash
