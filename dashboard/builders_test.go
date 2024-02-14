@@ -704,8 +704,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest", "exp"), onlyPost},
 		{b("windows-386-2008", "exp"), none},
 		{b("windows-amd64-2016", "exp"), both},
-		{b("darwin-amd64-10_14", "exp"), none},
-		{b("darwin-amd64-10_15", "exp"), onlyPost},
+		{b("darwin-amd64-10_15", "exp"), none},
+		{b("darwin-amd64-11_0", "exp"), onlyPost},
 		// ... but not on most others:
 		{b("freebsd-386-12_3", "exp"), none},
 		{b("freebsd-amd64-12_3", "exp"), none},
@@ -724,8 +724,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "build"), both},
 		{b("linux-amd64-longtest", "build"), onlyPost},
 		{b("windows-amd64-2016", "build"), both},
-		{b("darwin-amd64-10_14", "build"), none},
-		{b("darwin-amd64-10_15", "build"), onlyPost},
+		{b("darwin-amd64-10_15", "build"), none},
+		{b("darwin-amd64-11_0", "build"), onlyPost},
 		{b("linux-amd64-fedora", "build"), none},
 		{b("linux-amd64-clang", "build"), none},
 		{b("linux-amd64-sid", "build"), none},
@@ -747,15 +747,14 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-386-emu", "build"), none},
 		{b("android-amd64-emu", "build"), none},
 
-		{b("darwin-amd64-10_15", "go"), onlyPost},
-
-		// Go 1.20 is the last release with macOS 10.14 support:
-		{b("darwin-amd64-10_14", "go"), none},
-		{b("darwin-amd64-10_14@go1.21", "go"), none},
-		{b("darwin-amd64-10_14@go1.20", "go"), onlyPost},
-		{b("darwin-amd64-10_14", "net"), none},
-		{b("darwin-amd64-10_14@go1.21", "net"), none},
-		{b("darwin-amd64-10_14@go1.20", "net"), onlyPost},
+		{b("darwin-amd64-11_0", "go"), onlyPost},
+		// Go 1.22 is the last release with macOS 10.15 support:
+		{b("darwin-amd64-10_15", "go"), none},
+		{b("darwin-amd64-10_15@go1.23", "go"), none},
+		{b("darwin-amd64-10_15@go1.22", "go"), onlyPost},
+		{b("darwin-amd64-10_15", "net"), none},
+		{b("darwin-amd64-10_15@go1.23", "net"), none},
+		{b("darwin-amd64-10_15@go1.22", "net"), onlyPost},
 
 		// The darwin longtest builder added during the Go 1.21 dev cycle:
 		{b("darwin-amd64-longtest@go1.21", "go"), onlyPost},

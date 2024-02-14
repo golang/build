@@ -2369,7 +2369,9 @@ func init() {
 		Name:           "darwin-amd64-10_15",
 		HostType:       "host-darwin-amd64-10_15-aws",
 		distTestAdjust: macTestPolicy,
-		buildsRepo:     defaultPlusExpBuild,
+		buildsRepo: func(repo, branch, goBranch string) bool {
+			return defaultPlusExpBuild(repo, branch, goBranch) && atMostGo1(goBranch, 22)
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "darwin-amd64-11_0",
