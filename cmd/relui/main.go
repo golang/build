@@ -36,9 +36,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/access"
-	gomotepb "golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
-	"golang.org/x/build/internal/iapclient"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui"
 	"golang.org/x/build/internal/relui/db"
@@ -155,16 +153,6 @@ func main() {
 		Username: "user-relui",
 		Password: key(*masterKey, "user-relui"),
 	}
-	cc, err := iapclient.GRPCClient(ctx, "build.golang.org:443")
-	if err != nil {
-		log.Fatalf("Could not connect to coordinator: %v", err)
-	}
-	coordinator := &buildlet.GRPCCoordinatorClient{
-		Client: gomotepb.NewGomoteServiceClient(cc),
-	}
-	if _, err := coordinator.Client.Authenticate(ctx, &gomotepb.AuthenticateRequest{}); err != nil {
-		log.Fatalf("Broken coordinator client: %v", err)
-	}
 	gcsClient, err := storage.NewClient(ctx)
 	if err != nil {
 		log.Fatalf("Could not connect to GCS: %v", err)
@@ -237,7 +225,6 @@ func main() {
 		GerritHTTPClient:     oauth2.NewClient(ctx, creds.TokenSource),
 		PrivateGerritClient:  privateGerritClient,
 		PrivateGerritProject: "golang/go-private",
-		CreateBuildlet:       coordinator.CreateBuildlet,
 		SignService:          signServer,
 		GCSClient:            gcsClient,
 		ScratchFS: &task.ScratchFS{

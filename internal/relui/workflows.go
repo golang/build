@@ -30,7 +30,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/google/go-cmp/cmp"
 	pb "go.chromium.org/luci/buildbucket/proto"
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/installer/darwinpkg"
@@ -515,7 +514,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 	var mods []wf.Value[moduleArtifact]
 	var blockers []wf.Dependency
 
-	// Build, test and sign binary artifacts for all targets.
+	// Build and sign binary artifacts for all targets.
 	for _, target := range targets {
 		wd := wd.Sub(target.Name)
 
@@ -556,36 +555,25 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 			artifacts = append(artifacts, tar)
 		}
 		mods = append(mods, mod)
-		if target.BuildOnly {
-			continue
-		}
-		short := wf.Action3(wd, "Run short tests", tasks.runTests, wf.Const(dashboard.Builders[target.Builder]), skipTests, tar)
-		blockers = append(blockers, short)
-		if target.LongTestBuilder != "" {
-			long := wf.Action3(wd, "Run long tests", tasks.runTests, wf.Const(dashboard.Builders[target.LongTestBuilder]), skipTests, tar)
-			blockers = append(blockers, long)
-		}
 	}
 	signedArtifacts := wf.Task1(wd, "Compute GPG signature for artifacts", tasks.computeGPG, wf.Slice(artifacts...))
 
-	// Run advisory trybots.
-	var advisoryResults []wf.Value[testResult]
-	for _, bc := range advisoryTryBots(major) {
-		result := wf.Task3(wd, "Run advisory TryBot "+bc.Name, tasks.runAdvisoryTryBot, wf.Const(bc), skipTests, source)
-		advisoryResults = append(advisoryResults, result)
-	}
-	tryBotsApproved := wf.Action1(wd, "Wait for advisory TryBots", tasks.checkTestResults, wf.Slice(advisoryResults...))
+	// Test all targets.
 	builders := wf.Task2(wd, "Read builders", tasks.readRelevantBuilders, wf.Const(major), wf.Const(kind))
 	builderResults := wf.Expand1(wd, "Plan builders", func(wd *wf.Definition, builders []string) (wf.Value[[]testResult], error) {
 		var results []wf.Value[testResult]
 		for _, b := range builders {
+			// Note: We can consider adding an "is_first_class" property into builder config
+			// and using it to display whether the builder is for a first class port or not.
+			// Until then, it's up to the release coordinator to make this distintinction when
+			// approving any failures.
 			res := wf.Task3(wd, "Run advisory builder "+b, tasks.runAdvisoryBuildBucket, wf.Const(b), skipTests, sourceSpec)
 			results = append(results, res)
 		}
 		return wf.Slice(results...), nil
 	}, builders)
 	buildersApproved := wf.Action1(wd, "Wait for advisory builders", tasks.checkTestResults, builderResults)
-	blockers = append(blockers, tryBotsApproved, buildersApproved)
+	blockers = append(blockers, buildersApproved)
 
 	signedAndTested := wf.Task2(wd, "Wait for signing and tests", func(ctx *wf.TaskContext, artifacts []artifact, version string) ([]artifact, error) {
 		// Note: Note this needs to happen somewhere, doesn't matter where. Maybe move it to a nicer place later.
@@ -602,25 +590,6 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 	return source, signedAndTested, wf.Slice(mods...)
 }
 
-func advisoryTryBots(major int) []*dashboard.BuildConfig {
-	usedBuilders := map[string]bool{}
-	for _, t := range releasetargets.TargetsForGo1Point(major) {
-		usedBuilders[t.Builder] = true
-		usedBuilders[t.LongTestBuilder] = true
-	}
-
-	var extras []*dashboard.BuildConfig
-	for name, bc := range dashboard.Builders {
-		if !usedBuilders[name] &&
-			bc.BuildsRepoPostSubmit("go", fmt.Sprintf("release-branch.go1.%d", major), "") &&
-			bc.HostConfig().IsGoogle() &&
-			len(bc.KnownIssues) == 0 {
-			extras = append(extras, bc)
-		}
-	}
-	return extras
-}
-
 // BuildReleaseTasks serves as an adapter to the various build tasks in the task package.
 type BuildReleaseTasks struct {
 	GerritClient             task.GerritClient
@@ -635,7 +604,6 @@ type BuildReleaseTasks struct {
 	DownloadURL              string
 	ProxyPrefix              string // ProxyPrefix is the prefix at which module files are published, e.g. https://proxy.golang.org/golang.org/toolchain/@v
 	PublishFile              func(task.WebsiteFile) error
-	CreateBuildlet           func(context.Context, string) (buildlet.RemoteClient, error)
 	SignService              sign.Service
 	GoogleDockerBuildProject string
 	GoogleDockerBuildTrigger string
@@ -684,7 +652,7 @@ func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, source sourceSpec) 
 		return artifact{}, fmt.Errorf("failed to fetch %q: %v", source.ArchiveURL(), resp.Status)
 	}
 	defer resp.Body.Close()
-	return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, nil, artifact{}, "src.tar.gz", func(_ io.Reader, w io.Writer) error {
 		return b.buildSourceGCB(ctx, resp.Body, source.VersionFile, w)
 	})
 }
@@ -768,7 +736,7 @@ func (b *BuildReleaseTasks) diffArtifacts(ctx *wf.TaskContext, a1, a2 artifact) 
 
 func (b *BuildReleaseTasks) hashArtifact(ctx *wf.TaskContext, a artifact) (map[string]string, error) {
 	hashes := map[string]string{}
-	_, err := b.runBuildStep(ctx, nil, nil, a, "", func(_ *task.BuildletStep, r io.Reader, _ io.Writer) error {
+	_, err := b.runBuildStep(ctx, nil, a, "", func(r io.Reader, _ io.Writer) error {
 		return tarballHashes(r, "", hashes, false)
 	})
 	return hashes, err
@@ -810,8 +778,9 @@ func tarballHashes(r io.Reader, prefix string, hashes map[string]string, include
 }
 
 func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, nil, artifact{}, "tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, target, artifact{}, "tar.gz", func(_ io.Reader, w io.Writer) error {
 		// We need GOROOT_FINAL both during the binary build and test runs. See go.dev/issue/52236.
+		// TODO(go.dev/issue/62047): GOROOT_FINAL is being removed. Remove it from here too.
 		makeEnv := []string{"GOROOT_FINAL=" + dashboard.GorootFinal(target.GOOS)}
 		// Add extra vars from the target's configuration.
 		makeEnv = append(makeEnv, target.ExtraEnv...)
@@ -846,7 +815,7 @@ tar -xf src.tar.gz
 }
 
 func (b *BuildReleaseTasks) reproduceDistpack(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
-	return b.runBuildStep(ctx, target, nil, artifact{}, "tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, target, artifact{}, "tar.gz", func(_ io.Reader, w io.Writer) error {
 		scratchFile := b.ScratchFS.WriteFilename(ctx, fmt.Sprintf("reproduce-distpack-%v.tar.gz", target.Name))
 		// This script is carefully crafted to work on both Windows and Unix
 		// for testing. In particular, Windows doesn't seem to like ./foo.exe,
@@ -908,14 +877,14 @@ func (b *BuildReleaseTasks) binaryArchiveFromDistpack(ctx *wf.TaskContext, distp
 	if distpack.Target.GOOS == "windows" {
 		suffix = "zip"
 	}
-	return b.runBuildStep(ctx, distpack.Target, nil, distpack, suffix, func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, distpack.Target, distpack, suffix, func(r io.Reader, w io.Writer) error {
 		return task.ExtractFile(r, w, glob)
 	})
 }
 
 func (b *BuildReleaseTasks) modFilesFromDistpack(ctx *wf.TaskContext, distpack artifact) (moduleArtifact, error) {
 	result := moduleArtifact{Target: distpack.Target}
-	artifact, err := b.runBuildStep(ctx, nil, nil, distpack, "mod.zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+	artifact, err := b.runBuildStep(ctx, nil, distpack, "mod.zip", func(r io.Reader, w io.Writer) error {
 		zr, err := gzip.NewReader(r)
 		if err != nil {
 			return err
@@ -967,7 +936,7 @@ func (b *BuildReleaseTasks) modFilesFromDistpack(ctx *wf.TaskContext, distpack a
 
 func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, version string, t time.Time, tar artifact) (moduleArtifact, error) {
 	result := moduleArtifact{Target: tar.Target}
-	a, err := b.runBuildStep(ctx, nil, nil, tar, "mod.zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+	a, err := b.runBuildStep(ctx, nil, tar, "mod.zip", func(r io.Reader, w io.Writer) error {
 		ctx.DisableWatchdog() // The zipping process can be time consuming and is unlikely to hang.
 		var err error
 		result.Mod, result.Info, err = task.TarToModFiles(tar.Target, version, t, r, w)
@@ -981,7 +950,7 @@ func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, version stri
 }
 
 func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, signed artifact) (artifact, error) {
-	return b.runBuildStep(ctx, unsigned.Target, nil, signed, "tar.gz", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, unsigned.Target, signed, "tar.gz", func(signed io.Reader, w io.Writer) error {
 		signedBinaries, err := task.ReadBinariesFromPKG(signed)
 		if err != nil {
 			return err
@@ -1040,7 +1009,7 @@ func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, sign
 }
 
 func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version string, timestamp time.Time, mod moduleArtifact, signed artifact) (moduleArtifact, error) {
-	a, err := b.runBuildStep(ctx, nil, nil, signed, "signedmod.zip", func(_ *task.BuildletStep, signed io.Reader, w io.Writer) error {
+	a, err := b.runBuildStep(ctx, nil, signed, "signedmod.zip", func(signed io.Reader, w io.Writer) error {
 		signedBinaries, err := task.ReadBinariesFromPKG(signed)
 		if err != nil {
 			return err
@@ -1103,7 +1072,7 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 
 // buildDarwinPKG constructs an installer for the given binary artifact, to be signed.
 func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, binary.Target, nil, artifact{}, "pkg", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, binary.Target, artifact{}, "pkg", func(_ io.Reader, w io.Writer) error {
 		metadataFile, err := jsonEncodeScratchFile(ctx, b.ScratchFS, darwinpkg.InstallerOptions{
 			GOARCH:          binary.Target.GOARCH,
 			MinMacOSVersion: binary.Target.MinMacOSVersion,
@@ -1138,7 +1107,7 @@ func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, binary artifact)
 
 // buildWindowsMSI constructs an installer for the given binary artifact, to be signed.
 func (b *BuildReleaseTasks) buildWindowsMSI(ctx *wf.TaskContext, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, binary.Target, nil, artifact{}, "msi", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, binary.Target, artifact{}, "msi", func(_ io.Reader, w io.Writer) error {
 		metadataFile, err := jsonEncodeScratchFile(ctx, b.ScratchFS, windowsmsi.InstallerOptions{
 			GOARCH: binary.Target.GOARCH,
 		})
@@ -1171,7 +1140,7 @@ func (b *BuildReleaseTasks) buildWindowsMSI(ctx *wf.TaskContext, binary artifact
 }
 
 func (b *BuildReleaseTasks) convertZipToTGZ(ctx *wf.TaskContext, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, binary.Target, nil, binary, "tar.gz", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, binary.Target, binary, "tar.gz", func(r io.Reader, w io.Writer) error {
 		// Reading the whole file isn't ideal, but we need a ReaderAt, and
 		// don't have access to the lower-level file (which would support
 		// seeking) here.
@@ -1238,7 +1207,7 @@ func (b *BuildReleaseTasks) computeGPG(ctx *wf.TaskContext, artifacts []artifact
 
 // signArtifact signs a single artifact of specified type.
 func (b *BuildReleaseTasks) signArtifact(ctx *wf.TaskContext, a artifact, bt sign.BuildType) (signed artifact, _ error) {
-	return b.runBuildStep(ctx, a.Target, nil, artifact{}, a.Suffix, func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
+	return b.runBuildStep(ctx, a.Target, artifact{}, a.Suffix, func(_ io.Reader, w io.Writer) error {
 		signedPaths, err := b.signArtifacts(ctx, bt, []string{b.ScratchFS.URL(ctx, a.Scratch)})
 		if err != nil {
 			return err
@@ -1315,19 +1284,6 @@ func (b *BuildReleaseTasks) signArtifacts(ctx *wf.TaskContext, bt sign.BuildType
 	return outFiles, nil
 }
 
-func (b *BuildReleaseTasks) runTests(ctx *wf.TaskContext, build *dashboard.BuildConfig, skipTests []string, binary artifact) error {
-	for _, skip := range skipTests {
-		if skip == "all" || binary.Target.Name == skip {
-			ctx.Printf("Skipping test")
-			return nil
-		}
-	}
-	_, err := b.runBuildStep(ctx, binary.Target, build, binary, "", func(bs *task.BuildletStep, r io.Reader, _ io.Writer) error {
-		return bs.TestTarget(ctx, r)
-	})
-	return err
-}
-
 func (b *BuildReleaseTasks) readRelevantBuilders(ctx *wf.TaskContext, major int, kind task.ReleaseKind) ([]string, error) {
 	prefix := fmt.Sprintf("go1.%v-", major)
 	if kind == task.KindBeta {
@@ -1376,15 +1332,6 @@ func (b *BuildReleaseTasks) readRelevantBuilders(ctx *wf.TaskContext, major int,
 type testResult struct {
 	Name   string
 	Passed bool
-}
-
-func (b *BuildReleaseTasks) runAdvisoryTryBot(ctx *wf.TaskContext, bc *dashboard.BuildConfig, skipTests []string, source artifact) (testResult, error) {
-	return b.runAdvisoryTest(ctx, bc.Name, skipTests, func() error {
-		_, err := b.runBuildStep(ctx, nil, bc, source, "", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-			return bs.RunTryBot(ctx, r)
-		})
-		return err
-	})
 }
 
 func (b *BuildReleaseTasks) runAdvisoryBuildBucket(ctx *wf.TaskContext, name string, skipTests []string, source sourceSpec) (testResult, error) {
@@ -1451,8 +1398,6 @@ func (b *BuildReleaseTasks) checkTestResults(ctx *wf.TaskContext, results []test
 }
 
 // runBuildStep is a convenience function that manages resources a build step might need.
-// If a build config is specified, a BuildletStep will be passed to f. The target and build config
-// need not match.
 // If input with a scratch file is specified, its content will be opened and passed as a Reader to f.
 // If outputSuffix is specified, a unique filename will be generated based off
 // it (and the target name, if any), the file will be opened and passed as a
@@ -1460,30 +1405,10 @@ func (b *BuildReleaseTasks) checkTestResults(ctx *wf.TaskContext, results []test
 func (b *BuildReleaseTasks) runBuildStep(
 	ctx *wf.TaskContext,
 	target *releasetargets.Target,
-	build *dashboard.BuildConfig,
 	input artifact,
 	outputSuffix string,
-	f func(*task.BuildletStep, io.Reader, io.Writer) error,
+	f func(io.Reader, io.Writer) error,
 ) (artifact, error) {
-	var step *task.BuildletStep
-	if build != nil {
-		ctx.Printf("Creating buildlet %v.", build.Name)
-		client, err := b.CreateBuildlet(ctx, build.Name)
-		if err != nil {
-			return artifact{}, err
-		}
-		defer client.Close()
-		w := &task.LogWriter{Logger: ctx}
-		go w.Run(ctx)
-		step = &task.BuildletStep{
-			Target:      target,
-			Buildlet:    client,
-			BuildConfig: build,
-			LogWriter:   w,
-		}
-		ctx.Printf("Buildlet ready.")
-	}
-
 	var err error
 	var in io.ReadCloser
 	if input.Scratch != "" {
@@ -1512,13 +1437,8 @@ func (b *BuildReleaseTasks) runBuildStep(
 	}
 	// Hide in's Close method from the task, which may assert it to Closer.
 	nopIn := io.NopCloser(in)
-	if err := f(step, nopIn, multiOut); err != nil {
+	if err := f(nopIn, multiOut); err != nil {
 		return artifact{}, err
-	}
-	if step != nil {
-		if err := step.Buildlet.Close(); err != nil {
-			return artifact{}, err
-		}
 	}
 	if in != nil {
 		if err := in.Close(); err != nil {

@@ -90,7 +90,6 @@ esac
 type releaseTestDeps struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
-	buildlets      *task.FakeBuildlets
 	buildBucket    *task.FakeBuildBucketClient
 	goRepo         *task.FakeRepo
 	gerrit         *reviewerCheckGerrit
@@ -111,7 +110,6 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	// Set up a server that will be used to serve inputs to the build.
 	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
 	t.Cleanup(bootstrapServer.Close)
-	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, nil)
 
 	// Set up the fake CDN publishing process.
 	servingDir := t.TempDir()
@@ -172,7 +170,6 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		ScratchFS:                &task.ScratchFS{BaseURL: "file://" + scratchDir},
 		SignedURL:                "file://" + scratchDir + "/signed/outputs",
 		ServingURL:               "file://" + filepath.ToSlash(servingDir),
-		CreateBuildlet:           fakeBuildlets.CreateBuildlet,
 		SignService:              task.NewFakeSignService(t, scratchDir+"/signed/outputs"),
 		DownloadURL:              dlServer.URL,
 		ProxyPrefix:              dlServer.URL,
@@ -195,7 +192,6 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	return &releaseTestDeps{
 		ctx:            ctx,
 		cancel:         cancel,
-		buildlets:      fakeBuildlets,
 		buildBucket:    buildBucket,
 		goRepo:         goRepo,
 		gerrit:         gerrit,
@@ -449,8 +445,8 @@ func TestAdvisoryTestsFail(t *testing.T) {
 	if _, err := w.Run(deps.ctx, &verboseListener{t: t}); err != nil {
 		t.Fatal(err)
 	}
-	if testApprovals.Load() != 2 {
-		t.Errorf("advisory trybots didn't need approval")
+	if testApprovals.Load() != 1 {
+		t.Errorf("failed advisory builder didn't need approval")
 	}
 }
 
