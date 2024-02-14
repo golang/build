@@ -433,24 +433,24 @@ func TestBuildStatusFormat(t *testing.T) {
 		{
 			st: &buildStatus{
 				BuilderRev: buildgo.BuilderRev{
-					Name: "darwin-amd64-10_14",
+					Name: "darwin-amd64-13",
 				},
 				commitDetail: commitDetail{
 					RevBranch: "master",
 				},
 			},
-			want: "darwin-amd64-10_14",
+			want: "darwin-amd64-13",
 		},
 		{
 			st: &buildStatus{
 				BuilderRev: buildgo.BuilderRev{
-					Name: "darwin-amd64-10_14",
+					Name: "darwin-amd64-13",
 				},
 				commitDetail: commitDetail{
 					RevBranch: "release-branch.go1.15",
 				},
 			},
-			want: "darwin-amd64-10_14 (Go 1.15.x)",
+			want: "darwin-amd64-13 (Go 1.15.x)",
 		},
 	} {
 		if got := tt.st.NameAndBranch(); got != tt.want {

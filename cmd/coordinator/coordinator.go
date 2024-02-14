@@ -479,7 +479,7 @@ func stagingClusterBuilders() map[string]*dashboard.BuildConfig {
 		"linux-amd64",
 		"linux-amd64-sid",
 		"linux-amd64-clang",
-		"js-wasm",
+		"js-wasm-node18",
 	} {
 		if c, ok := dashboard.Builders[name]; ok {
 			m[name] = c

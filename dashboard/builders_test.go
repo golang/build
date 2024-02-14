@@ -142,7 +142,7 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.21",
+			branch: "release-branch.go1.22",
 			want: []string{
 				"freebsd-amd64-12_3",
 				"js-wasm-node18",
@@ -178,6 +178,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-386",
 				"misc-compile-openbsd-arm",
 				"misc-compile-openbsd-arm64",
+				"misc-compile-openbsd-ppc64-go1.22", // New to Go 1.22.
 				"misc-compile-plan9-386",
 				"misc-compile-plan9-amd64",
 				"misc-compile-plan9-arm",
@@ -199,19 +200,17 @@ func TestTrybots(t *testing.T) {
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.20",
+			branch: "release-branch.go1.21",
 			want: []string{
 				"freebsd-amd64-12_3",
-				"js-wasm",
+				"js-wasm-node18",
+				"wasip1-wasm-wasmtime",
 				"linux-386",
 				"linux-amd64",
 				"linux-amd64-boringcrypto",
-				"linux-amd64-nounified",
 				"linux-amd64-race",
 				"linux-arm64",
 				"openbsd-amd64-72",
-				"windows-386-2008",
-				"windows-386-2012",
 				"windows-386-2016",
 				"windows-amd64-2016",
 
@@ -587,10 +586,6 @@ func TestBuilderConfig(t *testing.T) {
 		{b("js-wasm-node18", "go"), both},
 		{b("js-wasm-node18@go1.21", "go"), both},
 		{b("js-wasm-node18@go1.20", "go"), none},
-		// Keep using js-wasm builder (with Node 14) only for Go 1.20 and older:
-		{b("js-wasm", "go"), none},
-		{b("js-wasm@go1.21", "go"), none},
-		{b("js-wasm@go1.20", "go"), both},
 		// Test js/wasm on a subset of golang.org/x repos:
 		{b("js-wasm-node18", "arch"), onlyPost},
 		{b("js-wasm-node18", "crypto"), onlyPost},
@@ -702,14 +697,14 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "exp"), both},
 		{b("linux-amd64-race", "exp"), both},
 		{b("linux-amd64-longtest", "exp"), onlyPost},
-		{b("windows-386-2008", "exp"), none},
+		{b("windows-386-2016", "exp"), none},
 		{b("windows-amd64-2016", "exp"), both},
 		{b("darwin-amd64-10_15", "exp"), none},
 		{b("darwin-amd64-11_0", "exp"), onlyPost},
 		// ... but not on most others:
 		{b("freebsd-386-12_3", "exp"), none},
 		{b("freebsd-amd64-12_3", "exp"), none},
-		{b("js-wasm", "exp"), none},
+		{b("js-wasm-node18", "exp"), none},
 		{b("wasip1-wasm-wazero", "exp"), none},
 		{b("wasip1-wasm-wasmtime", "exp"), none},
 		{b("wasip1-wasm-wasmer", "exp"), none},
@@ -739,7 +734,7 @@ func TestBuilderConfig(t *testing.T) {
 
 		{b("linux-amd64@go1.20", "pkgsite-metrics"), both},
 
-		{b("js-wasm", "build"), none},
+		{b("js-wasm-node18", "build"), none},
 		{b("wasip1-wasm-wazero", "build"), none},
 		{b("wasip1-wasm-wasmtime", "build"), none},
 		{b("wasip1-wasm-wasmer", "build"), none},
@@ -786,16 +781,9 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-staticlockranking", "go"), onlyPost},
 		{b("linux-amd64-staticlockranking", "net"), none},
 
-		{b("linux-amd64-nounified", "go"), none},
-		{b("linux-amd64-nounified", "tools"), none},
-		{b("linux-amd64-nounified", "net"), none},
-		{b("linux-amd64-nounified@go1.20", "go"), both},
-		{b("linux-amd64-nounified@go1.20", "tools"), both},
-		{b("linux-amd64-nounified@go1.20", "net"), none},
-
 		{b("linux-amd64-newinliner", "go"), both},
 		{b("linux-amd64-newinliner", "tools"), none},
-		{b("linux-amd64-newinliner@go1.20", "go"), none},
+		{b("linux-amd64-newinliner@go1.22", "go"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
@@ -892,11 +880,11 @@ func TestShouldRunDistTest(t *testing.T) {
 		{"linux-amd64", "reboot", tryMode, true},
 		{"linux-amd64-race", "reboot", tryMode, false},
 
-		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
-		{"darwin-amd64-10_14", "reboot", postSubmit, false},
-		{"darwin-amd64-10_14", "api", postSubmit, false},
-		{"darwin-amd64-10_14", "codewalk", postSubmit, false},
-		{"darwin-amd64-10_15", "test:foo", postSubmit, false},
+		{"darwin-amd64-13", "test:foo", postSubmit, false},
+		{"darwin-amd64-13", "reboot", postSubmit, false},
+		{"darwin-amd64-13", "api", postSubmit, false},
+		{"darwin-amd64-13", "codewalk", postSubmit, false},
+		{"darwin-amd64-12_0", "test:foo", postSubmit, false},
 	}
 	for _, tt := range tests {
 		bc, ok := Builders[tt.builder]

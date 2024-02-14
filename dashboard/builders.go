@@ -54,6 +54,7 @@ var slowBotAliases = map[string]string{
 	"illumos":               "illumos-amd64",
 	"ios":                   "ios-arm64-corellium",
 	"js":                    "js-wasm-node18",
+	"js-wasm":               "js-wasm-node18",
 	"wasip1":                "wasip1-wasm-wasmtime",
 	"wasip1-wasm":           "wasip1-wasm-wasmtime",
 	"linux":                 "linux-amd64",
@@ -150,14 +151,6 @@ var Hosts = map[string]*HostConfig{
 			// Issue 50084.
 			"GOMAXPROCS=1",
 		},
-	},
-	"host-darwin-amd64-10_14-aws": {
-		IsReverse:       true,
-		ExpectNum:       2,
-		Notes:           "AWS macOS Mojave (10.14) VM under QEMU",
-		SSHUsername:     "gopher",
-		HermeticReverse: true, // we destroy the VM when done & recreate
-		GoogleReverse:   true,
 	},
 	"host-darwin-amd64-10_15-aws": {
 		IsReverse:       true,
@@ -300,11 +293,6 @@ var Hosts = map[string]*HostConfig{
 	"host-linux-amd64-fedora": {
 		Notes:          "Fedora 30",
 		ContainerImage: "linux-x86-fedora:latest",
-		SSHUsername:    "root",
-	},
-	"host-linux-amd64-js-wasm": {
-		Notes:          "Container with Node.js 14 for testing js/wasm.",
-		ContainerImage: "js-wasm:latest",
 		SSHUsername:    "root",
 	},
 	"host-linux-amd64-js-wasm-node18": {
@@ -565,14 +553,6 @@ var Hosts = map[string]*HostConfig{
 		Owners:    []*gophers.Person{gh("rorth")}, // https://github.com/golang/go/issues/15581#issuecomment-550368581
 		IsReverse: true,
 		ExpectNum: 1,
-	},
-	"host-windows-amd64-2008": {
-		VMImage:     "windows-amd64-server-2008r2-v8",
-		SSHUsername: "gopher",
-	},
-	"host-windows-amd64-2012": {
-		VMImage:     "windows-amd64-server-2012r2-v8",
-		SSHUsername: "gopher",
 	},
 	"host-windows-amd64-2016": {
 		VMImage:     "windows-amd64-server-2016-v9",
@@ -1761,23 +1741,6 @@ func init() {
 		},
 	})
 	addBuilder(BuildConfig{
-		Name:     "linux-amd64-nounified",
-		HostType: "host-linux-amd64-bullseye",
-		Notes:    "builder with GOEXPERIMENT=nounified, see go.dev/issue/51397 and go.dev/issue/57977",
-		tryBot: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "tools") && goBranch == "release-branch.go1.20"
-		},
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return (repo == "go" || repo == "tools") && goBranch == "release-branch.go1.20"
-		},
-		env: []string{
-			"GO_DISABLE_OUTBOUND_NETWORK=1",
-			"GOEXPERIMENT=nounified",
-		},
-		numTestHelpers:    1,
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
 		Name:     "linux-amd64-newinliner",
 		HostType: "host-linux-amd64-bullseye",
 		Notes:    "builder with GOEXPERIMENT=newinliner, see go.dev/issue/61883",
@@ -1975,44 +1938,6 @@ func init() {
 			"GO_TEST_TIMEOUT_SCALE=5", // give them lots of time
 		},
 		numTryTestHelpers: 4, // Target time is < 15 min for go.dev/issue/42661.
-	})
-	addBuilder(BuildConfig{
-		Name:     "js-wasm",
-		HostType: "host-linux-amd64-js-wasm",
-		tryBot:   explicitTrySet("go"),
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Go 1.20 is the last Go release that works with Node 14. See issue 57614.
-			b := buildRepoByDefault(repo) && atMostGo1(goBranch, 20)
-			switch repo {
-			case "benchmarks", "debug", "perf", "talks", "tools", "tour", "website":
-				// Don't test these golang.org/x repos.
-				b = false
-			}
-			if repo != "go" && !(branch == "master" && goBranch == "master") {
-				// For golang.org/x repos, don't test non-latest versions.
-				b = false
-			}
-			return b
-		},
-		distTestAdjust: func(run bool, distTest string, isNormalTry bool) bool {
-			if isNormalTry {
-				if strings.Contains(distTest, "/internal/") ||
-					strings.Contains(distTest, "vendor/golang.org/x/arch") {
-					return false
-				}
-				switch distTest {
-				case "nolibgcc:crypto/x509", "reboot":
-					return false
-				}
-			}
-			return run
-		},
-		numTryTestHelpers: 5,
-		env: []string{
-			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
-			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
-			"GO_DISABLE_OUTBOUND_NETWORK=1",
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:     "js-wasm-node18",
@@ -2219,74 +2144,11 @@ func init() {
 		KnownIssues: []int{29801},
 	})
 	addBuilder(BuildConfig{
-		Name:           "windows-amd64-2008",
-		HostType:       "host-windows-amd64-2008",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Go 1.20 is the last version with Windows 7 support. See proposal 57003.
-			return onlyGo(repo, branch, goBranch) &&
-				atMostGo1(goBranch, 20)
-		},
-		env: []string{
-			"GOARCH=amd64",
-			"GOHOSTARCH=amd64",
-			// cmd/go takes ~188 seconds on windows-amd64
-			// now, which is over the 180 second default
-			// dist test timeout. So, bump this builder
-			// up:
-			"GO_TEST_TIMEOUT_SCALE=2",
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:     "windows-386-2008",
-		HostType: "host-windows-amd64-2008",
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Go 1.20 is the last version with Windows 7 support. See proposal 57003.
-			return defaultPlusExpBuild(repo, branch, goBranch) &&
-				atMostGo1(goBranch, 20)
-		},
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot:            defaultTrySet(),
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:           "windows-386-2012",
-		HostType:       "host-windows-amd64-2012",
-		distTestAdjust: fasterTrybots,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Go 1.20 is the last version with Windows 8/8.1 support. See proposal 57004.
-			return onlyGo(repo, branch, goBranch) &&
-				atMostGo1(goBranch, 20)
-		},
-		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
-		tryBot:            defaultTrySet(),
-		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
 		Name:              "windows-386-2016",
 		HostType:          "host-windows-amd64-2016",
 		env:               []string{"GOARCH=386", "GOHOSTARCH=386"},
 		tryBot:            defaultTrySet(),
 		numTryTestHelpers: 4,
-	})
-	addBuilder(BuildConfig{
-		Name:           "windows-amd64-2012",
-		HostType:       "host-windows-amd64-2012",
-		distTestAdjust: noTestDirAndNoReboot,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			// Go 1.20 is the last version with Windows 8/8.1 support. See proposal 57004.
-			return onlyGo(repo, branch, goBranch) &&
-				atMostGo1(goBranch, 20)
-		},
-		env: []string{
-			"GOARCH=amd64",
-			"GOHOSTARCH=amd64",
-			// cmd/go takes ~188 seconds on windows-amd64
-			// now, which is over the 180 second default
-			// dist test timeout. So, bump this builder
-			// up:
-			"GO_TEST_TIMEOUT_SCALE=2",
-		},
 	})
 	addBuilder(BuildConfig{
 		Name:           "windows-amd64-2016",
@@ -2355,14 +2217,6 @@ func init() {
 			// Note: GOMAXPROCS=4 workaround for go.dev/issue/51019
 			// tentatively removed here, since Azure VMs have 3x more
 			// RAM than the previous win11/arm64 machines.
-		},
-	})
-	addBuilder(BuildConfig{
-		Name:           "darwin-amd64-10_14",
-		HostType:       "host-darwin-amd64-10_14-aws",
-		distTestAdjust: macTestPolicy,
-		buildsRepo: func(repo, branch, goBranch string) bool {
-			return defaultPlusExp(repo, branch, goBranch) && atMostGo1(goBranch, 20)
 		},
 	})
 	addBuilder(BuildConfig{
