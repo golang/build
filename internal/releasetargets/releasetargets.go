@@ -16,13 +16,10 @@ import (
 )
 
 type Target struct {
-	Name            string
-	GOOS, GOARCH    string
-	SecondClass     bool
-	Builder         string
-	BuildOnly       bool
-	LongTestBuilder string
-	ExtraEnv        []string // Extra environment variables set during toolchain build.
+	Name         string
+	GOOS, GOARCH string
+	SecondClass  bool     // A port that is not a first class port. See go.dev/wiki/PortingPolicy#first-class-ports.
+	ExtraEnv     []string // Extra environment variables set during toolchain build.
 
 	// For Darwin targets, the minimum targeted version, e.g. 10.13 or 13.
 	MinMacOSVersion string
@@ -62,60 +59,29 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 var allReleases = map[int]ReleaseTargets{
 	21: {
 		"darwin-amd64": &Target{
-			Builder:         "darwin-amd64-13",
-			LongTestBuilder: "darwin-amd64-longtest",
 			MinMacOSVersion: "10.15", // go.dev/issue/57125
 		},
 		"darwin-arm64": &Target{
-			Builder:         "darwin-arm64-12",
 			MinMacOSVersion: "11", // Big Sur was the first release with M1 support.
 		},
-		"freebsd-386": &Target{
-			SecondClass: true,
-			Builder:     "freebsd-386-13_0",
-		},
-		"freebsd-amd64": &Target{
-			SecondClass: true,
-			Builder:     "freebsd-amd64-13_0",
-		},
-		"linux-386": &Target{
-			Builder:         "linux-386-bullseye",
-			LongTestBuilder: "linux-386-longtest",
-		},
+		"linux-386": &Target{},
 		"linux-armv6l": &Target{
 			GOARCH:   "arm",
-			Builder:  "linux-arm-aws",
 			ExtraEnv: []string{"GOARM=6"},
 		},
-		"linux-amd64": &Target{
-			Builder:         "linux-amd64-bullseye",
-			LongTestBuilder: "linux-amd64-longtest",
-		},
-		"linux-arm64": &Target{
-			Builder:         "linux-arm64",
-			LongTestBuilder: "linux-arm64-longtest",
-		},
-		"windows-386": &Target{
-			Builder: "windows-386-2016",
-		},
-		"windows-amd64": &Target{
-			Builder:         "windows-amd64-2016",
-			LongTestBuilder: "windows-amd64-longtest",
-		},
+		"linux-amd64":   &Target{},
+		"linux-arm64":   &Target{},
+		"windows-386":   &Target{},
+		"windows-amd64": &Target{},
 		"windows-arm": &Target{
-			Builder:     "windows-arm64-11", // Windows builds need a builder to create their MSIs.
 			SecondClass: true,
-			BuildOnly:   true,
 		},
 		"windows-arm64": &Target{
 			SecondClass: true,
-			Builder:     "windows-arm64-11",
 		},
 	},
 	23: {
 		"darwin-amd64": &Target{
-			Builder:         "darwin-amd64-13",
-			LongTestBuilder: "darwin-amd64-longtest",
 			MinMacOSVersion: "11", // go.dev/issue/64207
 		},
 	},
@@ -217,7 +183,6 @@ func TargetsForGo1Point(x int) ReleaseTargets {
 			GOOS:        osarch.OS,
 			GOARCH:      osarch.Arch,
 			SecondClass: true,
-			BuildOnly:   true,
 		}
 	}
 	return targets

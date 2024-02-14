@@ -15,9 +15,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"golang.org/x/build/dashboard"
-	"golang.org/x/build/internal/coordinator/pool"
 )
 
 var update = flag.Bool("update", false, "controls whether to update releases.txt")
@@ -51,19 +48,11 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 	}
 	sort.Strings(targetNames)
 	for _, name := range targetNames {
+		const builder = "(cross-compiled via distpack)"
 		target := targets[name]
 		var flags []string
-		builder := target.Builder
-		if target.BuildOnly {
-			if builder == "" {
-				builder = "(cross-compiled, no tests)"
-			} else {
-				flags = append(flags, "Build only")
-			}
-
-		}
-		if target.LongTestBuilder != "" {
-			flags = append(flags, "Long tests on "+target.LongTestBuilder)
+		if !target.SecondClass {
+			flags = append(flags, "First class port")
 		}
 		if target.MinMacOSVersion != "" {
 			flags = append(flags, "Minimum macOS version is "+target.MinMacOSVersion)
@@ -75,39 +64,8 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 		if len(target.ExtraEnv) != 0 {
 			fmt.Fprintf(w, "\tExtra env: %q\n", target.ExtraEnv)
 		}
-		if bc, ok := dashboard.Builders[target.Builder]; ok {
-			var runningOn string
-			switch pool.ForHost(bc.HostConfig()).(type) {
-			case *pool.EC2Buildlet:
-				runningOn = "AWS"
-			case *pool.GCEBuildlet:
-				runningOn = "GCP"
-			case *pool.ReverseBuildletPool:
-				runningOn = fmt.Sprintf("reverse builder: %v", bc.HostConfig().Notes)
-			default:
-				runningOn = "unknown"
-			}
-			fmt.Fprintf(w, "\tRunning on %v\n", runningOn)
-		}
 
 		fmt.Fprintf(w, "\n")
 	}
 	fmt.Fprintf(w, "\n\n")
-}
-
-func TestBuildersExist(t *testing.T) {
-	for _, rel := range allReleases {
-		for _, target := range rel {
-			if target == nil || target.Builder == "" {
-				continue
-			}
-			_, ok := dashboard.Builders[target.Builder]
-			if !ok {
-				t.Errorf("missing builder: %q", target.Builder)
-			}
-			if _, ok := dashboard.Builders[target.LongTestBuilder]; target.LongTestBuilder != "" && !ok {
-				t.Errorf("missing longtest builder: %q", target.LongTestBuilder)
-			}
-		}
-	}
 }
