@@ -60,11 +60,11 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
 var allReleases = map[int]ReleaseTargets{
-	20: {
+	21: {
 		"darwin-amd64": &Target{
 			Builder:         "darwin-amd64-13",
-			MinMacOSVersion: "10.13",                                           // Issues #36025 #35459
-			ExtraEnv:        []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
+			LongTestBuilder: "darwin-amd64-longtest",
+			MinMacOSVersion: "10.15", // go.dev/issue/57125
 		},
 		"darwin-arm64": &Target{
 			Builder:         "darwin-arm64-12",
@@ -95,36 +95,6 @@ var allReleases = map[int]ReleaseTargets{
 			Builder:         "linux-arm64",
 			LongTestBuilder: "linux-arm64-longtest",
 		},
-		"linux-ppc64le": &Target{
-			SecondClass: true,
-			Builder:     "linux-ppc64le-buildlet",
-			BuildOnly:   true,
-		},
-		"linux-s390x": &Target{
-			SecondClass: true,
-			Builder:     "linux-s390x-crosscompile",
-			BuildOnly:   true,
-		},
-		"windows-386": &Target{
-			Builder: "windows-386-2008",
-		},
-		"windows-amd64": &Target{
-			Builder:         "windows-amd64-2008",
-			LongTestBuilder: "windows-amd64-longtest",
-		},
-		"windows-arm64": &Target{
-			SecondClass: true,
-			Builder:     "windows-arm64-11",
-		},
-	},
-	21: {
-		"darwin-amd64": &Target{
-			Builder:         "darwin-amd64-13",
-			LongTestBuilder: "darwin-amd64-longtest",
-			MinMacOSVersion: "10.15", // go.dev/issue/57125
-		},
-		"linux-s390x":   nil,
-		"linux-ppc64le": nil,
 		"windows-386": &Target{
 			Builder: "windows-386-2016",
 		},
@@ -136,6 +106,10 @@ var allReleases = map[int]ReleaseTargets{
 			Builder:     "windows-arm64-11", // Windows builds need a builder to create their MSIs.
 			SecondClass: true,
 			BuildOnly:   true,
+		},
+		"windows-arm64": &Target{
+			SecondClass: true,
+			Builder:     "windows-arm64-11",
 		},
 	},
 }
