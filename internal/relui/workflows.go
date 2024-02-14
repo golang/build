@@ -372,9 +372,8 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 		branch = "master"
 	}
 	branchVal := wf.Const(branch)
-	distpackVal := wf.Const(enableDistpack(major))
 	timestamp := wf.Task0(wd, "Timestamp release", now)
-	versionFile := wf.Task3(wd, "Generate VERSION file", version.GenerateVersionFile, distpackVal, nextVersion, timestamp)
+	versionFile := wf.Task2(wd, "Generate VERSION file", version.GenerateVersionFile, nextVersion, timestamp)
 	wf.Output(wd, "VERSION file", versionFile)
 	head := wf.Task1(wd, "Read branch head", version.ReadBranchHead, branchVal)
 	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, head, wf.Const(""), versionFile)
@@ -418,10 +417,6 @@ func addCommTasks(
 	wf.Output(wd, "Mastodon URL", mastodonURL)
 }
 
-func enableDistpack(major int) bool {
-	return major > 20
-}
-
 func now(_ context.Context) (time.Time, error) {
 	return time.Now().UTC().Round(time.Second), nil
 }
@@ -436,13 +431,12 @@ func addSingleReleaseWorkflow(
 		branch = "master"
 	}
 	branchVal := wf.Const(branch)
-	distpackVal := wf.Const(enableDistpack(major))
 	startingHead := wf.Task1(wd, "Read starting branch head", version.ReadBranchHead, branchVal)
 
 	// Select version, check milestones.
 	nextVersion := wf.Task2(wd, "Get next version", version.GetNextVersion, wf.Const(major), kindVal)
 	timestamp := wf.Task0(wd, "Timestamp release", now)
-	versionFile := wf.Task3(wd, "Generate VERSION file", version.GenerateVersionFile, distpackVal, nextVersion, timestamp)
+	versionFile := wf.Task2(wd, "Generate VERSION file", version.GenerateVersionFile, nextVersion, timestamp)
 	wf.Output(wd, "VERSION file", versionFile)
 	milestones := wf.Task2(wd, "Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
@@ -467,7 +461,7 @@ func addSingleReleaseWorkflow(
 	// been public when we started, but it should be now.
 	tagCommit := startingHead
 	if branch != "master" {
-		publishingHead := wf.Task4(wd, "Check branch state matches source archive", build.checkSourceMatch, distpackVal, branchVal, versionFile, source, wf.After(okayToTagAndPublish))
+		publishingHead := wf.Task3(wd, "Check branch state matches source archive", build.checkSourceMatch, branchVal, versionFile, source, wf.After(okayToTagAndPublish))
 		versionCL := wf.Task4(wd, "Mail version CL", version.CreateAutoSubmitVersionCL, branchVal, nextVersion, coordinators, versionFile, wf.After(publishingHead))
 		tagCommit = wf.Task2(wd, "Wait for version CL submission", version.AwaitCL, versionCL, publishingHead)
 	}
@@ -516,7 +510,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 	targets := releasetargets.TargetsForGo1Point(major)
 	skipTests := wf.Param(wd, wf.ParamDef[[]string]{Name: "Targets to skip testing (or 'all') (optional)", ParamType: wf.SliceShort})
 
-	source := wf.Task2(wd, "Build source archive", tasks.buildSource, wf.Const(enableDistpack(major)), sourceSpec)
+	source := wf.Task1(wd, "Build source archive", tasks.buildSource, sourceSpec)
 	artifacts := []wf.Value[artifact]{source}
 	var mods []wf.Value[moduleArtifact]
 	var blockers []wf.Dependency
@@ -525,12 +519,12 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 	for _, target := range targets {
 		wd := wd.Sub(target.Name)
 
-		// Build release artifacts for the platform. For 1.21+, use distpacks.
+		// Build release artifacts for the platform using make.bash -distpack.
 		// For windows, produce both a tgz and zip -- we need tgzs to run
 		// tests, even though we'll eventually publish the zips.
 		var tar, zip wf.Value[artifact]
 		var mod wf.Value[moduleArtifact]
-		if enableDistpack(major) {
+		{ // Block to improve diff readability. Can be unnested later.
 			distpack := wf.Task2(wd, "Build distpack", tasks.buildDistpack, wf.Const(target), source)
 			reproducer := wf.Task2(wd, "Reproduce distpack on Windows", tasks.reproduceDistpack, wf.Const(target), source)
 			match := wf.Action2(wd, "Check distpacks match", tasks.checkDistpacksMatch, distpack, reproducer)
@@ -542,12 +536,6 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 				tar = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
 			}
 			mod = wf.Task1(wd, "Get module files from distpack", tasks.modFilesFromDistpack, distpack)
-		} else {
-			tar = wf.Task2(wd, "Build binary archive", tasks.buildBinary, wf.Const(target), source)
-			if target.GOOS == "windows" {
-				zip = wf.Task1(wd, "Convert to .zip", tasks.convertTGZToZip, tar)
-			}
-			mod = wf.Task3(wd, "Convert binary archive to modules", tasks.modFilesFromBinary, version, timestamp, tar)
 		}
 
 		// Create installers and perform platform-specific signing where
@@ -687,7 +675,7 @@ func (b *BuildReleaseTasks) getGitSource(ctx *wf.TaskContext, branch, commit, se
 	}, nil
 }
 
-func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, distpack bool, source sourceSpec) (artifact, error) {
+func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, source sourceSpec) (artifact, error) {
 	resp, err := b.GerritHTTPClient.Get(source.ArchiveURL())
 	if err != nil {
 		return artifact{}, err
@@ -696,14 +684,8 @@ func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, distpack bool, sour
 		return artifact{}, fmt.Errorf("failed to fetch %q: %v", source.ArchiveURL(), resp.Status)
 	}
 	defer resp.Body.Close()
-
-	if distpack {
-		return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
-			return b.buildSourceGCB(ctx, resp.Body, source.VersionFile, w)
-		})
-	}
-	return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
-		return task.WriteSourceArchive(ctx, resp.Body, source.VersionFile, w)
+	return b.runBuildStep(ctx, nil, nil, artifact{}, "src.tar.gz", func(bs *task.BuildletStep, _ io.Reader, w io.Writer) error {
+		return b.buildSourceGCB(ctx, resp.Body, source.VersionFile, w)
 	})
 }
 
@@ -749,7 +731,7 @@ mv go/pkg/distpack/*.src.tar.gz src.tar.gz
 	return err
 }
 
-func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, distpack bool, branch, versionFile string, source artifact) (head string, _ error) {
+func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, branch, versionFile string, source artifact) (head string, _ error) {
 	head, err := b.GerritClient.ReadBranchHead(ctx, b.GerritProject, branch)
 	if err != nil {
 		return "", err
@@ -758,7 +740,7 @@ func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, distpack bool,
 	if err != nil {
 		return "", err
 	}
-	branchArchive, err := b.buildSource(ctx, distpack, spec)
+	branchArchive, err := b.buildSource(ctx, spec)
 	if err != nil {
 		return "", err
 	}
@@ -1119,13 +1101,6 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 	return mod, nil
 }
 
-func (b *BuildReleaseTasks) buildBinary(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
-	bc := dashboard.Builders[target.Builder]
-	return b.runBuildStep(ctx, target, bc, source, "tar.gz", func(bs *task.BuildletStep, r io.Reader, w io.Writer) error {
-		return bs.BuildBinary(ctx, r, w)
-	})
-}
-
 // buildDarwinPKG constructs an installer for the given binary artifact, to be signed.
 func (b *BuildReleaseTasks) buildDarwinPKG(ctx *wf.TaskContext, binary artifact) (artifact, error) {
 	return b.runBuildStep(ctx, binary.Target, nil, artifact{}, "pkg", func(_ *task.BuildletStep, _ io.Reader, w io.Writer) error {
@@ -1192,12 +1167,6 @@ func (b *BuildReleaseTasks) buildWindowsMSI(ctx *wf.TaskContext, binary artifact
 		defer r.Close()
 		_, err = io.Copy(w, r)
 		return err
-	})
-}
-
-func (b *BuildReleaseTasks) convertTGZToZip(ctx *wf.TaskContext, binary artifact) (artifact, error) {
-	return b.runBuildStep(ctx, binary.Target, nil, binary, "zip", func(_ *task.BuildletStep, r io.Reader, w io.Writer) error {
-		return task.ConvertTGZToZIP(r, w)
 	})
 }
 

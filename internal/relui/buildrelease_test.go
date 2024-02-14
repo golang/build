@@ -38,21 +38,18 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
-func TestNonDistpack(t *testing.T) {
-	t.Run("minor", func(t *testing.T) {
-		testRelease(t, "go1.20", 20, "go1.20.1", task.KindMinor)
-	})
-}
-
 func TestRelease(t *testing.T) {
+	t.Run("minor", func(t *testing.T) {
+		testRelease(t, "go1.22", 22, "go1.22.1", task.KindMinor)
+	})
 	t.Run("beta", func(t *testing.T) {
-		testRelease(t, "go1.20", 21, "go1.21beta1", task.KindBeta)
+		testRelease(t, "go1.22", 23, "go1.23beta1", task.KindBeta)
 	})
 	t.Run("rc", func(t *testing.T) {
-		testRelease(t, "go1.20", 21, "go1.21rc1", task.KindRC)
+		testRelease(t, "go1.22", 23, "go1.23rc1", task.KindRC)
 	})
 	t.Run("major", func(t *testing.T) {
-		testRelease(t, "go1.20", 21, "go1.21.0", task.KindMajor)
+		testRelease(t, "go1.22", 23, "go1.23.0", task.KindMajor)
 	})
 }
 

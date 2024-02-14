@@ -173,10 +173,7 @@ func nextVersion(version string) (string, error) {
 	return fmt.Sprintf("%s%d", version[:lastNonDigit+1], n+1), nil
 }
 
-func (t *VersionTasks) GenerateVersionFile(_ *workflow.TaskContext, distpack bool, version string, timestamp time.Time) (string, error) {
-	if !distpack {
-		return version, nil
-	}
+func (t *VersionTasks) GenerateVersionFile(_ *workflow.TaskContext, version string, timestamp time.Time) (string, error) {
 	return fmt.Sprintf("%v\ntime %v\n", version, timestamp.Format(time.RFC3339)), nil
 }
 
