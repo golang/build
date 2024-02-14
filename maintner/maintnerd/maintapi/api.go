@@ -205,11 +205,6 @@ func tryWorkItem(
 			w.GoBranch = []string{"master"}
 			w.GoVersion = []*apipb.MajorMinor{&develVersion}
 			for _, r := range supportedReleases {
-				if r.BranchName == "release-branch.go1.20" && w.Project == "build" {
-					// x/build stopped supporting Go 1.20 sooner.
-					continue
-				}
-
 				w.GoCommit = append(w.GoCommit, r.BranchCommit)
 				w.GoBranch = append(w.GoBranch, r.BranchName)
 				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{Major: r.Major, Minor: r.Minor})

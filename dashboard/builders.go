@@ -1299,13 +1299,7 @@ func buildRepoByDefault(repo string) bool {
 
 var (
 	defaultPlusExp      = defaultPlus("exp")
-	defaultPlusExpBuild = func(repo, branch, goBranch string) bool {
-		if repo == "build" && !atLeastGo1(goBranch, 21) {
-			// x/build stopped supporting Go 1.20 sooner.
-			return false
-		}
-		return defaultPlus("exp", "build")(repo, branch, goBranch)
-	}
+	defaultPlusExpBuild = defaultPlus("exp", "build")
 )
 
 // linux-amd64 and linux-amd64-race build all the repos.
@@ -1313,10 +1307,6 @@ var (
 // we only run them on servers and don't need to test the
 // many different architectures that Go supports (like ios).
 func linuxAmd64Repos(repo, branch, goBranch string) bool {
-	if repo == "build" && !atLeastGo1(goBranch, 21) {
-		// x/build stopped supporting Go 1.20 sooner.
-		return false
-	}
 	return true
 }
 
