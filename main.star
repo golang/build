@@ -233,14 +233,48 @@ GOOGLE_LOW_CAPACITY_HOSTS = [
     "windows-arm64",
 ]
 
+# TBD_CAPACITY_HOSTS lists "hosts" that whose capacity is yet to be determined.
+# When the work to add a host is underway, its entry should either move to the
+# LOW_CAPACITY_HOSTS list below, or removed if it's not low-capacity.
+TBD_CAPACITY_HOSTS = [
+    "aix-ppc64",
+    "android-386",
+    "android-amd64",
+    "android-arm",
+    "android-arm64",
+    "dragonfly-amd64",
+    "freebsd-386",
+    "freebsd-amd64",
+    "freebsd-arm",
+    "freebsd-arm64",
+    "illumos-amd64",
+    "ios-amd64",
+    "ios-arm64",
+    "linux-mips",
+    "linux-mips",
+    "linux-mips64",
+    "linux-mips64",
+    "linux-mips64le",
+    "linux-mips64le",
+    "linux-mipsle",
+    "linux-mipsle",
+    "linux-s390x",
+    "netbsd-386",
+    "netbsd-amd64",
+    "openbsd-386",
+    "openbsd-arm",
+    "openbsd-arm64",
+    "windows-arm",
+]
+
 # LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
 # They need to match the builder type, excluding any run mods.
-LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + [
+LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
     "freebsd-riscv64",
+    "linux-loong64",
     "linux-ppc64",
     "linux-ppc64le",
     "linux-riscv64",
-    "linux-loong64",
     "netbsd-arm",
     "netbsd-arm64",
     "openbsd-ppc64",
@@ -305,8 +339,13 @@ luci.list_view(
 #
 # The format of a builder type is thus $GOOS-$GOARCH(_osversion)?(-$RUN_MOD)*.
 BUILDER_TYPES = [
-    "darwin-amd64-nocgo",
+    "aix-ppc64",
+    "android-386",
+    "android-amd64",
+    "android-arm",
+    "android-arm64",
     "darwin-amd64-longtest",
+    "darwin-amd64-nocgo",
     "darwin-amd64_10.15",
     "darwin-amd64_11",
     "darwin-amd64_12",
@@ -315,11 +354,19 @@ BUILDER_TYPES = [
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
+    "dragonfly-amd64",
+    "freebsd-386",
+    "freebsd-amd64",
+    "freebsd-arm",
+    "freebsd-arm64",
     "freebsd-riscv64",
+    "illumos-amd64",
+    "ios-amd64",
+    "ios-arm64",
     "js-wasm",
     "linux-386",
-    "linux-386-softfloat",
     "linux-386-longtest",
+    "linux-386-softfloat",
     "linux-amd64",
     "linux-amd64-boringcrypto",
     "linux-amd64-clang15",
@@ -330,10 +377,10 @@ BUILDER_TYPES = [
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
     "linux-amd64-noopt",
+    "linux-amd64-perf_vs_gopls_0_11",
     "linux-amd64-perf_vs_parent",
     "linux-amd64-perf_vs_release",
     "linux-amd64-perf_vs_tip",
-    "linux-amd64-perf_vs_gopls_0_11",
     "linux-amd64-race",
     "linux-amd64-racecompile",
     "linux-amd64-ssacheck",
@@ -341,12 +388,22 @@ BUILDER_TYPES = [
     "linux-arm",
     "linux-arm64",
     "linux-loong64",
+    "linux-mips",
+    "linux-mips64",
+    "linux-mips64le",
+    "linux-mipsle",
     "linux-ppc64-power10",
     "linux-ppc64le",
     "linux-riscv64",
+    "linux-s390x",
+    "netbsd-386",
+    "netbsd-amd64",
     "netbsd-arm",
     "netbsd-arm64",
+    "openbsd-386",
     "openbsd-amd64",
+    "openbsd-arm",
+    "openbsd-arm64",
     "openbsd-ppc64",
     "openbsd-riscv64",
     "plan9-386",
@@ -359,19 +416,54 @@ BUILDER_TYPES = [
     "windows-amd64",
     "windows-amd64-longtest",
     "windows-amd64-race",
+    "windows-arm",
     "windows-arm64",
 ]
 
+def known_issue(issue_number, skip_x_repos = False):
+    return struct(
+        issue_number = issue_number,
+        skip_x_repos = skip_x_repos,  # Whether to skip defining builders for x/ repos.
+    )
+
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "freebsd-riscv64": struct(issue_number = 63482),
-    "linux-arm": struct(issue_number = 65241),
-    "linux-loong64": struct(issue_number = 65398),
-    "netbsd-arm": struct(issue_number = 63698),
-    "openbsd-ppc64": struct(issue_number = 63480),
-    "openbsd-riscv64": struct(issue_number = 64176),
-    "plan9-386": struct(issue_number = 63599),
-    "plan9-amd64": struct(issue_number = 63600),
-    "plan9-arm": struct(issue_number = 63601),
+    "freebsd-riscv64": known_issue(issue_number = 63482),
+    "linux-arm": known_issue(issue_number = 65241),
+    "linux-loong64": known_issue(issue_number = 65398),
+    "netbsd-arm": known_issue(issue_number = 63698),
+    "openbsd-ppc64": known_issue(issue_number = 63480),
+    "openbsd-riscv64": known_issue(issue_number = 64176),
+    "plan9-386": known_issue(issue_number = 63599),
+    "plan9-amd64": known_issue(issue_number = 63600),
+    "plan9-arm": known_issue(issue_number = 63601),
+
+    # The known issue for these builder types tracks the work of starting to add them.
+    # Skip the builder definitions for x/ repos to reduce noise.
+    # Once the builder is added and starts working in the main repo, x/ repos can be unskipped.
+    "aix-ppc64": known_issue(issue_number = 60440, skip_x_repos = True),
+    "android-386": known_issue(issue_number = 61097, skip_x_repos = True),
+    "android-amd64": known_issue(issue_number = 61097, skip_x_repos = True),
+    "android-arm": known_issue(issue_number = 61097, skip_x_repos = True),
+    "android-arm64": known_issue(issue_number = 61097, skip_x_repos = True),
+    "dragonfly-amd64": known_issue(issue_number = 61092, skip_x_repos = True),
+    "freebsd-386": known_issue(issue_number = 60468, skip_x_repos = True),
+    "freebsd-amd64": known_issue(issue_number = 61095, skip_x_repos = True),
+    "freebsd-arm": known_issue(issue_number = 60440, skip_x_repos = True),
+    "freebsd-arm64": known_issue(issue_number = 60440, skip_x_repos = True),
+    "illumos-amd64": known_issue(issue_number = 60440, skip_x_repos = True),
+    "ios-amd64": known_issue(issue_number = 42177, skip_x_repos = True),
+    "ios-arm64": known_issue(issue_number = 60440, skip_x_repos = True),
+    "linux-mips": known_issue(issue_number = 60440, skip_x_repos = True),
+    "linux-mips64": known_issue(issue_number = 60440, skip_x_repos = True),
+    "linux-mips64le": known_issue(issue_number = 60440, skip_x_repos = True),
+    "linux-mipsle": known_issue(issue_number = 60440, skip_x_repos = True),
+    "linux-s390x": known_issue(issue_number = 60440, skip_x_repos = True),
+    "netbsd-386": known_issue(issue_number = 61120, skip_x_repos = True),
+    "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
+    "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
+    "openbsd-arm": known_issue(issue_number = 60440, skip_x_repos = True),
+    "openbsd-arm64": known_issue(issue_number = 60440, skip_x_repos = True),
+    "windows-arm": known_issue(issue_number = 60440, skip_x_repos = True),
 }
 
 # NO_NETWORK_BUILDERS are a subset of builder types
@@ -1442,13 +1534,19 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     os, arch, suffix, run_mods = split_builder_type(builder_type)
     host_type = host_of(builder_type)
 
+    if builder_type in KNOWN_ISSUE_BUILDER_TYPES and KNOWN_ISSUE_BUILDER_TYPES[builder_type] \
+        .skip_x_repos and project != "go":
+        return False, False, False, []
+
     # Filter out old OS versions from new branches.
     if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22", "go1.21"]:
         # Go 1.22 is last to support macOS 10.15.
         return False, False, False, []
 
     # Filter out new ports on old release branches.
-    # None at this time.
+    if os == "openbsd" and arch == "riscv64" and go_branch_short in ["go1.22", "go1.21"]:
+        # The openbsd/riscv64 port is new to Go 1.23.
+        return False, False, False, []
 
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
