@@ -35,7 +35,7 @@ func generate(version, goRoot string) error {
 	dir := filepath.Join(goRoot, "doc", "next")
 	doc, err := relnote.Merge(os.DirFS(dir))
 	if err != nil {
-		return err
+		return fmt.Errorf("merging %s: %v", dir, err)
 	}
 	out := markdown.ToMarkdown(doc)
 	out = fmt.Sprintf(prefixFormat, version) + out
