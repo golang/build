@@ -7,8 +7,10 @@ package relnote
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -208,6 +210,7 @@ func TestParseAPIFile(t *testing.T) {
 		"123.next": &fstest.MapFile{Data: []byte(`
 pkg p1, type T struct
 pkg p2, func F(int, bool) #123
+pkg syscall (windows-386), const WSAENOPROTOOPT = 10042 #62254
 	`)},
 	}
 	got, err := parseAPIFile(fsys, "123.next")
@@ -215,11 +218,12 @@ pkg p2, func F(int, bool) #123
 		t.Fatal(err)
 	}
 	want := []APIFeature{
-		{"p1", "type T struct", 0},
-		{"p2", "func F(int, bool)", 123},
+		{"p1", "", "type T struct", 0},
+		{"p2", "", "func F(int, bool)", 123},
+		{"syscall", "(windows-386)", "const WSAENOPROTOOPT = 10042", 62254},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("\ngot  %+v\nwant %+v", got, want)
+		t.Errorf("\ngot  %#v\nwant %#v", got, want)
 	}
 }
 
@@ -247,6 +251,22 @@ func TestCheckAPIFile(t *testing.T) {
 				t.Errorf("\ngot  %s\nwant %s", got, want)
 			}
 		})
+	}
+}
+
+func TestAllAPIFilesForErrors(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	fsys := os.DirFS(filepath.Join(runtime.GOROOT(), "api"))
+	apiFiles, err := fs.Glob(fsys, "*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range apiFiles {
+		if _, err := parseAPIFile(fsys, f); err != nil {
+			t.Errorf("parseTestFile(%q) failed with %v", f, err)
+		}
 	}
 }
 

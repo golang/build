@@ -327,16 +327,20 @@ func parseMarkdownFile(fsys fs.FS, path string) (*md.Document, error) {
 // like the ones in the main go repo in the api directory.
 type APIFeature struct {
 	Package string // package that the feature is in
+	Build   string // build that the symbol is relevant for (e.g. GOOS, GOARCH)
 	Feature string // everything about the feature other than the package
 	Issue   int    // the issue that introduced the feature, or 0 if none
 }
 
-var apiFileLineRegexp = regexp.MustCompile(`^pkg ([^,]+), ([^#]*)(#\d+)?$`)
+// This regexp has four capturing groups: package, build, feature and issue.
+var apiFileLineRegexp = regexp.MustCompile(`^pkg ([^ \t]+)[ \t]*(\([^)]+\))?, ([^#]*)(#\d+)?$`)
 
 // parseAPIFile parses a file in the api format and returns a list of the file's features.
 // A feature is represented by a single line that looks like
 //
-//	PKG WORDS #ISSUE
+//	pkg PKG (BUILD) FEATURE #ISSUE
+//
+// where the BUILD and ISSUE may be absent.
 func parseAPIFile(fsys fs.FS, filename string) ([]APIFeature, error) {
 	f, err := fsys.Open(filename)
 	if err != nil {
@@ -347,20 +351,24 @@ func parseAPIFile(fsys fs.FS, filename string) ([]APIFeature, error) {
 	scan := bufio.NewScanner(f)
 	for scan.Scan() {
 		line := strings.TrimSpace(scan.Text())
-		if line == "" {
+		if line == "" || line[0] == '#' {
 			continue
 		}
 		matches := apiFileLineRegexp.FindStringSubmatch(line)
 		if len(matches) == 0 {
 			return nil, fmt.Errorf("%s: malformed line %q", filename, line)
 		}
+		if len(matches) != 5 {
+			return nil, fmt.Errorf("wrong number of matches for line %q", line)
+		}
 		f := APIFeature{
 			Package: matches[1],
-			Feature: strings.TrimSpace(matches[2]),
+			Build:   matches[2],
+			Feature: strings.TrimSpace(matches[3]),
 		}
-		if len(matches) > 3 && len(matches[3]) > 0 {
+		if issue := matches[4]; issue != "" {
 			var err error
-			f.Issue, err = strconv.Atoi(matches[3][1:]) // skip leading '#'
+			f.Issue, err = strconv.Atoi(issue[1:]) // skip leading '#'
 			if err != nil {
 				return nil, err
 			}
