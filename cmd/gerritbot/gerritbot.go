@@ -207,6 +207,9 @@ const (
 
 	// Footer containing the Gerrit Change ID.
 	prefixGitFooterChangeID = "Change-Id:"
+
+	// Footer containing the LUCI SlowBots to run.
+	prefixGitFooterCQIncludeTrybots = "Cq-Include-Trybots:"
 )
 
 // Gerrit projects we accept PRs for.
@@ -830,7 +833,10 @@ Please visit Gerrit at %s.
 	return nil
 }
 
-var changeIdentRE = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-fA-F]{40})\n?`)
+var (
+	changeIdentRE      = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-fA-F]{40})\n?`)
+	CqIncludeTrybotsRE = regexp.MustCompile(`(?m)^Cq-Include-Trybots: (\S+)\n?`)
+)
 
 // commitMessage returns the text used when creating the squashed commit for pr.
 // A non-nil cl indicates that pr is associated with an existing Gerrit Change.
@@ -850,11 +856,22 @@ func commitMessage(pr *github.PullRequest, cl *maintner.GerritCL) (string, error
 		changeID = genChangeID(pr)
 	}
 
+	// LUCI requires this in the footer (hence why we do so below), but we
+	// are intentionally more lenient here and allow the line to appear
+	// anywhere in an attempt to catch simple mistakes.
+	tryBots := CqIncludeTrybotsRE.FindStringSubmatch(prBody)
+	if tryBots != nil {
+		prBody = strings.Replace(prBody, tryBots[0], "", -1)
+	}
+
 	var msg bytes.Buffer
 	fmt.Fprintf(&msg, "%s\n\n%s\n\n", cleanTitle(pr.GetTitle()), prBody)
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterChangeID, changeID)
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterLastRev, pr.Head.GetSHA())
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterPR, prShortLink(pr))
+	if tryBots != nil {
+		fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterCQIncludeTrybots, tryBots[1])
+	}
 
 	// Clean the commit message up.
 	cmd := exec.Command("git", "stripspace")
