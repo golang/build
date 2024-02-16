@@ -923,6 +923,9 @@ func platformToGoValues(platform string) (goos string, goarch string, err error)
 	if goos == "Mac" || goos == "mac" {
 		goos = "darwin"
 	}
+	if goarch == "armv6l" {
+		goarch = "arm"
+	}
 	return goos, goarch, nil
 }
 
