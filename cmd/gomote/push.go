@@ -72,7 +72,6 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 			log.Printf(s, a...)
 		}
 	}
-	haveGo14 := false
 	remote := map[string]buildlet.DirEntry{} // keys like "src/make.bash"
 
 	client := gomoteServerClient(ctx)
@@ -102,25 +101,19 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 	for _, entry := range resp.GetEntries() {
 		de := buildlet.DirEntry{Line: entry}
 		en := de.Name()
-		if strings.HasPrefix(en, "go1.4/") {
-			haveGo14 = true
-			continue
-		}
 		if strings.HasPrefix(en, "go/") && en != "go/" {
 			remote[en[len("go/"):]] = de
 		}
 	}
-	if !haveGo14 {
-		logf("installing go1.4")
-		if dryRun {
-			logf("(Dry-run) Would have pushed go1.4")
-		} else {
-			_, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
-				GomoteId: name,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
-			}
+	logf("installing go-bootstrap version in the working directory")
+	if dryRun {
+		logf("(Dry-run) Would have pushed go-bootstrap")
+	} else {
+		_, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
+			GomoteId: name,
+		})
+		if err != nil {
+			return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
 		}
 	}
 
