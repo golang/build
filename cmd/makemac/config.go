@@ -23,6 +23,11 @@ type imageConfig struct {
 // with the old image.
 var prodImageConfig = []imageConfig{
 	{
+		Name:     "darwin-amd64-10_15",
+		Image:    "4aaca93eedef29a20715259ee1a5a5f4309528dc1ef8a0ab2a0dafa08286ca57",
+		MinCount: 5, // release branches only
+	},
+	{
 		Name:     "darwin-amd64-11",
 		Image:    "f0cc898922b37726f6d5ad7b260e92b0443c6289b535cb0a32fd2955abe8adcc",
 		MinCount: 10,
