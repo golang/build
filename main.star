@@ -204,7 +204,7 @@ luci.recipe.defaults.cipd_package.set("golang/recipe_bundles/go.googlesource.com
 luci.recipe.defaults.cipd_version.set("refs/heads/luci-config")
 luci.recipe.defaults.use_python3.set(True)
 
-def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, low_capacity):
+def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, has_shared_pool, low_capacity):
     return struct(
         gerrit_host = gerrit_host,
         swarming_host = swarming_host + ".appspot.com",
@@ -214,7 +214,7 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
         coordinator_pool = "luci.golang.%s" % bucket,
         worker_sa = worker_sa + "@golang-ci-luci.iam.gserviceaccount.com",
         worker_pool = "luci.golang.%s-workers" % bucket,
-        shared_worker_pool = "luci.golang.shared-workers",
+        shared_worker_pool = "luci.golang.shared-workers" if has_shared_pool else "",
         low_capacity_hosts = low_capacity,
     )
 
@@ -313,14 +313,14 @@ DEFAULT_HOST_SUFFIX = {
 
 # The try bucket will include builders which work on pre-commit or pre-review
 # code.
-PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-builder", "public-worker-builder", LOW_CAPACITY_HOSTS)
+PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS)
 
 # The ci bucket will include builders which work on post-commit code.
-PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-builder", "public-worker-builder", LOW_CAPACITY_HOSTS)
+PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS)
 
 # The security-try bucket is for builders that test unreviewed, embargoed
 # security fixes.
-SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security-try", "security-coordinator-builder", "security-worker-builder", LOW_CAPACITY_HOSTS)
+SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security-try", "security-coordinator-builder", "security-worker-builder", False, LOW_CAPACITY_HOSTS)
 
 # The prod bucket will include builders which work on post-commit code and
 # generate executable artifacts used by other users or machines.
@@ -1168,8 +1168,8 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Note that these should generally live in the worker pools.
     base_dims = dimensions_of(host_type)
     base_dims["pool"] = env.worker_pool
-    if is_capacity_constrained(env.low_capacity_hosts, host_type):
-        # Scarce resources live in the shared-workers pool.
+    if is_capacity_constrained(env.low_capacity_hosts, host_type) and env.shared_worker_pool != "":
+        # Scarce resources live in the shared-workers pool when it is available.
         base_dims["pool"] = env.shared_worker_pool
 
     # On less-supported platforms, we may not have bootstraps before 1.21
@@ -1850,16 +1850,30 @@ def _define_go_internal_ci():
 
         for builder_type in BUILDER_TYPES:
             exists, _, _, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
+            host_type = host_of(builder_type)
 
             # The internal host only has access to some machines. As of
             # writing, that means all the GCE-hosted (high-capacity) builders
-            # and that's it.
-            exists = exists and not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_of(builder_type))
+            # and a select subset of GOOGLE_LOW_CAPACITY_HOSTS, and that's it.
+            if host_type in [
+                # A select subset of GOOGLE_LOW_CAPACITY_HOSTS that provide
+                # a separate set of VMs that connect to the chrome-swarming
+                # swarming instance. This requires additional resources and
+                # work to set up, hence each such host needs to opt-in here.
+                "linux-arm",
+            ]:
+                # The list above is expected to contain only Google low-capacity hosts.
+                # Verify that's the case.
+                if not is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type):
+                    fail("host type %s is listed explicitly but is not a Google low-capacity host", host_type)
+            elif is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type):
+                exists = False
+
             if not exists:
                 continue
 
             # Define presubmit builders. Since there's no postsubmit to monitor,
-            # all possible builders are required.
+            # all possible builders that perform testing are required.
             name, _ = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
             _, _, _, run_mods = split_builder_type(builder_type)
             luci.cq_tryjob_verifier(
