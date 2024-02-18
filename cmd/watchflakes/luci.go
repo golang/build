@@ -69,11 +69,11 @@ func NewLUCIClient() *LUCIClient {
 }
 
 type BuilderConfigProperties struct {
-	Repo     string `json:"project, omitempty"`
-	GoBranch string `json:"go_branch, omitempty"`
+	Repo     string `json:"project,omitempty"`
+	GoBranch string `json:"go_branch,omitempty"`
 	Target   struct {
-		GOARCH string `json:"goarch, omitempty"`
-		GOOS   string `json:"goos, omitempty"`
+		GOARCH string `json:"goarch,omitempty"`
+		GOOS   string `json:"goos,omitempty"`
 	} `json:"target"`
 }
 
@@ -535,7 +535,16 @@ func fetchURL(url string) string {
 		log.Fatal(err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return ""
+	} else if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		log.Fatal(fmt.Errorf("GET %s: non-200 OK status code: %v body: %q", url, resp.Status, body))
+	}
 	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(fmt.Errorf("GET %s: failed to read body: %v body: %q", url, err, body))
+	}
 	return string(body)
 }
 
