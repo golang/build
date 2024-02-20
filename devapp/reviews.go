@@ -80,28 +80,8 @@ func (s *server) handleReviews(t *template.Template, w http.ResponseWriter, r *h
 	s.cMu.RLock()
 	defer s.cMu.RUnlock()
 
-	ownerFilter := r.FormValue("owner")
-	var (
-		projects     []*project
-		totalChanges int
-	)
-	if len(ownerFilter) > 0 {
-		for _, p := range s.data.reviews.Projects {
-			var cs []*change
-			for _, c := range p.Changes {
-				if o := c.Owner(); o != nil && o.Name() == ownerFilter {
-					cs = append(cs, c)
-					totalChanges++
-				}
-			}
-			if len(cs) > 0 {
-				projects = append(projects, &project{GerritProject: p.GerritProject, Changes: cs})
-			}
-		}
-	} else {
-		projects = s.data.reviews.Projects
-		totalChanges = s.data.reviews.TotalChanges
-	}
+	projects := s.data.reviews.Projects
+	totalChanges := s.data.reviews.TotalChanges
 
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, struct {
