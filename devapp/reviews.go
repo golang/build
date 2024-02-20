@@ -11,7 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -199,8 +199,8 @@ func (s *server) updateReviewsData() error {
 		if err != nil {
 			return err
 		}
-		sort.Slice(proj.Changes, func(i, j int) bool {
-			return proj.Changes[i].LastUpdate.Before(proj.Changes[j].LastUpdate)
+		slices.SortFunc(proj.Changes, func(a, b *change) int {
+			return a.LastUpdate.Compare(b.LastUpdate)
 		})
 		projects = append(projects, proj)
 		return nil
@@ -208,8 +208,8 @@ func (s *server) updateReviewsData() error {
 	if err != nil {
 		return err
 	}
-	sort.Slice(projects, func(i, j int) bool {
-		return projects[i].Project() < projects[j].Project()
+	slices.SortFunc(projects, func(a, b *project) int {
+		return strings.Compare(a.Project(), b.Project())
 	})
 	s.data.reviews.Projects = projects
 	s.data.reviews.TotalChanges = totalChanges
