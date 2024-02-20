@@ -940,7 +940,7 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 	}
 	packages := []*swarmpb.CipdPackage{
 		{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
-		{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: properties.BootstrapVersion},
+		{Path: "tools/bootstrap-go", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: properties.BootstrapVersion},
 	}
 	pythonBin := "python3"
 	switch goos {
@@ -953,6 +953,7 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 		pythonBin = `tools\bin\python3.exe`
 		packages = append(packages, &swarmpb.CipdPackage{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"})
 	}
+
 	req := &swarmpb.NewTaskRequest{
 		Name:           name,
 		Priority:       20, // 30 is the priority for builds
@@ -964,7 +965,9 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 						Packages: packages,
 					},
 					EnvPrefixes: []*swarmpb.StringListPair{
-						{Key: "PATH", Value: []string{"tools/bin"}},
+						{Key: "PATH", Value: []string{"tools/bin", "go/bin"}},
+						{Key: "GOROOT_BOOTSTRAP", Value: []string{"tools/bootstrap-go"}},
+						{Key: "GOPATH", Value: []string{"gopath"}},
 					},
 					Command:    []string{pythonBin, "-c", buildletStartup(goos, goarch)},
 					Dimensions: createStringPairs(dimensions),

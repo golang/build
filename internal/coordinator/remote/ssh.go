@@ -447,14 +447,10 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 // This makes the new SSH session easier to use for Go testing.
 func (ss *SSHServer) setupRemoteSSHEnvSwarm(builderType, workDir string, f io.Writer) {
 	if strings.Contains(builderType, "windows") {
-		fmt.Fprintf(f, `set GOPATH=%s\gopath`+"\n", workDir)
-		fmt.Fprintf(f, `set PATH=%%PATH%%;%s\go\bin`+"\n", workDir)
-		fmt.Fprintf(f, `cd %s`+"\n", workDir)
+		// TODO(65826) find a universal way of setting the working directory.
+		fmt.Fprintf(f, `cd %s`+"\r\n", workDir)
 		return
 	}
-	fmt.Fprintf(f, "GOPATH=%s/gopath\n", workDir)
-	fmt.Fprintf(f, "PATH=$PATH:%s/go/bin\n", workDir)
-	fmt.Fprintf(f, "export GOPATH PATH\n")
 	fmt.Fprintf(f, "cd %s\n", workDir)
 }
 
