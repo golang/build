@@ -93,6 +93,9 @@ func addSymbolLinksText(text, defaultPackage string) []md.Inline {
 		case '[':
 			start = i
 		case ']':
+			if start < 0 {
+				continue
+			}
 			link, ok := symbolLink(text[start+1:i], text[:start], text[i+1:], defaultPackage)
 			if ok {
 				appendPlain(start)
@@ -110,6 +113,8 @@ func addSymbolLinksText(text, defaultPackage string) []md.Inline {
 // symbolLink convert s into a Link and returns it and true, or nil and false if
 // s is not a valid link or is surrounded by runes that disqualify it from being
 // converted to a link.
+//
+// The argument s is the text between '[' and ']'.
 func symbolLink(s, before, after, defaultPackage string) (md.Inline, bool) {
 	if before != "" {
 		r, _ := utf8.DecodeLastRuneInString(before)
@@ -137,7 +142,7 @@ func symbolLink(s, before, after, defaultPackage string) (md.Inline, bool) {
 		sym = "#" + sym
 	}
 	return &md.Link{
-		Inner: []md.Inline{&md.Plain{Text: s}},
+		Inner: []md.Inline{&md.Code{Text: s}},
 		URL:   fmt.Sprintf("/pkg/%s%s", pkg, sym),
 	}, true
 }

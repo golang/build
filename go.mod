@@ -72,7 +72,7 @@ require (
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/inf.v0 v0.9.1
 	rsc.io/github v0.3.0
-	rsc.io/markdown v0.0.0-20240117044121-669d2fdf1650
+	rsc.io/markdown v0.0.0-20240306144322-0bf8f97ee8ef
 )
 
 require (

@@ -116,6 +116,8 @@ func TestStdlibPackageHeading(t *testing.T) {
 	h := stdlibPackageHeading("net/http", 1)
 	got := md.ToMarkdown(h)
 	want := "#### [net/http](/pkg/net/http/)\n"
+	// TODO(jba): use a code element for the heading; the following is the correct value of "want":
+	// want := "#### [`net/http`](/pkg/net/http/)\n"
 	if got != want {
 		t.Errorf("\ngot  %q\nwant %q", got, want)
 	}
@@ -278,14 +280,17 @@ func TestSymbolLinks(t *testing.T) {
 		{"a b", "a b"},
 		{"a [b", "a [b"},
 		{"a b[X]", "a b[X]"},
-		{"a [Buffer] b", "a [Buffer](/pkg/bytes#Buffer) b"},
-		{"a [Buffer]\nb", "a [Buffer](/pkg/bytes#Buffer)\nb"},
-		{"a [bytes.Buffer], b", "a [bytes.Buffer](/pkg/bytes#Buffer), b"},
-		{"[bytes.Buffer.String]", "[bytes.Buffer.String](/pkg/bytes#Buffer.String)"},
-		{"a--[encoding/json.Marshal].", "a--[encoding/json.Marshal](/pkg/encoding/json#Marshal)."},
-		{"a [math] and s[math] and [NewBuffer].", "a [math](/pkg/math) and s[math] and [NewBuffer](/pkg/bytes#NewBuffer)."},
-		{"A [*log/slog.Logger]", "A [*log/slog.Logger](/pkg/log/slog#Logger)"},
+		{"a [Buffer] b", "a [`Buffer`](/pkg/bytes#Buffer) b"},
+		{"a [Buffer]\nb", "a [`Buffer`](/pkg/bytes#Buffer)\nb"},
+		{"a [bytes.Buffer], b", "a [`bytes.Buffer`](/pkg/bytes#Buffer), b"},
+		{"[bytes.Buffer.String]", "[`bytes.Buffer.String`](/pkg/bytes#Buffer.String)"},
+		{"a--[encoding/json.Marshal].", "a--[`encoding/json.Marshal`](/pkg/encoding/json#Marshal)."},
+		{"a [math] and s[math] and [NewBuffer].", "a [`math`](/pkg/math) and s[math] and [`NewBuffer`](/pkg/bytes#NewBuffer)."},
+		{"A [*log/slog.Logger]", "A [`*log/slog.Logger`](/pkg/log/slog#Logger)"},
 		{"Not in code `[math]`.", "Not in code `[math]`."},
+		// TODO(jba): handle a Code inline between brackets, as in the two tests below.
+		// {"a [`Buffer`] b", "a [`Buffer`](/pkg/bytes#Buffer) b"},
+		// {"[`bytes.Buffer.String`]", "[`bytes.Buffer.String`](/pkg/bytes#Buffer.String)"},
 	} {
 		doc := NewParser().Parse(test.in)
 		addSymbolLinks(doc, "bytes")

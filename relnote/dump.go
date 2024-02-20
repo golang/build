@@ -41,6 +41,13 @@ func dumpBlock(b md.Block, depth int) {
 
 func dumpInlines(ins []md.Inline, depth int) {
 	for _, in := range ins {
-		fmt.Printf("%*s%#v\n", depth*4, "", in)
+		switch in := in.(type) {
+		case *md.Link:
+			fmt.Printf("%*sLink:\n", depth*4, "")
+			dumpInlines(in.Inner, depth+1)
+			fmt.Printf("%*sURL: %q\n", (depth+1)*4, "", in.URL)
+		default:
+			fmt.Printf("%*s%#v\n", depth*4, "", in)
+		}
 	}
 }
