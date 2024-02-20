@@ -1610,10 +1610,7 @@ POST_ACTIONS = [
 ]
 
 def _define_go_ci():
-    console_generators = []
-    postsubmit_builders_by_port = {}
-    postsubmit_builders_by_project_and_branch = {}
-    postsubmit_builders_with_go_repo_trigger = {}
+    # Presubmit.
     for project in PROJECTS:
         for go_branch_short, go_branch in GO_BRANCHES.items():
             # Set up a CQ group for the builder definitions below.
@@ -1653,14 +1650,11 @@ def _define_go_ci():
             )
 
             # Define builders.
-            postsubmit_builders = {}
-            postsubmit_builders_known_issue = {}
             for builder_type in BUILDER_TYPES:
-                exists, presubmit, postsubmit, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
+                exists, presubmit, _, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
                 if not exists:
                     continue
 
-                # Define presubmit builders.
                 name, _ = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
                 luci.cq_tryjob_verifier(
                     builder = name,
@@ -1698,20 +1692,6 @@ def _define_go_ci():
                         disable_reuse = True,
                     )
 
-                # Define post-submit builders.
-                if postsubmit:
-                    name, triggers = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
-                    if builder_type in KNOWN_ISSUE_BUILDER_TYPES:
-                        postsubmit_builders_known_issue[name] = builder_type
-                    else:
-                        postsubmit_builders[name] = builder_type
-
-                    # Collect all the builders that have triggers from the Go repository. Every builder needs at least one.
-                    if project == "go":
-                        postsubmit_builders_with_go_repo_trigger[name] = True
-                        for name in triggers:
-                            postsubmit_builders_with_go_repo_trigger[name] = True
-
             # For golang.org/x/tools, also include coverage for extra Go versions.
             if project == "tools" and go_branch_short == "gotip":
                 for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
@@ -1722,6 +1702,38 @@ def _define_go_ci():
                         cq_group = cq_group.name,
                         disable_reuse = True,
                     )
+
+    # Postsubmit.
+    console_generators = []
+    postsubmit_builders_by_port = {}
+    postsubmit_builders_by_project_and_branch = {}
+    postsubmit_builders_with_go_repo_trigger = {}
+    for project in PROJECTS:
+        for go_branch_short, go_branch in GO_BRANCHES.items():
+            # Define builders.
+            postsubmit_builders = {}
+            postsubmit_builders_known_issue = {}
+            for builder_type in BUILDER_TYPES:
+                exists, _, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
+                if not exists or not postsubmit:
+                    continue
+
+                name, triggers = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
+                if builder_type in KNOWN_ISSUE_BUILDER_TYPES:
+                    postsubmit_builders_known_issue[name] = builder_type
+                else:
+                    postsubmit_builders[name] = builder_type
+
+                # Collect all the builders that have triggers from the Go repository. Every builder needs at least one.
+                if project == "go":
+                    postsubmit_builders_with_go_repo_trigger[name] = True
+                    for name in triggers:
+                        postsubmit_builders_with_go_repo_trigger[name] = True
+
+            # For golang.org/x/tools, also include coverage for extra Go versions.
+            if project == "tools" and go_branch_short == "gotip":
+                for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
+                    builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
                     ci_builder, _ = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
                     postsubmit_builders[ci_builder] = builder_type
 
