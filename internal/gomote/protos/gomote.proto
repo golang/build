@@ -68,6 +68,7 @@ message AddBootstrapResponse {
 // CreateInstanceRequest specifies the data needed to create a gomote instance.
 message CreateInstanceRequest {
   string builder_type = 1;
+  repeated string experiment_option = 2;
 }
 
 // CreateInstanceResponse contains data about a created gomote instance.
