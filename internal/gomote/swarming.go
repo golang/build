@@ -364,11 +364,18 @@ func (ss *SwarmingServer) ListDirectory(ctx context.Context, req *protos.ListDir
 	}, nil
 }
 
-// golangbuildModeAll is golangbuild's MODE_ALL mode that
-// builds and tests the project all within the same build.
-//
-// See https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/experimental/golangbuild/golangbuildpb/params.proto;l=148-149;drc=4e874bfb4ff7ff0620940712983ca82e8ea81028.
-const golangbuildModeAll = 0
+const (
+	// golangbuildModeAll is golangbuild's MODE_ALL mode that
+	// builds and tests the project all within the same build.
+	//
+	// See https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/experimental/golangbuild/golangbuildpb/params.proto;l=148-149;drc=4e874bfb4ff7ff0620940712983ca82e8ea81028.
+	golangbuildModeAll = 0
+	// golangbuildPerfMode is golangbuild's MODE_PERF that
+	// runs performance tests.
+	//
+	// See https://source.chromium.org/chromium/infra/infra/+/main:go/src/infra/experimental/golangbuild/golangbuildpb/params.proto;l=174-177;drc=fdea4abccf8447808d4e702c8d09fdd20fd81acb.
+	golangbuildPerfMode = 4
+)
 
 func (ss *SwarmingServer) validBuilders(ctx context.Context) (map[string]*buildbucketpb.BuilderItem, error) {
 	listBuilders := func(bucket string) ([]*buildbucketpb.BuilderItem, error) {
@@ -435,7 +442,7 @@ func (ss *SwarmingServer) validBuilders(ctx context.Context) (map[string]*buildb
 			continue
 		}
 		config, err := builderProperties(builder)
-		if err != nil || config.Mode != golangbuildModeAll {
+		if err != nil || !slices.Contains([]int{golangbuildModeAll, golangbuildPerfMode}, config.Mode) {
 			continue
 		}
 		builders[name] = builder
