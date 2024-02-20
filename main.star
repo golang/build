@@ -1568,7 +1568,6 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
     presubmit = postsubmit  # Default to running in presubmit if and only if running in postsubmit.
     presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
-    presubmit = presubmit and "openbsd" not in builder_type  # Not yet enabled. See CL 526255.
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
         presubmit = presubmit and os not in ["js", "wasip1"]
 
