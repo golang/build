@@ -285,13 +285,15 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
     "solaris-amd64",
 ]
 
-# SLOW_HOSTS lists "hosts" who are known to run slower than our typical
+# SLOW_HOSTS lists "hosts" who are known to run slower than our typical fast
 # high-capacity machines. It is a mapping of the host to a test timeout scaling
-# factor.
+# factor. It also affects the decision of whether to include a builder in
+# presubmit testing by default (slow high-capacity hosts aren't included).
 SLOW_HOSTS = {
     "linux-ppc64": 2,
     "linux-ppc64le": 2,
     "netbsd-arm64": 2,
+    "openbsd-amd64": 2,
 }
 
 # host_timeout_scale returns the default test timeout scale for a given host.
@@ -1568,6 +1570,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
     presubmit = postsubmit  # Default to running in presubmit if and only if running in postsubmit.
     presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
+    presubmit = presubmit and not host_timeout_scale(host_type) > 1  # Speed.
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
         presubmit = presubmit and os not in ["js", "wasip1"]
 
