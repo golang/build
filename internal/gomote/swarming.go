@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -35,6 +36,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+// ExperimentGolangbuild use golangbuild to bootstrap the gomote instance
+const ExperimentGolangbuild = "exp-golangbuild"
 
 type rendezvousClient interface {
 	DeregisterInstance(ctx context.Context, id string)
@@ -186,8 +190,9 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 		log.Printf("CreateInstance: builder configuration not found for %s: %s", builder.GetId().GetBuilder(), err)
 		return status.Errorf(codes.Internal, "invalid builder configuration")
 	}
+	expUseGolangbuild := slices.Contains(req.GetExperimentOption(), ExperimentGolangbuild)
 	go func() {
-		bc, err := ss.startNewSwarmingTask(stream.Context(), name, dimensions, cp, &SwarmOpts{})
+		bc, err := ss.startNewSwarmingTask(stream.Context(), name, dimensions, cp, &SwarmOpts{}, expUseGolangbuild)
 		if err != nil {
 			log.Printf("startNewSwarmingTask() = %s", err)
 		}
@@ -752,11 +757,11 @@ type SwarmOpts struct {
 // running on it. It returns a buildlet client configured to speak to it.
 // The request will last as long as the lifetime of the context. The dimensions
 // are a set of key value pairs used to describe what instance type to create.
-func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts) (buildlet.Client, error) {
+func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts, useGolangbuild bool) (buildlet.Client, error) {
 	ss.rendezvous.RegisterInstance(ctx, name, 10*time.Minute)
 	condRun(opts.OnInstanceRegistration)
 
-	taskID, err := ss.newSwarmingTask(ctx, name, dimensions, properties, opts)
+	taskID, err := ss.newSwarmingTask(ctx, name, dimensions, properties, opts, useGolangbuild)
 	if err != nil {
 		ss.rendezvous.DeregisterInstance(ctx, name)
 		return nil, err
@@ -929,7 +934,11 @@ func platformToGoValues(platform string) (goos string, goarch string, err error)
 	return goos, goarch, nil
 }
 
-func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts) (string, error) {
+func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts, useGolangbuild bool) (string, error) {
+	if useGolangbuild {
+
+		return ss.newSwarmingTaskWithGolangbuild(ctx, name, dimensions, properties, opts)
+	}
 	cipdPlatform, ok := dimensions["cipd_platform"]
 	if !ok {
 		return "", fmt.Errorf("dimensions require cipd_platform: instance=%s", name)
@@ -995,6 +1004,109 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 	return taskMD.TaskId, nil
 }
 
+func golangbuildStartup(goos, goarch, golangbuildBin string) string {
+	cmd := `import urllib.request
+import sys
+import platform
+import subprocess
+import os
+import stat
+
+def make_executable(file_path):
+    if sys.platform != "win32":
+        st = os.stat(file_path)
+        os.chmod(file_path, st.st_mode | stat.S_IEXEC)
+
+if __name__ == "__main__":
+    ext = ""
+    if sys.platform == "win32":
+        ext = ".exe"
+    sep = "/"
+    if sys.platform == "win32":
+        sep = "\\"
+    buildlet_name = "." + sep + "buildlet"
+    if os.path.exists(buildlet_name):
+        os.remove(buildlet_name)
+    urllib.request.urlretrieve("https://storage.googleapis.com/go-builder-data/buildlet.%s-%s", buildlet_name)
+    make_executable(os.getcwd() + sep + buildlet_name)
+    buildlet_name = "."+sep + buildlet_name
+    subprocess.run(["%s", buildlet_name, "--coordinator=gomotessh.golang.org:443", "--reverse-type=swarming-task", "-swarming-bot", "-halt=false"], shell=False, env=os.environ.copy())
+`
+	return fmt.Sprintf(cmd, goos, goarch, golangbuildBin)
+}
+
+func (ss *SwarmingServer) newSwarmingTaskWithGolangbuild(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts) (string, error) {
+	log.Printf("gomote: swarming task creation using golangbuild name=%s", name)
+	cipdPlatform, ok := dimensions["cipd_platform"]
+	if !ok {
+		return "", fmt.Errorf("dimensions require cipd_platform: instance=%s", name)
+	}
+	goos, goarch, err := platformToGoValues(cipdPlatform)
+	if err != nil {
+		return "", err
+	}
+	packages := []*swarmpb.CipdPackage{
+		{Path: "tools/bin", PackageName: "infra/experimental/golangbuild/" + cipdPlatform, Version: "latest"},
+		{Path: "tools/bin", PackageName: "infra/tools/cipd/" + cipdPlatform, Version: "latest"},
+		{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
+	}
+	pythonBin := "python3"
+	golangbuildBin := "golangbuild"
+	switch goos {
+	case "darwin":
+		golangbuildBin = `tools/bin/golangbuild`
+		pythonBin = `tools/bin/python3`
+		packages = append(packages,
+			&swarmpb.CipdPackage{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"})
+	case "windows":
+		golangbuildBin = `tools\bin\golangbuild.exe`
+		pythonBin = `tools\bin\python3.exe`
+		packages = append(packages, &swarmpb.CipdPackage{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"})
+	}
+
+	req := &swarmpb.NewTaskRequest{
+		Name:           name,
+		Priority:       20, // 30 is the priority for builds
+		ServiceAccount: "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
+		TaskSlices: []*swarmpb.TaskSlice{
+			&swarmpb.TaskSlice{
+				Properties: &swarmpb.TaskProperties{
+					CipdInput: &swarmpb.CipdInput{
+						Packages: packages,
+					},
+					EnvPrefixes: []*swarmpb.StringListPair{
+						{Key: "PATH", Value: []string{"tools/bin"}},
+					},
+					Command:    []string{pythonBin, "-c", golangbuildStartup(goos, goarch, golangbuildBin)},
+					Dimensions: createStringPairs(dimensions),
+					Env: []*swarmpb.StringPair{
+						&swarmpb.StringPair{
+							Key:   "GOMOTEID",
+							Value: name,
+						},
+						&swarmpb.StringPair{
+							Key:   "GOMOTE_SETUP",
+							Value: properties.BuilderId,
+						},
+					},
+					ExecutionTimeoutSecs: 86400,
+				},
+				ExpirationSecs:  86400,
+				WaitForCapacity: false,
+			},
+		},
+		Tags:  []string{"golang_mode:gomote"},
+		Realm: "golang:ci",
+	}
+	taskMD, err := ss.swarmingClient.NewTask(ctx, req)
+	if err != nil {
+		log.Printf("gomote: swarming task creation failed name=%s: %s", name, err)
+		return "", fmt.Errorf("unable to start task: %w", err)
+	}
+	log.Printf("gomote: task created: id=%s https://chromium-swarm.appspot.com/task?id=%s", taskMD.TaskId, taskMD.TaskId)
+	return taskMD.TaskId, nil
+}
+
 func condRun(fn func()) {
 	if fn != nil {
 		fn()
@@ -1010,6 +1122,7 @@ func tryThenPeriodicallyDo(ctx context.Context, period time.Duration, f func(con
 type configProperties struct {
 	BootstrapVersion string `json:"bootstrap_version"`
 	Mode             int    `json:"mode"`
+	BuilderId        string // <project>/<bucket>/<builder>
 }
 
 func builderProperties(builder *buildbucketpb.BuilderItem) (*configProperties, error) {
@@ -1020,5 +1133,7 @@ func builderProperties(builder *buildbucketpb.BuilderItem) (*configProperties, e
 	if cp.BootstrapVersion == "" {
 		cp.BootstrapVersion = "latest"
 	}
+	id := builder.GetId()
+	cp.BuilderId = fmt.Sprintf("%s/%s/%s", id.GetProject(), id.GetBucket(), id.GetBuilder())
 	return cp, nil
 }

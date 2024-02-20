@@ -1159,7 +1159,7 @@ func TestStartNewSwarmingTask(t *testing.T) {
 				return
 			}
 		},
-	}); err == nil || !strings.Contains(err.Error(), "revdial.Dialer closed") {
+	}, false); err == nil || !strings.Contains(err.Error(), "revdial.Dialer closed") {
 		errCh <- fmt.Errorf("startNewSwarmingTask() = bc, %s; want \"revdial.Dialer closed\" error", err)
 	}
 	select {

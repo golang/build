@@ -134,6 +134,8 @@ func create(args []string) error {
 	fs.BoolVar(&setup, "setup", false, "set up the instance by pushing GOROOT and building the Go toolchain")
 	var newGroup string
 	fs.StringVar(&newGroup, "new-group", "", "also create a new group and add the new instances to it")
+	var expUseGolangbuild bool
+	fs.BoolVar(&expUseGolangbuild, "exp-golangbuild", false, "experimental: use golangbuild to bootstrap the instance")
 
 	fs.Parse(args)
 	if fs.NArg() != 1 {
@@ -165,7 +167,11 @@ func create(args []string) error {
 		i := i
 		eg.Go(func() error {
 			start := time.Now()
-			stream, err := client.CreateInstance(ctx, &protos.CreateInstanceRequest{BuilderType: builderType})
+			var exp []string
+			if expUseGolangbuild {
+				exp = append(exp, "exp-golangbuild")
+			}
+			stream, err := client.CreateInstance(ctx, &protos.CreateInstanceRequest{BuilderType: builderType, ExperimentOption: exp})
 			if err != nil {
 				return fmt.Errorf("failed to create buildlet: %w", err)
 			}
