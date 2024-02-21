@@ -550,13 +550,19 @@ def projects_of_type(types):
 # - presubmit, whether the builder should be run in presubmit by default
 # - postsubmit, whether the builder should run in postsubmit
 # - presubmit location filters, any cq.location_filter to apply to presubmit
-def make_run_mod(add_props = {}, add_env = {}, enabled = None, timeout_scale = 1):
+def make_run_mod(add_props = {}, add_env = {}, enabled = None, test_timeout_scale = 1):
     def apply_mod(props, project):
         props.update(add_props)
 
         # Compose timeout scaling factors by multiplying them.
-        if project == "go":
-            props["timeout_scale"] *= timeout_scale
+        if test_timeout_scale != 1:
+            if "test_timeout_scale" not in props:
+                # Having no test_timeout_scale means that it starts at 1.
+                props["test_timeout_scale"] = test_timeout_scale
+            else:
+                props["test_timeout_scale"] *= test_timeout_scale
+
+        # Update any environment variables.
         props["env"].update(add_env)
 
     if enabled == None:
@@ -654,7 +660,7 @@ RUN_MODS = dict(
     # Run a larger set of tests.
     longtest = make_run_mod(
         add_props = {"long_test": True},
-        timeout_scale = 5,
+        test_timeout_scale = 5,
         enabled = define_for_presubmit_only_for_projs_or_on_release_branches({
             "protobuf": [],
             "go": [
@@ -748,7 +754,7 @@ RUN_MODS = dict(
     # Build and test with race mode enabled.
     race = make_run_mod(
         add_props = {"race_mode": True},
-        timeout_scale = 2,
+        test_timeout_scale = 2,
         enabled = define_for_presubmit_only_for_ports_or_on_release_branches(["linux-amd64"]),
     ),
 
@@ -1122,8 +1128,9 @@ def define_builder(env, project, go_branch_short, builder_type):
         "target": {"goos": os, "goarch": arch},
         "env": {},
         "is_google": not is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type) or is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type),
-        "timeout_scale": host_timeout_scale(host_type),
     }
+    if host_timeout_scale(host_type) != 1:
+        base_props["test_timeout_scale"] = host_timeout_scale(host_type)
     if builder_type in KNOWN_ISSUE_BUILDER_TYPES:
         base_props["known_issue"] = KNOWN_ISSUE_BUILDER_TYPES[builder_type].issue_number
     for d in EXTRA_DEPENDENCIES:
@@ -1202,10 +1209,6 @@ def define_builder(env, project, go_branch_short, builder_type):
         if not mod in RUN_MODS:
             fail("unknown run mod: %s" % mod)
         RUN_MODS[mod].apply(base_props, project)
-
-    if base_props["timeout_scale"] != 1:
-        base_props["env"]["GO_TEST_TIMEOUT_SCALE"] = "%d" % base_props["timeout_scale"]
-    base_props.pop("timeout_scale")  # We're done with this prop now (just used to set proper environ).
 
     # Named cache for git clones.
     base_props["git_cache"] = "git"
