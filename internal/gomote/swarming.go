@@ -816,7 +816,7 @@ func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string,
 // waitForInstanceOrFailure waits for either the swarming task to enter a failed state or the successful connection from
 // a buildlet client.
 func (ss *SwarmingServer) waitForInstanceOrFailure(ctx context.Context, taskID, name string) (buildlet.Client, error) {
-	queryCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	queryCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 
 	checkForTaskFailure := func(pollCtx context.Context) <-chan error {
 		errCh := make(chan error, 1)
@@ -1030,14 +1030,14 @@ if __name__ == "__main__":
         ext = ".exe"
     sep = "/"
     if sys.platform == "win32":
-        sep = "\\"
-    buildlet_name = "." + sep + "buildlet"
-    if os.path.exists(buildlet_name):
-        os.remove(buildlet_name)
-    urllib.request.urlretrieve("https://storage.googleapis.com/go-builder-data/buildlet.%s-%s", buildlet_name)
-    make_executable(os.getcwd() + sep + buildlet_name)
-    buildlet_name = "."+sep + buildlet_name
-    subprocess.run(["%s", buildlet_name, "--coordinator=gomotessh.golang.org:443", "--reverse-type=swarming-task", "-swarming-bot", "-halt=false"], shell=False, env=os.environ.copy())
+        sep = "\\\\"
+    buildlet_file = "buildlet" + ext
+    buildlet_path = "." + sep + buildlet_file
+    if os.path.exists(buildlet_path):
+        os.remove(buildlet_path)
+    urllib.request.urlretrieve("https://storage.googleapis.com/go-builder-data/buildlet.%s-%s", buildlet_path)
+    make_executable(os.getcwd() + sep + buildlet_file)
+    subprocess.run(["%s", buildlet_path, "--coordinator=gomotessh.golang.org:443", "--reverse-type=swarming-task", "-swarming-bot", "-halt=false"], shell=False, env=os.environ.copy())
 `
 	return fmt.Sprintf(cmd, goos, goarch, golangbuildBin)
 }
@@ -1066,7 +1066,7 @@ func (ss *SwarmingServer) newSwarmingTaskWithGolangbuild(ctx context.Context, na
 		packages = append(packages,
 			&swarmpb.CipdPackage{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"})
 	case "windows":
-		golangbuildBin = `tools\bin\golangbuild.exe`
+		golangbuildBin = `tools\\bin\\golangbuild.exe`
 		pythonBin = `tools\bin\python3.exe`
 		packages = append(packages, &swarmpb.CipdPackage{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"})
 	}
