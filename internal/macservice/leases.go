@@ -82,7 +82,6 @@ type Lease struct {
 type InstanceSpecification struct {
 	Profile     MachineProfile     `json:"profile"`
 	AccessLevel NetworkAccessLevel `json:"accessLevel"`
-	OSType      OSType             `json:"osType"`
 
 	DiskSelection DiskSelection `json:"diskSelection"`
 }
@@ -105,10 +104,4 @@ type NetworkAccessLevel string
 
 const (
 	GOLANG_OSS NetworkAccessLevel = "GOLANG_OSS"
-)
-
-type OSType string
-
-const (
-	MAC OSType = "MAC"
 )

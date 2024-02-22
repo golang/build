@@ -441,7 +441,6 @@ func makeLeaseRequest(image string) macservice.LeaseRequest {
 			ProjectName:  managedProject,
 		},
 		InstanceSpecification: macservice.InstanceSpecification{
-			OSType: macservice.MAC,
 			Profile: macservice.V1_MEDIUM_VM,
 			AccessLevel: macservice.GOLANG_OSS,
 			DiskSelection: macservice.DiskSelection{
