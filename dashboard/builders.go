@@ -1534,6 +1534,11 @@ func init() {
 	addBuilder(BuildConfig{
 		Name:     "freebsd-amd64-race",
 		HostType: "host-freebsd-amd64-13_0",
+		env: []string{
+			// Give this builder more time. The default timeout appears to be too small for x/tools
+			// tests (specifically, I/O seems to be slower on this builder). See #64473.
+			"GO_TEST_TIMEOUT_SCALE=2",
+		},
 	})
 	addBuilder(BuildConfig{
 		Name:              "freebsd-amd64-13_0",
