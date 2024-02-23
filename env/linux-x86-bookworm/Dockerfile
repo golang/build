@@ -21,6 +21,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # libc6-dev: for building Go's bootstrap 'dist' prog
 # libgles2-mesa-dev: required by x/mobile repo
 # libopenal-dev: required by x/mobile repo
+# linux-perf: for performance analysis on perf builders
 # lsof: misc basic tool
 # make: used for setting up benchmarks in the x/benchmark builders
 # mercurial: mercurial VCS supported by cmd/go
@@ -49,6 +50,7 @@ RUN apt-get update && apt-get install -y \
 	libc6-dev-i386 \
 	libgles2-mesa-dev \
 	libopenal-dev \
+	linux-perf \
 	lsof \
 	make \
 	mercurial \
