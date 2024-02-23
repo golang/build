@@ -523,6 +523,7 @@ PROJECTS = {
     "perf": PT.TOOL,
     "pkgsite": PT.TOOL,
     "pkgsite-metrics": PT.TOOL,
+    "playground": PT.TOOL,
     "protobuf": PT.SPECIAL,
     "review": PT.TOOL,
     "sync": PT.CORE,
