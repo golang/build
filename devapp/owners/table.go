@@ -630,9 +630,17 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{thanm},
 		Secondary: []Owner{compilerTeam},
 	},
+	"go/src/runtime/internal/asan": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{mauri870},
+	},
 	"go/src/runtime/internal/atomic": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{austin, khr, mknyszek, mauri870},
+	},
+	"go/src/runtime/internal/msan": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{mauri870},
 	},
 	"go/src/runtime/internal/sys": {
 		Primary:   []Owner{runtimeTeam},
