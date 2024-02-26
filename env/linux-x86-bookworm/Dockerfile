@@ -4,6 +4,30 @@
 
 FROM golang/buildlet-stage0 AS stage0
 
+# Build perf_to_profile to make go tool pprof work with perf.data files.
+FROM debian:bookworm AS perftoprofile
+LABEL maintainer="golang-dev@googlegroups.com"
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update && apt-get install -y \
+	--no-install-recommends \
+	ca-certificates \
+	curl \
+	g++ \
+	git \
+	libelf-dev \
+	libcap-dev
+
+RUN curl -L "https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64" > bazelisk && \
+	chmod +x bazelisk
+
+RUN git clone https://github.com/google/perf_data_converter && \
+	cd perf_data_converter && \
+	/bazelisk build //src:perf_to_profile && \
+	cp bazel-bin/src/perf_to_profile /perf_to_profile.exe # COPY --from won't be able to resolve symlink, so do it now.
+
+# Actual image build.
 FROM debian:bookworm
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
@@ -67,5 +91,6 @@ RUN apt-get update && apt-get install -y \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=stage0 /go/bin/* /usr/local/bin/
+COPY --from=perftoprofile /perf_to_profile.exe /usr/local/bin/perf_to_profile
 
 CMD ["/usr/local/bin/run-worker.sh"]
