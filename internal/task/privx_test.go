@@ -90,6 +90,7 @@ echo`), 0777); err != nil {
 	var announcementHeader MailHeader
 	var announcementMessage MailContent
 	p := &PrivXPatch{
+		Git:           &Git{},
 		PrivateGerrit: &privxClient{privRepoDir: privRepo.dir.dir},
 		PublicGerrit:  &privxClient{},
 

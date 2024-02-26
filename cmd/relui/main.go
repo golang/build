@@ -308,6 +308,7 @@ func main() {
 	dh.RegisterDefinition("Sync go-private master branch with public", privateSyncTask.NewDefinition())
 
 	privateXPatchTask := &task.PrivXPatch{
+		Git:           gitClient,
 		PublicGerrit:  gerritClient,
 		PrivateGerrit: privateGerritClient,
 		PublicRepoURL: func(repo string) string {

@@ -19,6 +19,7 @@ import (
 )
 
 type PrivXPatch struct {
+	Git           *Git
 	PublicGerrit  GerritClient
 	PrivateGerrit GerritClient
 	// PublicRepoURL returns a git clone URL for repo
@@ -75,9 +76,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		// to replicate from one instance to another using the API alone. Rather
 		// than adding workarounds for those edge cases, we just use Git
 		// directly, which makes the process extremely simple.
-		git := &Git{}
-
-		repo, err := git.Clone(ctx, x.PublicRepoURL(repoName))
+		repo, err := x.Git.Clone(ctx, x.PublicRepoURL(repoName))
 		if err != nil {
 			return nil, err
 		}
