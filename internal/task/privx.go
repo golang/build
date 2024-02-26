@@ -99,7 +99,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		// Beyond this point we don't want to retry any of the following steps.
 		ctx.DisableRetries()
 
-		ctx.Printf("pusing to %s", x.PublicRepoURL(repoName))
+		ctx.Printf("pushing to %s", x.PublicRepoURL(repoName))
 		// We are unable to use repo.RunCommand here, because of strange i/o
 		// changes that git made. The messages sent by the remote are printed by
 		// git to stderr, and no matter what combination of options you pass it
@@ -110,13 +110,13 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		var stdout, stderr bytes.Buffer
 		err = repo.git.runGitStreamed(ctx.Context, &stdout, &stderr, repo.dir, "push", x.PublicRepoURL(repoName), refspec)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("git push failed: %v, stdout: %q stderr: %q", err, stdout.String(), stderr.String())
 		}
 
 		// Extract the CL number from the output using a quick and dirty regex.
 		re, err := regexp.Compile(fmt.Sprintf(`https:\/\/go-review.googlesource.com\/c\/%s\/\+\/(\d+)`, regexp.QuoteMeta(repoName)))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to compile regex: %s", err)
 		}
 		matches := re.FindSubmatch(stderr.Bytes())
 		if len(matches) != 2 {
