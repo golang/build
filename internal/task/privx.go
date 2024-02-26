@@ -92,7 +92,11 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		}
 		ctx.Printf("cherry-picked")
 		refspec := "HEAD:refs/for/master%l=Auto-Submit,l=Commit-Queue+1"
-		for _, reviewer := range reviewers {
+		reviewerEmails, err := coordinatorEmails(reviewers)
+		if err != nil {
+			return nil, err
+		}
+		for _, reviewer := range reviewerEmails {
 			refspec += ",r=" + reviewer
 		}
 
