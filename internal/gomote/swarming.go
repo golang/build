@@ -816,7 +816,7 @@ func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string,
 // waitForInstanceOrFailure waits for either the swarming task to enter a failed state or the successful connection from
 // a buildlet client.
 func (ss *SwarmingServer) waitForInstanceOrFailure(ctx context.Context, taskID, name string) (buildlet.Client, error) {
-	queryCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	queryCtx, cancel := context.WithTimeout(ctx, 25*time.Minute)
 
 	checkForTaskFailure := func(pollCtx context.Context) <-chan error {
 		errCh := make(chan error, 1)
