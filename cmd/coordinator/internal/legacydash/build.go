@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-
 package legacydash
 
 import (
@@ -449,13 +447,13 @@ func (l *Log) Text() ([]byte, error) {
 	return b, nil
 }
 
-func PutLog(c context.Context, text string) (hash string, err error) {
+func (h handler) putLog(c context.Context, text string) (hash string, err error) {
 	b := new(bytes.Buffer)
 	z, _ := gzip.NewWriterLevel(b, gzip.BestCompression)
 	io.WriteString(z, text)
 	z.Close()
 	hash = loghash.New(text)
 	key := dsKey("Log", hash, nil)
-	_, err = datastoreClient.Put(c, key, &Log{b.Bytes()})
+	_, err = h.datastoreCl.Put(c, key, &Log{b.Bytes()})
 	return
 }

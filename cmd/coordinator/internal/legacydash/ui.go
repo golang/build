@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-
 package legacydash
 
 import (
@@ -34,7 +32,7 @@ import (
 )
 
 // uiHandler is the HTTP handler for the https://build.golang.org/.
-func uiHandler(w http.ResponseWriter, r *http.Request) {
+func (h handler) uiHandler(w http.ResponseWriter, r *http.Request) {
 	view, err := viewForRequest(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -55,7 +53,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 	var rpcs errgroup.Group
 	rpcs.Go(func() error {
 		var err error
-		tb.res, err = maintnerClient.GetDashboard(ctx, dashReq)
+		tb.res, err = h.maintnerCl.GetDashboard(ctx, dashReq)
 		return err
 	})
 	if view.ShowsActiveBuilds() {
@@ -68,7 +66,7 @@ func uiHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "maintner.GetDashboard: "+err.Error(), httpStatusOfErr(err))
 		return
 	}
-	data, err := tb.buildTemplateData(ctx)
+	data, err := tb.buildTemplateData(ctx, h.datastoreCl)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -152,7 +150,7 @@ func (tb *uiTemplateDataBuilder) getCommitsToLoad() map[commitInPackage]bool {
 // want map. The returned map is keyed by the git hash and may not
 // contain items that didn't exist in the datastore. (It is not an
 // error if 1 or all don't exist.)
-func (tb *uiTemplateDataBuilder) loadDatastoreCommits(ctx context.Context, want map[commitInPackage]bool) (map[string]*Commit, error) {
+func (tb *uiTemplateDataBuilder) loadDatastoreCommits(ctx context.Context, cl *datastore.Client, want map[commitInPackage]bool) (map[string]*Commit, error) {
 	ret := map[string]*Commit{}
 
 	// Allow tests to fake what the datastore would've loaded, and
@@ -174,7 +172,7 @@ func (tb *uiTemplateDataBuilder) loadDatastoreCommits(ctx context.Context, want 
 		}).Key()
 		keys = append(keys, key)
 	}
-	commits, err := fetchCommits(ctx, keys)
+	commits, err := fetchCommits(ctx, cl, keys)
 	if err != nil {
 		return nil, fmt.Errorf("fetchCommits: %v", err)
 	}
@@ -277,8 +275,8 @@ func repoImportPath(rh *apipb.DashRepoHead) string {
 	return ri.ImportPath
 }
 
-func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemplateData, error) {
-	dsCommits, err := tb.loadDatastoreCommits(ctx, tb.getCommitsToLoad())
+func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastoreCl *datastore.Client) (*uiTemplateData, error) {
+	dsCommits, err := tb.loadDatastoreCommits(ctx, datastoreCl, tb.getCommitsToLoad())
 	if err != nil {
 		return nil, err
 	}
@@ -322,14 +320,6 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context) (*uiTemp
 				return ts.Packages[i].Package.Name < ts.Packages[j].Package.Name
 			})
 			xRepoSections = append(xRepoSections, ts)
-		}
-	}
-
-	// Release Branches
-	var releaseBranches []string
-	for _, gr := range tb.res.Releases {
-		if gr.BranchName != "master" {
-			releaseBranches = append(releaseBranches, gr.BranchName)
 		}
 	}
 
@@ -561,7 +551,7 @@ type Pagination struct {
 // It is not an error if a commit doesn't exist.
 // Only commits that were found in datastore are returned,
 // in an unspecified order.
-func fetchCommits(ctx context.Context, keys []*datastore.Key) ([]*Commit, error) {
+func fetchCommits(ctx context.Context, cl *datastore.Client, keys []*datastore.Key) ([]*Commit, error) {
 	if len(keys) == 0 {
 		return nil, nil
 	}
@@ -570,7 +560,7 @@ func fetchCommits(ctx context.Context, keys []*datastore.Key) ([]*Commit, error)
 		out[i] = new(Commit)
 	}
 
-	err := datastoreClient.GetMulti(ctx, keys, out)
+	err := cl.GetMulti(ctx, keys, out)
 	err = filterDatastoreError(err)
 	err = filterNoSuchEntity(err)
 	if err != nil {

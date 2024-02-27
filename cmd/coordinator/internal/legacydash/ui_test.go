@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-
 package legacydash
 
 import (
@@ -327,7 +325,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 				activeBuilds:   tt.activeBuilds,
 				testCommitData: tt.testCommitData,
 			}
-			data, err := tb.buildTemplateData(context.Background())
+			data, err := tb.buildTemplateData(context.Background(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
