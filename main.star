@@ -430,7 +430,6 @@ def known_issue(issue_number, skip_x_repos = False):
 
 KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-riscv64": known_issue(issue_number = 63482),
-    "linux-arm": known_issue(issue_number = 65241),
     "linux-loong64": known_issue(issue_number = 65398),
     "netbsd-arm": known_issue(issue_number = 63698),
     "openbsd-ppc64": known_issue(issue_number = 63480),
@@ -1891,14 +1890,15 @@ def _define_go_internal_ci():
                 continue
 
             # Define presubmit builders. Since there's no postsubmit to monitor,
-            # all possible builders that perform testing are required.
+            # all possible completed builders that perform testing are required.
             name, _ = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
             _, _, _, run_mods = split_builder_type(builder_type)
             luci.cq_tryjob_verifier(
                 builder = name,
                 cq_group = cq_group_name,
                 disable_reuse = True,
-                includable_only = any([r.startswith("perf") for r in run_mods]),
+                includable_only = any([r.startswith("perf") for r in run_mods]) or
+                                  builder_type in KNOWN_ISSUE_BUILDER_TYPES,
             )
 
 _define_go_ci()
