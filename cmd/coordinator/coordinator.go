@@ -41,6 +41,7 @@ import (
 	"golang.org/x/build/buildlet"
 	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
 	"golang.org/x/build/cmd/coordinator/internal/legacydash"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/cmd/coordinator/protos"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
@@ -360,8 +361,9 @@ func main() {
 	// grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
 	grpcServer := grpc.NewServer(opts...)
 
-	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, nil, string(masterKey()), grpcServer)
-	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
+	luciPoll := lucipoll.NewService(maintnerClient)
+	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, luciPoll, string(masterKey()), grpcServer)
+	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient, LUCI: luciPoll}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	setSessionPool(sp)
 	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient())
