@@ -12,7 +12,6 @@ import (
 	"log"
 	"net/http"
 	"regexp"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -23,25 +22,35 @@ import (
 	gpb "go.chromium.org/luci/common/proto/gitiles"
 	"go.chromium.org/luci/grpc/prpc"
 	rdbpb "go.chromium.org/luci/resultdb/proto/v1"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-var nProc = runtime.GOMAXPROCS(0) * 4
 
 const resultDBHost = "results.api.cr.dev"
 const crBuildBucketHost = "cr-buildbucket.appspot.com"
 const gitilesHost = "go.googlesource.com"
 
+// LUCIClient is a LUCI client.
 type LUCIClient struct {
 	HTTPClient     *http.Client
 	GitilesClient  gpb.GitilesClient
 	BuildsClient   bbpb.BuildsClient
 	BuildersClient bbpb.BuildersClient
 	ResultDBClient rdbpb.ResultDBClient
+
+	// TraceSteps controls whether to log each step name as it's executed.
+	TraceSteps bool
+
+	nProc int
 }
 
-func NewLUCIClient() *LUCIClient {
+// NewLUCIClient creates a LUCI client.
+// nProc controls concurrency. NewLUCIClient panics if nProc is non-positive.
+func NewLUCIClient(nProc int) *LUCIClient {
+	if nProc < 1 {
+		panic(fmt.Errorf("nProc is %d, want 1 or higher", nProc))
+	}
 	c := new(http.Client)
 	gitilesClient, err := gitiles.NewRESTClient(c, gitilesHost, false)
 	if err != nil {
@@ -65,6 +74,7 @@ func NewLUCIClient() *LUCIClient {
 		BuildsClient:   buildsClient,
 		BuildersClient: buildersClient,
 		ResultDBClient: resultDBClient,
+		nProc:          nProc,
 	}
 }
 
@@ -75,6 +85,7 @@ type BuilderConfigProperties struct {
 		GOARCH string `json:"goarch,omitempty"`
 		GOOS   string `json:"goos,omitempty"`
 	} `json:"target"`
+	KnownIssue int `json:"known_issue,omitempty"`
 }
 
 type Builder struct {
@@ -123,12 +134,14 @@ type Failure struct {
 	LogText string
 }
 
-// Get the list of commits
-func (c *LUCIClient) ListCommits(ctx context.Context, repo, gobranch string, since time.Time) []Commit {
-	log.Println("ListCommits", repo, gobranch)
+// ListCommits fetches the list of commits from Gerrit.
+func (c *LUCIClient) ListCommits(ctx context.Context, repo, goBranch string, since time.Time) []Commit {
+	if c.TraceSteps {
+		log.Println("ListCommits", repo, goBranch)
+	}
 	branch := "master"
 	if repo == "go" {
-		branch = gobranch
+		branch = goBranch
 	}
 	var commits []Commit
 	var pageToken string
@@ -160,11 +173,13 @@ done:
 	return commits
 }
 
-// Get the list of builders, on the given repo and gobranch.
-// If repo and gobranch are empty, list all builders.
-func (c *LUCIClient) ListBuilders(ctx context.Context, repo, gobranch string) []Builder {
-	log.Println("ListBuilders", repo, gobranch)
-	all := repo == "" && gobranch == ""
+// ListBuilders fetches the list of builders, on the given repo and goBranch.
+// If repo and goBranch are empty, it fetches all builders.
+func (c *LUCIClient) ListBuilders(ctx context.Context, repo, goBranch string) ([]Builder, error) {
+	if c.TraceSteps {
+		log.Println("ListBuilders", repo, goBranch)
+	}
+	all := repo == "" && goBranch == ""
 	var builders []Builder
 	var pageToken string
 nextPage:
@@ -175,12 +190,12 @@ nextPage:
 		PageToken: pageToken,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	for _, b := range resp.GetBuilders() {
 		var p BuilderConfigProperties
 		json.Unmarshal([]byte(b.GetConfig().GetProperties()), &p)
-		if all || (p.Repo == repo && p.GoBranch == gobranch) {
+		if all || (p.Repo == repo && p.GoBranch == goBranch) {
 			builders = append(builders, Builder{b.GetId().GetBuilder(), &p})
 		}
 	}
@@ -191,11 +206,14 @@ nextPage:
 	slices.SortFunc(builders, func(a, b Builder) int {
 		return strings.Compare(a.Name, b.Name)
 	})
-	return builders
+	return builders, nil
 }
 
-func (c *LUCIClient) ListBoards(ctx context.Context) []*Dashboard {
-	builders := c.ListBuilders(ctx, "", "")
+func (c *LUCIClient) ListBoards(ctx context.Context) ([]*Dashboard, error) {
+	builders, err := c.ListBuilders(ctx, "", "")
+	if err != nil {
+		return nil, err
+	}
 	repoMap := make(map[Project]bool)
 	for _, b := range builders {
 		repoMap[Project{b.Repo, b.GoBranch}] = true
@@ -218,19 +236,21 @@ func (c *LUCIClient) ListBoards(ctx context.Context) []*Dashboard {
 		}
 		return strings.Compare(d1.GoBranch, d2.GoBranch)
 	})
-	return boards
+	return boards, nil
 }
 
-// Get builds from one builder.
-func (c *LUCIClient) GetBuilds(ctx context.Context, builder string, since time.Time) []*bbpb.Build {
-	log.Println("GetBuilds", builder)
+// GetBuilds fetches builds from one builder.
+func (c *LUCIClient) GetBuilds(ctx context.Context, builder string, since time.Time) ([]*bbpb.Build, error) {
+	if c.TraceSteps {
+		log.Println("GetBuilds", builder)
+	}
 	pred := &bbpb.BuildPredicate{
 		Builder:    &bbpb.BuilderID{Project: "golang", Bucket: "ci", Builder: builder},
 		CreateTime: &bbpb.TimeRange{StartTime: timestamppb.New(since)},
 	}
 	mask, err := fieldmaskpb.New((*bbpb.Build)(nil), "id", "builder", "output", "status", "steps", "infra", "end_time")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	var builds []*bbpb.Build
 	var pageToken string
@@ -242,37 +262,43 @@ nextPage:
 		PageToken: pageToken,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	builds = append(builds, resp.GetBuilds()...)
 	if resp.GetNextPageToken() != "" {
 		pageToken = resp.GetNextPageToken()
 		goto nextPage
 	}
-	return builds
+	return builds, nil
 }
 
-// Read the build dashboard dash, fill in the content.
-func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.Time) {
-	log.Println("ReadBoard", dash.Repo, dash.GoBranch)
+// ReadBoard reads the build dashboard dash, then fills in the content.
+func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.Time) error {
+	if c.TraceSteps {
+		log.Println("ReadBoard", dash.Repo, dash.GoBranch)
+	}
 	dash.Commits = c.ListCommits(ctx, dash.Repo, dash.GoBranch, since)
-	dash.Builders = c.ListBuilders(ctx, dash.Repo, dash.GoBranch)
+	var err error
+	dash.Builders, err = c.ListBuilders(ctx, dash.Repo, dash.GoBranch)
+	if err != nil {
+		return err
+	}
 
 	dashMap := make([]map[string]*BuildResult, len(dash.Builders)) // indexed by builder, then keyed by commit hash
 
 	// Get builds from builders.
-	var wg sync.WaitGroup
-	sem := make(chan int, nProc)
+	g, groupContext := errgroup.WithContext(ctx)
+	g.SetLimit(c.nProc)
 	for i, builder := range dash.Builders {
+		builder := builder
 		buildMap := make(map[string]*BuildResult)
 		dashMap[i] = buildMap
-		wg.Add(1)
-		sem <- 1
-		go func(builder Builder) {
-			defer func() { wg.Done(); <-sem }()
+		g.Go(func() error {
 			bName := builder.Name
-			builds := c.GetBuilds(ctx, bName, since)
-
+			builds, err := c.GetBuilds(groupContext, bName, since)
+			if err != nil {
+				return err
+			}
 			for _, b := range builds {
 				id := b.GetId()
 				var commit, goCommit string
@@ -366,11 +392,14 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 				}
 				buildMap[commit] = r
 			}
-		}(builder)
+			return nil
+		})
 	}
-	wg.Wait()
+	if err := g.Wait(); err != nil {
+		return err
+	}
 
-	// Gather into dashboard
+	// Gather into dashboard.
 	dash.Results = make([][]*BuildResult, len(dash.Builders))
 	for i, m := range dashMap {
 		dash.Results[i] = make([]*BuildResult, len(dash.Commits))
@@ -383,17 +412,25 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 			dash.Results[i][j] = r
 		}
 	}
+
+	return nil
 }
 
-func (c *LUCIClient) ReadBoards(ctx context.Context, boards []*Dashboard, since time.Time) {
+func (c *LUCIClient) ReadBoards(ctx context.Context, boards []*Dashboard, since time.Time) error {
 	for _, dash := range boards {
-		c.ReadBoard(ctx, dash, since)
+		err := c.ReadBoard(ctx, dash, since)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-// For a failed run, get the failed tests and artifacts.
+// GetResultAndArtifacts fetches the failed tests and artifacts for the failed run r.
 func (c *LUCIClient) GetResultAndArtifacts(ctx context.Context, r *BuildResult) []*Failure {
-	log.Println("GetResultAndArtifacts", r.Builder, shortHash(r.Commit), r.ID)
+	if c.TraceSteps {
+		log.Println("GetResultAndArtifacts", r.Builder, shortHash(r.Commit), r.ID)
+	}
 	req := &rdbpb.QueryTestResultsRequest{
 		Invocations: []string{r.InvocationID},
 		Predicate:   &rdbpb.TestResultPredicate{Expectancy: rdbpb.TestResultPredicate_VARIANTS_WITH_UNEXPECTED_RESULTS},
@@ -457,8 +494,8 @@ func splitTestID(testid string) (string, string) {
 	return "", testid
 }
 
-func buildURL(buildid int64) string { // keep in sync with buildUrlRE in github.go
-	return fmt.Sprintf("https://ci.chromium.org/b/%d", buildid)
+func buildURL(buildID int64) string { // keep in sync with buildUrlRE in github.go
+	return fmt.Sprintf("https://ci.chromium.org/b/%d", buildID)
 }
 
 func shortHash(s string) string {
@@ -471,11 +508,11 @@ func shortHash(s string) string {
 // FindFailures returns the failures listed in the dashboards.
 // The result is sorted by commit date, then repo, then builder.
 // Pupulate the failure contents (the .Failures fields) for the
-// failures
+// failures.
 func (c *LUCIClient) FindFailures(ctx context.Context, boards []*Dashboard) []*BuildResult {
 	var res []*BuildResult
 	var wg sync.WaitGroup
-	sem := make(chan int, nProc)
+	sem := make(chan int, c.nProc)
 	for _, dash := range boards {
 		for i, b := range dash.Builders {
 			for _, r := range dash.Results[i] {
@@ -516,7 +553,8 @@ func (c *LUCIClient) FindFailures(ctx context.Context, boards []*Dashboard) []*B
 	return res
 }
 
-// Print the dashboard. For each builder, print a list of commits and status.
+// PrintDashboard prints the dashboard.
+// For each builder, it prints a list of commits and status.
 func PrintDashboard(dash *Dashboard) {
 	for i, b := range dash.Builders {
 		fmt.Println(b.Name)
@@ -525,6 +563,42 @@ func PrintDashboard(dash *Dashboard) {
 				continue
 			}
 			fmt.Printf("\t%s %v %v\n", shortHash(r.Commit), r.Time, r.Status)
+		}
+	}
+}
+
+// FetchLogs fetches logs for build results.
+func (c *LUCIClient) FetchLogs(res []*BuildResult) {
+	// TODO: caching?
+	g := new(errgroup.Group)
+	g.SetLimit(c.nProc)
+	for _, r := range res {
+		r := r
+		g.Go(func() error {
+			c.fetchLogsForBuild(r)
+			return nil
+		})
+	}
+	g.Wait()
+}
+
+func (c *LUCIClient) fetchLogsForBuild(r *BuildResult) {
+	if c.TraceSteps {
+		log.Println("fetchLogsForBuild", r.Builder, shortHash(r.Commit), r.ID)
+	}
+	if r.LogURL == "" {
+		fmt.Printf("no log url: %s\n", buildURL(r.ID))
+	} else {
+		r.LogText = fetchURL(r.LogURL + "?format=raw")
+	}
+	if r.StepLogURL != "" {
+		r.StepLogText = fetchURL(r.StepLogURL + "?format=raw")
+	}
+	for _, f := range r.Failures {
+		if f.LogURL == "" {
+			fmt.Printf("no log url: %s %s\n", buildURL(r.ID), f.TestID)
+		} else {
+			f.LogText = fetchURL(f.LogURL)
 		}
 	}
 }
@@ -546,38 +620,4 @@ func fetchURL(url string) string {
 		log.Fatal(fmt.Errorf("GET %s: failed to read body: %v body: %q", url, err, body))
 	}
 	return string(body)
-}
-
-func fetchLogsForBuild(r *BuildResult) {
-	log.Println("fetchLogs", r.Builder, shortHash(r.Commit), r.ID)
-	if r.LogURL == "" {
-		fmt.Printf("no log url: %s\n", buildURL(r.ID))
-	} else {
-		r.LogText = fetchURL(r.LogURL + "?format=raw")
-	}
-	if r.StepLogURL != "" {
-		r.StepLogText = fetchURL(r.StepLogURL + "?format=raw")
-	}
-	for _, f := range r.Failures {
-		if f.LogURL == "" {
-			fmt.Printf("no log url: %s %s\n", buildURL(r.ID), f.TestID)
-		} else {
-			f.LogText = fetchURL(f.LogURL)
-		}
-	}
-}
-
-func fetchLogs(res []*BuildResult) {
-	// TODO: caching?
-	var wg sync.WaitGroup
-	sem := make(chan int, nProc)
-	for _, r := range res {
-		wg.Add(1)
-		sem <- 1
-		go func(r *BuildResult) {
-			defer func() { wg.Done(); <-sem }()
-			fetchLogsForBuild(r)
-		}(r)
-	}
-	wg.Wait()
 }

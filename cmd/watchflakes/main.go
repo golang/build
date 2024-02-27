@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"runtime"
 	"strings"
 	"time"
 
@@ -102,7 +103,8 @@ func main() {
 
 	// Load LUCI dashboards
 	ctx := context.Background()
-	c := NewLUCIClient()
+	c := NewLUCIClient(runtime.GOMAXPROCS(0) * 4)
+	c.TraceSteps = true
 
 	var ticker *time.Ticker
 	if *repeat != 0 {
@@ -110,13 +112,16 @@ func main() {
 	}
 Repeat:
 	startTime := time.Now()
-	boards := c.ListBoards(ctx)
+	boards, err := c.ListBoards(ctx)
+	if err != nil {
+		log.Fatalln("ListBoards:", err)
+	}
 	c.ReadBoards(ctx, boards, startTime.Add(-timeLimit))
 	skipBrokenCommits(boards)
 	skipBrokenBuilders(boards)
 
 	failRes := c.FindFailures(ctx, boards)
-	fetchLogs(failRes)
+	c.FetchLogs(failRes)
 
 	if *verbose {
 		for _, r := range failRes {
@@ -126,7 +131,7 @@ Repeat:
 
 	// Load GitHub issues
 	var issues []*Issue
-	issues, err := readIssues(issues)
+	issues, err = readIssues(issues)
 	if err != nil {
 		log.Fatal(err)
 	}
