@@ -174,13 +174,28 @@ func hostPathHandler(h http.Handler) http.Handler {
 
 // A linkRewriter is a ResponseWriter that rewrites links in HTML output.
 // It rewrites relative links /foo to be /host/foo, and it rewrites any link
-// https://h/foo, where h is in validHosts, to be /h/foo. This corrects the
-// links to have the right form for the test server.
+// https://h/foo or //h/foo, where h is in validHosts, to be /h/foo.
+// This corrects the links to have the right form for the local development mode.
 type linkRewriter struct {
 	http.ResponseWriter
 	host string
 	buf  []byte
 	ct   string // content-type
+}
+
+func (r *linkRewriter) WriteHeader(code int) {
+	if l := r.Header().Get("Location"); l != "" {
+		if u, err := url.Parse(l); err == nil {
+			if u.Host == "" {
+				u.Path = "/" + r.host + u.Path
+			} else if validHosts[u.Host] {
+				u.Path = "/" + u.Host + u.Path
+				u.Scheme, u.Host = "", ""
+			}
+			r.Header().Set("Location", u.String())
+		}
+	}
+	r.ResponseWriter.WriteHeader(code)
 }
 
 func (r *linkRewriter) Write(data []byte) (int, error) {
@@ -200,12 +215,12 @@ func (r *linkRewriter) Write(data []byte) (int, error) {
 }
 
 func (r *linkRewriter) Flush() {
-	repl := []string{
-		`href="/`, `href="/` + r.host + `/`,
-	}
+	var repl []string
 	for host := range validHosts {
 		repl = append(repl, `href="https://`+host, `href="/`+host)
+		repl = append(repl, `href="//`+host, `href="/`+host) // Handle scheme-less URLs.
 	}
+	repl = append(repl, `href="/`, `href="/`+r.host+`/`)
 	strings.NewReplacer(repl...).WriteString(r.ResponseWriter, string(r.buf))
 	r.buf = nil
 }
