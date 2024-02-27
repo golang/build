@@ -247,16 +247,20 @@ func main() {
 
 	gce := pool.NewGCEConfiguration()
 
-	goKubeClient, err := gke.NewClient(context.Background(),
-		gce.BuildEnv().KubeServices.Name,
-		gce.BuildEnv().KubeServices.Location(),
-		gke.OptNamespace(gce.BuildEnv().KubeServices.Namespace),
-		gke.OptProject(gce.BuildEnv().ProjectName),
-		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
-	if err != nil {
-		log.Fatalf("connecting to GKE failed: %v", err)
+	if gce.BuildEnv().KubeServices.Name != "" {
+		goKubeClient, err := gke.NewClient(context.Background(),
+			gce.BuildEnv().KubeServices.Name,
+			gce.BuildEnv().KubeServices.Location(),
+			gke.OptNamespace(gce.BuildEnv().KubeServices.Namespace),
+			gke.OptProject(gce.BuildEnv().ProjectName),
+			gke.OptTokenSource(gce.GCPCredentials().TokenSource))
+		if err != nil {
+			log.Fatalf("connecting to GKE failed: %v", err)
+		}
+		go monitorGitMirror(goKubeClient)
+	} else {
+		log.Println("Kubernetes services disabled due to empty KubeServices.Name")
 	}
-	go monitorGitMirror(goKubeClient)
 
 	if *mode == "prod" || (*mode == "dev" && *devEnableEC2) {
 		// TODO(golang.org/issues/38337) the coordinator will use a package scoped pool
@@ -364,7 +368,9 @@ func main() {
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
 		gce.BuildletPool().SetEnabled(*devEnableGCE)
-		go findWorkLoop()
+		if *devEnableGCE || *devEnableEC2 {
+			go findWorkLoop()
+		}
 	} else {
 		go gce.BuildletPool().CleanUpOldVMs()
 
