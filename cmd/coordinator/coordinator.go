@@ -360,7 +360,7 @@ func main() {
 	// grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
 	grpcServer := grpc.NewServer(opts...)
 
-	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()), grpcServer)
+	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, nil, string(masterKey()), grpcServer)
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	setSessionPool(sp)

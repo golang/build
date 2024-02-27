@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
+	bbpb "go.chromium.org/luci/buildbucket/proto"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -66,7 +68,11 @@ func (h handler) uiHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "maintner.GetDashboard: "+err.Error(), httpStatusOfErr(err))
 		return
 	}
-	data, err := tb.buildTemplateData(ctx, h.datastoreCl)
+	var luci lucipoll.Snapshot
+	if h.LUCI != nil && tb.showLUCI() {
+		luci = h.LUCI.PostSubmitSnapshot()
+	}
+	data, err := tb.buildTemplateData(ctx, h.datastoreCl, luci)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -96,7 +102,11 @@ func viewForRequest(r *http.Request) (dashboardView, error) {
 	case "json":
 		return jsonView{}, nil
 	case "":
-		return htmlView{}, nil
+		showLUCI, _ := strconv.ParseBool(r.URL.Query().Get("showluci"))
+		if legacyOnly, _ := strconv.ParseBool(r.URL.Query().Get("legacyonly")); legacyOnly {
+			showLUCI = false
+		}
+		return htmlView{ShowLUCI: showLUCI}, nil
 	}
 	return nil, errors.New("unsupported mode argument")
 }
@@ -151,19 +161,6 @@ func (tb *uiTemplateDataBuilder) getCommitsToLoad() map[commitInPackage]bool {
 // contain items that didn't exist in the datastore. (It is not an
 // error if 1 or all don't exist.)
 func (tb *uiTemplateDataBuilder) loadDatastoreCommits(ctx context.Context, cl *datastore.Client, want map[commitInPackage]bool) (map[string]*Commit, error) {
-	ret := map[string]*Commit{}
-
-	// Allow tests to fake what the datastore would've loaded, and
-	// thus also allow tests to be run without a real (or fake) datastore.
-	if m := tb.testCommitData; m != nil {
-		for k := range want {
-			if c, ok := m[k.commit]; ok {
-				ret[k.commit] = c
-			}
-		}
-		return ret, nil
-	}
-
 	var keys []*datastore.Key
 	for k := range want {
 		key := (&Commit{
@@ -176,6 +173,7 @@ func (tb *uiTemplateDataBuilder) loadDatastoreCommits(ctx context.Context, cl *d
 	if err != nil {
 		return nil, fmt.Errorf("fetchCommits: %v", err)
 	}
+	var ret = make(map[string]*Commit)
 	for _, c := range commits {
 		ret[c.Hash] = c
 	}
@@ -211,7 +209,7 @@ func (tb *uiTemplateDataBuilder) newCommitInfo(dsCommits map[string]*Commit, rep
 		Hash:        dc.Commit,
 		PackagePath: repo,
 		User:        formatGitAuthor(dc.AuthorName, dc.AuthorEmail),
-		Desc:        cleanTitle(dc.Title, tb.req.Branch),
+		Desc:        cleanTitle(dc.Title, tb.branch()),
 		Time:        time.Unix(dc.CommitTimeSec, 0),
 		Branch:      branch,
 	}
@@ -229,6 +227,15 @@ func (tb *uiTemplateDataBuilder) newCommitInfo(dsCommits map[string]*Commit, rep
 		}
 	}
 	return ci
+}
+
+func (tb *uiTemplateDataBuilder) showLUCI() bool {
+	v, ok := tb.view.(htmlView)
+	return ok && v == htmlView{ShowLUCI: true} &&
+		// Only show LUCI build results for the default top-level view.
+		tb.req.Page == 0 &&
+		tb.req.Repo == "" &&
+		tb.branch() == "master"
 }
 
 // showXRepoSection reports whether the dashboard should show the state of the x/foo repos at the bottom of
@@ -275,10 +282,162 @@ func repoImportPath(rh *apipb.DashRepoHead) string {
 	return ri.ImportPath
 }
 
-func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastoreCl *datastore.Client) (*uiTemplateData, error) {
-	dsCommits, err := tb.loadDatastoreCommits(ctx, datastoreCl, tb.getCommitsToLoad())
-	if err != nil {
-		return nil, err
+// appendLUCIResults appends result data polled from LUCI to commits.
+func appendLUCIResults(luci lucipoll.Snapshot, commits []*CommitInfo, repo string) {
+	commitBuilds, ok := luci.RepoCommitBuilds[repo]
+	if !ok {
+		return
+	}
+	for _, c := range commits {
+		builds, ok := commitBuilds[c.Hash]
+		if !ok {
+			// No builds for this commit.
+			continue
+		}
+		for _, b := range builds {
+			builder := luci.Builders[b.BuilderName]
+			if builder.Repo != repo || builder.GoBranch != "master" {
+				// TODO: Support builder.GoBranch != master for x/ repos.
+				// Or maybe it's fine to leave that to appendLUCIResultsXRepo only,
+				// and have this appendLUCIResults function deal repo == "go" only.
+				// Hmm, maybe it needs to handle repo != "go" for when viewing the
+				// individual repo commit views... I'll see later.
+				continue
+			}
+			switch b.Status {
+			case bbpb.Status_STARTED, bbpb.Status_SUCCESS, bbpb.Status_FAILURE, bbpb.Status_INFRA_FAILURE:
+			default:
+				continue
+			}
+			tagFriendly := builder.Name
+			if after, ok := strings.CutPrefix(tagFriendly, fmt.Sprintf("gotip-%s-%s_", builder.Target.GOOS, builder.Target.GOARCH)); ok {
+				// Convert os-arch_osversion-mod1-mod2 (an underscore at start of "_osversion")
+				// to have os-arch-osversion-mod1-mod2 (a dash at start of "-osversion") form.
+				// The tag computation below uses this to find both "osversion-mod1" or "mod1".
+				tagFriendly = fmt.Sprintf("gotip-%s-%s-", builder.Target.GOOS, builder.Target.GOARCH) + after
+			}
+			builderName := strings.TrimPrefix(tagFriendly, "gotip-") + "-🐇"
+			// Note: goHash is empty for the main Go repo.
+			goHash := ""
+			if repo != "go" {
+				// TODO: Generalize goHash for non-go builds.
+				//
+				// If the non-go build was triggered by an x/ repo trigger,
+				// its b.GetInput().GetGitilesCommit().GetId() will be the
+				// x/ repo commit, and the Go repo commit will be selected
+				// at runtime...
+				//
+				// Can get it out of output properties but that would mean
+				// not being able to support STARTED builds.
+			}
+			switch b.Status {
+			case bbpb.Status_STARTED:
+				if c.BuildingURLs == nil {
+					c.BuildingURLs = make(map[builderAndGoHash]string)
+				}
+				c.BuildingURLs[builderAndGoHash{builderName, goHash}] = buildURL(b.ID)
+			case bbpb.Status_SUCCESS, bbpb.Status_FAILURE:
+				c.ResultData = append(c.ResultData, fmt.Sprintf("%s|%t|%s|%s",
+					builderName,
+					b.Status == bbpb.Status_SUCCESS,
+					buildURL(b.ID),
+					goHash,
+				))
+			case bbpb.Status_INFRA_FAILURE:
+				c.ResultData = append(c.ResultData, fmt.Sprintf("%s|%s|%s|%s",
+					builderName,
+					"infra_failure",
+					buildURL(b.ID),
+					goHash,
+				))
+			}
+		}
+	}
+}
+
+func appendLUCIResultsXRepo(luci lucipoll.Snapshot, c *CommitInfo, repo, goBranch, goHash string) {
+	commitBuilds, ok := luci.RepoCommitBuilds[repo]
+	if !ok {
+		return
+	}
+	builds, ok := commitBuilds[c.Hash]
+	if !ok {
+		// No builds for this commit.
+		return
+	}
+	for _, b := range builds {
+		builder := luci.Builders[b.BuilderName]
+		if builder.Repo != repo || builder.GoBranch != goBranch {
+			continue
+		}
+		switch b.Status {
+		case bbpb.Status_STARTED, bbpb.Status_SUCCESS, bbpb.Status_FAILURE, bbpb.Status_INFRA_FAILURE:
+		default:
+			continue
+		}
+		// TODO: Maybe dedup builder name calculation with addLUCIBuilders and more places.
+		// That said, those few places have slightly different details, so maybe it's fine.
+		shortGoBranch := "tip"
+		if after, ok := strings.CutPrefix(goBranch, "release-branch.go"); ok {
+			shortGoBranch = after
+		}
+		tagFriendly := builder.Name
+		if after, ok := strings.CutPrefix(tagFriendly, fmt.Sprintf("x_%s-go%s-%s-%s_", repo, shortGoBranch, builder.Target.GOOS, builder.Target.GOARCH)); ok {
+			// Convert os-arch_osversion-mod1-mod2 (an underscore at start of "_osversion")
+			// to have os-arch-osversion-mod1-mod2 (a dash at start of "-osversion") form.
+			// The tag computation below uses this to find both "osversion-mod1" or "mod1".
+			tagFriendly = fmt.Sprintf("x_%s-go%s-%s-%s-", repo, shortGoBranch, builder.Target.GOOS, builder.Target.GOARCH) + after
+		}
+		// The builder name is "os-arch{-suffix}-🐇". The "🐇" is used to avoid collisions
+		// in builder names between LUCI builders and coordinator builders, and to make it
+		// possible to tell LUCI builders apart by their name.
+		builderName := strings.TrimPrefix(tagFriendly, fmt.Sprintf("x_%s-go%s-", repo, shortGoBranch)) + "-🐇"
+		switch b.Status {
+		case bbpb.Status_STARTED:
+			if c.BuildingURLs == nil {
+				c.BuildingURLs = make(map[builderAndGoHash]string)
+			}
+			c.BuildingURLs[builderAndGoHash{builderName, goHash}] = buildURL(b.ID)
+		case bbpb.Status_SUCCESS, bbpb.Status_FAILURE:
+			c.ResultData = append(c.ResultData, fmt.Sprintf("%s|%t|%s|%s",
+				builderName,
+				b.Status == bbpb.Status_SUCCESS,
+				buildURL(b.ID),
+				goHash,
+			))
+		case bbpb.Status_INFRA_FAILURE:
+			c.ResultData = append(c.ResultData, fmt.Sprintf("%s|%s|%s|%s",
+				builderName,
+				"infra_failure",
+				buildURL(b.ID),
+				goHash,
+			))
+		}
+	}
+}
+
+func buildURL(buildID int64) string {
+	return fmt.Sprintf("https://ci.chromium.org/b/%d", buildID)
+}
+
+func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastoreCl *datastore.Client, luci lucipoll.Snapshot) (*uiTemplateData, error) {
+	wantCommits := tb.getCommitsToLoad()
+	var dsCommits map[string]*Commit
+	if datastoreCl != nil {
+		var err error
+		dsCommits, err = tb.loadDatastoreCommits(ctx, datastoreCl, wantCommits)
+		if err != nil {
+			return nil, err
+		}
+	} else if m := tb.testCommitData; m != nil {
+		// Allow tests to fake what the datastore would've loaded, and
+		// thus also allow tests to be run without a real (or fake) datastore.
+		dsCommits = make(map[string]*Commit)
+		for k := range wantCommits {
+			if c, ok := m[k.commit]; ok {
+				dsCommits[k.commit] = c
+			}
+		}
 	}
 
 	var commits []*CommitInfo
@@ -286,6 +445,7 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 		ci := tb.newCommitInfo(dsCommits, tb.req.Repo, dc)
 		commits = append(commits, ci)
 	}
+	appendLUCIResults(luci, commits, tb.repoGerritProj())
 
 	// x/ repo sections at bottom (each is a "TagState", for historical reasons)
 	var xRepoSections []*TagState
@@ -302,18 +462,21 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 				if path == "" {
 					continue
 				}
+				ci := tb.newCommitInfo(dsCommits, path, rh.Commit)
+				appendLUCIResultsXRepo(luci, ci, rh.GerritProject, ts.Branch(), gorel.BranchCommit)
 				ts.Packages = append(ts.Packages, &PackageState{
 					Package: &Package{
 						Name: rh.GerritProject,
 						Path: path,
 					},
-					Commit: tb.newCommitInfo(dsCommits, path, rh.Commit),
+					Commit: ci,
 				})
 			}
 			builders := map[string]bool{}
 			for _, pkg := range ts.Packages {
 				addBuilders(builders, pkg.Package.Name, ts.Branch())
 			}
+			addLUCIBuilders(luci, builders, ts.Packages, gorel.BranchName)
 			ts.Builders = builderKeys(builders)
 
 			sort.Slice(ts.Packages, func(i, j int) bool {
@@ -335,7 +498,7 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 		TagState:   xRepoSections,
 		Pagination: &Pagination{},
 		Branches:   tb.res.Branches,
-		Branch:     tb.req.Branch,
+		Branch:     tb.branch(),
 		Repo:       gerritProject,
 	}
 
@@ -360,13 +523,23 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 	if tb.view.ShowsActiveBuilds() {
 		// Populate building URLs for the HTML UI only.
 		data.populateBuildingURLs(ctx, tb.activeBuilds)
+
+		// Appending LUCI active builds can be done here, but it's done
+		// earlier in appendLUCIResults instead because it's convenient
+		// to do there in the case of LUCI.
 	}
 
 	return data, nil
 }
 
 // htmlView renders the HTML (default) form of https://build.golang.org/ with no mode parameter.
-type htmlView struct{}
+type htmlView struct {
+	// ShowLUCI controls whether to show build results from the LUCI post-submit dashboard
+	// in addition to coordinator-backed build results from Datastore.
+	//
+	// It has no effect if there's no LUCI client.
+	ShowLUCI bool
+}
 
 func (htmlView) ShowsActiveBuilds() bool { return true }
 func (htmlView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiTemplateData) {
@@ -398,20 +571,16 @@ func dashboardRequest(view dashboardView, r *http.Request) (*apipb.DashboardRequ
 		}
 	}
 
-	repo := r.FormValue("repo") // empty for main go repo, else e.g. "golang.org/x/net"
-
-	branch := r.FormValue("branch")
-	if branch == "" {
-		branch = "master"
-	}
+	repo := r.FormValue("repo")     // empty for main go repo, else e.g. "golang.org/x/net"
+	branch := r.FormValue("branch") // empty means "master"
 	maxCommits := commitsPerPage
 	if branch == "mixed" {
 		maxCommits = 0 // let maintner decide
 	}
 	return &apipb.DashboardRequest{
 		Page:       int32(page),
-		Branch:     branch,
 		Repo:       repo,
+		Branch:     branch,
 		MaxCommits: int32(maxCommits),
 	}, nil
 }
@@ -471,7 +640,7 @@ func (jsonView) ServeDashboard(w http.ResponseWriter, r *http.Request, data *uiT
 
 func toBuildStatus(host string, data *uiTemplateData) types.BuildStatus {
 	// cell returns one of "" (no data), "ok", or a failure URL.
-	cell := func(res *Result) string {
+	cell := func(res *DisplayResult) string {
 		switch {
 		case res == nil:
 			return ""
@@ -599,6 +768,36 @@ func addBuilders(builders map[string]bool, gerritProj, branch string) {
 	}
 }
 
+// addLUCIBuilders adds LUCI builders that match the given xRepos and goBranch
+// to the provided builders map.
+func addLUCIBuilders(luci lucipoll.Snapshot, builders map[string]bool, xRepos []*PackageState, goBranch string) {
+	for _, r := range xRepos {
+		repoName := r.Package.Name
+		for _, b := range luci.Builders {
+			if b.Repo != repoName || b.GoBranch != goBranch {
+				// Filter out builders whose repo and Gobranch doesn't match.
+				continue
+			}
+			shortGoBranch := "tip"
+			if after, ok := strings.CutPrefix(b.GoBranch, "release-branch.go"); ok {
+				shortGoBranch = after
+			}
+			tagFriendly := b.Name
+			if after, ok := strings.CutPrefix(tagFriendly, fmt.Sprintf("x_%s-go%s-%s-%s_", b.Repo, shortGoBranch, b.Target.GOOS, b.Target.GOARCH)); ok {
+				// Convert os-arch_osversion-mod1-mod2 (an underscore at start of "_osversion")
+				// to have os-arch-osversion-mod1-mod2 (a dash at start of "-osversion") form.
+				// The tag computation below uses this to find both "osversion-mod1" or "mod1".
+				tagFriendly = fmt.Sprintf("x_%s-go%s-%s-%s-", b.Repo, shortGoBranch, b.Target.GOOS, b.Target.GOARCH) + after
+			}
+			// The builder name is "os-arch{-suffix}-🐇". The "🐇" is used to avoid collisions
+			// in builder names between LUCI builders and coordinator builders, and to make to
+			// possible to tell LUCI builders apart by their name.
+			builderName := strings.TrimPrefix(tagFriendly, fmt.Sprintf("x_%s-go%s-", b.Repo, shortGoBranch)) + "-🐇"
+			builders[builderName] = true
+		}
+	}
+}
+
 func builderKeys(m map[string]bool) (s []string) {
 	s = make([]string, 0, len(m))
 	for k := range m {
@@ -680,7 +879,9 @@ type PackageState struct {
 type CommitInfo struct {
 	Hash string
 
-	// ResultData is a copy of the Commit.ResultData field from datastore.
+	// ResultData is a copy of the [Commit.ResultData] field from datastore,
+	// with an additional rule that the second '|'-separated value may be "infra_failure"
+	// to indicate a problem with the infrastructure rather than the code being tested.
 	ResultData []string
 
 	// BuildingURLs contains the status URL values for builds that

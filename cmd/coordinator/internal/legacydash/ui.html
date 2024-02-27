@@ -165,9 +165,9 @@
                 {{if .BuildingURL}}
                   <a href="{{.BuildingURL}}"><img src="https://go.dev/favicon.ico" height=16 width=16 border=0></a>
                 {{else}}
-                  <a href="/log/{{.LogHash}}"
+                  <a href="{{.LogURL}}"
                     class="{{if .OK}}ok{{else}}fail{{end}}
-                      {{- if $ki}} noise{{end}}"
+                      {{- if or $ki .Noise}} noise{{end}}"
                     title="Build log of {{$builderName}} on commit {{shortHash $c.Hash}}{{with $h}} (using Go commit {{shortHash .}}){{end}}.
                       {{- with $ki}}{{"\n\n"}}This builder has a known issue. See go.dev/issue/{{.}}.{{end}}"
                   >{{if .OK}}ok{{else}}fail{{end}}</a>
@@ -277,9 +277,9 @@
                 {{if .BuildingURL}}
                   <a href="{{.BuildingURL}}"><img src="https://go.dev/favicon.ico" height=16 width=16 border=0></a>
                 {{else}}
-                  <a href="/log/{{.LogHash}}"
+                  <a href="{{.LogURL}}"
                     class="{{if .OK}}ok{{else}}fail{{end}}
-                      {{- if $ki}} noise{{end}}"
+                      {{- if or $ki .Noise}} noise{{end}}"
                     title="Build log of {{$builderName}} on commit {{shortHash $h}} (using Go commit {{shortHash $goHash}}).
                       {{- with $ki}}{{"\n\n"}}This builder has a known issue. See go.dev/issue/{{.}}.{{end}}"
                   >{{if .OK}}ok{{else}}fail{{end}}</a>

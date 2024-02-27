@@ -138,6 +138,8 @@ type Commit struct {
 	// For non-Go commits, only the Results for the current Go tip, weekly,
 	// and release Tags are stored here. This is purely de-normalized data.
 	// The complete data set is stored in Result entities.
+	//
+	// Each string is formatted as builder|OK|LogHash|GoHash.
 	ResultData []string `datastore:",noindex"`
 }
 
@@ -225,23 +227,27 @@ func min(a, b int) int {
 //
 // For the main Go repo, goHash is the empty string.
 func (c *Commit) Result(builder, goHash string) *Result {
-	return result(c.ResultData, c.Hash, c.PackagePath, builder, goHash)
+	r := result(c.ResultData, c.Hash, c.PackagePath, builder, goHash)
+	if r == nil {
+		return nil
+	}
+	return &r.Result
 }
 
 // Result returns the build Result for this commit for the given builder/goHash.
 //
 // For the main Go repo, goHash is the empty string.
-func (c *CommitInfo) Result(builder, goHash string) *Result {
+func (c *CommitInfo) Result(builder, goHash string) *DisplayResult {
 	if r := result(c.ResultData, c.Hash, c.PackagePath, builder, goHash); r != nil {
 		return r
 	}
 	if u, ok := c.BuildingURLs[builderAndGoHash{builder, goHash}]; ok {
-		return &Result{
+		return &DisplayResult{Result: Result{
 			Builder:     builder,
 			BuildingURL: u,
 			Hash:        c.Hash,
 			GoHash:      goHash,
-		}
+		}}
 	}
 	if fakeResults {
 		// Create a fake random result.
@@ -249,25 +255,38 @@ func (c *CommitInfo) Result(builder, goHash string) *Result {
 		default:
 			return nil
 		case 1:
-			return &Result{
+			return &DisplayResult{Result: Result{
 				Builder: builder,
 				Hash:    c.Hash,
 				GoHash:  goHash,
 				OK:      true,
-			}
+			}}
 		case 2:
-			return &Result{
+			return &DisplayResult{Result: Result{
 				Builder: builder,
 				Hash:    c.Hash,
 				GoHash:  goHash,
 				LogHash: "fakefailureurl",
-			}
+			}}
 		}
 	}
 	return nil
 }
 
-func result(resultData []string, hash, packagePath, builder, goHash string) *Result {
+type DisplayResult struct {
+	Result
+	Noise bool
+}
+
+func (r *DisplayResult) LogURL() string {
+	if strings.HasPrefix(r.LogHash, "https://") {
+		return r.LogHash
+	} else {
+		return "/log/" + r.LogHash
+	}
+}
+
+func result(resultData []string, hash, packagePath, builder, goHash string) *DisplayResult {
 	for _, r := range resultData {
 		if !strings.HasPrefix(r, builder) {
 			// Avoid strings.SplitN alloc in the common case.
@@ -292,6 +311,14 @@ func result(resultData []string, hash, packagePath, builder, goHash string) *Res
 // As a special case, "tip" is an alias for "master", since this app
 // still uses a bunch of hg terms from when we used hg.
 func isUntested(builder, repo, branch, goBranch string) bool {
+	if strings.HasSuffix(builder, "-🐇") {
+		// LUCI builders are never considered untested.
+		//
+		// Note: It would be possible to improve this by reporting
+		// whether a given LUCI builder exists for a given x/ repo.
+		// That needs more bookkeeping and code, so left for later.
+		return false
+	}
 	if branch == "tip" {
 		branch = "master"
 	}
@@ -320,8 +347,8 @@ func knownIssue(builder string) int {
 	return 0
 }
 
-// Results returns the build Results for this Commit.
-func (c *CommitInfo) Results() (results []*Result) {
+// Results returns the build results for this Commit.
+func (c *CommitInfo) Results() (results []*DisplayResult) {
 	for _, r := range c.ResultData {
 		p := strings.SplitN(r, "|", 4)
 		if len(p) != 4 {
@@ -376,15 +403,18 @@ func reverse(s []string) {
 	}
 }
 
-// partsToResult creates a Result from ResultData substrings.
-func partsToResult(hash, packagePath string, p []string) *Result {
-	return &Result{
-		Builder:     p[0],
-		Hash:        hash,
-		PackagePath: packagePath,
-		GoHash:      p[3],
-		OK:          p[1] == "true",
-		LogHash:     p[2],
+// partsToResult creates a DisplayResult from ResultData substrings.
+func partsToResult(hash, packagePath string, p []string) *DisplayResult {
+	return &DisplayResult{
+		Result: Result{
+			Builder:     p[0],
+			Hash:        hash,
+			PackagePath: packagePath,
+			GoHash:      p[3],
+			OK:          p[1] == "true",
+			LogHash:     p[2],
+		},
+		Noise: p[1] == "infra_failure",
 	}
 }
 

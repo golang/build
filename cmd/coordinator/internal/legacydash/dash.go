@@ -19,10 +19,15 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/NYTimes/gziphandler"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"google.golang.org/grpc"
 )
+
+type luciClient interface {
+	PostSubmitSnapshot() lucipoll.Snapshot
+}
 
 type handler struct {
 	mux *http.ServeMux
@@ -34,6 +39,9 @@ type handler struct {
 	// Maintner client for the maintner service.
 	// Typically the one at maintner.golang.org.
 	maintnerCl apipb.MaintnerServiceClient
+
+	// LUCI is a client for LUCI, used for fetching build results from there.
+	LUCI luciClient
 }
 
 func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) { h.mux.ServeHTTP(w, req) }
@@ -43,11 +51,12 @@ const fakeResults = false
 
 // Handler sets a datastore client, maintner client, builder master key and
 // GRPC server at the package scope, and returns an HTTP mux for the legacy dashboard.
-func Handler(dc *datastore.Client, mc apipb.MaintnerServiceClient, key string, grpcServer *grpc.Server) http.Handler {
+func Handler(dc *datastore.Client, mc apipb.MaintnerServiceClient, lc luciClient, key string, grpcServer *grpc.Server) http.Handler {
 	h := handler{
 		mux:         http.NewServeMux(),
 		datastoreCl: dc,
 		maintnerCl:  mc,
+		LUCI:        lc,
 	}
 	kc := keyCheck{masterKey: key}
 
