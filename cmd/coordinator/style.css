@@ -175,6 +175,13 @@ table.Build tbody tr.commit:hover {
   color: #000;
   text-decoration: none;
 }
+.Build-resultFail {
+  color: #C00;
+}
+.Build-resultNoise {
+  text-decoration: none;
+  color: #888;
+}
 .QueueStats-body {
   background-color: #f8f8f8;
 }

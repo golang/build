@@ -165,10 +165,14 @@
           {{range $a := .Archs}}
             <td class="Build-result {{if not $a.FirstClass}} unsupported{{end}}" data-builder="{{$a.Name}}">
               {{with $c.ResultForBuilder $a.Name}}
-                  {{if .OK}}
-                    <a class="Build-resultOK" href="https://build.golang.org/log/{{.LogHash}}"
-                      title="Build log of {{$a.Name}} on commit {{shortHash $c.Hash}}.">ok</a>
-                  {{end}}
+                {{if .BuildingURL}}
+                  <a href="{{.BuildingURL}}"><img src="https://go.dev/favicon.ico" height=16 width=16 border=0></a>
+                {{else}}
+                  <a class="Build-result{{if .OK}}OK{{else}}Fail{{end}}
+                    {{- if .Noise}} Build-resultNoise{{end}}"
+                    href="{{.LogURL}}"
+                    title="Build log of {{$a.Name}} on commit {{shortHash $c.Hash}}.">{{if .OK}}ok{{else}}fail{{end}}</a>
+                {{end}}
               {{end}}
             </td>
           {{end}}
