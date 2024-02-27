@@ -10,7 +10,6 @@ body {
   color: #222;
   font-family: sans-serif;
   margin: 0;
-  padding: 10px;
 }
 h1,
 h2,
@@ -45,7 +44,6 @@ pre {
 }
 header {
   background: #e0ebf5;
-  margin: -10px -10px 0;
   padding: 10px;
 }
 header h1 {
@@ -79,6 +77,9 @@ header nav a {
   margin-right: 5px;
   padding: 10px;
   text-decoration: none;
+}
+div.page {
+  padding: 10px;
 }
 table {
   border-collapse: collapse;

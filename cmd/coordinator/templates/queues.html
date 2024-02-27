@@ -12,6 +12,7 @@
   </head>
   <body class="QueueStats-body">
     {{template "build-header"}}
+    <div class="page">
     <h2>Queues</h2>
     <div class="QueueStats">
       {{range $name, $stats := .Queues}}
@@ -86,6 +87,7 @@
           </table>
         </div>
       {{end}}
+    </div>
     </div>
   </body>
 </html>
