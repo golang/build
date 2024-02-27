@@ -209,22 +209,6 @@ func tryWorkItem(
 				w.GoBranch = append(w.GoBranch, r.BranchName)
 				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{Major: r.Major, Minor: r.Minor})
 			}
-
-			// Test x/tools with Go 1.19+1.18 in addition to the supportedReleases above,
-			// to mirror behavior implemented in LUCI. This is needed only until x/tools
-			// stops accepting legacy trybot results or x/tools stops needing to support
-			// these Go versions, whichever happens first. Relevant only if that happens
-			// before the migration to LUCI is complete.
-			// See https://go.googlesource.com/tools/+/HEAD/gopls/#supported-go-versions.
-			if w.Project == "tools" {
-				w.GoCommit = append(w.GoCommit, "619b8fd7d2c94af12933f409e962b99aa9263555") // go1.19.13 tag.
-				w.GoBranch = append(w.GoBranch, "release-branch.go1.19")
-				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{Major: 1, Minor: 19})
-
-				w.GoCommit = append(w.GoCommit, "581603cb7d02019bbf4ff508014038f3120a3dcb") // go1.18.10 tag.
-				w.GoBranch = append(w.GoBranch, "release-branch.go1.18")
-				w.GoVersion = append(w.GoVersion, &apipb.MajorMinor{Major: 1, Minor: 18})
-			}
 		} else {
 			// A branch that is neither internal-branch.goX.Y-suffix nor "master":
 			// maybe some custom branch like "dev.go2go".
