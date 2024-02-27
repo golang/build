@@ -493,7 +493,6 @@ GO_BRANCHES = {
 EXTRA_GO_BRANCHES = {
     "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
     "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13"),
-    "go1.18": struct(branch = "release-branch.go1.18", bootstrap = "1.17.13"),
 }
 
 # PT is Project Type, a classification of a project.
