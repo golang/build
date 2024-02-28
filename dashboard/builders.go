@@ -2863,6 +2863,24 @@ func init() {
 	})
 }
 
+// BuildersPortedToLUCI lists coordinator builders that have been ported
+// over to LUCI and don't need to continue to run. Their results will be
+// hidden from the build.golang.org page and new builds won't be started
+// if stopPortedBuilders (below) is true.
+//
+// See go.dev/issue/65913
+// and go.dev/issue/63471.
+var BuildersPortedToLUCI = map[string]bool{
+	"wasip1-wasm-wasmedge": true, // Would be 'wasip1-wasm_wasmedge' but put off until go.dev/issue/60097 picks up activity.
+
+	// TODO(go.dev/issue/63471): Add more here. For example:
+	//"wasip1-wasm-wazero": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-wasip1-wasm_wazero.
+}
+
+// stopPortedBuilders controls whether ported builders should be stopped,
+// instead of just made invisible in the web UI.
+const stopPortedBuilders = false
+
 // addBuilder adds c to the Builders map after doing some checks.
 func addBuilder(c BuildConfig) {
 	if c.Name == "" {
@@ -2897,6 +2915,10 @@ func addBuilder(c BuildConfig) {
 	}
 	if types != 1 {
 		panic(fmt.Sprintf("build config %q host type inconsistent (must be Reverse, Image, or VM)", c.Name))
+	}
+
+	if BuildersPortedToLUCI[c.Name] && stopPortedBuilders {
+		return
 	}
 
 	Builders[c.Name] = &c

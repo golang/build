@@ -128,6 +128,11 @@ func (d *Handler) getBuilders(conf map[string]*dashboard.BuildConfig, luci lucip
 		if !b.BuildsRepoPostSubmit("go", "master", "master") {
 			continue
 		}
+		if dashboard.BuildersPortedToLUCI[b.Name] && len(luci.Builders) > 0 {
+			// Don't display old builders that have been ported
+			// to LUCI if willing to show LUCI builders as well.
+			continue
+		}
 		db := bm[b.GOOS()]
 		db.OS = b.GOOS()
 		db.Archs = append(db.Archs, &arch{

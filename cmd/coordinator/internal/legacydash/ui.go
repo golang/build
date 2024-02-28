@@ -476,6 +476,15 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 			for _, pkg := range ts.Packages {
 				addBuilders(builders, pkg.Package.Name, ts.Branch())
 			}
+			if len(luci.Builders) > 0 {
+				for name := range builders {
+					if dashboard.BuildersPortedToLUCI[name] {
+						// Don't display old builders that have been ported
+						// to LUCI if willing to show LUCI builders as well.
+						delete(builders, name)
+					}
+				}
+			}
 			addLUCIBuilders(luci, builders, ts.Packages, gorel.BranchName)
 			ts.Builders = builderKeys(builders)
 
@@ -509,6 +518,15 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 		}
 	} else {
 		addBuilders(builders, tb.repoGerritProj(), tb.branch())
+	}
+	if len(luci.Builders) > 0 {
+		for name := range builders {
+			if dashboard.BuildersPortedToLUCI[name] {
+				// Don't display old builders that have been ported
+				// to LUCI if willing to show LUCI builders as well.
+				delete(builders, name)
+			}
+		}
 	}
 	data.Builders = builderKeys(builders)
 
