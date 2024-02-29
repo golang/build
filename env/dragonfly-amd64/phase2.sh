@@ -22,7 +22,17 @@ q' | ed /etc/rc.d/pfi
 # pfi startup does not have full path that a root login does.
 export PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/games:/usr/local/sbin:/usr/local/bin:/usr/pkg/sbin:/usr/pkg/bin:/root/bin
 
+# Upgrade pkg first
+pkg update
+pkg upgrade -y pkg || true
+
+# pkg 1.14 had a bug
+[ ! -f /usr/local/etc/pkg/repos/df-latest.conf ] && \
+    cp /usr/local/etc/pkg/repos/df-latest.conf.sample /usr/local/etc/pkg/repos/df-latest.conf
+
 # Update pkg database and install extras we need.
+pkg update
+pkg upgrade -fy
 pkg install -y bash curl git gdb
 
 echo 'DONE WITH PHASE 2.'
