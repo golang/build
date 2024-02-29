@@ -1680,11 +1680,12 @@ def _define_go_ci():
                 # against all supported releases in addition to testing with tip.
                 # Make presubmit mandatory for builders deemed "fast".
                 # See go.dev/issue/17626.
+                x_repo_presubmit = builder_type in ["linux-amd64", "linux-386", "darwin-amd64_14", "windows-amd64"]
                 if project != "go" and go_branch_short != "gotip":
                     luci.cq_tryjob_verifier(
                         builder = name,
                         cq_group = go_cq_group(project, "gotip").name,
-                        includable_only = builder_type != "linux-amd64",  # linux-amd64 is deemed "fast."
+                        includable_only = not x_repo_presubmit,
                         disable_reuse = True,
                     )
 
