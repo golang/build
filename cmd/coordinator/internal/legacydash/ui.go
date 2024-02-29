@@ -102,7 +102,7 @@ func viewForRequest(r *http.Request) (dashboardView, error) {
 	case "json":
 		return jsonView{}, nil
 	case "":
-		showLUCI, _ := strconv.ParseBool(r.URL.Query().Get("showluci"))
+		var showLUCI = true
 		if legacyOnly, _ := strconv.ParseBool(r.URL.Query().Get("legacyonly")); legacyOnly {
 			showLUCI = false
 		}

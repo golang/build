@@ -63,7 +63,7 @@ type Handler struct {
 }
 
 func (d *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	showLUCI, _ := strconv.ParseBool(req.URL.Query().Get("showluci"))
+	var showLUCI = true
 	if legacyOnly, _ := strconv.ParseBool(req.URL.Query().Get("legacyonly")); legacyOnly {
 		showLUCI = false
 	}
