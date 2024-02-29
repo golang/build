@@ -514,23 +514,28 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 			return fmt.Errorf("b.gerritMessageAuthorName: %v", err)
 		}
 
-		// NOTE: care is required to update this message. GerritBot's sync of Gerrit comments
-		// to the GitHub PR is simple and currently relies on historical sync messages on the
-		// PR exactly matching what the current incarnation of GerritBot would have posted for
-		// old Gerrit comments. As implemented, changing the content here will cause
-		// GerritBot to post effectively duplicate messages to the GitHub PR. See CL 530736 for details.
-		// TODO: allow message content to evolve more easily, perhaps by writing an ID or timestamp
-		// for the Gerrit message being synced, or a coarser solution like having a time cutoff,
-		// or tracking more state, or some other solution.
+		// NOTE: care is required to update this message.
+		// GerritBot needs to avoid duplicating old messages,
+		// which it does by checking whether it is about
+		// to insert a duplicate. Any change to the message
+		// text requires also passing the equivalent old version
+		// of the text to postGitHubMessageNoDup.
+
 		header := fmt.Sprintf("Message from %s:\n", authorName)
 		msg := fmt.Sprintf(`
 %s
 
 ---
 Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
-After addressing review feedback, remember to [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
+After addressing review feedback, remember to [publish your drafts](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
 			m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
-		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), header, msg); err != nil {
+
+		// We used to link to the wiki on GitHub.
+		// That no longer works for contextual links
+		// after issue #61940.
+		oldmsg := strings.Replace(msg, "https://go.dev/wiki/", "https://github.com/golang/go/wiki/", 1)
+
+		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), header, msg, []string{oldmsg}); err != nil {
 			return fmt.Errorf("postGitHubMessageNoDup: %v", err)
 		}
 	}
@@ -579,7 +584,7 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 	}
 
 	repo := pr.GetBase().GetRepo()
-	if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg); err != nil {
+	if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg, nil); err != nil {
 		return fmt.Errorf("postGitHubMessageNoDup: %v", err)
 	}
 
@@ -779,7 +784,7 @@ Please visit Gerrit at %s.
   * You should word wrap the PR description at ~76 characters unless you need longer lines (e.g., for tables or URLs).
 * See the [Sending a change via GitHub](https://go.dev/doc/contribute#sending_a_change_github) and [Reviews](https://go.dev/doc/contribute#reviews) sections of the Contribution Guide as well as the [FAQ](https://go.dev/wiki/GerritBot/#frequently-asked-questions) for details.`,
 		pr.Head.GetSHA(), changeURL)
-	err = b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
+	err = b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg, nil)
 	if err != nil {
 		return err
 	}
@@ -937,8 +942,23 @@ func logGitHubRateLimits(resp *github.Response) {
 // postGitHubMessageNoDup ensures that the message being posted on an issue does not already have the
 // same exact content, except for a header which is ignored. These comments can be toggled by the user
 // via a slash command /comments {on|off} at the beginning of a message.
+// The oldMsgs parameter holds a list of older versions of this message;
+// if one of those appears the new message is considered a dup.
 // TODO(andybons): This logic is shared by gopherbot. Consolidate it somewhere.
-func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issueNum int, header, msg string) error {
+func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issueNum int, header, msg string, oldMsgs []string) error {
+	isDup := func(s string) bool {
+		// TODO: check for exact match?
+		if strings.Contains(s, msg) {
+			return true
+		}
+		for _, m := range oldMsgs {
+			if strings.Contains(s, m) {
+				return true
+			}
+		}
+		return false
+	}
+
 	gr := b.corpus.GitHub().Repo(org, repo)
 	if gr == nil {
 		return fmt.Errorf("unknown github repo %s/%s", org, repo)
@@ -951,8 +971,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 		var dup bool
 		gi.ForeachComment(func(c *maintner.GitHubComment) error {
 			since = c.Updated
-			// TODO: check for exact match?
-			if strings.Contains(c.Body, msg) {
+			if isDup(c.Body) {
 				dup = true
 				return nil
 			}
@@ -982,8 +1001,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	}
 	logGitHubRateLimits(resp)
 	for _, ic := range ics {
-		if strings.Contains(ic.GetBody(), msg) {
-			// Dup.
+		if isDup(ic.GetBody()) {
 			return nil
 		}
 	}
@@ -997,8 +1015,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 		ownerID = issue.GetUser().GetID()
 	}
 	for _, ic := range ics {
-		if strings.Contains(ic.GetBody(), msg) {
-			// Dup.
+		if isDup(ic.GetBody()) {
 			return nil
 		}
 		body := ic.GetBody()
