@@ -120,7 +120,21 @@ It must not reveal details beyond what's allowed by the security policy.`,
 		ParamType: wf.SliceShort,
 		Example:   "CVE-2023-XXXX",
 		Doc:       "List of CVEs for PRIVATE track fixes contained in the release to be included in the pre-announcement.",
+		Check: func(cves []string) error {
+			var m = make(map[string]bool)
+			for _, c := range cves {
+				switch {
+				case !cveRE.MatchString(c):
+					return fmt.Errorf("CVE ID %q doesn't match %s", c, cveRE)
+				case m[c]:
+					return fmt.Errorf("duplicate CVE ID %q", c)
+				}
+				m[c] = true
+			}
+			return nil
+		},
 	}
+	cveRE = regexp.MustCompile(`^CVE-\d{4}-\d{4,7}$`)
 
 	securitySummaryParameter = wf.ParamDef[string]{
 		Name: "Security Summary (optional)",
