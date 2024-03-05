@@ -451,10 +451,14 @@ func TestTagSingleRepo(t *testing.T) {
 type verboseListener struct {
 	t              *testing.T
 	outputListener func(string, interface{})
+	onStall        func()
 }
 
 func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
 	l.t.Logf("workflow %q: stalled", workflowID.String())
+	if l.onStall != nil {
+		l.onStall()
+	}
 	return nil
 }
 
