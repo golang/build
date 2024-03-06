@@ -220,13 +220,12 @@ func main() {
 	signServer := sign.NewServer()
 	protos.RegisterReleaseServiceServer(grpcServer, signServer)
 	buildTasks := &relui.BuildReleaseTasks{
-		GerritClient:         gerritClient,
-		GerritProject:        "go",
-		GerritHTTPClient:     oauth2.NewClient(ctx, creds.TokenSource),
-		PrivateGerritClient:  privateGerritClient,
-		PrivateGerritProject: "golang/go-private",
-		SignService:          signServer,
-		GCSClient:            gcsClient,
+		GerritClient:        gerritClient,
+		GerritProject:       "go",
+		GerritHTTPClient:    oauth2.NewClient(ctx, creds.TokenSource),
+		PrivateGerritClient: privateGerritClient,
+		SignService:         signServer,
+		GCSClient:           gcsClient,
 		ScratchFS: &task.ScratchFS{
 			BaseURL: *scratchFilesBase,
 			GCS:     gcsClient,

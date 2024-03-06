@@ -218,6 +218,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 			"js-wasm",        // Builder used on 1.20 and older.
 		},
 		"Ref from the private repository to build from (optional)": "",
+		"Security repository to retrieve ref from (optional)":      "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -368,15 +369,15 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 
 	// Set up the fake merge process. Once we stop to ask for approval, commit
 	// the fix to the public server.
-	privateRepo := task.NewFakeRepo(t, "go-private")
+	privateRepo := task.NewFakeRepo(t, "go")
 	privateRepo.Commit(goFiles)
 	securityFix := map[string]string{"security.txt": "This file makes us secure"}
+	privateRepoName := "go-internal/go (new)"
 	privateRef := privateRepo.Commit(securityFix)
 	privateGerrit := task.NewFakeGerrit(t, privateRepo)
 	deps.buildBucket.GerritURL = privateGerrit.GerritURL()
-	deps.buildBucket.Projects = []string{"go-private"}
+	deps.buildBucket.Projects = []string{"go"}
 	deps.buildTasks.PrivateGerritClient = privateGerrit
-	deps.buildTasks.PrivateGerritProject = "go-private"
 
 	defaultApprove := deps.buildTasks.ApproveAction
 	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext) error {
@@ -394,6 +395,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	w, err := workflow.Start(wd, map[string]interface{}{
 		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
 		"Ref from the private repository to build from (optional)": privateRef,
+		"Security repository to retrieve ref from (optional)":      privateRepoName,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -438,6 +440,7 @@ func TestAdvisoryTestsFail(t *testing.T) {
 	w, err := workflow.Start(wd, map[string]interface{}{
 		"Targets to skip testing (or 'all') (optional)":            []string(nil),
 		"Ref from the private repository to build from (optional)": "",
+		"Security repository to retrieve ref from (optional)":      "",
 	})
 	if err != nil {
 		t.Fatal(err)
