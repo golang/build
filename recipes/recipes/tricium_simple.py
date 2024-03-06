@@ -34,7 +34,6 @@ def RunSteps(api):
         report_files_via_property='affected_files')
   analyzers = [
         api.tricium.analyzers.HTTPS_CHECK,
-        api.tricium.analyzers.SPELLCHECKER,
   ]
   api.tricium.run_legacy(analyzers, repo_path, affected_files, commit_message)
 
