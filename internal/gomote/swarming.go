@@ -37,8 +37,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ExperimentGolangbuild use golangbuild to bootstrap the gomote instance
-const ExperimentGolangbuild = "exp-golangbuild"
+// expDisableGolangbuild disables the use of golangbuild during the swarming task gomote bootstrap process.
+const expDisableGolangbuild = "disable-golang-build"
 
 type rendezvousClient interface {
 	DeregisterInstance(ctx context.Context, id string)
@@ -190,9 +190,9 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 		log.Printf("CreateInstance: builder configuration not found for %s: %s", builder.GetId().GetBuilder(), err)
 		return status.Errorf(codes.Internal, "invalid builder configuration")
 	}
-	expUseGolangbuild := slices.Contains(req.GetExperimentOption(), ExperimentGolangbuild)
+	useGolangbuild := !slices.Contains(req.GetExperimentOption(), expDisableGolangbuild)
 	go func() {
-		bc, err := ss.startNewSwarmingTask(stream.Context(), name, dimensions, cp, &SwarmOpts{}, expUseGolangbuild)
+		bc, err := ss.startNewSwarmingTask(stream.Context(), name, dimensions, cp, &SwarmOpts{}, useGolangbuild)
 		if err != nil {
 			log.Printf("startNewSwarmingTask() = %s", err)
 		}
