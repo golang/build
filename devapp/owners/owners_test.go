@@ -23,9 +23,9 @@ func TestMatch(t *testing.T) {
 		entry *Entry
 	}{
 		{
-			"sync",
+			"net",
 			&Entry{
-				Primary: []Owner{bcmills},
+				Primary: []Owner{neild, iant},
 			},
 		},
 		{

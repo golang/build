@@ -22,62 +22,62 @@ func archOsTeam(teamName string) *Entry {
 }
 
 var (
-	adonovan     = gh("adonovan")
-	agl          = gh("agl")
-	agnivade     = gh("agnivade")
-	alexbrainman = gh("alexbrainman")
-	amedee       = gh("cagedmantis")
-	austin       = gh("aclements")
-	bcmills      = gh("bcmills")
-	bradfitz     = gh("bradfitz")
-	cherryyz     = gh("cherrymui")
-	codyoss      = gh("codyoss")
-	dmitshur     = gh("dmitshur")
-	danderson    = gh("danderson")
-	drakkan      = gh("drakkan")
-	drchase      = gh("dr2chase")
-	dvyukov      = gh("dvyukov")
-	eliben       = gh("eliben")
-	filippo      = gh("FiloSottile")
-	findleyr     = gh("findleyr")
-	gri          = gh("griesemer")
-	hyangah      = gh("hyangah")
-	iant         = gh("ianlancetaylor")
-	iancottrell  = gh("ianthehat")
-	jba          = gh("jba")
-	jbd          = gh("rakyll")
-	joetsai      = gh("dsnet")
-	kardianos    = gh("kardianos")
-	katie        = gh("katiehockman")
-	kevinburke   = gh("kevinburke")
-	khr          = gh("randall77")
-	martisch     = gh("martisch")
-	matloob      = gh("matloob")
-	mauri870     = gh("mauri870")
-	mdempsky     = gh("mdempsky")
-	mdlayher     = gh("mdlayher")
-	minux        = gh("minux")
-	mknyszek     = gh("mknyszek")
-	mpvl         = gh("mpvl")
-	mvdan        = gh("mvdan")
-	mwhudson     = gh("mwhudson")
-	neelance     = gh("neelance")
-	neild        = gh("neild")
-	nigeltao     = gh("nigeltao")
-	prattmic     = gh("prattmic")
-	pjw          = gh("pjweinb")
-	r            = gh("robpike")
-	rakoczy      = gh("toothrot")
-	roland       = gh("rolandshoemaker")
-	rsc          = gh("rsc")
-	sameer       = gh("Sajmani")
-	shinfan      = gh("shinfan")
-	suzmue       = gh("suzmue")
-	taking       = gh("timothy-king")
-	thanm        = gh("thanm")
-	tklauser     = gh("tklauser")
-	tombergan    = gh("tombergan")
-	zpavlinovic  = gh("zpavlinovic")
+	adonovan      = gh("adonovan")
+	agl           = gh("agl")
+	agnivade      = gh("agnivade")
+	alexbrainman  = gh("alexbrainman")
+	amedee        = gh("cagedmantis")
+	austin        = gh("aclements")
+	bradfitz      = gh("bradfitz")
+	cherryyz      = gh("cherrymui")
+	codyoss       = gh("codyoss")
+	dmitshur      = gh("dmitshur")
+	danderson     = gh("danderson")
+	drakkan       = gh("drakkan")
+	drchase       = gh("dr2chase")
+	dvyukov       = gh("dvyukov")
+	eliben        = gh("eliben")
+	filippo       = gh("FiloSottile")
+	findleyr      = gh("findleyr")
+	gri           = gh("griesemer")
+	hyangah       = gh("hyangah")
+	iant          = gh("ianlancetaylor")
+	iancottrell   = gh("ianthehat")
+	jba           = gh("jba")
+	jbd           = gh("rakyll")
+	joetsai       = gh("dsnet")
+	kardianos     = gh("kardianos")
+	katie         = gh("katiehockman")
+	kevinburke    = gh("kevinburke")
+	khr           = gh("randall77")
+	martisch      = gh("martisch")
+	matloob       = gh("matloob")
+	mauri870      = gh("mauri870")
+	mdempsky      = gh("mdempsky")
+	mdlayher      = gh("mdlayher")
+	minux         = gh("minux")
+	mknyszek      = gh("mknyszek")
+	mpvl          = gh("mpvl")
+	mvdan         = gh("mvdan")
+	mwhudson      = gh("mwhudson")
+	neelance      = gh("neelance")
+	neild         = gh("neild")
+	nigeltao      = gh("nigeltao")
+	prattmic      = gh("prattmic")
+	pjw           = gh("pjweinb")
+	r             = gh("robpike")
+	rakoczy       = gh("toothrot")
+	roland        = gh("rolandshoemaker")
+	rsc           = gh("rsc")
+	sameer        = gh("Sajmani")
+	samthanawalla = gh("samthanawalla")
+	shinfan       = gh("shinfan")
+	suzmue        = gh("suzmue")
+	taking        = gh("timothy-king")
+	thanm         = gh("thanm")
+	tklauser      = gh("tklauser")
+	tombergan     = gh("tombergan")
+	zpavlinovic   = gh("zpavlinovic")
 
 	compilerTeam  = gh("golang/compiler")
 	fuzzingTeam   = gh("golang/fuzzing")
@@ -186,7 +186,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"go/src/cmd/go": {
-		Primary:   []Owner{bcmills, matloob},
+		Primary:   []Owner{matloob, samthanawalla},
 		Secondary: []Owner{rsc, iant},
 	},
 	"go/src/cmd/gofmt": {
@@ -685,7 +685,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{iant, bradfitz, tklauser},
 	},
 	"go/src/testing": {
-		Primary:   []Owner{bcmills},
+		Primary:   []Owner{adonovan, neild},
 		Secondary: []Owner{mpvl},
 	},
 	"go/src/testing/quick": {
@@ -768,7 +768,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{hyangah},
 	},
 	"mod": {
-		Primary: []Owner{bcmills, matloob},
+		Primary: []Owner{matloob, samthanawalla},
 	},
 	"net": {
 		Primary: []Owner{neild, iant},
@@ -803,7 +803,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{kevinburke},
 	},
 	"sync": {
-		Primary: []Owner{bcmills},
+		Primary: []Owner{adonovan},
 	},
 	"sys/unix": {
 		Primary:   []Owner{runtimeTeam},
@@ -829,8 +829,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{adonovan},
 	},
 	"tools/cmd/auth": {
-		Primary:   []Owner{bcmills},
-		Secondary: []Owner{matloob},
+		Secondary: []Owner{matloob, samthanawalla},
 	},
 	"tools/cmd/godoc": {
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
@@ -854,7 +853,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/buildutil": {
-		Primary:   []Owner{bcmills, matloob},
+		Primary:   []Owner{matloob},
 		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/callgraph": {
@@ -882,9 +881,6 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{taking},
 		Secondary: []Owner{findleyr},
 	},
-	"tools/go/vcs": {
-		Secondary: []Owner{bcmills, matloob},
-	},
 	"tools/imports": {
 		Primary: []Owner{toolsTeam},
 	},
@@ -894,7 +890,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/internal/apidiff": {
 		Primary:   []Owner{jba},
-		Secondary: []Owner{matloob, bcmills},
+		Secondary: []Owner{matloob},
 	},
 	"tools/internal/fastwalk": {
 		Primary: []Owner{toolsTeam},
@@ -911,9 +907,6 @@ var entries = map[string]*Entry{
 	"tools/internal/jsonrpc2": {
 		Primary:   []Owner{iancottrell},
 		Secondary: []Owner{findleyr, jba},
-	},
-	"tools/internal/testenv": {
-		Primary: []Owner{bcmills},
 	},
 	"tools/internal/tool": {
 		Primary: []Owner{iancottrell},
@@ -932,7 +925,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{findleyr, suzmue},
 	},
 	"tools/txtar": {
-		Primary: []Owner{bcmills, matloob},
+		Primary: []Owner{matloob},
 	},
 	"pkgsite": {
 		Primary: []Owner{pkgsiteTeam},
