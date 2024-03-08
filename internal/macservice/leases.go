@@ -83,6 +83,8 @@ type InstanceSpecification struct {
 	Profile     MachineProfile     `json:"profile"`
 	AccessLevel NetworkAccessLevel `json:"accessLevel"`
 
+	Metadata []MetadataEntry `json:"metadata"`
+
 	DiskSelection DiskSelection `json:"diskSelection"`
 }
 
@@ -105,3 +107,8 @@ type NetworkAccessLevel string
 const (
 	GOLANG_OSS NetworkAccessLevel = "GOLANG_OSS"
 )
+
+type MetadataEntry struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}

@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -12,7 +13,12 @@ import (
 	"github.com/google/go-cmp/cmp"
 	spb "go.chromium.org/luci/swarming/proto/api_v2"
 	"golang.org/x/build/internal/macservice"
+	"golang.org/x/build/internal/secret"
 )
+
+func init() {
+	secret.InitFlagSupport(context.Background())
+}
 
 // recordMacServiceClient is a macserviceClient that records mutating requests.
 type recordMacServiceClient struct {
@@ -210,7 +216,9 @@ func TestHandleObsoleteLeases(t *testing.T) {
 	// handleObsoleteLeases should vacate "obsolute" and none of the others.
 	config := []imageConfig{
 		{
-			Name:     "active",
+			Hostname: "active",
+			Cert:     "dummy-cert",
+			Key:      "dummy-key",
 			Image:    "active-image",
 			MinCount: 1,
 		},
@@ -280,12 +288,16 @@ func TestAddNewLeases(t *testing.T) {
 	// "unmanaged") and 2 "image-b" instances.
 	config := []imageConfig{
 		{
-			Name:     "a",
+			Hostname: "a",
+			Cert:     "dummy-cert",
+			Key:      "dummy-key",
 			Image:    "image-a",
 			MinCount: 2,
 		},
 		{
-			Name:     "b",
+			Hostname: "b",
+			Cert:     "dummy-cert",
+			Key:      "dummy-key",
 			Image:    "image-b",
 			MinCount: 2,
 		},
@@ -322,8 +334,17 @@ func TestAddNewLeases(t *testing.T) {
 	var mc recordMacServiceClient
 	addNewLeases(&mc, config, leases)
 
+	leaseA, err := makeLeaseRequest(&config[0])
+	if err != nil {
+		t.Fatalf("makeLeaseRequest(a) got err %v want nil", err)
+	}
+	leaseB, err := makeLeaseRequest(&config[1])
+	if err != nil {
+		t.Fatalf("makeLeaseRequest(b) got err %v want nil", err)
+	}
+
 	got := mc.lease
-	want := []macservice.LeaseRequest{makeLeaseRequest("image-a"), makeLeaseRequest("image-b"), makeLeaseRequest("image-b")}
+	want := []macservice.LeaseRequest{leaseA, leaseB, leaseB}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Lease request mismatch (-want +got):\n%s", diff)
 	}

@@ -51,7 +51,7 @@ const (
 )
 
 const (
-	swarmingService = "https://chromium-swarm.appspot.com"
+	swarmingHost    = "chromium-swarm.appspot.com"
 	swarmingPool    = "luci.golang.shared-workers"
 )
 
@@ -89,7 +89,7 @@ func run() error {
 	}
 
 	sc, err := swarming.NewClient(ctx, swarming.ClientOptions{
-		ServiceURL:          swarmingService,
+		ServiceURL:          "https://"+swarmingHost,
 		AuthenticatedClient: ac,
 	})
 	if err != nil {
@@ -434,7 +434,16 @@ func handleObsoleteLeases(mc macServiceClient, config []imageConfig, leases map[
 	}
 }
 
-func makeLeaseRequest(image string) macservice.LeaseRequest {
+func makeLeaseRequest(c *imageConfig) (macservice.LeaseRequest, error) {
+	cert, err := secret.DefaultResolver.ResolveSecret(c.Cert)
+	if err != nil {
+		return macservice.LeaseRequest{}, fmt.Errorf("error resolving certificate secret: %w", err)
+	}
+	key, err := secret.DefaultResolver.ResolveSecret(c.Key)
+	if err != nil {
+		return macservice.LeaseRequest{}, fmt.Errorf("error resolving key secret: %w", err)
+	}
+
 	return macservice.LeaseRequest{
 		VMResourceNamespace: macservice.Namespace{
 			CustomerName: macServiceCustomer,
@@ -445,12 +454,30 @@ func makeLeaseRequest(image string) macservice.LeaseRequest {
 			AccessLevel: macservice.GOLANG_OSS,
 			DiskSelection: macservice.DiskSelection{
 				ImageHashes: macservice.ImageHashes{
-					BootSHA256: image,
+					BootSHA256: c.Image,
+				},
+			},
+			Metadata: []macservice.MetadataEntry{
+				{
+					Key:   "golang.swarming",
+					Value: swarmingHost,
+				},
+				{
+					Key:   "golang.hostname",
+					Value: c.Hostname,
+				},
+				{
+					Key:   "golang.cert",
+					Value: cert,
+				},
+				{
+					Key:   "golang.key",
+					Value: key,
 				},
 			},
 		},
 		Duration: createExpirationDurationString,
-	}
+	}, nil
 }
 
 // addNewLeases adds new MacService leases as needed to ensure that there are
@@ -494,9 +521,15 @@ func addNewLeases(mc macServiceClient, config []imageConfig, leases map[string]m
 		}
 
 		log.Printf("Image %s: creating %d new leases", config.Image, need)
+		req, err := makeLeaseRequest(config)
+		if err != nil {
+			log.Printf("Image %s: creating lease request: error %v", config.Image, err)
+			continue
+		}
+
 		for i := 0; i < need; i++ {
 			log.Printf("Image %s: creating lease %d...", config.Image, i)
-			resp, err := mc.Lease(makeLeaseRequest(config.Image))
+			resp, err := mc.Lease(req)
 			if err != nil {
 				log.Printf("Image %s: creating lease %d: error %v", config.Image, i, err)
 				continue
