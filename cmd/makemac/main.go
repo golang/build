@@ -25,6 +25,7 @@ import (
 	"log"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"go.chromium.org/luci/swarming/client/swarming"
@@ -51,16 +52,16 @@ const (
 )
 
 const (
-	swarmingHost    = "chromium-swarm.appspot.com"
-	swarmingPool    = "luci.golang.shared-workers"
-)
-
-const (
 	macServiceCustomer = "golang"
 
-	// Leases managed by makemac have ProjectName "makemac". Leases without
-	// this project will not be touched.
-	managedProject = "makemac"
+	// Leases managed by makemac have ProjectName "makemac/SWARMING_HOST",
+	// indicating that it is managed by makemac, and which swarming host it
+	// belongs to. Leases without this project prefix will not be touched.
+	//
+	// Note that we track the swarming host directly in the lease project
+	// name because new leases may not have yet connected to the swarming
+	// server, but we still need to know which host to count them towards.
+	managedProjectPrefix = "makemac"
 )
 
 func main() {
@@ -88,18 +89,22 @@ func run() error {
 		return fmt.Errorf("error creating authenticated client: %w", err)
 	}
 
-	sc, err := swarming.NewClient(ctx, swarming.ClientOptions{
-		ServiceURL:          "https://"+swarmingHost,
-		AuthenticatedClient: ac,
-	})
-	if err != nil {
-		return fmt.Errorf("error creating swarming client: %w", err)
+	// Initialize each swarming client.
+	for sc, ic := range prodImageConfig {
+		c, err := swarming.NewClient(ctx, swarming.ClientOptions{
+			ServiceURL:          "https://"+sc.Host,
+			AuthenticatedClient: ac,
+		})
+		if err != nil {
+			return fmt.Errorf("error creating swarming client for %s: %w", sc.Host, err)
+		}
+		sc.client = c
+
+		logImageConfig(sc, ic)
 	}
 
-	logImageConfig(prodImageConfig)
-
 	// Always run once at startup.
-	runOnce(ctx, sc, mc)
+	runOnce(ctx, prodImageConfig, mc)
 
 	if *period == 0 {
 		// User only wants a single check. We're done.
@@ -108,14 +113,14 @@ func run() error {
 
 	t := time.NewTicker(*period)
 	for range t.C {
-		runOnce(ctx, sc, mc)
+		runOnce(ctx, prodImageConfig, mc)
 	}
 
 	return nil
 }
 
-func runOnce(ctx context.Context, sc swarming.Client, mc macServiceClient) {
-	bots, err := swarmingBots(ctx, sc)
+func runOnce(ctx context.Context, config map[*swarmingConfig][]imageConfig, mc macServiceClient) {
+	bots, err := swarmingBots(ctx, config)
 	if err != nil {
 		log.Printf("Error looking up swarming bots: %v", err)
 		return
@@ -134,12 +139,28 @@ func runOnce(ctx context.Context, sc swarming.Client, mc macServiceClient) {
 	handleMissingBots(mc, bots, leases)
 	handleDeadBots(mc, bots, leases)
 	renewLeases(mc, leases)
-	handleObsoleteLeases(mc, prodImageConfig, leases)
-	addNewLeases(mc, prodImageConfig, leases)
+	handleObsoleteLeases(mc, config, leases)
+	addNewLeases(mc, config, leases)
+}
+
+// leaseSwarmingHost returns the swarming host a managed lease belongs to.
+//
+// Returns "" if this isn't a managed lease.
+func leaseSwarmingHost(l macservice.Lease) string {
+	prefix, host, ok := strings.Cut(l.VMResourceNamespace.ProjectName, "/")
+	if !ok {
+		// Malformed project name, must not be managed.
+		return ""
+	}
+	if prefix != managedProjectPrefix {
+		// Some other prefix. Not managed.
+		return ""
+	}
+	return host
 }
 
 func leaseIsManaged(l macservice.Lease) bool {
-	return l.VMResourceNamespace.ProjectName == managedProject
+	return leaseSwarmingHost(l) != ""
 }
 
 func logSummary(bots map[string]*spb.BotInfo, leases map[string]macservice.Instance) {
@@ -181,14 +202,14 @@ func logSummary(bots map[string]*spb.BotInfo, leases map[string]macservice.Insta
 	for _, k := range keys {
 		inst := leases[k]
 
-		managed := false
-		if leaseIsManaged(inst.Lease) {
-			managed = true
+		swarming := leaseSwarmingHost(inst.Lease)
+		if swarming == "" {
+			swarming = "<unmanaged>"
 		}
 
 		image := inst.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256
 
-		log.Printf("\t%s: managed=%t\timage=%s", k, managed, image)
+		log.Printf("\t%s: image=%s\tswarming=%s", k, image, swarming)
 	}
 }
 
@@ -198,34 +219,37 @@ var botIDRe = regexp.MustCompile(`.*--([0-9a-f-]+)\.golang\..*\.macservice.goog$
 // swarmingBots returns set of bots backed by MacService, as seen by swarming.
 // The map key is the MacService lease ID.
 // Bots may be dead.
-func swarmingBots(ctx context.Context, sc swarming.Client) (map[string]*spb.BotInfo, error) {
-	dimensions := []*spb.StringPair{
-		{
-			Key:   "pool",
-			Value: swarmingPool,
-		},
-		{
-			Key:   "os",
-			Value: "Mac",
-		},
-	}
-	bb, err := sc.ListBots(ctx, dimensions)
-	if err != nil {
-		return nil, fmt.Errorf("error listing bots: %w", err)
-	}
-
+func swarmingBots(ctx context.Context, config map[*swarmingConfig][]imageConfig) (map[string]*spb.BotInfo, error) {
 	m := make(map[string]*spb.BotInfo)
 
-	for _, b := range bb {
-		id := b.GetBotId()
-		match := botIDRe.FindStringSubmatch(id)
-		if match == nil {
-			log.Printf("Swarming bot %s is not a MacService bot, skipping...", id)
-			continue
+	scs := sortedSwarmingConfigs(config)
+	for _, sc := range scs {
+		dimensions := []*spb.StringPair{
+			{
+				Key:   "pool",
+				Value: sc.Pool,
+			},
+			{
+				Key:   "os",
+				Value: "Mac",
+			},
+		}
+		bb, err := sc.client.ListBots(ctx, dimensions)
+		if err != nil {
+			return nil, fmt.Errorf("error listing bots: %w", err)
 		}
 
-		lease := match[1]
-		m[lease] = b
+		for _, b := range bb {
+			id := b.GetBotId()
+			match := botIDRe.FindStringSubmatch(id)
+			if match == nil {
+				log.Printf("Swarming bot %s is not a MacService bot, skipping...", id)
+				continue
+			}
+
+			lease := match[1]
+			m[lease] = b
+		}
 	}
 
 	return m, nil
@@ -397,10 +421,14 @@ func renewLeases(mc macServiceClient, leases map[string]macservice.Instance) {
 // handleObsoleteLeases vacates any makemac-managed leases with images that are
 // not requested by imageConfigs. This typically occurs when updating makemac
 // to roll out a new image version.
-func handleObsoleteLeases(mc macServiceClient, config []imageConfig, leases map[string]macservice.Instance) {
+func handleObsoleteLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig, leases map[string]macservice.Instance) {
 	log.Printf("Checking for leases with obsolete images...")
 
-	configMap := imageConfigMap(config)
+	// swarming host -> image sha -> image config
+	swarmingImages := make(map[string]map[string]*imageConfig)
+	for sc, ic := range config {
+		swarmingImages[sc.Host] = imageConfigMap(ic)
+	}
 
 	var ids []string
 	for id := range leases {
@@ -413,13 +441,20 @@ func handleObsoleteLeases(mc macServiceClient, config []imageConfig, leases map[
 	for _, id := range ids {
 		lease := leases[id]
 
-		if !leaseIsManaged(lease.Lease) {
+		swarming := leaseSwarmingHost(lease.Lease)
+		if swarming == "" {
 			log.Printf("Lease %s is not managed by makemac; skipping image check", id)
 			continue
 		}
 
+		images, ok := swarmingImages[swarming]
+		if !ok {
+			log.Printf("Lease %s belongs to unknown swarming host %s; skipping image check", id, swarming)
+			continue
+		}
+
 		image := lease.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256
-		if _, ok := configMap[image]; ok {
+		if _, ok := images[image]; ok {
 			continue
 		}
 
@@ -434,12 +469,12 @@ func handleObsoleteLeases(mc macServiceClient, config []imageConfig, leases map[
 	}
 }
 
-func makeLeaseRequest(c *imageConfig) (macservice.LeaseRequest, error) {
-	cert, err := secret.DefaultResolver.ResolveSecret(c.Cert)
+func makeLeaseRequest(sc *swarmingConfig, ic *imageConfig) (macservice.LeaseRequest, error) {
+	cert, err := secret.DefaultResolver.ResolveSecret(ic.Cert)
 	if err != nil {
 		return macservice.LeaseRequest{}, fmt.Errorf("error resolving certificate secret: %w", err)
 	}
-	key, err := secret.DefaultResolver.ResolveSecret(c.Key)
+	key, err := secret.DefaultResolver.ResolveSecret(ic.Key)
 	if err != nil {
 		return macservice.LeaseRequest{}, fmt.Errorf("error resolving key secret: %w", err)
 	}
@@ -447,24 +482,24 @@ func makeLeaseRequest(c *imageConfig) (macservice.LeaseRequest, error) {
 	return macservice.LeaseRequest{
 		VMResourceNamespace: macservice.Namespace{
 			CustomerName: macServiceCustomer,
-			ProjectName:  managedProject,
+			ProjectName:  managedProjectPrefix+"/"+sc.Host,
 		},
 		InstanceSpecification: macservice.InstanceSpecification{
 			Profile: macservice.V1_MEDIUM_VM,
 			AccessLevel: macservice.GOLANG_OSS,
 			DiskSelection: macservice.DiskSelection{
 				ImageHashes: macservice.ImageHashes{
-					BootSHA256: c.Image,
+					BootSHA256: ic.Image,
 				},
 			},
 			Metadata: []macservice.MetadataEntry{
 				{
 					Key:   "golang.swarming",
-					Value: swarmingHost,
+					Value: sc.Host,
 				},
 				{
 					Key:   "golang.hostname",
-					Value: c.Hostname,
+					Value: ic.Hostname,
 				},
 				{
 					Key:   "golang.cert",
@@ -482,59 +517,75 @@ func makeLeaseRequest(c *imageConfig) (macservice.LeaseRequest, error) {
 
 // addNewLeases adds new MacService leases as needed to ensure that there are
 // at least MinCount makemac-managed leases of each configured image type.
-func addNewLeases(mc macServiceClient, config []imageConfig, leases map[string]macservice.Instance) {
+func addNewLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig, leases map[string]macservice.Instance) {
 	log.Printf("Checking if new leases are required...")
 
-	configMap := imageConfigMap(config)
-
-	imageCount := make(map[string]int)
-
+	// Count images per swarming host. Each host gets a different
+	// configuration. Map of swarming host -> image sha -> count.
+	swarmingImageCount := make(map[string]map[string]int)
 	for _, lease := range leases {
-		if !leaseIsManaged(lease.Lease) {
+		swarming := leaseSwarmingHost(lease.Lease)
+		if swarming == "" {
 			// Don't count leases we don't manage.
 			continue
 		}
+		if _, ok := swarmingImageCount[swarming]; !ok {
+			swarmingImageCount[swarming] = make(map[string]int)
+		}
 
 		image := lease.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256
-		imageCount[image]++
+		swarmingImageCount[swarming][image]++
 	}
 
-	var images []string
-	for image := range configMap {
-		images = append(images, image)
+	// Iterate through configs in swarming order, then image order.
+	swarmingOrder := sortedSwarmingConfigs(config)
+	imageMap := make([]map[string]*imageConfig, 0, len(swarmingOrder))
+	imageOrder := make([][]string, 0, len(swarmingOrder))
+	for _, sc := range swarmingOrder {
+		m := imageConfigMap(config[sc])
+		order := make([]string, 0, len(m))
+		for image := range m {
+			order = append(order, image)
+		}
+		sort.Strings(order)
+		imageMap = append(imageMap, m)
+		imageOrder = append(imageOrder, order)
 	}
-	sort.Strings(images)
 
 	log.Printf("Current image lease count:")
-	for _, image := range images {
-		config := configMap[image]
-		gotCount := imageCount[config.Image]
-		log.Printf("\t%s: have %d leases\twant %d leases", config.Image, gotCount, config.MinCount)
+	for i, sc := range swarmingOrder {
+		for _, image := range imageOrder[i] {
+			config := imageMap[i][image]
+			gotCount := swarmingImageCount[sc.Host][config.Image]
+			log.Printf("\tHost %s: image %s: have %d leases\twant %d leases", sc.Host, config.Image, gotCount, config.MinCount)
+		}
 	}
 
-	for _, image := range images {
-		config := configMap[image]
-		gotCount := imageCount[config.Image]
-		need := config.MinCount - gotCount
-		if need <= 0 {
-			continue
-		}
-
-		log.Printf("Image %s: creating %d new leases", config.Image, need)
-		req, err := makeLeaseRequest(config)
-		if err != nil {
-			log.Printf("Image %s: creating lease request: error %v", config.Image, err)
-			continue
-		}
-
-		for i := 0; i < need; i++ {
-			log.Printf("Image %s: creating lease %d...", config.Image, i)
-			resp, err := mc.Lease(req)
-			if err != nil {
-				log.Printf("Image %s: creating lease %d: error %v", config.Image, i, err)
+	for i, sc := range swarmingOrder {
+		for _, image := range imageOrder[i] {
+			config := imageMap[i][image]
+			gotCount := swarmingImageCount[sc.Host][config.Image]
+			need := config.MinCount - gotCount
+			if need <= 0 {
 				continue
 			}
-			log.Printf("Image %s: created lease %s", config.Image, resp.PendingLease.LeaseID)
+
+			log.Printf("Host %s: image %s: creating %d new leases", sc.Host, config.Image, need)
+			req, err := makeLeaseRequest(sc, config)
+			if err != nil {
+				log.Printf("Host %s: image %s: creating lease request: error %v", sc.Host, config.Image, err)
+				continue
+			}
+
+			for i := 0; i < need; i++ {
+				log.Printf("Host %s: image %s: creating lease %d...", sc.Host, config.Image, i)
+				resp, err := mc.Lease(req)
+				if err != nil {
+					log.Printf("Host %s: image %s: creating lease %d: error %v", sc.Host, config.Image, i, err)
+					continue
+				}
+				log.Printf("Host %s: image %s: created lease %s", sc.Host, config.Image, resp.PendingLease.LeaseID)
+			}
 		}
 	}
 }

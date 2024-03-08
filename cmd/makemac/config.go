@@ -5,9 +5,27 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"log"
+	"slices"
+
+	"go.chromium.org/luci/swarming/client/swarming"
 )
+
+// swarmingConfig describes a swarming server.
+type swarmingConfig struct {
+	Host string // Swarming host URL
+	Pool string // Pool containing MacService bots
+
+	client swarming.Client
+}
+
+// Standard public swarming host.
+var publicSwarming = &swarmingConfig{
+	Host: "chromium-swarm.appspot.com",
+	Pool: "luci.golang.shared-workers",
+}
 
 // imageConfig describes how many instances of a specific image type should
 // exist.
@@ -19,7 +37,7 @@ type imageConfig struct {
 	MinCount int    // minimum instance count to maintain
 }
 
-// Production image configuration.
+// Production image configuration for each swarming host.
 //
 // After changing an image here, makemac will automatically destroy instances
 // with the old image. Changing hostname, cert, or key will _not_ automatically
@@ -28,41 +46,43 @@ type imageConfig struct {
 // TODO(prattmic): rather than storing secrets in secret manager, makemac could
 // use genbotcert to generate valid certificate/key pairs on the fly, unique to
 // each lease, which could then have unique hostnames.
-var prodImageConfig = []imageConfig{
-	{
-		Hostname: "darwin-amd64-10_15",
-		Cert:     "secret:symbolic-datum-552/darwin-amd64-10_15-cert",
-		Key:      "secret:symbolic-datum-552/darwin-amd64-10_15-key",
-		Image:    "4aaca93eedef29a20715259ee1a5a5f4309528dc1ef8a0ab2a0dafa08286ca57",
-		MinCount: 5, // release branches only
-	},
-	{
-		Hostname: "darwin-amd64-11",
-		Cert:     "secret:symbolic-datum-552/darwin-amd64-11-cert",
-		Key:      "secret:symbolic-datum-552/darwin-amd64-11-key",
-		Image:    "f0cc898922b37726f6d5ad7b260e92b0443c6289b535cb0a32fd2955abe8adcc",
-		MinCount: 10,
-	},
-	{
-		Hostname: "darwin-amd64-12",
-		Cert:     "secret:symbolic-datum-552/darwin-amd64-12-cert",
-		Key:      "secret:symbolic-datum-552/darwin-amd64-12-key",
-		Image:    "0a45171fb12a7efc3e7c5170b3292e592822dfc63c15aca0d093d94621097b8d",
-		MinCount: 10,
-	},
-	{
-		Hostname: "darwin-amd64-13",
-		Cert:     "secret:symbolic-datum-552/darwin-amd64-13-cert",
-		Key:      "secret:symbolic-datum-552/darwin-amd64-13-key",
-		Image:    "f1bda73984f0725f2fa147d277ef87498bdec170030e1c477ee3576b820f1fb6",
-		MinCount: 10,
-	},
-	{
-		Hostname: "darwin-amd64-14",
-		Cert:     "secret:symbolic-datum-552/darwin-amd64-14-cert",
-		Key:      "secret:symbolic-datum-552/darwin-amd64-14-key",
-		Image:    "ad1a56b7fec85ead9992b04444c4b5aef81becf38f85529976646f14a9ce5410",
-		MinCount: 10,
+var prodImageConfig = map[*swarmingConfig][]imageConfig{
+	publicSwarming: {
+		{
+			Hostname: "darwin-amd64-10_15",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-10_15-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-10_15-key",
+			Image:    "57b56e0a86984934370bf00058b2bd708031d256104167a3bbbc5ff5aaaf6939",
+			MinCount: 5, // release branches only
+		},
+		{
+			Hostname: "darwin-amd64-11",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-11-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-11-key",
+			Image:    "3279e7f8aef8a1d02ba0897de44e5306f94c8cacec3c8c662a897b810879f655",
+			MinCount: 10,
+		},
+		{
+			Hostname: "darwin-amd64-12",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-12-key",
+			Image:    "959a409833522fcba0be62c0c818d68b29d4e1be28d3cbf43dbbc81cb3e3fdeb",
+			MinCount: 10,
+		},
+		{
+			Hostname: "darwin-amd64-13",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-13-key",
+			Image:    "30efbbd26e846da8158a7252d47b3adca15b30270668a95620ace3502cdcaa36",
+			MinCount: 10,
+		},
+		{
+			Hostname: "darwin-amd64-14",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-14-key",
+			Image:    "3ec96f33cf17c85bd6d1bbf122c327bc9e5c62620c3ef9ff63e2db4feebdd8da",
+			MinCount: 10,
+		},
 	},
 }
 
@@ -79,13 +99,27 @@ func imageConfigMap(cc []imageConfig) map[string]*imageConfig {
 	return m
 }
 
-func init() {
-	// Panic if prodImageConfig contains duplicates.
-	imageConfigMap(prodImageConfig)
+// sortedSwarmingConfigs returns the swarming configs in c, sorted by host.
+func sortedSwarmingConfigs(c map[*swarmingConfig][]imageConfig) []*swarmingConfig {
+	scs := make([]*swarmingConfig, 0, len(c))
+	for sc := range c {
+		scs = append(scs, sc)
+	}
+	slices.SortFunc(scs, func(a, b *swarmingConfig) int {
+		return cmp.Compare(a.Host, b.Host)
+	})
+	return scs
 }
 
-func logImageConfig(cc []imageConfig) {
-	log.Printf("Image configuration:")
+func init() {
+	// Panic if prodImageConfig contains duplicates.
+	for _, c := range prodImageConfig {
+		imageConfigMap(c)
+	}
+}
+
+func logImageConfig(sc *swarmingConfig, cc []imageConfig) {
+	log.Printf("%s image configuration:", sc.Host)
 	for _, c := range cc {
 		log.Printf("\t%s: image=%s\tcount=%d", c.Hostname, c.Image, c.MinCount)
 	}

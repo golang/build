@@ -47,6 +47,8 @@ func (r *recordMacServiceClient) Find(req macservice.FindRequest) (macservice.Fi
 }
 
 func TestHandleMissingBots(t *testing.T) {
+	const project = managedProjectPrefix + "/swarming.example.com"
+
 	// Test leases:
 	// * "healthy" connected to LUCI, and is healthy.
 	// * "dead" connected to LUCI, but later died.
@@ -63,21 +65,21 @@ func TestHandleMissingBots(t *testing.T) {
 		"healthy": {
 			Lease: macservice.Lease{
 				LeaseID:             "healthy",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project},
 				Expires:             time.Now().Add(createExpirationDuration - 2*time.Hour),
 			},
 		},
 		"newBooting": {
 			Lease: macservice.Lease{
 				LeaseID:             "newBooting",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project},
 				Expires:             time.Now().Add(createExpirationDuration - 5*time.Minute),
 			},
 		},
 		"neverBooted": {
 			Lease: macservice.Lease{
 				LeaseID:             "neverBooted",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project},
 				Expires:             time.Now().Add(createExpirationDuration - 2*time.Hour),
 			},
 		},
@@ -105,6 +107,8 @@ func TestHandleMissingBots(t *testing.T) {
 }
 
 func TestHandleDeadBots(t *testing.T) {
+	const project = managedProjectPrefix + "/swarming.example.com"
+
 	// Test leases:
 	// * "healthy" connected to LUCI, and is healthy.
 	// * "dead" connected to LUCI, but later died, and the lease is gone from MacService.
@@ -122,14 +126,14 @@ func TestHandleDeadBots(t *testing.T) {
 		"healthy": {
 			Lease: macservice.Lease{
 				LeaseID:             "healthy",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project},
 				Expires:             time.Now().Add(createExpirationDuration - 2*time.Hour),
 			},
 		},
 		"deadLeasePresent": {
 			Lease: macservice.Lease{
 				LeaseID:             "deadLeasePresent",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project},
 				// Lease created 5 minutes ago. Doesn't matter;
 				// new lease checked don't apply here. See
 				// comment in handleDeadBots.
@@ -146,7 +150,7 @@ func TestHandleDeadBots(t *testing.T) {
 		"neverBooted": {
 			Lease: macservice.Lease{
 				LeaseID:             "neverBooted",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project},
 				Expires:             time.Now().Add(createExpirationDuration - 2*time.Hour),
 			},
 		},
@@ -167,6 +171,8 @@ func TestHandleDeadBots(t *testing.T) {
 }
 
 func TestRenewLeases(t *testing.T) {
+	const project = managedProjectPrefix + "/swarming.example.com"
+
 	// Test leases:
 	// * "new" was created <1hr ago.
 	// * "standard" was created >1hr ago.
@@ -177,14 +183,14 @@ func TestRenewLeases(t *testing.T) {
 		"new": {
 			Lease: macservice.Lease{
 				LeaseID:             "new",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project},
 				Expires:             time.Now().Add(createExpirationDuration - 5*time.Minute),
 			},
 		},
 		"standard": {
 			Lease: macservice.Lease{
 				LeaseID:             "standard",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project},
 				Expires:             time.Now().Add(renewExpirationDuration - 5*time.Minute),
 			},
 		},
@@ -208,26 +214,49 @@ func TestRenewLeases(t *testing.T) {
 }
 
 func TestHandleObsoleteLeases(t *testing.T) {
+	swarming1 := &swarmingConfig{
+		Host: "swarming1.example.com",
+		Pool: "example.pool",
+	}
+	project1 := managedProjectPrefix + "/" + swarming1.Host
+	swarming2 := &swarmingConfig{
+		Host: "swarming2.example.com",
+		Pool: "example.pool",
+	}
+	project2 := managedProjectPrefix + "/" + swarming2.Host
+
 	// Test leases:
 	// * "active" uses image "active-image"
 	// * "obsolete" uses image "obsolete-image"
+	// * "obsolete-on-swarming2" uses image "obsolete-image" on "swarming2" (as configured)
 	// * "unmanaged" uses image "obsolete-image", but is not managed by makemac.
 	//
-	// handleObsoleteLeases should vacate "obsolute" and none of the others.
-	config := []imageConfig{
-		{
-			Hostname: "active",
-			Cert:     "dummy-cert",
-			Key:      "dummy-key",
-			Image:    "active-image",
-			MinCount: 1,
+	// handleObsoleteLeases should vacate "obsolete" and none of the others.
+	config := map[*swarmingConfig][]imageConfig{
+		swarming1: {
+			{
+				Hostname: "active",
+				Cert:     "dummy-cert",
+				Key:      "dummy-key",
+				Image:    "active-image",
+				MinCount: 1,
+			},
+		},
+		swarming2: {
+			{
+				Hostname: "obsolete-on-swarming2",
+				Cert:     "dummy-cert",
+				Key:      "dummy-key",
+				Image:    "obsolete-image",
+				MinCount: 1,
+			},
 		},
 	}
 	leases := map[string]macservice.Instance{
 		"active": {
 			Lease: macservice.Lease{
 				LeaseID:             "active",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
 				DiskSelection: macservice.DiskSelection{
@@ -240,7 +269,20 @@ func TestHandleObsoleteLeases(t *testing.T) {
 		"obsolete": {
 			Lease: macservice.Lease{
 				LeaseID:             "obsolete",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
+			},
+			InstanceSpecification: macservice.InstanceSpecification{
+				DiskSelection: macservice.DiskSelection{
+					ImageHashes: macservice.ImageHashes{
+						BootSHA256: "obsolete-image",
+					},
+				},
+			},
+		},
+		"obsolete-on-swarming2": {
+			Lease: macservice.Lease{
+				LeaseID:             "obsolete-on-swarming2",
+				VMResourceNamespace: macservice.Namespace{ProjectName: project2},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
 				DiskSelection: macservice.DiskSelection{
@@ -276,37 +318,63 @@ func TestHandleObsoleteLeases(t *testing.T) {
 }
 
 func TestAddNewLeases(t *testing.T) {
+	swarming1 := &swarmingConfig{
+		Host: "swarming1.example.com",
+		Pool: "example.pool",
+	}
+	project1 := managedProjectPrefix + "/" + swarming1.Host
+	swarming2 := &swarmingConfig{
+		Host: "swarming2.example.com",
+		Pool: "example.pool",
+	}
+
 	// Test leases:
-	// * "image-a-1" uses image "image-a"
+	// * "image-a-1" uses image "image-a" on "swarming1"
 	// * "unmanaged" uses image "image-a", but is not managed by makemac.
 	//
 	// Test images:
-	// * "image-a" wants 2 instances.
-	// * "image-b" wants 2 instances.
+	// * On "swarming1":
+	//   * "image-a" wants 2 instances.
+	//   * "image-b" wants 2 instances.
+	// * On "swarming2":
+	//   * "image-a" wants 1 instances.
 	//
-	// addNewLeases should create 1 "image-a" instance (ignoring
-	// "unmanaged") and 2 "image-b" instances.
-	config := []imageConfig{
-		{
-			Hostname: "a",
-			Cert:     "dummy-cert",
-			Key:      "dummy-key",
-			Image:    "image-a",
-			MinCount: 2,
+	// addNewLeases should create:
+	// * 1 "image-a" instance on "swarming1"
+	// * 1 "image-a" instance on "swarming2"
+	// * 2 "image-b" instances on "swarming1"
+	config := map[*swarmingConfig][]imageConfig{
+		swarming1: {
+			{
+				Hostname: "a",
+				Cert:     "dummy-cert",
+				Key:      "dummy-key",
+				Image:    "image-a",
+				MinCount: 2,
+			},
+			{
+				Hostname: "b",
+				Cert:     "dummy-cert",
+				Key:      "dummy-key",
+				Image:    "image-b",
+				MinCount: 2,
+			},
 		},
-		{
-			Hostname: "b",
-			Cert:     "dummy-cert",
-			Key:      "dummy-key",
-			Image:    "image-b",
-			MinCount: 2,
+		swarming2: {
+			{
+				Hostname: "a",
+				Cert:     "dummy-cert",
+				Key:      "dummy-key",
+				Image:    "image-a",
+				MinCount: 1,
+			},
 		},
 	}
 	leases := map[string]macservice.Instance{
 		"image-a-1": {
 			Lease: macservice.Lease{
 				LeaseID:             "image-a-1",
-				VMResourceNamespace: macservice.Namespace{ProjectName: managedProject},
+				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
 				DiskSelection: macservice.DiskSelection{
@@ -334,17 +402,21 @@ func TestAddNewLeases(t *testing.T) {
 	var mc recordMacServiceClient
 	addNewLeases(&mc, config, leases)
 
-	leaseA, err := makeLeaseRequest(&config[0])
+	leaseASwarm1, err := makeLeaseRequest(swarming1, &config[swarming1][0])
 	if err != nil {
-		t.Fatalf("makeLeaseRequest(a) got err %v want nil", err)
+		t.Fatalf("makeLeaseRequest(a, swarm1) got err %v want nil", err)
 	}
-	leaseB, err := makeLeaseRequest(&config[1])
+	leaseBSwarm1, err := makeLeaseRequest(swarming1, &config[swarming1][1])
 	if err != nil {
-		t.Fatalf("makeLeaseRequest(b) got err %v want nil", err)
+		t.Fatalf("makeLeaseRequest(b, swarm1) got err %v want nil", err)
+	}
+	leaseASwarm2, err := makeLeaseRequest(swarming2, &config[swarming2][0])
+	if err != nil {
+		t.Fatalf("makeLeaseRequest(a, swarm2) got err %v want nil", err)
 	}
 
 	got := mc.lease
-	want := []macservice.LeaseRequest{leaseA, leaseB, leaseB}
+	want := []macservice.LeaseRequest{leaseASwarm1, leaseBSwarm1, leaseBSwarm1, leaseASwarm2}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Lease request mismatch (-want +got):\n%s", diff)
 	}
