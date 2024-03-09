@@ -238,6 +238,9 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end tim
 	ret := make([]*BenchmarkJSON, 0, len(benchmarks))
 	for _, bench := range benchmarks {
 		b, err := fetchNamedUnitBenchmark(ctx, qc, start, end, repository, branch, bench.name, bench.unit)
+		if errors.Is(err, errBenchmarkNotFound) {
+			continue
+		}
 		if err != nil {
 			return nil, fmt.Errorf("error fetching benchmark %s/%s: %w", bench.name, bench.unit, err)
 		}
@@ -653,7 +656,7 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 			benchmarks = []*BenchmarkJSON{result}
 		}
 	}
-	if err == errBenchmarkNotFound {
+	if errors.Is(err, errBenchmarkNotFound) {
 		log.Printf("Benchmark not found: %q", benchmark)
 		http.Error(w, "Benchmark not found", 404)
 		return
