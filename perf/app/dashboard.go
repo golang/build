@@ -222,15 +222,15 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end tim
 			unit: "sec/op",
 		},
 		{
-			name: "RegexMatch-8",
+			name: "RegexMatch-16",
 			unit: "sec/op",
 		},
 		{
-			name: "BuildJSON-8",
+			name: "BuildJSON-16",
 			unit: "sec/op",
 		},
 		{
-			name: "ZapJSON-8",
+			name: "ZapJSON-16",
 			unit: "sec/op",
 		},
 	}
