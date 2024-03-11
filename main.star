@@ -204,7 +204,7 @@ luci.recipe.defaults.cipd_package.set("golang/recipe_bundles/go.googlesource.com
 luci.recipe.defaults.cipd_version.set("refs/heads/luci-config")
 luci.recipe.defaults.use_python3.set(True)
 
-def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, has_shared_pool, low_capacity):
+def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, has_shared_pool, low_capacity, priority = None):
     return struct(
         gerrit_host = gerrit_host,
         swarming_host = swarming_host + ".appspot.com",
@@ -216,6 +216,7 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
         worker_pool = "luci.golang.%s-workers" % bucket,
         shared_worker_pool = "luci.golang.shared-workers" if has_shared_pool else "",
         low_capacity_hosts = low_capacity,
+        priority = priority,
     )
 
 # GOOGLE_LOW_CAPACITY_HOSTS are low-capacity hosts that happen to be operated
@@ -313,16 +314,24 @@ DEFAULT_HOST_SUFFIX = {
     "windows-amd64": "10",
 }
 
+# We set build priorities by environment. These should always be lower than the
+# build priority for gomote requests, which is 20 (lower number means higher priority).
+PRIORITY = struct(
+    GOMOTE = 20,
+    PRESUBMIT = 30,
+    POSTSUBMIT = 40,
+)
+
 # The try bucket will include builders which work on pre-commit or pre-review
 # code.
-PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS)
+PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS, priority = PRIORITY.PRESUBMIT)
 
 # The ci bucket will include builders which work on post-commit code.
-PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS)
+PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS, priority = PRIORITY.POSTSUBMIT)
 
 # The security-try bucket is for builders that test unreviewed, embargoed
 # security fixes.
-SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security-try", "security-coordinator-builder", "security-worker-builder", False, LOW_CAPACITY_HOSTS)
+SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security-try", "security-coordinator-builder", "security-worker-builder", False, LOW_CAPACITY_HOSTS, priority = PRIORITY.PRESUBMIT)
 
 # The prod bucket will include builders which work on post-commit code and
 # generate executable artifacts used by other users or machines.
@@ -1280,6 +1289,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             experiments = exps,
             expiration_timeout = expiration_timeout,
             wait_for_capacity = wait_for_capacity,
+            priority = env.priority,
             **kwargs
         )
 
