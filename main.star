@@ -1846,83 +1846,84 @@ def _define_go_ci():
         )
 
 def _define_go_internal_ci():
-    for go_branch_short, go_branch in GO_BRANCHES.items():
-        # TODO(yifany): Simplify cq.location_filter once Tricium to CV
-        # migration (go/luci/tricium) is done.
-        cq_group_name = ("go-internal_%s" % go_branch_short).replace(".", "-")
-        luci.cq_group(
-            name = cq_group_name,
-            acls = [
-                acl.entry(
-                    roles = acl.CQ_DRY_RUNNER,
-                    groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+    for project_name in ["go", "net", "crypto"]:
+        for go_branch_short, go_branch in GO_BRANCHES.items():
+            # TODO(yifany): Simplify cq.location_filter once Tricium to CV
+            # migration (go/luci/tricium) is done.
+            cq_group_name = ("go-internal_%s_%s" % (project_name, go_branch_short)).replace(".", "-")
+            luci.cq_group(
+                name = cq_group_name,
+                acls = [
+                    acl.entry(
+                        roles = acl.CQ_DRY_RUNNER,
+                        groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+                    ),
+                    acl.entry(
+                        roles = acl.CQ_COMMITTER,
+                        groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+                    ),
+                ],
+                watch = cq.refset(
+                    repo = "https://go-internal.googlesource.com/%s" % project_name,
+                    refs = ["refs/heads/%s" % go_branch.branch],
                 ),
-                acl.entry(
-                    roles = acl.CQ_COMMITTER,
-                    groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
-                ),
-            ],
-            watch = cq.refset(
-                repo = "https://go-internal.googlesource.com/go",
-                refs = ["refs/heads/%s" % go_branch.branch],
-            ),
-            allow_submit_with_open_deps = True,
-            trust_dry_runner_deps = True,
-            allow_non_owner_dry_runner = True,
-            verifiers = [
-                luci.cq_tryjob_verifier(
-                    builder = "try/tricium",
-                    location_filters = [
-                        cq.location_filter(
-                            gerrit_host_regexp = "%s-review.googlesource.com" % host,
-                            gerrit_project_regexp = filter_project,
-                            path_regexp = ".+",
-                        )
-                        for host in ["go", "go-internal"]
-                        for filter_project in PROJECTS
-                    ],
-                    mode_allowlist = [cq.MODE_ANALYZER_RUN],
-                ),
-            ],
-            # TODO(prattmic): Set post_actions to apply TryBot-Result labels.
-        )
-
-        for builder_type in BUILDER_TYPES:
-            exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
-            host_type = host_of(builder_type)
-
-            # The internal host only has access to some machines. As of
-            # writing, that means all the GCE-hosted (high-capacity) builders
-            # and a select subset of GOOGLE_LOW_CAPACITY_HOSTS, and that's it.
-            if host_type in [
-                # A select subset of GOOGLE_LOW_CAPACITY_HOSTS that provide
-                # a separate set of VMs that connect to the chrome-swarming
-                # swarming instance. This requires additional resources and
-                # work to set up, hence each such host needs to opt-in here.
-                "linux-arm",
-            ]:
-                # The list above is expected to contain only Google low-capacity hosts.
-                # Verify that's the case.
-                if not is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type):
-                    fail("host type %s is listed explicitly but is not a Google low-capacity host", host_type)
-            elif is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type):
-                exists = False
-
-            if not exists:
-                continue
-
-            # Define presubmit builders. Since there's no postsubmit to monitor,
-            # all possible completed builders that perform testing are required.
-            name, _ = define_builder(SECURITY_TRY_ENV, "go", go_branch_short, builder_type)
-            _, _, _, run_mods = split_builder_type(builder_type)
-            luci.cq_tryjob_verifier(
-                builder = name,
-                cq_group = cq_group_name,
-                disable_reuse = True,
-                includable_only = any([r.startswith("perf") for r in run_mods]) or
-                                  (not presubmit and not postsubmit) or
-                                  builder_type in KNOWN_ISSUE_BUILDER_TYPES,
+                allow_submit_with_open_deps = True,
+                trust_dry_runner_deps = True,
+                allow_non_owner_dry_runner = True,
+                verifiers = [
+                    luci.cq_tryjob_verifier(
+                        builder = "try/tricium",
+                        location_filters = [
+                            cq.location_filter(
+                                gerrit_host_regexp = "%s-review.googlesource.com" % host,
+                                gerrit_project_regexp = filter_project,
+                                path_regexp = ".+",
+                            )
+                            for host in ["go", "go-internal"]
+                            for filter_project in PROJECTS
+                        ],
+                        mode_allowlist = [cq.MODE_ANALYZER_RUN],
+                    ),
+                ],
+                # TODO(prattmic): Set post_actions to apply TryBot-Result labels.
             )
+
+            for builder_type in BUILDER_TYPES:
+                exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project_name, go_branch_short, builder_type)
+                host_type = host_of(builder_type)
+
+                # The internal host only has access to some machines. As of
+                # writing, that means all the GCE-hosted (high-capacity) builders
+                # and a select subset of GOOGLE_LOW_CAPACITY_HOSTS, and that's it.
+                if host_type in [
+                    # A select subset of GOOGLE_LOW_CAPACITY_HOSTS that provide
+                    # a separate set of VMs that connect to the chrome-swarming
+                    # swarming instance. This requires additional resources and
+                    # work to set up, hence each such host needs to opt-in here.
+                    "linux-arm",
+                ]:
+                    # The list above is expected to contain only Google low-capacity hosts.
+                    # Verify that's the case.
+                    if not is_capacity_constrained(GOOGLE_LOW_CAPACITY_HOSTS, host_type):
+                        fail("host type %s is listed explicitly but is not a Google low-capacity host", host_type)
+                elif is_capacity_constrained(LOW_CAPACITY_HOSTS, host_type):
+                    exists = False
+
+                if not exists:
+                    continue
+
+                # Define presubmit builders. Since there's no postsubmit to monitor,
+                # all possible completed builders that perform testing are required.
+                name, _ = define_builder(SECURITY_TRY_ENV, project_name, go_branch_short, builder_type)
+                _, _, _, run_mods = split_builder_type(builder_type)
+                luci.cq_tryjob_verifier(
+                    builder = name,
+                    cq_group = cq_group_name,
+                    disable_reuse = True,
+                    includable_only = any([r.startswith("perf") for r in run_mods]) or
+                                      (not presubmit and not postsubmit) or
+                                      builder_type in KNOWN_ISSUE_BUILDER_TYPES,
+                )
 
 _define_go_ci()
 _define_go_internal_ci()
