@@ -51,6 +51,17 @@ luci.project(
             ],
         ),
 
+        # Allow task service accounts to validate configurations.
+        #
+        # This is fine, since all our configurations for this project (even for internal
+        # builders) are public.
+        luci.binding(
+            roles = "role/configs.validator",
+            users = [
+                "public-worker-builder@golang-ci-luci.iam.gserviceaccount.com",
+            ],
+        ),
+
         # luci-analysis permissions.
         #
         # Note on security: this appears to open up reading luci-analysis to everyone
@@ -672,13 +683,14 @@ RUN_MODS = dict(
         add_props = {"long_test": True},
         test_timeout_scale = 5,
         enabled = define_for_presubmit_only_for_projs_or_on_release_branches({
-            "protobuf": [],
+            "build": [],
             "go": [
                 # Enable longtest builders on go against tip if files related to vendored code are modified.
                 "src/{,cmd/}go[.]{mod,sum}",
                 "src/{,cmd/}vendor/.+",
                 "src/.+_bundle.go",
             ],
+            "protobuf": [],
         }),
     ),
 
