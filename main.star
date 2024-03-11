@@ -403,6 +403,7 @@ BUILDER_TYPES = [
     "linux-amd64-racecompile",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
+    "linux-amd64-typesalias",
     "linux-amd64_debian12-perf_vs_gopls_0_11",
     "linux-amd64_debian12-perf_vs_parent",
     "linux-amd64_debian12-perf_vs_release",
@@ -805,6 +806,15 @@ RUN_MODS = dict(
     staticlockranking = make_run_mod(
         add_env = {"GOEXPERIMENT": "staticlockranking"},
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
+    ),
+
+    # Build and test with the gotypesalias GODEBUG, which enables
+    # explicit representation of type aliases.
+    #
+    # The builder can be removed once gotypesalias=1 is the default.
+    typesalias = make_run_mod(
+        add_env = {"GODEBUG": "gotypesalias=1"},
+        enabled = define_for_optional_presubmit_only(["go", "tools"]),
     ),
 )
 
