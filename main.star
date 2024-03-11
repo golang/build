@@ -1876,7 +1876,7 @@ def _define_go_internal_ci():
         )
 
         for builder_type in BUILDER_TYPES:
-            exists, _, _, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
+            exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, "go", go_branch_short, builder_type)
             host_type = host_of(builder_type)
 
             # The internal host only has access to some machines. As of
@@ -1908,6 +1908,7 @@ def _define_go_internal_ci():
                 cq_group = cq_group_name,
                 disable_reuse = True,
                 includable_only = any([r.startswith("perf") for r in run_mods]) or
+                                  (not presubmit and not postsubmit) or
                                   builder_type in KNOWN_ISSUE_BUILDER_TYPES,
             )
 
