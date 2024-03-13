@@ -69,7 +69,7 @@ require (
 	google.golang.org/appengine v1.6.8-0.20221117013220-504804fb50de
 	google.golang.org/genproto/googleapis/api v0.0.0-20230822172742-b8732ec3820d
 	google.golang.org/grpc v1.59.0
-	google.golang.org/protobuf v1.31.0
+	google.golang.org/protobuf v1.33.0
 	gopkg.in/inf.v0 v0.9.1
 	rsc.io/github v0.3.0
 	rsc.io/markdown v0.0.0-20240117044121-669d2fdf1650
