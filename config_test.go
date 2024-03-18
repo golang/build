@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package luciconfig
+package luciconfig_test
 
 import (
 	"os/exec"
@@ -11,21 +11,28 @@ import (
 
 func TestValidate(t *testing.T) {
 	if testing.Short() {
-		t.Skip("skipping in short mode because we need network access on the builders to validate")
+		t.Skip("skipping in short mode because network access is needed to validate")
+	}
+	if _, err := exec.LookPath("lucicfg"); err != nil {
+		t.Fatalf("lucicfg is not available: %v\n\nSee the README for how to install it.", err)
 	}
 
 	// N.B. Disable lint checks for now. We haven't had them enabled and we're failing quite a few of them.
-	result, err := exec.Command("lucicfg", "validate", "-lint-checks", "none", "./main.star").CombinedOutput()
+	result, err := exec.Command("lucicfg", "validate", "-lint-checks=none", "main.star").CombinedOutput()
 	t.Logf("validation output:\n%s", result)
 	if err != nil {
-		t.Fatal("failed to validate configuration, did you remember to run `./main.star`?")
+		t.Fatalf("failed to validate configuration: %v\n\nTry running `go generate` or see the README for more information.", err)
 	}
 }
 
 func TestFormatted(t *testing.T) {
-	result, err := exec.Command("lucicfg", "fmt", "-dry-run", ".").CombinedOutput()
+	if _, err := exec.LookPath("lucicfg"); err != nil {
+		t.Fatalf("lucicfg is not available: %v\n\nSee the README for how to install it.", err)
+	}
+
+	result, err := exec.Command("lucicfg", "fmt", "-dry-run").CombinedOutput()
 	t.Logf("formatter output:\n%s", result)
 	if err != nil {
-		t.Fatal("failed to run formatter, did you remember to run `lucicfg fmt`?")
+		t.Fatalf("failed to run formatter: %v\n\nTry running `lucicfg fmt` or see the README for more information.", err)
 	}
 }

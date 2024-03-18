@@ -1,8 +1,10 @@
 This branch holds LUCI configuration for the Go project.
 
-Regenerate configuration by running `./main.star`.
+The configuration is defined by `main.star`.
+Use `go generate` to update generated files. (Under the hood it runs `./main.star`.)
+Use `lucicfg fmt` to format `main.star`.
 
-You will need the `lucicfg` program for that.
+You will need the `lucicfg` program.
 See https://www.chromium.org/developers/how-tos/depottools/#installing
 to install it.
 
