@@ -485,9 +485,9 @@ func addSingleReleaseWorkflow(
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
 	published := wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, availableOnProxy, pushed))
 	if kind == task.KindMajor {
-		goimportsCL := wf.Task2(wd, fmt.Sprintf("Mail goimports CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, nextVersion, wf.After(published))
-		goimportsCommit := wf.Task2(wd, "Wait for goimports CL submission", version.AwaitCL, goimportsCL, wf.Const(""))
-		wf.Output(wd, "goimports CL submitted", goimportsCommit)
+		xToolsStdlibCL := wf.Task2(wd, fmt.Sprintf("Mail x/tools stdlib CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, nextVersion, wf.After(published))
+		xToolsStdlibCommit := wf.Task2(wd, "Wait for x/tools stdlib CL submission", version.AwaitCL, xToolsStdlibCL, wf.Const(""))
+		wf.Output(wd, "x/tools stdlib CL submitted", xToolsStdlibCommit)
 	}
 
 	dockerBuild := wf.Task1(wd, "Start Google Docker build", build.runGoogleDockerBuild, nextVersion, wf.After(uploaded))

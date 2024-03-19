@@ -77,8 +77,8 @@ case "$1" in
   echo "tidied!" >> go.mod
   ;;
 "generate")
-  mkdir -p internal/imports
-  cd internal/imports && echo "package imports" >> zstdlib.go
+  mkdir -p internal/stdlib
+  cd internal/stdlib && echo "package stdlib" >> manifest.go
   ;;
 *)
   echo unexpected command $@
