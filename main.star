@@ -125,6 +125,14 @@ PUBLIC_REALMS = [
     luci.bucket(name = "ci-workers"),
 ]
 
+# Shadow buckets, for mutating and trying out builds.
+PUBLIC_SHADOW_BUCKETS = [
+    luci.bucket(shadows = "try", name = "try.shadow", dynamic = True),
+    luci.bucket(shadows = "try-workers", name = "try-workers.shadow", dynamic = True),
+    luci.bucket(shadows = "ci", name = "ci.shadow", dynamic = True),
+    luci.bucket(shadows = "ci-workers", name = "ci-workers.shadow", dynamic = True),
+]
+
 SECURITY_REALMS = [
     luci.realm(name = "pools/security-try"),
     luci.realm(name = "pools/security-try-workers"),
@@ -199,6 +207,29 @@ luci.binding(
     realm = PUBLIC_REALMS + SECURITY_REALMS,
     users = [
         "relui-tasks@symbolic-datum-552.iam.gserviceaccount.com",
+    ],
+)
+
+# Allow anyone on the Go team to create builds in shadow buckets.
+# Creating builds is more permissive than triggering them: it allows
+# for arbitrary mutation of the builder definition, whereas triggered
+# builds may only mutate explicitly mutable fields. These shadow buckets
+# are used for testing.
+luci.binding(
+    roles = "role/buildbucket.creator",
+    realm = PUBLIC_SHADOW_BUCKETS,
+    groups = ["mdb/golang-team"],
+)
+
+# Allow all our service accounts to create ResultDB invocations in
+# shadow buckets. This permission is necessary to set explicitly according
+# to the shadow bucket documentation.
+luci.binding(
+    roles = "role/resultdb.invocationCreator",
+    realm = PUBLIC_SHADOW_BUCKETS,
+    users = [
+        "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
+        "public-worker-builder@golang-ci-luci.iam.gserviceaccount.com",
     ],
 )
 
