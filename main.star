@@ -1300,6 +1300,7 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     # Determine which experiments to apply.
     experiments = {
+        "golang.shard_by_weight": 100,
     }
 
     # Construct the executable reference.
