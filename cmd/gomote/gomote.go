@@ -142,7 +142,7 @@ to reproduce a rare failure, like so:
 # Legacy Infrastructure
 
 Setting the GOMOTEDISABLELUCI environmental variable equal to true will set the gomote client to communicate with
-the the coordinator instead of the gomote server.
+the coordinator instead of the gomote server.
 */
 package main
 

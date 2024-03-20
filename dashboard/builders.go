@@ -624,7 +624,7 @@ func init() {
 	}
 }
 
-// CosArch defines the diffrent COS images types used.
+// CosArch defines the different COS images types used.
 type CosArch string
 
 const (
