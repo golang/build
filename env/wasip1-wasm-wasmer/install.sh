@@ -321,7 +321,7 @@ semver_compare() {
     fi
   fi
 
-  # if we're here we know that the target verison cannot be less than or equal to
+  # if we're here we know that the target version cannot be less than or equal to
   # our current version, therefore we upgrade
 
   echo -1 && return 0
