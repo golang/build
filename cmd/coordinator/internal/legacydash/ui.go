@@ -214,7 +214,9 @@ func (tb *uiTemplateDataBuilder) newCommitInfo(dsCommits map[string]*Commit, rep
 		Branch:      branch,
 	}
 	if dsc, ok := dsCommits[dc.Commit]; ok {
-		ci.ResultData = dsc.ResultData
+		// Remove extra dsc.ResultData capacity to make it
+		// okay to append additional data to ci.ResultData.
+		ci.ResultData = dsc.ResultData[:len(dsc.ResultData):len(dsc.ResultData)]
 	}
 	// For non-go repos, add the rows for the Go commits that were
 	// at HEAD overlapping in time with dc.Commit.
