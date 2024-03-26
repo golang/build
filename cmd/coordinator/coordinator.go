@@ -380,11 +380,11 @@ func main() {
 			log.Fatalln("luci/auth.NewAuthenticator:", err)
 		}
 	}
-	buildersCl := buildbucketpb.NewBuildersPRPCClient(&prpc.Client{
+	buildersCl := buildbucketpb.NewBuildersClient(&prpc.Client{
 		C:    luciHTTPClient,
 		Host: "cr-buildbucket.appspot.com",
 	})
-	buildsCl := buildbucketpb.NewBuildsPRPCClient(&prpc.Client{
+	buildsCl := buildbucketpb.NewBuildsClient(&prpc.Client{
 		C:    luciHTTPClient,
 		Host: "cr-buildbucket.appspot.com",
 	})

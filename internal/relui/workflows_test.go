@@ -198,7 +198,7 @@ func TestReadRelevantBuildersLive(t *testing.T) {
 	if err != nil {
 		t.Fatal("auth.NewAuthenticator:", err)
 	}
-	buildersClient := buildbucketpb.NewBuildersPRPCClient(&prpc.Client{
+	buildersClient := buildbucketpb.NewBuildersClient(&prpc.Client{
 		C:    luciHTTPClient,
 		Host: "cr-buildbucket.appspot.com",
 	})

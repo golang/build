@@ -155,11 +155,11 @@ func TestFindMissingBuildersLive(t *testing.T) {
 	if err != nil {
 		t.Fatal("auth.NewAuthenticator:", err)
 	}
-	buildsClient := buildbucketpb.NewBuildsPRPCClient(&prpc.Client{
+	buildsClient := buildbucketpb.NewBuildsClient(&prpc.Client{
 		C:    luciHTTPClient,
 		Host: "cr-buildbucket.appspot.com",
 	})
-	buildersClient := buildbucketpb.NewBuildersPRPCClient(&prpc.Client{
+	buildersClient := buildbucketpb.NewBuildersClient(&prpc.Client{
 		C:    luciHTTPClient,
 		Host: "cr-buildbucket.appspot.com",
 	})

@@ -181,11 +181,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	buildsClient := pb.NewBuildsPRPCClient(&prpc.Client{
+	buildsClient := pb.NewBuildsClient(&prpc.Client{
 		C:    luciHTTPClient,
 		Host: "cr-buildbucket.appspot.com",
 	})
-	buildersClient := pb.NewBuildersPRPCClient(&prpc.Client{
+	buildersClient := pb.NewBuildersClient(&prpc.Client{
 		C:    luciHTTPClient,
 		Host: "cr-buildbucket.appspot.com",
 	})

@@ -47,15 +47,15 @@ func NewLUCIClient() *LUCIClient {
 	if err != nil {
 		log.Fatal(err)
 	}
-	buildsClient := bbpb.NewBuildsPRPCClient(&prpc.Client{
+	buildsClient := bbpb.NewBuildsClient(&prpc.Client{
 		C:    c,
 		Host: crBuildBucketHost,
 	})
-	buildersClient := bbpb.NewBuildersPRPCClient(&prpc.Client{
+	buildersClient := bbpb.NewBuildersClient(&prpc.Client{
 		C:    c,
 		Host: crBuildBucketHost,
 	})
-	resultDBClient := rdbpb.NewResultDBPRPCClient(&prpc.Client{
+	resultDBClient := rdbpb.NewResultDBClient(&prpc.Client{
 		C:    c,
 		Host: resultDBHost,
 	})
