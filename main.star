@@ -455,6 +455,8 @@ BUILDER_TYPES = [
     "linux-amd64_debian12-perf_vs_tip",
     "linux-arm",
     "linux-arm64",
+    "linux-arm64-longtest",
+    "linux-arm64-race",
     "linux-loong64",
     "linux-mips",
     "linux-mips64",
