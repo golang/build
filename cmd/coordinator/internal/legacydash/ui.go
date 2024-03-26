@@ -795,7 +795,7 @@ func addLUCIBuilders(luci lucipoll.Snapshot, builders map[string]bool, xRepos []
 		repoName := r.Package.Name
 		for _, b := range luci.Builders {
 			if b.Repo != repoName || b.GoBranch != goBranch {
-				// Filter out builders whose repo and Gobranch doesn't match.
+				// Filter out builders whose repo or Go branch doesn't match.
 				continue
 			}
 			shortGoBranch := "tip"

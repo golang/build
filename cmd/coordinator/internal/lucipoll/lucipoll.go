@@ -155,33 +155,40 @@ func runOnce(
 	// Fetch builds for Go repo commits.
 	for _, c := range dashResp.Commits {
 		repo, commit := "go", c.Commit
-		buildList, err := fetchBuildsForCommit(ctx, buildsCl, repo, commit, "id", "builder.builder", "status", "input.gitiles_commit", "input.properties")
+		buildList, err := fetchBuildsForCommit(ctx, buildsCl, repo, commit, "id", "builder.builder", "status", "input.gitiles_commit")
 		if err != nil {
 			return nil, nil, err
 		}
 		total += len(buildList)
 		for _, b := range buildList {
+			if c := b.GetInput().GetGitilesCommit(); c.Project != repo {
+				return nil, nil, fmt.Errorf(`internal error: in Go repo commit loop, c.Project is %q but expected it to be "go"`, c.Project)
+			} else if c.Id != commit {
+				return nil, nil, fmt.Errorf("internal error: in Go repo commit loop, c.Id is %q but expected it to be %q", c.Id, commit)
+			}
+			switch b.GetStatus() {
+			case bbpb.Status_STARTED, bbpb.Status_SUCCESS, bbpb.Status_FAILURE, bbpb.Status_INFRA_FAILURE:
+			default:
+				// Skip builds with other statuses at this time.
+				// Such builds can be included when the callers deem it useful.
+				continue
+			}
 			builder, ok := builders[b.GetBuilder().GetBuilder()]
 			if !ok {
 				// A build that isn't associated with a current builder we're tracking.
 				// It might've been removed, or has a known issue. Skip this build too.
 				continue
-			}
-			c := b.GetInput().GetGitilesCommit()
-			if c.Project != builder.Repo {
-				// A build that was triggered from a different project than the builder is for.
-				// If the build hasn't completed, the exact repo commit hasn't been chosen yet.
-				// For now such builds are not represented in the simple model of this package,
-				// so skip it.
+			} else if builder.Repo != "go" {
+				// Not a Go repo build. Those are handled below, so out of scope here.
 				continue
 			}
-			if builds[builder.Repo] == nil {
-				builds[builder.Repo] = make(map[string]map[string]Build)
+			if builds[repo] == nil {
+				builds[repo] = make(map[string]map[string]Build)
 			}
-			if builds[builder.Repo][c.Id] == nil {
-				builds[builder.Repo][c.Id] = make(map[string]Build)
+			if builds[repo][commit] == nil {
+				builds[repo][commit] = make(map[string]Build)
 			}
-			builds[builder.Repo][c.Id][b.GetBuilder().GetBuilder()] = Build{
+			builds[repo][commit][b.GetBuilder().GetBuilder()] = Build{
 				ID:          b.GetId(),
 				BuilderName: b.GetBuilder().GetBuilder(),
 				Status:      b.GetStatus(),
@@ -189,7 +196,98 @@ func runOnce(
 			used++
 		}
 	}
-	// Fetch builds for a single commit in each golang.org/x repo.
+	// Fetch builds for the single latest commit of each golang.org/x repo,
+	// ones that were invoked from the Go repository side.
+	var repoHeads = make(map[string]string) // A repo → head commit ID map.
+	for _, rh := range dashResp.RepoHeads {
+		repoHeads[rh.GerritProject] = rh.Commit.Commit
+	}
+	for _, r := range dashResp.Releases {
+		repo, commit := "go", r.GetBranchCommit()
+		buildList, err := fetchBuildsForCommit(ctx, buildsCl, repo, commit, "id", "builder.builder", "status", "input.gitiles_commit", "output.properties")
+		if err != nil {
+			return nil, nil, err
+		}
+		total += len(buildList)
+		for _, b := range buildList {
+			if c := b.GetInput().GetGitilesCommit(); c.Project != "go" {
+				return nil, nil, fmt.Errorf(`internal error: in x/ repo loop for builds invoked from the Go repo side, c.Project is %q but expected it to be "go"`, c.Project)
+			}
+			switch b.GetStatus() {
+			case bbpb.Status_STARTED, bbpb.Status_SUCCESS, bbpb.Status_FAILURE, bbpb.Status_INFRA_FAILURE:
+			default:
+				// Skip builds with other statuses at this time.
+				// Such builds can be included when the callers deem it useful.
+				continue
+			}
+			builder, ok := builders[b.GetBuilder().GetBuilder()]
+			if !ok {
+				// A build that isn't associated with a current builder we're tracking.
+				// It might've been removed, or has a known issue. Skip this build too.
+				continue
+			} else if builder.Repo == "go" {
+				// A Go repo build. Those were handled above, so out of scope here.
+				continue
+			}
+			var buildOutputProps struct {
+				Sources []struct {
+					GitilesCommit struct {
+						Project string
+						Ref     string
+						Id      string
+					}
+				}
+			}
+			if data, err := b.GetOutput().GetProperties().MarshalJSON(); err != nil {
+				return nil, nil, fmt.Errorf("marshaling build output properties to JSON failed: %v", err)
+			} else if err := json.Unmarshal(data, &buildOutputProps); err != nil {
+				return nil, nil, err
+			}
+			repoCommit, ok := func() (string, bool) {
+				for _, s := range buildOutputProps.Sources {
+					if c := s.GitilesCommit; c.Project == builder.Repo {
+						if c.Ref != "refs/heads/master" {
+							panic(fmt.Errorf(`internal error: in x/ repo loop for project %s, c.Ref != "refs/heads/master"`, c.Project))
+						}
+						return c.Id, true
+					}
+				}
+				return "", false
+			}()
+			if !ok && b.GetStatus() == bbpb.Status_STARTED {
+				// A started build that hasn't selected the x/ repo commit yet.
+				// As an approximation, assume it'll pick the latest x/ repo head commit.
+				repoCommit = repoHeads[builder.Repo]
+			} else if !ok {
+				// Repo commit not found in output properties, and it's not a started build.
+				// As an example, this can happen if a build failed due to an infra failure
+				// early on, before selecting the x/ repo commit. Skip such builds.
+				continue
+			}
+			if repoCommit != repoHeads[builder.Repo] {
+				// Skip builds that are not for the x/ repository's head commit.
+				continue
+			}
+			if builds[builder.Repo] == nil {
+				builds[builder.Repo] = make(map[string]map[string]Build)
+			}
+			if builds[builder.Repo][repoCommit] == nil {
+				builds[builder.Repo][repoCommit] = make(map[string]Build)
+			}
+			builds[builder.Repo][repoCommit][b.GetBuilder().GetBuilder()] = Build{
+				ID:          b.GetId(),
+				BuilderName: b.GetBuilder().GetBuilder(),
+				Status:      b.GetStatus(),
+			}
+			used++
+		}
+	}
+	// Fetch builds for the single latest commit of each golang.org/x repo,
+	// ones that were invoked from the x/ repository side.
+	var goHeads = make(map[string]string) // A branch → head commit ID map.
+	for _, r := range dashResp.Releases {
+		goHeads[r.GetBranchName()] = r.GetBranchCommit()
+	}
 	for _, rh := range dashResp.RepoHeads {
 		if rh.GerritProject == "go" {
 			continue
@@ -200,16 +298,62 @@ func runOnce(
 			continue
 		}
 		repo, commit := rh.GerritProject, rh.Commit.Commit
-		buildList, err := fetchBuildsForCommit(ctx, buildsCl, repo, commit, "id", "builder.builder", "status", "input.gitiles_commit", "input.properties")
+		buildList, err := fetchBuildsForCommit(ctx, buildsCl, repo, commit, "id", "builder.builder", "status", "input.gitiles_commit", "output.properties")
 		if err != nil {
 			return nil, nil, err
 		}
 		total += len(buildList)
 		for _, b := range buildList {
+			switch b.GetStatus() {
+			case bbpb.Status_STARTED, bbpb.Status_SUCCESS, bbpb.Status_FAILURE, bbpb.Status_INFRA_FAILURE:
+			default:
+				// Skip builds with other statuses at this time.
+				// Such builds can be included when the callers deem it useful.
+				continue
+			}
 			builder, ok := builders[b.GetBuilder().GetBuilder()]
 			if !ok {
 				// A build that isn't associated with a current builder we're tracking.
 				// It might've been removed, or has a known issue. Skip this build too.
+				continue
+			}
+			var buildOutputProps struct {
+				Sources []struct {
+					GitilesCommit struct {
+						Project string
+						Ref     string
+						Id      string
+					}
+				}
+			}
+			if data, err := b.GetOutput().GetProperties().MarshalJSON(); err != nil {
+				return nil, nil, fmt.Errorf("marshaling build output properties to JSON failed: %v", err)
+			} else if err := json.Unmarshal(data, &buildOutputProps); err != nil {
+				return nil, nil, err
+			}
+			goCommit, ok := func() (string, bool) {
+				for _, s := range buildOutputProps.Sources {
+					if c := s.GitilesCommit; c.Project == "go" {
+						if c.Ref != "refs/heads/"+builder.GoBranch {
+							panic(fmt.Errorf(`internal error: in Go repo loop, c.Ref != "refs/heads/%s"`, builder.GoBranch))
+						}
+						return c.Id, true
+					}
+				}
+				return "", false
+			}()
+			if !ok && b.GetStatus() == bbpb.Status_STARTED {
+				// A started build that hasn't selected the Go repo commit yet.
+				// As an approximation, assume it'll pick the latest Go repo head commit.
+				goCommit = goHeads[builder.GoBranch]
+			} else if !ok {
+				// Repo commit not found in output properties, and it's not a started build.
+				// As an example, this can happen if a build failed due to an infra failure
+				// early on, before selecting the Go repo commit. Skip such builds.
+				continue
+			}
+			if goCommit != goHeads[builder.GoBranch] {
+				// Skip builds that are not for the Go repository's head commit.
 				continue
 			}
 			c := b.GetInput().GetGitilesCommit()
@@ -218,7 +362,7 @@ func runOnce(
 				// that build repo will always match builder repo. This isn't
 				// true for the main Go repo because it triggers builds for x/
 				// repos. But x/ repo builds don't trigger builds elsewhere.
-				return nil, nil, fmt.Errorf("internal error: build repo %q doesn't match builder repo %q", b.GetInput().GetGitilesCommit().GetProject(), builder.Repo)
+				return nil, nil, fmt.Errorf("internal error: build repo %q doesn't match builder repo %q", c.Project, builder.Repo)
 			}
 			if builds[builder.Repo] == nil {
 				builds[builder.Repo] = make(map[string]map[string]Build)
@@ -234,8 +378,7 @@ func runOnce(
 			used++
 		}
 	}
-	fmt.Printf("runOnce: aggregate GetBuildsForCommit calls fetched %d builds in %v\n", total, time.Since(t0))
-	fmt.Printf("runOnce: used %d of those %d builds\n", used, total)
+	log.Printf("lucipoll.runOnce: aggregate GetBuildsForCommit calls fetched %d builds (and used %d of them) in %v\n", total, used, time.Since(t0))
 
 	return builders, builds, nil
 }
