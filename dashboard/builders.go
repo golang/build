@@ -2871,10 +2871,11 @@ func init() {
 // See go.dev/issue/65913
 // and go.dev/issue/63471.
 var BuildersPortedToLUCI = map[string]bool{
+	"js-wasm-node18":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-js-wasm.
 	"wasip1-wasm-wasmedge": true, // Would be 'wasip1-wasm_wasmedge' but put off until go.dev/issue/60097 picks up activity.
-
-	// TODO(go.dev/issue/63471): Add more here. For example:
-	//"wasip1-wasm-wazero": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-wasip1-wasm_wazero.
+	"wasip1-wasm-wasmer":   true, // Would be 'wasip1-wasm_wasmer' but put off until go.dev/issue/59907 picks up activity.
+	"wasip1-wasm-wasmtime": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-wasip1-wasm_wasmtime.
+	"wasip1-wasm-wazero":   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-wasip1-wasm_wazero.
 }
 
 // stopPortedBuilders controls whether ported builders should be stopped,
