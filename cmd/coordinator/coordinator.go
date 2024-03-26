@@ -37,6 +37,10 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
+	"go.chromium.org/luci/auth"
+	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
+	"go.chromium.org/luci/grpc/prpc"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
@@ -361,7 +365,30 @@ func main() {
 	// grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
 	grpcServer := grpc.NewServer(opts...)
 
-	luciPoll := lucipoll.NewService(maintnerClient)
+	var luciHTTPClient *http.Client
+	switch *mode {
+	case "prod":
+		var err error
+		luciHTTPClient, err = auth.NewAuthenticator(context.Background(), auth.SilentLogin, auth.Options{GCEAllowAsDefault: true}).Client()
+		if err != nil {
+			log.Fatalln("luci/auth.NewAuthenticator:", err)
+		}
+	case "dev":
+		var err error
+		luciHTTPClient, err = auth.NewAuthenticator(context.Background(), auth.SilentLogin, chromeinfra.DefaultAuthOptions()).Client()
+		if err != nil {
+			log.Fatalln("luci/auth.NewAuthenticator:", err)
+		}
+	}
+	buildersCl := buildbucketpb.NewBuildersPRPCClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
+	buildsCl := buildbucketpb.NewBuildsPRPCClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
+	luciPoll := lucipoll.NewService(maintnerClient, buildersCl, buildsCl)
 	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, luciPoll, string(masterKey()), grpcServer)
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient, LUCI: luciPoll}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}

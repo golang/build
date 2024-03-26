@@ -18,7 +18,6 @@ import (
 	"time"
 
 	bbpb "go.chromium.org/luci/buildbucket/proto"
-	"go.chromium.org/luci/grpc/prpc"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"google.golang.org/grpc"
@@ -52,13 +51,11 @@ type Build struct {
 	Status      bbpb.Status
 }
 
-func NewService(maintCl maintnerClient) *service {
-	const crBuildBucketHost = "cr-buildbucket.appspot.com"
-
+func NewService(maintCl maintnerClient, buildersCl bbpb.BuildersClient, buildsCl bbpb.BuildsClient) *service {
 	s := &service{
 		maintCl:    maintCl,
-		buildersCl: bbpb.NewBuildersPRPCClient(&prpc.Client{Host: crBuildBucketHost}),
-		buildsCl:   bbpb.NewBuildsPRPCClient(&prpc.Client{Host: crBuildBucketHost}),
+		buildersCl: buildersCl,
+		buildsCl:   buildsCl,
 	}
 	go s.pollLoop()
 	return s
