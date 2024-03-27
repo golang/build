@@ -7,7 +7,7 @@ set -e
 set -u
 
 # Update to the version listed on https://openbsd.org
-readonly VERSION="${VERSION:-7.2}"
+readonly VERSION="${VERSION:-7.4}"
 readonly RELNO="${VERSION/./}"
 readonly SNAPSHOT=false
 
