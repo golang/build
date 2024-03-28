@@ -1339,13 +1339,25 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Create a helper to emit builder definitions, installing common fields from
     # the current context.
     def emit_builder(name, bucket, dimensions, properties, service_account, **kwargs):
+        builder_executable = executable
+        if name == "gotip-windows-amd64-test_only":
+            # Pin https://chrome-infra-packages.appspot.com/p/infra/experimental/golangbuild/windows-amd64/+/-LZNHgUiqBeGS1e7u-XerddSZrKPD3JF3a-8kTTK4L4C
+            # only on windows-amd64 workers (not the linux-amd64 coordinator, where that instance ID doesn't exist).
+            # TODO(go.dev/issue/66580): Undo this later.
+            builder_executable = luci.executable(
+                name = "golangbuild-pinned",
+                cipd_package = "infra/experimental/golangbuild/windows-amd64",
+                cipd_version = "-LZNHgUiqBeGS1e7u-XerddSZrKPD3JF3a-8kTTK4L4C",
+                cmd = ["golangbuild"],
+            )
+
         exps = dict(experiments)
         if not is_fully_supported(dimensions):
             exps["luci.best_effort_platform"] = 100
         luci.builder(
             name = name,
             bucket = bucket,
-            executable = executable,
+            executable = builder_executable,
             dimensions = dimensions,
             properties = properties,
             service_account = service_account,
