@@ -235,15 +235,18 @@ func putBootstrap(args []string) error {
 	for _, inst := range putSet {
 		inst := inst
 		eg.Go(func() error {
-			client := gomoteServerClient(ctx)
-			resp, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
-				GomoteId: inst,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
-			}
-			if resp.GetBootstrapGoUrl() == "" {
-				fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", inst)
+			// TODO(66635) remove once gomotes can no longer be created via the coordinator.
+			if luciDisabled() {
+				client := gomoteServerClient(ctx)
+				resp, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
+					GomoteId: inst,
+				})
+				if err != nil {
+					return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
+				}
+				if resp.GetBootstrapGoUrl() == "" {
+					fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", inst)
+				}
 			}
 			return nil
 		})
