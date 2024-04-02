@@ -2882,26 +2882,26 @@ var BuildersPortedToLUCI = map[string]bool{
 	"darwin-arm64-12":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-darwin-arm64_12.
 
 	// Linux builders (just those covering first-class ports).
-	"linux-386":                     true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386.
-	"linux-386-longtest":            true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-longtest.
-	"linux-386-softfloat":           true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-softfloat.
-	"linux-arm-aws":                 true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm.
-	"linux-amd64":                   true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64.
-	"linux-amd64-longtest":          true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-longtest.
-	"linux-amd64-race":              true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-race.
-	"linux-amd64-longtest-race":     true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-longtest-race.
-	"linux-amd64-racecompile":       true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-racecompile.
-	"linux-amd64-nocgo":             true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-nocgo.
-	"linux-amd64-noopt":             true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-noopt.
-	"linux-amd64-clang":             true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-clang15 (a newer clang, but we won't be adding exactly -clang7 to LUCI by now).
-	"linux-amd64-goamd64v3":         true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-goamd64v3.
-	"linux-amd64-boringcrypto":      true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-boringcrypto.
-	"linux-amd64-ssacheck":          true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-ssacheck.
-	"linux-amd64-staticlockranking": true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-staticlockranking.
-	"linux-amd64-newinliner":        true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-newinliner.
-	"linux-arm64":                   true,  // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64.
-	"linux-arm64-longtest":          false, // Not yet available in LUCI.
-	"linux-arm64-race":              false, // Not yet available in LUCI.
+	"linux-386":                     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386.
+	"linux-386-longtest":            true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-longtest.
+	"linux-386-softfloat":           true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-softfloat.
+	"linux-arm-aws":                 true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm.
+	"linux-amd64":                   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64.
+	"linux-amd64-longtest":          true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-longtest.
+	"linux-amd64-race":              true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-race.
+	"linux-amd64-longtest-race":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-longtest-race.
+	"linux-amd64-racecompile":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-racecompile.
+	"linux-amd64-nocgo":             true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-nocgo.
+	"linux-amd64-noopt":             true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-noopt.
+	"linux-amd64-clang":             true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-clang15 (a newer clang, but we won't be adding exactly -clang7 to LUCI by now).
+	"linux-amd64-goamd64v3":         true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-goamd64v3.
+	"linux-amd64-boringcrypto":      true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-boringcrypto.
+	"linux-amd64-ssacheck":          true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-ssacheck.
+	"linux-amd64-staticlockranking": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-staticlockranking.
+	"linux-amd64-newinliner":        true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-newinliner.
+	"linux-arm64":                   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64.
+	"linux-arm64-longtest":          true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64-longtest.
+	"linux-arm64-race":              true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64-race.
 
 	// Windows builders.
 	"windows-386-2016":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-windows-386.
