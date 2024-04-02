@@ -286,8 +286,8 @@ TBD_CAPACITY_HOSTS = [
 LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
     "freebsd-riscv64",
     "linux-loong64",
-    "linux-ppc64",
-    "linux-ppc64le",
+    "linux-ppc64_power10",
+    "linux-ppc64le_power8",
     "linux-riscv64",
     "netbsd-arm",
     "netbsd-arm64",
@@ -304,8 +304,8 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
 # factor. It also affects the decision of whether to include a builder in
 # presubmit testing by default (slow high-capacity hosts aren't included).
 SLOW_HOSTS = {
-    "linux-ppc64": 2,
-    "linux-ppc64le": 2,
+    "linux-ppc64_power10": 2,
+    "linux-ppc64le_power8": 2,
     "netbsd-arm64": 2,
     "openbsd-amd64": 2,
 }
@@ -401,10 +401,10 @@ luci.list_view(
 # BUILDER_TYPES lists possible builder types.
 #
 # A builder type is a combination of a GOOS and GOARCH, an optional suffix that
-# specifies the OS version, and a series of run-time modifications
+# specifies the OS version or CPU version, and a series of run-time modifications
 # (listed in RUN_MODS).
 #
-# The format of a builder type is thus $GOOS-$GOARCH(_osversion)?(-$RUN_MOD)*.
+# The format of a builder type is thus $GOOS-$GOARCH(_suffix)?(-$RUN_MOD)*.
 BUILDER_TYPES = [
     "aix-ppc64",
     "android-386",
@@ -462,8 +462,8 @@ BUILDER_TYPES = [
     "linux-mips64",
     "linux-mips64le",
     "linux-mipsle",
-    "linux-ppc64-power10",
-    "linux-ppc64le",
+    "linux-ppc64_power10",
+    "linux-ppc64le_power8",
     "linux-riscv64",
     "linux-s390x",
     "netbsd-386",
@@ -815,12 +815,6 @@ RUN_MODS = dict(
         enabled = define_for_postsubmit(["tools"], go_branches = [branch for branch in GO_BRANCHES.keys() if branch != "gotip"]),
     ),
 
-    # Build and test with GOPPC64=power10, which makes the compiler assume certain ppc64 CPU
-    # features are always available.
-    power10 = make_run_mod(
-        add_env = {"GOPPC64": "power10"},
-    ),
-
     # Build and test with race mode enabled.
     race = make_run_mod(
         add_props = {"race_mode": True},
@@ -974,7 +968,7 @@ def dimensions_of(host_type):
 
     host = "%s-%s" % (goos, goarch)
 
-    os = None
+    os, cpu = None, None
 
     # Narrow down the dimensions using the suffix.
 
@@ -1002,9 +996,11 @@ def dimensions_of(host_type):
         fail("failed to find required OS version for host %s" % host)
 
     if suffix != "":
-        if goos == "linux":
+        if goos == "linux" and "debian" in suffix:
             # linux-amd64_debian11 -> Debian-11
             os = suffix.replace("debian", "Debian-")
+        elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
+            cpu = goarch + "-64-" + suffix.replace("power", "POWER")
         elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffix
@@ -1012,6 +1008,8 @@ def dimensions_of(host_type):
             os = "Windows-" + suffix
         elif goos == "openbsd":
             os = "openbsd-" + suffix
+        else:
+            fail("unhandled suffix %s for host type %s" % (suffix, host_type))
 
     # Request a specific GCE machine type for certain platforms.
     #
@@ -1037,6 +1035,8 @@ def dimensions_of(host_type):
     dims = {"cipd_platform": cipd_platform}
     if os != None:
         dims["os"] = os
+    if cpu != None:
+        dims["cpu"] = cpu
     if machine_type != None:
         dims["machine_type"] = machine_type
     return dims
@@ -1240,6 +1240,10 @@ def define_builder(env, project, go_branch_short, builder_type):
                 base_props["wazero_version"] = "2@1.5.0"
             else:
                 fail("unknown GOOS=wasip1 builder suffix: %s" % suffix)
+
+    # Set GOPPC64 explicitly when it's specified in the suffix.
+    if arch in ["ppc64", "ppc64le"] and "power" in suffix:
+        base_props["env"]["GOPPC64"] = suffix
 
     # TODO(go.dev/issue/65241): Start by mirroring old infra's linux-arm env,
     # which came from CL 390395 and that came from CL 35501 for issue 18748.
