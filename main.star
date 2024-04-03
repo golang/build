@@ -287,7 +287,9 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
     "freebsd-riscv64",
     "linux-loong64",
     "linux-ppc64_power10",
+    "linux-ppc64le_power10",
     "linux-ppc64le_power8",
+    "linux-ppc64le_power9",
     "linux-riscv64",
     "netbsd-arm",
     "netbsd-arm64",
@@ -305,7 +307,9 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
 # presubmit testing by default (slow high-capacity hosts aren't included).
 SLOW_HOSTS = {
     "linux-ppc64_power10": 2,
+    "linux-ppc64le_power10": 2,
     "linux-ppc64le_power8": 2,
+    "linux-ppc64le_power9": 2,
     "netbsd-arm64": 2,
     "openbsd-amd64": 2,
 }
@@ -463,7 +467,9 @@ BUILDER_TYPES = [
     "linux-mips64le",
     "linux-mipsle",
     "linux-ppc64_power10",
+    "linux-ppc64le_power10",
     "linux-ppc64le_power8",
+    "linux-ppc64le_power9",
     "linux-riscv64",
     "linux-s390x",
     "netbsd-386",
@@ -499,6 +505,8 @@ def known_issue(issue_number, skip_x_repos = False):
 KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-riscv64": known_issue(issue_number = 63482),
     "linux-loong64": known_issue(issue_number = 65398),
+    "linux-ppc64le_power10": known_issue(issue_number = 64660),
+    "linux-ppc64le_power9": known_issue(issue_number = 66667),
     "netbsd-arm": known_issue(issue_number = 63698),
     "openbsd-ppc64": known_issue(issue_number = 63480),
     "openbsd-riscv64": known_issue(issue_number = 64176),
