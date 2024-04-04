@@ -85,9 +85,19 @@ func (s *service) PostSubmitSnapshot() Snapshot {
 }
 
 func (s *service) pollLoop() {
+	// A hard timeout for runOnce to complete.
+	// Normally it takes about a minute or so.
+	// Sometimes (a few times a week) it takes 24 hours and a minute.
+	// Don't let it run more than 30 minutes, so we'll find out trying
+	// again sooner can help, at least until the root problem is fixed.
+	// See go.dev/issue/66687.
+	const runOnceTimeout = 30 * time.Minute
+
 	ticker := time.NewTicker(2 * time.Minute)
 	for {
-		builders, builds, err := runOnce(context.Background(), s.maintCl, s.buildersCl, s.buildsCl)
+		ctx, cancel := context.WithTimeout(context.Background(), runOnceTimeout)
+		builders, builds, err := runOnce(ctx, s.maintCl, s.buildersCl, s.buildsCl)
+		cancel()
 		if err != nil {
 			log.Println("lucipoll:", err)
 			// Sleep a bit and retry.
