@@ -96,12 +96,22 @@ func TestMirrorInitiallyEmpty(t *testing.T) {
 
 type testMirror struct {
 	// Local paths to the copies of the build repo.
-	gerrit, github, csr string
+	gerrit, github, csr explicitRepo
 	m                   *gitMirror
 	server              *httptest.Server
 	buildRepo           *repo
 	t                   *testing.T
 }
+
+// explicitRepo is a Git repository
+// whose GIT_DIR and worktree paths
+// are explicitly tracked.
+type explicitRepo struct {
+	gitDir string // GIT_DIR.
+	dir    string // Worktree directory if non-bare repo, equal to gitDir if bare.
+}
+
+func (r explicitRepo) bare() bool { return r.gitDir == r.dir }
 
 // newTestMirror returns a mirror configured to watch the "build" repository
 // and mirror it to GitHub and CSR. All repositories are faked out with local
@@ -119,9 +129,6 @@ func newTestMirror(t *testing.T) *testMirror {
 	}
 
 	tm := &testMirror{
-		gerrit: gerrit,
-		github: t.TempDir(),
-		csr:    t.TempDir(),
 		m: &gitMirror{
 			mux:      http.NewServeMux(),
 			cacheDir: t.TempDir(),
@@ -143,12 +150,10 @@ func newTestMirror(t *testing.T) *testMirror {
 	tm.server = httptest.NewServer(tm.m.mux)
 	t.Cleanup(tm.server.Close)
 
-	// The origin is non-bare so we can commit to it; the destinations are
-	// bare so we can push to them.
-	initRepo := func(dir string, bare bool) {
-		initArgs := []string{"init"}
+	initRepo := func(dir string, bare bool) explicitRepo {
+		gitDir, initArgs := filepath.Join(dir, ".git"), []string{"init"}
 		if bare {
-			initArgs = append(initArgs, "--bare")
+			gitDir, initArgs = dir, append(initArgs, "--bare")
 		}
 		for _, args := range [][]string{
 			initArgs,
@@ -157,14 +162,18 @@ func newTestMirror(t *testing.T) *testMirror {
 		} {
 			cmd := exec.Command("git", args...)
 			envutil.SetDir(cmd, dir)
+			envutil.SetEnv(cmd, "GIT_DIR="+gitDir)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("%s: %v\n%s", strings.Join(cmd.Args, " "), err, out)
 			}
 		}
+		return explicitRepo{gitDir, dir}
 	}
-	initRepo(tm.gerrit, false)
-	initRepo(tm.github, true)
-	initRepo(tm.csr, true)
+	// The origin is non-bare so we can commit to it; the destinations are
+	// bare so we can push to them.
+	tm.gerrit = initRepo(gerrit, false)
+	tm.github = initRepo(t.TempDir(), true)
+	tm.csr = initRepo(t.TempDir(), true)
 
 	tm.buildRepo = tm.m.addRepo(&repospkg.Repo{
 		GoGerritProject:    "build",
@@ -180,8 +189,8 @@ func newTestMirror(t *testing.T) *testMirror {
 	// Manually add mirror repos. We can't use tm.m.addMirrors, as they
 	// hard-codes the real remotes, but we need to use local test
 	// directories.
-	tm.buildRepo.addRemote("github", tm.github, "")
-	tm.buildRepo.addRemote("csr", tm.csr, "")
+	tm.buildRepo.addRemote("github", tm.github.gitDir, "")
+	tm.buildRepo.addRemote("csr", tm.csr.gitDir, "")
 
 	return tm
 }
@@ -195,17 +204,21 @@ func (tm *testMirror) loopOnce() {
 
 func (tm *testMirror) commit(content string) {
 	tm.t.Helper()
-	if err := os.WriteFile(filepath.Join(tm.gerrit, "README"), []byte(content), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(tm.gerrit.dir, "README"), []byte(content), 0777); err != nil {
 		tm.t.Fatal(err)
 	}
 	tm.git(tm.gerrit, "add", ".")
 	tm.git(tm.gerrit, "commit", "-m", content)
 }
 
-func (tm *testMirror) git(dir string, args ...string) string {
+func (tm *testMirror) git(r explicitRepo, args ...string) string {
 	tm.t.Helper()
 	cmd := exec.Command("git", args...)
-	envutil.SetDir(cmd, dir)
+	envutil.SetDir(cmd, r.dir)
+	envutil.SetEnv(cmd, "GIT_DIR="+r.gitDir)
+	if !r.bare() {
+		envutil.SetEnv(cmd, "GIT_WORK_TREE="+r.dir)
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		tm.t.Fatalf("git: %v, %s", err, out)

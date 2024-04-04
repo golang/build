@@ -329,7 +329,7 @@ type remote struct {
 type repo struct {
 	name    string
 	url     string
-	root    string // on-disk location of the git repo, *cacheDir/name
+	root    string // on-disk location of the bare git repo, *cacheDir/name
 	meta    *repospkg.Repo
 	changed chan bool // sent to when a change comes in
 	status  statusRing
@@ -344,7 +344,8 @@ type repo struct {
 	lastGood  time.Time
 }
 
-// init sets up the repo, cloning the repository to the local root.
+// init sets up the repo, cloning the remote repository from r.url
+// to a local --mirror (which implies --bare) repository at r.root.
 func (r *repo) init() error {
 	canReuse := true
 	if _, err := os.Stat(filepath.Join(r.root, "FETCH_HEAD")); err != nil {
@@ -394,6 +395,7 @@ func (r *repo) runGitQuiet(args ...string) ([]byte, []byte, error) {
 		envutil.SetDir(cmd, "/")
 	} else {
 		envutil.SetDir(cmd, r.root)
+		envutil.SetEnv(cmd, "GIT_DIR="+r.root)
 	}
 	envutil.SetEnv(cmd, "HOME="+r.mirror.homeDir)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
