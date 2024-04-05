@@ -287,6 +287,7 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
     "freebsd-riscv64",
     "linux-loong64",
     "linux-ppc64_power10",
+    "linux-ppc64_power8",
     "linux-ppc64le_power10",
     "linux-ppc64le_power8",
     "linux-ppc64le_power9",
@@ -307,6 +308,7 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
 # presubmit testing by default (slow high-capacity hosts aren't included).
 SLOW_HOSTS = {
     "linux-ppc64_power10": 2,
+    "linux-ppc64_power8": 2,
     "linux-ppc64le_power10": 2,
     "linux-ppc64le_power8": 2,
     "linux-ppc64le_power9": 2,
@@ -467,6 +469,7 @@ BUILDER_TYPES = [
     "linux-mips64le",
     "linux-mipsle",
     "linux-ppc64_power10",
+    "linux-ppc64_power8",
     "linux-ppc64le_power10",
     "linux-ppc64le_power8",
     "linux-ppc64le_power9",
