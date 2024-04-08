@@ -289,8 +289,13 @@ func TestSymbolLinks(t *testing.T) {
 		{"a [math] and s[math] and [NewBuffer].", "a [`math`](/pkg/math) and s[math] and [`NewBuffer`](/pkg/bytes#NewBuffer)."},
 		{"A [*log/slog.Logger]", "A [`*log/slog.Logger`](/pkg/log/slog#Logger)"},
 		{"Not in code `[math]`.", "Not in code `[math]`."},
+		// Link text that already has backticks.
 		{"a [`Buffer`] b", "a [`Buffer`](/pkg/bytes#Buffer) b"},
 		{"[`bytes.Buffer.String`]", "[`bytes.Buffer.String`](/pkg/bytes#Buffer.String)"},
+		// Links inside inline elements with nested content.
+		{"**must use [Buffer]**", "**must use [`Buffer`](/pkg/bytes#Buffer)**"},
+		{"*must use [Buffer] value*", "*must use [`Buffer`](/pkg/bytes#Buffer) value*"},
+		{"_**[Buffer]**_", "_**[`Buffer`](/pkg/bytes#Buffer)**_"},
 	} {
 		doc := NewParser().Parse(test.in)
 		addSymbolLinks(doc, "bytes")

@@ -67,13 +67,26 @@ func addSymbolLinksInlines(ins []md.Inline, defaultPackage string) []md.Inline {
 			}
 		}
 
+		// Handle inline elements with nested content.
 		switch in := ins[i].(type) {
 		case *md.Strong:
-			res = append(res, addSymbolLinksInlines(in.Inner, defaultPackage)...)
+			res = append(res, &md.Strong{
+				Marker: in.Marker,
+				Inner:  addSymbolLinksInlines(in.Inner, defaultPackage),
+			})
+
 		case *md.Emph:
-			res = append(res, addSymbolLinksInlines(in.Inner, defaultPackage)...)
+			res = append(res, &md.Emph{
+				Marker: in.Marker,
+				Inner:  addSymbolLinksInlines(in.Inner, defaultPackage),
+			})
+		// Currently we don't support Del nodes because we don't enable the Strikethrough
+		// extension. But this can't hurt.
 		case *md.Del:
-			res = append(res, addSymbolLinksInlines(in.Inner, defaultPackage)...)
+			res = append(res, &md.Del{
+				Marker: in.Marker,
+				Inner:  addSymbolLinksInlines(in.Inner, defaultPackage),
+			})
 		// Don't look for links in anything else.
 		default:
 			res = append(res, in)
