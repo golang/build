@@ -347,7 +347,7 @@ made with the Go 1 [promise of compatibility](/doc/go1compat)
 in mind.
 There are also various performance improvements, not enumerated here.
 
-#### [archive/tar](/pkg/archive/tar/)
+#### [`archive/tar`](/pkg/archive/tar/)
 
 <!-- https://go.dev/issue/54451, CL 491175 -->
 The implementation of the
@@ -357,7 +357,7 @@ interface returned by
 now implements a `String` method that calls
 [`io/fs.FormatFileInfo`](/pkg/io/fs/#FormatFileInfo).
 
-#### [archive/zip](/pkg/archive/zip/)
+#### [`archive/zip`](/pkg/archive/zip/)
 
 <!-- https://go.dev/issue/54451, CL 491175 -->
 The implementation of the
@@ -367,7 +367,7 @@ interface returned by
 now implements a `String` method that calls
 [`io/fs.FormatFileInfo`](/pkg/io/fs/#FormatFileInfo).
 
-#### [bytes](/pkg/bytes/)
+#### [`bytes`](/pkg/bytes/)
 
 <!-- https://go.dev/issue/53685, CL 474635 -->
 The [`Buffer`](/pkg/bytes/#Buffer) type
@@ -379,7 +379,7 @@ These may be used along with the
 method to append directly to the `Buffer`.
 ways different.
 
-#### [debug/elf](/pkg/debug/elf/)
+#### [`debug/elf`](/pkg/debug/elf/)
 
 <!-- https://go.dev/issue/56887, CL 452496 -->
 The constant flags permitted in a `DT_FLAGS_1`
@@ -401,14 +401,14 @@ given dynamic tag.
 The package now defines the constant
 [`R_PPC64_REL24_P9NOTOC`](/pkg/debug/elf/#R_PPC64_REL24_P9NOTOC).
 
-#### [net](/pkg/net/)
+#### [`net`](/pkg/net/)
 
 <!-- https://go.dev/issue/59166, https://go.dev/issue/56539 -->
 <!-- CL 471136, CL 471137, CL 471140 -->
 On Linux, the [net](/pkg/net/) package can now use
 Multipath TCP when the kernel supports it.
 
-#### [net/http](/pkg/net/http/)
+#### [`net/http`](/pkg/net/http/)
 
 <!-- CL 472636 -->
 The new [`ResponseController.EnableFullDuplex`](/pkg/net/http#ResponseController.EnableFullDuplex)

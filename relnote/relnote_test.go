@@ -115,9 +115,7 @@ func TestStdlibPackage(t *testing.T) {
 func TestStdlibPackageHeading(t *testing.T) {
 	h := stdlibPackageHeading("net/http", 1)
 	got := md.ToMarkdown(h)
-	want := "#### [net/http](/pkg/net/http/)\n"
-	// TODO(jba): use a code element for the heading; the following is the correct value of "want":
-	// want := "#### [`net/http`](/pkg/net/http/)\n"
+	want := "#### [`net/http`](/pkg/net/http/)\n"
 	if got != want {
 		t.Errorf("\ngot  %q\nwant %q", got, want)
 	}

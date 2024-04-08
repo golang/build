@@ -12,7 +12,7 @@ like [`bytes.Buffer`](/pkg/bytes#Buffer)
 and [`bytes.Reader.Read`](/pkg/bytes#Reader.Read).
 This: s[math] is not a link.
 
-#### [bytes](/pkg/bytes/)
+#### [`bytes`](/pkg/bytes/)
 
 Inside this file, [`Buffer`](/pkg/bytes#Buffer) can be used instead of
 [`bytes.Buffer`](/pkg/bytes#Buffer).
