@@ -6,6 +6,7 @@ package relnote
 
 import (
 	"fmt"
+	"strings"
 
 	md "rsc.io/markdown"
 )
@@ -24,7 +25,8 @@ func dumpBlocks(bs []md.Block, depth int) {
 }
 
 func dumpBlock(b md.Block, depth int) {
-	fmt.Printf("%*s%T\n", depth*4, "", b)
+	typeName := strings.TrimPrefix(fmt.Sprintf("%T", b), "*markdown.")
+	dprintf(depth, "%s\n", typeName)
 	switch b := b.(type) {
 	case *md.Paragraph:
 		dumpInlines(b.Text.Inline, depth+1)
@@ -42,12 +44,29 @@ func dumpBlock(b md.Block, depth int) {
 func dumpInlines(ins []md.Inline, depth int) {
 	for _, in := range ins {
 		switch in := in.(type) {
+		case *md.Plain:
+			dprintf(depth, "Plain(%q)\n", in.Text)
+		case *md.Code:
+			dprintf(depth, "Code(%q)\n", in.Text)
 		case *md.Link:
-			fmt.Printf("%*sLink:\n", depth*4, "")
+			dprintf(depth, "Link:\n")
 			dumpInlines(in.Inner, depth+1)
-			fmt.Printf("%*sURL: %q\n", (depth+1)*4, "", in.URL)
+			dprintf(depth+1, "URL: %q\n", in.URL)
+		case *md.Strong:
+			dprintf(depth, "Strong(%q):\n", in.Marker)
+			dumpInlines(in.Inner, depth+1)
+		case *md.Emph:
+			dprintf(depth, "Emph(%q):\n", in.Marker)
+			dumpInlines(in.Inner, depth+1)
+		case *md.Del:
+			dprintf(depth, "Del(%q):\n", in.Marker)
+			dumpInlines(in.Inner, depth+1)
 		default:
 			fmt.Printf("%*s%#v\n", depth*4, "", in)
 		}
 	}
+}
+
+func dprintf(depth int, format string, args ...any) {
+	fmt.Printf("%*s%s", depth*4, "", fmt.Sprintf(format, args...))
 }
