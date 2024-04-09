@@ -2913,8 +2913,11 @@ var BuildersPortedToLUCI = map[string]bool{
 	"linux-riscv64-jsing":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-riscv64.
 	"linux-riscv64-unmatched": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-riscv64 (this builder is testing the same port as on the line above).
 
-	"linux-ppc64le-buildlet":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le.
-	"linux-ppc64-sid-power10": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64-power10.
+	"linux-ppc64le-buildlet":   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le_power8.
+	"linux-ppc64le-power9osu":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le_power9.
+	"linux-ppc64le-power10osu": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le_power10.
+	"linux-ppc64-sid-buildlet": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64_power8.
+	"linux-ppc64-sid-power10":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64_power10.
 
 	"netbsd-arm64-bsiegert": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-netbsd-arm64.
 
