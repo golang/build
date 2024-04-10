@@ -352,7 +352,10 @@ PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-bu
 # security fixes.
 SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security-try", "security-coordinator-builder", "security-worker-builder", False, LOW_CAPACITY_HOSTS, priority = PRIORITY.PRESUBMIT)
 
-def define_shadow_buckets(env, creator_groups):
+def define_public_shadow_buckets(env):
+    if env.swarming_host != "chromium-swarm.appspot.com":
+        fail("only the chromium-swarm instance is known to be intended for public builds, but env.swarming_host is %s" % env.swarming_host)
+
     all_pools = [env.coordinator_pool, env.worker_pool]
     if env.shared_worker_pool:
         all_pools.append(env.shared_worker_pool)
@@ -370,14 +373,19 @@ def define_shadow_buckets(env, creator_groups):
                 pools = all_pools,
             ),
             bindings = [
-                # Allow anyone on the Go team to create builds in shadow buckets.
+                # Allow everyone to see builds in public shadow buckets.
+                luci.binding(
+                    roles = ["role/buildbucket.reader"],
+                    groups = "all",
+                ),
+                # Allow anyone on the Go team to create builds in public shadow buckets.
                 # Creating builds is more permissive than triggering them: it allows
                 # for arbitrary mutation of the builder definition, whereas triggered
                 # builds may only mutate explicitly mutable fields. These shadow buckets
-                # are used for testing.
+                # are used for testing of public builder configurations and behaviors.
                 luci.binding(
                     roles = "role/buildbucket.creator",
-                    groups = creator_groups,
+                    groups = ["mdb/golang-team"],
                 ),
 
                 # Allow our service accounts to create ResultDB invocations in shadow buckets.
@@ -391,9 +399,9 @@ def define_shadow_buckets(env, creator_groups):
         )
     return env
 
-# Create shadow buckets, for mutating and trying out builds.
-define_shadow_buckets(PUBLIC_TRY_ENV, ["mdb/golang-team"])
-define_shadow_buckets(PUBLIC_CI_ENV, ["mdb/golang-team"])
+# Create public shadow buckets, for mutating and testing out changes to public builds.
+define_public_shadow_buckets(PUBLIC_TRY_ENV)
+define_public_shadow_buckets(PUBLIC_CI_ENV)
 
 # The prod bucket will include builders which work on post-commit code and
 # generate executable artifacts used by other users or machines.
