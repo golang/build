@@ -446,6 +446,7 @@ BUILDER_TYPES = [
     "ios-arm64",
     "js-wasm",
     "linux-386",
+    "linux-386-clang15",
     "linux-386-longtest",
     "linux-386-softfloat",
     "linux-amd64",
@@ -469,6 +470,7 @@ BUILDER_TYPES = [
     "linux-amd64_debian12-perf_vs_tip",
     "linux-arm",
     "linux-arm64",
+    "linux-arm64-boringcrypto",
     "linux-arm64-longtest",
     "linux-arm64-race",
     "linux-loong64",
@@ -515,6 +517,8 @@ def known_issue(issue_number, skip_x_repos = False):
 
 KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-riscv64": known_issue(issue_number = 63482),
+    "linux-386-clang15": known_issue(issue_number = 60468),
+    "linux-arm64-boringcrypto": known_issue(issue_number = 60468),
     "linux-loong64": known_issue(issue_number = 65398),
     "netbsd-arm": known_issue(issue_number = 63698),
     "openbsd-ppc64": known_issue(issue_number = 63480),
