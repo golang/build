@@ -1138,7 +1138,7 @@ def make_console_gen(project, go_branch_short, builders, by_go_commit = False, k
         else:
             name = "z-%s-%s" % (project, go_branch_short)
         title = project_title(project) + " (" + go_branch_short + ")"
-        ref = "refs/heads/master"
+        ref = "refs/heads/" + MAIN_BRANCH_NAME
         if by_go_commit:
             name += "-by-go"
             title += " by go commit"
@@ -1863,7 +1863,7 @@ def _define_go_ci():
             if project == "go":
                 poller_branch = go_branch.branch
             else:
-                poller_branch = "master"
+                poller_branch = MAIN_BRANCH_NAME
             luci.gitiles_poller(
                 name = "%s-%s-trigger" % (project, go_branch_short),
                 bucket = "ci",
