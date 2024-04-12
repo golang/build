@@ -517,8 +517,6 @@ def known_issue(issue_number, skip_x_repos = False):
 
 KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-riscv64": known_issue(issue_number = 63482),
-    "linux-386-clang15": known_issue(issue_number = 60468),
-    "linux-arm64-boringcrypto": known_issue(issue_number = 60468),
     "linux-loong64": known_issue(issue_number = 65398),
     "netbsd-arm": known_issue(issue_number = 63698),
     "openbsd-ppc64": known_issue(issue_number = 63480),
