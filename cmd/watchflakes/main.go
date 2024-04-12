@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Watchflakes is a program that triages apparent test flakes
+// on the build.golang.org dashboards. See https://go.dev/wiki/Watchflakes.
 package main
 
 import (
