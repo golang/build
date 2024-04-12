@@ -268,7 +268,7 @@ func awsCredentialsFromSecrets() (string, string, error) {
 	}
 	accessKey, err := c.Retrieve(ctx, secret.NameAWSAccessKey)
 	if err != nil {
-		return "", "", fmt.Errorf("unable to retrueve access key: %w", err)
+		return "", "", fmt.Errorf("unable to retrieve access key: %w", err)
 	}
 	return keyID, accessKey, nil
 }

@@ -53,6 +53,9 @@ const (
 	// NameMaintnerGitHubToken is the secret name for the Maintner GitHub token.
 	NameMaintnerGitHubToken = "maintner-github-token"
 
+	// NameWatchflakesGitHubToken is the secret name for the watchflakes GitHub token.
+	NameWatchflakesGitHubToken = "watchflakes-github-token"
+
 	// NameGitHubWebhookSecret is the secret name for a golang/go GitHub webhook secret.
 	NameGitHubWebhookSecret = "github-webhook-secret"
 

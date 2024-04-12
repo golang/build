@@ -7,7 +7,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -48,15 +50,6 @@ var scriptRE = regexp.MustCompile(`(?m)(^( {4}|\t)#!watchflakes\n((( {4}|\t).*)?
 // It also sets up the repo, labels, and testFlakes variables for
 // use by other functions below.
 func readIssues(old []*Issue) ([]*Issue, error) {
-	var err error
-	gh, err = github.Dial("gopherbot")
-	if err != nil {
-		gh, err = github.Dial("")
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Find repo.
 	r, err := gh.Repo("golang", "go")
 	if err != nil {
@@ -383,4 +376,35 @@ func postComment(issue *Issue, body string) error {
 		}
 	}
 	return gh.AddIssueComment(issue.Issue, body+signature)
+}
+
+// defaultTransportWithRSCIOGitHubAuth is an http.RoundTripper
+// that implements authentication for the rsc.io/github.Client
+// type, but otherwise defers to http.DefaultTransport.
+//
+// It's brittle and exists only until there's a better API for
+// providing an *http.Client to the rsc.io/github package.
+type defaultTransportWithRSCIOGitHubAuth struct {
+	GitHubToken interface{ SetAuthHeader(*http.Request) }
+}
+
+func (t defaultTransportWithRSCIOGitHubAuth) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Host == "api.github.com" && req.URL.Scheme == "https" {
+		if req.Host != "api.github.com" {
+			return nil, fmt.Errorf("internal error: req.Host is %q, want api.github.com", req.Host)
+		}
+		// Confirm that the caller is the expected method of rsc.io/github.Client.
+		//
+		// Note: This is brittle and not great. But it works for now, and will go
+		// away after we can pass a custom *http.Client to github.Client directly.
+		var pc = make([]uintptr, 1)
+		if n := runtime.Callers(6, pc); n == 0 {
+			return nil, fmt.Errorf("internal error: unknown caller")
+		} else if f, _ := runtime.CallersFrames(pc).Next(); f.Function != "rsc.io/github.(*Client).graphQL" {
+			return nil, fmt.Errorf("internal error: caller is %q, want rsc.io/github", f.Function)
+		}
+		req = req.Clone(req.Context())
+		t.GitHubToken.SetAuthHeader(req)
+	}
+	return http.DefaultTransport.RoundTrip(req)
 }

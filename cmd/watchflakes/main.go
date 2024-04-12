@@ -11,13 +11,18 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
 	bbpb "go.chromium.org/luci/buildbucket/proto"
 	rdbpb "go.chromium.org/luci/resultdb/proto/v1"
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/cmd/watchflakes/internal/script"
+	"golang.org/x/build/internal/secret"
+	"golang.org/x/oauth2"
 	"rsc.io/github"
 )
 
@@ -37,6 +42,8 @@ var (
 	post    = flag.Bool("post", false, "post updates to GitHub issues")
 	repeat  = flag.Duration("repeat", 0, "run again after waiting `delay`")
 	verbose = flag.Bool("v", false, "print verbose posting decisions")
+
+	useSecretManager = flag.Bool("use-secret-manager", false, "fetch GitHub token from Secret Manager instead of $HOME/.netrc")
 )
 
 func usage() {
@@ -48,6 +55,7 @@ func usage() {
 func main() {
 	log.SetPrefix("watchflakes: ")
 	flag.Usage = usage
+	buildenv.RegisterStagingFlag()
 	flag.Parse()
 	if flag.NArg() > 1 {
 		usage()
@@ -60,6 +68,36 @@ func main() {
 			log.Fatalf("parsing query:\n%s", err)
 		}
 		query = &Issue{Issue: new(github.Issue), Script: s, ScriptText: flag.Arg(0)}
+	}
+
+	// Create an authenticated GitHub client.
+	if *useSecretManager {
+		// Fetch credentials from Secret Manager.
+		secretCl, err := secret.NewClientInProject(buildenv.FromFlags().ProjectName)
+		if err != nil {
+			log.Fatalln("failed to create a Secret Manager client:", err)
+		}
+		ghToken, err := secretCl.Retrieve(context.Background(), secret.NameWatchflakesGitHubToken)
+		if err != nil {
+			log.Fatalln("failed to retrieve GitHub token from Secret Manager:", err)
+		}
+		// TODO: Use a better API for providing authentication to github.Client, after it's available.
+		// For now, rely on the fact this is package main and we don't expect any of our dependencies
+		// to modify http.DefaultClient (or to access it concurrently).
+		if !reflect.ValueOf(*http.DefaultClient).IsZero() {
+			log.Fatalln("internal error: the initial value of *http.DefaultClient is unexpectedly non-zero")
+		}
+		http.DefaultClient.Transport = defaultTransportWithRSCIOGitHubAuth{
+			GitHubToken: &oauth2.Token{AccessToken: ghToken},
+		}
+		gh = new(github.Client)
+	} else {
+		// Use credentials in $HOME/.netrc.
+		var err error
+		gh, err = github.Dial("")
+		if err != nil {
+			log.Fatalln("github.Dial:", err)
+		}
 	}
 
 	// Load LUCI dashboards
