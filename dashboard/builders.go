@@ -2884,6 +2884,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	// Linux builders (just those covering first-class ports).
 	"linux-386":                     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386.
 	"linux-386-longtest":            true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-longtest.
+	"linux-386-clang":               true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-clang15 (a newer clang, but we won't be adding exactly -clang7 to LUCI by now).
 	"linux-386-softfloat":           true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-softfloat.
 	"linux-arm-aws":                 true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm.
 	"linux-amd64":                   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64.
@@ -2902,6 +2903,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	"linux-arm64":                   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64.
 	"linux-arm64-longtest":          true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64-longtest.
 	"linux-arm64-race":              true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64-race.
+	"linux-arm64-boringcrypto":      true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64-boringcrypto.
 
 	// Windows builders.
 	"windows-386-2016":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-windows-386.
