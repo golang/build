@@ -28,6 +28,13 @@ var slowBotAliases = map[string]string{
 	// Known missing builders:
 	"ios-amd64": "", // There is no builder for the iOS Simulator. See issues 42100 and 42177.
 
+	// Fully ported to LUCI and stopped in the coordinator.
+	"js":          "",
+	"wasip1":      "",
+	"wasm":        "",
+	"js-wasm":     "",
+	"wasip1-wasm": "",
+
 	"386":                   "linux-386",
 	"aix":                   "aix-ppc64",
 	"amd64":                 "linux-amd64",
@@ -53,10 +60,6 @@ var slowBotAliases = map[string]string{
 	"freebsd-riscv64":       "freebsd-riscv64-unmatched",
 	"illumos":               "illumos-amd64",
 	"ios":                   "ios-arm64-corellium",
-	"js":                    "js-wasm-node18",
-	"js-wasm":               "js-wasm-node18",
-	"wasip1":                "wasip1-wasm-wasmtime",
-	"wasip1-wasm":           "wasip1-wasm-wasmtime",
 	"linux":                 "linux-amd64",
 	"linux-arm":             "linux-arm-aws",
 	"linux-loong64":         "linux-loong64-3a5000",
@@ -103,11 +106,6 @@ var slowBotAliases = map[string]string{
 	"s390x":                 "linux-s390x-ibm",
 	"solaris":               "solaris-amd64-oraclerel",
 	"solaris-amd64":         "solaris-amd64-oraclerel",
-	"wasm":                  "js-wasm-node18",
-	"wasmedge":              "wasip1-wasm-wasmedge",
-	"wasmer":                "wasip1-wasm-wasmer",
-	"wasmtime":              "wasip1-wasm-wasmtime",
-	"wazero":                "wasip1-wasm-wazero",
 	"windows":               "windows-amd64-2016",
 	"windows-386":           "windows-386-2016",
 	"windows-amd64":         "windows-amd64-2016",
@@ -750,8 +748,8 @@ type BuildConfig struct {
 	Notes string // notes for humans
 
 	// tryBot optionally specifies a policy func for whether trybots are enabled.
-	// nil means off. Even if tryBot returns true, BuildConfig.BuildsRepo must also
-	// return true. See the implementation of BuildConfig.BuildsRepoTryBot.
+	// nil means off. Even if tryBot returns true, BuildConfig.buildsRepoAtAll must
+	// also return true. See the implementation of BuildConfig.BuildsRepoTryBot.
 	// The proj is "go", "net", etc. The branch is proj's branch.
 	// The goBranch is the same as branch for proj "go", else it's the go branch
 	// ("master, "release-branch.go1.12", etc).
@@ -2866,7 +2864,7 @@ func init() {
 // BuildersPortedToLUCI lists coordinator builders that have been ported
 // over to LUCI and don't need to continue to run. Their results will be
 // hidden from the build.golang.org page and new builds won't be started
-// if stopPortedBuilders (below) is true.
+// if stopPortedBuilder (below) returns true.
 //
 // See go.dev/issue/65913
 // and go.dev/issue/63471.
@@ -2935,9 +2933,11 @@ var BuildersPortedToLUCI = map[string]bool{
 	"wasip1-wasm-wazero":   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-wasip1-wasm_wazero.
 }
 
-// stopPortedBuilders controls whether ported builders should be stopped,
+// stopPortedBuilder reports whether the named ported builder should be stopped,
 // instead of just made invisible in the web UI.
-const stopPortedBuilders = false
+func stopPortedBuilder(builderName string) (stop bool) {
+	return strings.Contains(builderName, "-wasm-")
+}
 
 // addBuilder adds c to the Builders map after doing some checks.
 func addBuilder(c BuildConfig) {
@@ -2975,8 +2975,9 @@ func addBuilder(c BuildConfig) {
 		panic(fmt.Sprintf("build config %q host type inconsistent (must be Reverse, Image, or VM)", c.Name))
 	}
 
-	if BuildersPortedToLUCI[c.Name] && stopPortedBuilders {
-		return
+	if BuildersPortedToLUCI[c.Name] && stopPortedBuilder(c.Name) {
+		c.buildsRepo = func(_, _, _ string) bool { return false }
+		c.Notes = "Unavailable in the coordinator. Use LUCI (https://go.dev/wiki/LUCI) instead."
 	}
 
 	Builders[c.Name] = &c
