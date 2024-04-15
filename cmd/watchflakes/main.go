@@ -40,7 +40,7 @@ const maxFailPerBuild = 3
 var (
 	md      = flag.Bool("md", false, "print Markdown output suitable for GitHub issues")
 	post    = flag.Bool("post", false, "post updates to GitHub issues")
-	repeat  = flag.Duration("repeat", 0, "run again after waiting `delay`")
+	repeat  = flag.Duration("repeat", 0, "keep running with specified `period`; zero means to run once and exit")
 	verbose = flag.Bool("v", false, "print verbose posting decisions")
 
 	useSecretManager = flag.Bool("use-secret-manager", false, "fetch GitHub token from Secret Manager instead of $HOME/.netrc")
@@ -104,6 +104,10 @@ func main() {
 	ctx := context.Background()
 	c := NewLUCIClient()
 
+	var ticker *time.Ticker
+	if *repeat != 0 {
+		ticker = time.NewTicker(*repeat)
+	}
 Repeat:
 	startTime := time.Now()
 	boards := c.ListBoards(ctx)
@@ -251,7 +255,7 @@ Repeat:
 	log.Printf("Done. %d boards, %d failures, %d issues, %d posts, in %v\n", len(boards), len(failRes), len(issues), posts, time.Since(startTime))
 
 	if *repeat != 0 {
-		time.Sleep(*repeat)
+		<-ticker.C
 		goto Repeat
 	}
 }
