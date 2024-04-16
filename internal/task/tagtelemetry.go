@@ -88,7 +88,7 @@ go run ./internal/configgen -w
 	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
 }
 
-// AwaitSubmitted waits for the CL with the given change ID to be submitted.
+// AwaitSubmission waits for the CL with the given change ID to be submitted.
 //
 // The return value is the submitted commit hash, or "" if changeID is "".
 func (t *TagTelemetryTasks) AwaitSubmission(ctx *wf.TaskContext, changeID string) error {

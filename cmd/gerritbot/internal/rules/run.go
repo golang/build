@@ -152,7 +152,7 @@ func matchAny(pattern string, list []string) bool {
 	return false
 }
 
-// matchAny reports the count of matches for the regexp in s,
+// matchCount reports the count of matches for the regexp in s,
 // returning 0 for a bad regexp after logging the bad regexp.
 func matchCount(pattern string, s string) int {
 	re := regexp.MustCompile(pattern)

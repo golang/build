@@ -119,7 +119,7 @@ func fmtFrac(buf []byte, v uint64, prec int) (nw int, nv uint64) {
 	return w, v
 }
 
-// fmtFrac is identical to fmtInt in the time package.
+// fmtInt is identical to fmtInt in the time package.
 func fmtInt(buf []byte, v uint64) int {
 	w := len(buf)
 	if v == 0 {
