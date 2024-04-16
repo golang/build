@@ -317,7 +317,7 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 				}
 				if commit == "" {
 					switch b.GetStatus() {
-					case bbpb.Status_SUCCESS, bbpb.Status_FAILURE:
+					case bbpb.Status_SUCCESS:
 						log.Fatalf("empty commit: %s", buildURL(id))
 					default:
 						// unfinished build, or infra failure, ignore
