@@ -11,9 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -23,7 +21,6 @@ import (
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/cmd/watchflakes/internal/script"
 	"golang.org/x/build/internal/secret"
-	"golang.org/x/oauth2"
 	"rsc.io/github"
 )
 
@@ -82,16 +79,7 @@ func main() {
 		if err != nil {
 			log.Fatalln("failed to retrieve GitHub token from Secret Manager:", err)
 		}
-		// TODO: Use a better API for providing authentication to github.Client, after it's available.
-		// For now, rely on the fact this is package main and we don't expect any of our dependencies
-		// to modify http.DefaultClient (or to access it concurrently).
-		if !reflect.ValueOf(*http.DefaultClient).IsZero() {
-			log.Fatalln("internal error: the initial value of *http.DefaultClient is unexpectedly non-zero")
-		}
-		http.DefaultClient.Transport = defaultTransportWithRSCIOGitHubAuth{
-			GitHubToken: &oauth2.Token{AccessToken: ghToken},
-		}
-		gh = new(github.Client)
+		gh = github.NewClient(ghToken)
 	} else {
 		// Use credentials in $HOME/.netrc.
 		var err error

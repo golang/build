@@ -71,7 +71,7 @@ require (
 	google.golang.org/grpc v1.59.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/inf.v0 v0.9.1
-	rsc.io/github v0.3.0
+	rsc.io/github v0.3.1-0.20240418182958-01bebb0c456a
 	rsc.io/markdown v0.0.0-20240306144322-0bf8f97ee8ef
 )
 
