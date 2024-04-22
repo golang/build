@@ -468,6 +468,8 @@ BUILDER_TYPES = [
     "linux-amd64_c2s16-perf_vs_parent",
     "linux-amd64_c2s16-perf_vs_release",
     "linux-amd64_c2s16-perf_vs_tip",
+    "linux-amd64_c3h88-perf_vs_parent",
+    "linux-amd64_c3h88-perf_vs_tip",
     "linux-arm",
     "linux-arm64",
     "linux-arm64-boringcrypto",
@@ -1018,7 +1020,7 @@ def dimensions_of(host_type):
         if goos == "linux" and "debian" in suffix:
             # linux-amd64_debian11 -> Debian-11
             os = suffix.replace("debian", "Debian-")
-        elif goos == "linux" and goarch == "amd64" and suffix == "c2s16":
+        elif goos == "linux" and goarch == "amd64" and suffix in ["c2s16", "c3h88"]:
             # Performance test machines.
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
@@ -1045,6 +1047,8 @@ def dimensions_of(host_type):
             if suffix == "c2s16":
                 # Performance test machines.
                 machine_type = "c2-standard-16"
+            elif suffix == "c3h88":
+                machine_type = "c3-highcpu-88"
             else:
                 machine_type = "n1-standard-16"
         elif goarch == "arm64":
