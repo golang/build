@@ -4,16 +4,15 @@
 
 //go:build go1.21
 
-// The relnote command summarizes the Go changes in Gerrit marked with
-// RELNOTE annotations for the release notes.
+// The relnote command works with release notes.
+// It can be used to look for unfinished notes and to generate the
+// final markdown file.
 package main
 
 import (
-	"bytes"
 	"context"
 	"flag"
 	"fmt"
-	"html"
 	"log"
 	"os"
 	"path"
@@ -21,14 +20,12 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
-	"golang.org/x/build/maintner/godata"
 	"golang.org/x/build/repos"
 )
 
@@ -94,13 +91,10 @@ func (c change) TextLine() string {
 func usage() {
 	out := flag.CommandLine.Output()
 	fmt.Fprintf(out, "usage:\n")
-	fmt.Fprintf(out, "   relnote\n")
-	fmt.Fprintf(out, "      summarize the Go changes in Gerrit marked with\n")
-	fmt.Fprintf(out, "      RELNOTE annotations for the release notes (obsolete)\n")
 	fmt.Fprintf(out, "   relnote generate [GOROOT]\n")
 	fmt.Fprintf(out, "      generate release notes from doc/next under GOROOT (default: runtime.GOROOT())\n")
-	fmt.Fprintf(out, "   relnote todo\n")
-	fmt.Fprintf(out, "      report which release notes need to be written\n")
+	fmt.Fprintf(out, "   relnote todo PREVIOUS_RELEASE_DATE\n")
+	fmt.Fprintf(out, "      report which release notes need to be written; use YYYY-MM-DD format for date of last release\n")
 	flag.PrintDefaults()
 }
 
@@ -132,168 +126,25 @@ func main() {
 		case "generate":
 			err = generate(version, flag.Arg(1))
 		case "todo":
+			prevDate := flag.Arg(1)
+			if prevDate == "" {
+				log.Fatal("need previous release date")
+			}
+			prevDateTime, err := time.Parse("2006-01-02", prevDate)
+			if err != nil {
+				log.Fatalf("previous release date: %s", err)
+			}
 			nextDir := filepath.Join(goroot, "doc", "next")
-			err = todo(os.Stdout, os.DirFS(nextDir))
+			err = todo(os.Stdout, os.DirFS(nextDir), prevDateTime)
 		default:
 			err = fmt.Errorf("unknown command %q", cmd)
 		}
 		if err != nil {
 			log.Fatal(err)
 		}
-		return
-	}
-
-	// Releases are every 6 months. Walk forward by 6 month increments to next release.
-	cutoff := time.Date(2016, time.August, 1, 00, 00, 00, 0, time.UTC)
-	now := time.Now()
-	for cutoff.Before(now) {
-		cutoff = cutoff.AddDate(0, 6, 0)
-	}
-
-	// Previous release was 6 months earlier.
-	cutoff = cutoff.AddDate(0, -6, 0)
-
-	// The maintner corpus doesn't track inline comments. See go.dev/issue/24863.
-	// So we need to use a Gerrit API client to fetch them instead. If maintner starts
-	// tracking inline comments in the future, this extra complexity can be dropped.
-	gerritClient := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
-	matchedCLs, err := findCLsWithRelNote(gerritClient, cutoff)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	existingHTML, err := os.ReadFile(filepath.Join(goroot, "doc/go1."+version+".html"))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	corpus, err := godata.Get(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
-	changes := map[string][]change{} // keyed by pkg
-	unclosed := map[int32][]int32{}  // from issue number to CL numbers
-	gh := corpus.GitHub().Repo("golang", "go")
-	addedIssue := make(map[int32]bool)
-	corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
-		if gp.Server() != "go.googlesource.com" {
-			return nil
-		}
-		gp.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
-			if cl.Status != "merged" {
-				return nil
-			}
-			if cl.Branch() != "master" {
-				// Ignore CLs sent to development or release branches.
-				return nil
-			}
-			if cl.Commit.CommitTime.Before(cutoff) {
-				// Was in a previous release; not for this one.
-				return nil
-			}
-			for _, num := range issueNumbers(cl) {
-				if bytes.Contains(existingHTML, []byte(fmt.Sprintf("https://go.dev/issue/%d", num))) || addedIssue[num] {
-					continue
-				}
-				if issue := gh.Issue(num); issue != nil && hasLabel(issue, "Proposal-Accepted") {
-					if *verbose {
-						log.Printf("CL %d mentions accepted proposal #%d (%s)", cl.Number, num, issue.Title)
-					}
-					if !issue.ClosedAt.Before(cutoff) {
-						pkg := issuePackage(issue)
-						changes[pkg] = append(changes[pkg], change{Issue: issue})
-						addedIssue[num] = true
-					} else if !issue.Closed {
-						unclosed[num] = append(unclosed[num], cl.Number)
-					}
-				}
-			}
-
-			if bytes.Contains(existingHTML, []byte(fmt.Sprintf("CL %d", cl.Number))) {
-				return nil
-			}
-			var relnote string
-			if _, ok := matchedCLs[int(cl.Number)]; ok {
-				comments, err := gerritClient.ListChangeComments(context.Background(), fmt.Sprint(cl.Number))
-				if err != nil {
-					return err
-				}
-				relnote = clRelNote(cl, comments)
-			}
-			if relnote == "" {
-				// Invent a RELNOTE=modified api/name.txt if the commit modifies any API files.
-				var api []string
-				for _, f := range cl.Commit.Files {
-					if strings.HasPrefix(f.File, "api/") && strings.HasSuffix(f.File, ".txt") {
-						api = append(api, f.File)
-					}
-				}
-				if len(api) > 0 {
-					relnote = "modified " + strings.Join(api, ", ")
-					if *verbose {
-						log.Printf("CL %d %s", cl.Number, relnote)
-					}
-				}
-			}
-			if relnote != "" {
-				pkg := clPackage(cl)
-				changes[pkg] = append(changes[pkg], change{
-					Note: relnote,
-					CL:   cl,
-				})
-			}
-			return nil
-		})
-		return nil
-	})
-
-	var pkgs []string
-	for pkg, changes := range changes {
-		pkgs = append(pkgs, pkg)
-		sort.Slice(changes, func(i, j int) bool {
-			x, y := &changes[i], &changes[j]
-			if (x.Issue != nil) != (y.Issue != nil) {
-				return x.Issue != nil
-			}
-			if x.Issue != nil {
-				return x.Issue.Number < y.Issue.Number
-			}
-			return x.CL.Number < y.CL.Number
-		})
-	}
-	sort.Strings(pkgs)
-
-	// TODO(rsc): Instead of making people do the mechanical work of
-	// copy and pasting this TODO HTML into the release notes,
-	// relnote should edit the release notes directly to insert the TODOs.
-	// Then it should print to standard output only a summary of the
-	// changes it made.
-	for _, pkg := range pkgs {
-		if !strings.HasPrefix(pkg, "cmd/") {
-			continue
-		}
-		for _, change := range changes[pkg] {
-			fmt.Printf("<!-- %s -->\n<p>\n  <!-- %s -->\n</p>\n", change.ID(), change.TextLine())
-		}
-	}
-	for _, pkg := range pkgs {
-		if strings.HasPrefix(pkg, "cmd/") {
-			continue
-		}
-		fmt.Printf("\n<dl id=%q><dt><a href=%q>%s</a></dt>\n  <dd>",
-			pkg, "/pkg/"+pkg+"/", pkg)
-		for _, change := range changes[pkg] {
-			fmt.Printf("\n    <p><!-- %s -->\n      TODO: <a href=%q>%s</a>: %s\n    </p>\n",
-				change.ID(), change.URL(), change.URL(), html.EscapeString(change.TextLine()))
-		}
-		fmt.Printf("  </dd>\n</dl><!-- %s -->\n", pkg)
-	}
-	for issue, cls := range unclosed {
-		var s []string
-		for _, cl := range cls {
-			s = append(s, strconv.Itoa(int(cl)))
-		}
-		fmt.Fprintf(os.Stderr, "Warning: accepted proposal #%d is not closed but has these CLs: %s\n", issue, strings.Join(s, ", "))
+	} else {
+		usage()
+		log.Fatal("missing subcommand")
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func TestToDo(t *testing.T) {
@@ -24,11 +25,11 @@ func TestToDo(t *testing.T) {
 		dir[name] = &fstest.MapFile{Data: []byte(contents)}
 	}
 	var buf bytes.Buffer
-	if err := todo(&buf, dir); err != nil {
+	if err := todo(&buf, dir, time.Time{}); err != nil {
 		t.Fatal(err)
 	}
 	got := buf.String()
-	want := `a.md:1: TODO: write something
+	want := `TODO: write something (from a.md:1)
 `
 	if got != want {
 		t.Errorf("\ngot:\n%s\nwant:\n%s", got, want)
