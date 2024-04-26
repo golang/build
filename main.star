@@ -215,7 +215,7 @@ luci.recipe.defaults.cipd_package.set("golang/recipe_bundles/go.googlesource.com
 luci.recipe.defaults.cipd_version.set("refs/heads/luci-config")
 luci.recipe.defaults.use_python3.set(True)
 
-def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, has_shared_pool, low_capacity, priority = None):
+def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, has_shared_pool, low_capacity, known_issue, priority = None):
     return struct(
         gerrit_host = gerrit_host,
         swarming_host = swarming_host + ".appspot.com",
@@ -229,6 +229,7 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
         worker_pool = "luci.golang.%s-workers" % bucket,
         shared_worker_pool = "luci.golang.shared-workers" if has_shared_pool else "",
         low_capacity_hosts = low_capacity,
+        known_issue_builder_types = known_issue,
         priority = priority,
     )
 
@@ -332,76 +333,6 @@ DEFAULT_HOST_SUFFIX = {
     "windows-386": "10",
     "windows-amd64": "10",
 }
-
-# We set build priorities by environment. These should always be lower than the
-# build priority for gomote requests, which is 20 (lower number means higher priority).
-PRIORITY = struct(
-    GOMOTE = 20,
-    PRESUBMIT = 30,
-    POSTSUBMIT = 40,
-)
-
-# The try bucket will include builders which work on pre-commit or pre-review
-# code.
-PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS, priority = PRIORITY.PRESUBMIT)
-
-# The ci bucket will include builders which work on post-commit code.
-PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS, priority = PRIORITY.POSTSUBMIT)
-
-# The security-try bucket is for builders that test unreviewed, embargoed
-# security fixes.
-SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security-try", "security-coordinator-builder", "security-worker-builder", False, LOW_CAPACITY_HOSTS, priority = PRIORITY.PRESUBMIT)
-
-def define_public_shadow_buckets(env):
-    if env.swarming_host != "chromium-swarm.appspot.com":
-        fail("only the chromium-swarm instance is known to be intended for public builds, but env.swarming_host is %s" % env.swarming_host)
-
-    all_pools = [env.coordinator_pool, env.worker_pool]
-    if env.shared_worker_pool:
-        all_pools.append(env.shared_worker_pool)
-
-    for bucket, shadow_bucket in [(env.bucket, env.shadow_bucket), (env.worker_bucket, env.worker_shadow_bucket)]:
-        luci.bucket(
-            shadows = bucket,
-            name = shadow_bucket,
-            dynamic = True,
-            # Explicitly set bucket constraints for shadow buckets. These are populated
-            # for each real bucket implicitly via luci.builder(...), but not populated at
-            # all for shadow buckets, unfortunately.
-            constraints = luci.bucket_constraints(
-                service_accounts = [env.coordinator_sa, env.worker_sa],
-                pools = all_pools,
-            ),
-            bindings = [
-                # Allow everyone to see builds in public shadow buckets.
-                luci.binding(
-                    roles = ["role/buildbucket.reader"],
-                    groups = "all",
-                ),
-                # Allow anyone on the Go team to create builds in public shadow buckets.
-                # Creating builds is more permissive than triggering them: it allows
-                # for arbitrary mutation of the builder definition, whereas triggered
-                # builds may only mutate explicitly mutable fields. These shadow buckets
-                # are used for testing of public builder configurations and behaviors.
-                luci.binding(
-                    roles = "role/buildbucket.creator",
-                    groups = ["mdb/golang-team"],
-                ),
-
-                # Allow our service accounts to create ResultDB invocations in shadow buckets.
-                # This permission is necessary to set explicitly according to the shadow bucket
-                # documentation.
-                luci.binding(
-                    roles = "role/resultdb.invocationCreator",
-                    users = [env.coordinator_sa, env.worker_sa],
-                ),
-            ],
-        )
-    return env
-
-# Create public shadow buckets, for mutating and testing out changes to public builds.
-define_public_shadow_buckets(PUBLIC_TRY_ENV)
-define_public_shadow_buckets(PUBLIC_CI_ENV)
 
 # The prod bucket will include builders which work on post-commit code and
 # generate executable artifacts used by other users or machines.
@@ -555,6 +486,9 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "openbsd-arm64": known_issue(issue_number = 60440, skip_x_repos = True),
     "windows-arm": known_issue(issue_number = 60440, skip_x_repos = True),
 }
+SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
+SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
+})
 
 # NO_NETWORK_BUILDERS are a subset of builder types
 # where we require the no-network check to run.
@@ -583,6 +517,76 @@ EXTRA_GO_BRANCHES = {
     "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
     "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13"),
 }
+
+# We set build priorities by environment. These should always be lower than the
+# build priority for gomote requests, which is 20 (lower number means higher priority).
+PRIORITY = struct(
+    GOMOTE = 20,
+    PRESUBMIT = 30,
+    POSTSUBMIT = 40,
+)
+
+# The try bucket will include builders which work on pre-commit or pre-review
+# code.
+PUBLIC_TRY_ENV = define_environment("go", "chromium-swarm", "try", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS, KNOWN_ISSUE_BUILDER_TYPES, priority = PRIORITY.PRESUBMIT)
+
+# The ci bucket will include builders which work on post-commit code.
+PUBLIC_CI_ENV = define_environment("go", "chromium-swarm", "ci", "coordinator-builder", "public-worker-builder", True, LOW_CAPACITY_HOSTS, KNOWN_ISSUE_BUILDER_TYPES, priority = PRIORITY.POSTSUBMIT)
+
+# The security-try bucket is for builders that test unreviewed, embargoed
+# security fixes.
+SECURITY_TRY_ENV = define_environment("go-internal", "chrome-swarming", "security-try", "security-coordinator-builder", "security-worker-builder", False, LOW_CAPACITY_HOSTS, SECURITY_KNOWN_ISSUE_BUILDER_TYPES, priority = PRIORITY.PRESUBMIT)
+
+def define_public_shadow_buckets(env):
+    if env.swarming_host != "chromium-swarm.appspot.com":
+        fail("only the chromium-swarm instance is known to be intended for public builds, but env.swarming_host is %s" % env.swarming_host)
+
+    all_pools = [env.coordinator_pool, env.worker_pool]
+    if env.shared_worker_pool:
+        all_pools.append(env.shared_worker_pool)
+
+    for bucket, shadow_bucket in [(env.bucket, env.shadow_bucket), (env.worker_bucket, env.worker_shadow_bucket)]:
+        luci.bucket(
+            shadows = bucket,
+            name = shadow_bucket,
+            dynamic = True,
+            # Explicitly set bucket constraints for shadow buckets. These are populated
+            # for each real bucket implicitly via luci.builder(...), but not populated at
+            # all for shadow buckets, unfortunately.
+            constraints = luci.bucket_constraints(
+                service_accounts = [env.coordinator_sa, env.worker_sa],
+                pools = all_pools,
+            ),
+            bindings = [
+                # Allow everyone to see builds in public shadow buckets.
+                luci.binding(
+                    roles = ["role/buildbucket.reader"],
+                    groups = "all",
+                ),
+                # Allow anyone on the Go team to create builds in public shadow buckets.
+                # Creating builds is more permissive than triggering them: it allows
+                # for arbitrary mutation of the builder definition, whereas triggered
+                # builds may only mutate explicitly mutable fields. These shadow buckets
+                # are used for testing of public builder configurations and behaviors.
+                luci.binding(
+                    roles = "role/buildbucket.creator",
+                    groups = ["mdb/golang-team"],
+                ),
+
+                # Allow our service accounts to create ResultDB invocations in shadow buckets.
+                # This permission is necessary to set explicitly according to the shadow bucket
+                # documentation.
+                luci.binding(
+                    roles = "role/resultdb.invocationCreator",
+                    users = [env.coordinator_sa, env.worker_sa],
+                ),
+            ],
+        )
+    return env
+
+# Create public shadow buckets, for mutating and testing out changes to public builds.
+define_public_shadow_buckets(PUBLIC_TRY_ENV)
+define_public_shadow_buckets(PUBLIC_CI_ENV)
 
 # PT is Project Type, a classification of a project.
 PT = struct(
@@ -1240,8 +1244,8 @@ def define_builder(env, project, go_branch_short, builder_type):
     }
     if host_timeout_scale(host_type) != 1:
         base_props["test_timeout_scale"] = host_timeout_scale(host_type)
-    if builder_type in KNOWN_ISSUE_BUILDER_TYPES:
-        base_props["known_issue"] = KNOWN_ISSUE_BUILDER_TYPES[builder_type].issue_number
+    if builder_type in env.known_issue_builder_types:
+        base_props["known_issue"] = env.known_issue_builder_types[builder_type].issue_number
     for d in EXTRA_DEPENDENCIES:
         if not d.applies(project, port_of(builder_type), run_mods):
             continue
@@ -1479,7 +1483,7 @@ def define_sharded_builder(env, project, name, test_shards, go_branch_short, bui
         builders_to_trigger = [
             "%s/%s" % (env.bucket, builder_name(project, go_branch_short, builder_type))
             for project in PROJECTS
-            if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type)[2]
+            if project != "go" and enabled(env.low_capacity_hosts, project, go_branch_short, builder_type, env.known_issue_builder_types)[2]
         ]
 
     # Coordinator builder.
@@ -1642,12 +1646,12 @@ def display_for_builder_type(builder_type):
 # and branch, the second whether it should run in presubmit by default, and
 # the third if it should run in postsubmit. The final list is a list of cq.location_filters
 # if the builder should run in presubmit by default.
-def enabled(low_capacity_hosts, project, go_branch_short, builder_type):
+def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_issue_builder_types):
     pt = PROJECTS[project]
     os, arch, suffix, run_mods = split_builder_type(builder_type)
     host_type = host_of(builder_type)
 
-    if builder_type in KNOWN_ISSUE_BUILDER_TYPES and KNOWN_ISSUE_BUILDER_TYPES[builder_type] \
+    if builder_type in known_issue_builder_types and known_issue_builder_types[builder_type] \
         .skip_x_repos and project != "go":
         return False, False, False, []
 
@@ -1764,7 +1768,7 @@ def _define_go_ci():
 
             # Define builders.
             for builder_type in BUILDER_TYPES:
-                exists, presubmit, _, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
+                exists, presubmit, _, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)
                 if not exists:
                     continue
 
@@ -1791,7 +1795,7 @@ def _define_go_ci():
                 # See go.dev/issue/17626.
                 if project != "go" and go_branch_short != "gotip":
                     x_repo_presubmit = builder_type in ["linux-amd64", "linux-386", "darwin-amd64_14", "windows-amd64"] and \
-                                       enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)[2]
+                                       enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)[2]
                     luci.cq_tryjob_verifier(
                         builder = name,
                         cq_group = go_cq_group(project, "gotip").name,
@@ -1829,7 +1833,7 @@ def _define_go_ci():
             postsubmit_builders = {}
             postsubmit_builders_known_issue = {}
             for builder_type in BUILDER_TYPES:
-                exists, _, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type)
+                exists, _, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)
                 if not exists or not postsubmit:
                     continue
 
@@ -1977,7 +1981,7 @@ def _define_go_internal_ci():
             )
 
             for builder_type in BUILDER_TYPES:
-                exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project_name, go_branch_short, builder_type)
+                exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project_name, go_branch_short, builder_type, SECURITY_KNOWN_ISSUE_BUILDER_TYPES)
                 host_type = host_of(builder_type)
 
                 # The internal host only has access to some machines. As of
@@ -2010,7 +2014,7 @@ def _define_go_internal_ci():
                     disable_reuse = True,
                     includable_only = any([r.startswith("perf") for r in run_mods]) or
                                       (not presubmit and not postsubmit) or
-                                      builder_type in KNOWN_ISSUE_BUILDER_TYPES,
+                                      builder_type in SECURITY_KNOWN_ISSUE_BUILDER_TYPES,
                 )
 
 _define_go_ci()
