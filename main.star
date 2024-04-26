@@ -488,6 +488,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
+    "darwin-amd64_14": known_issue(issue_number = 67073),
 })
 
 # NO_NETWORK_BUILDERS are a subset of builder types
@@ -1993,6 +1994,7 @@ def _define_go_internal_ci():
                     # swarming instance. This requires additional resources and
                     # work to set up, hence each such host needs to opt-in here.
                     "linux-arm",
+                    "darwin-amd64_14",
                 ]:
                     # The list above is expected to contain only Google low-capacity hosts.
                     # Verify that's the case.
