@@ -21,11 +21,18 @@ type swarmingConfig struct {
 	client swarming.Client
 }
 
-// Standard public swarming host.
-var publicSwarming = &swarmingConfig{
-	Host: "chromium-swarm.appspot.com",
-	Pool: "luci.golang.shared-workers",
-}
+var (
+	// Public swarming host.
+	publicSwarming = &swarmingConfig{
+		Host: "chromium-swarm.appspot.com",
+		Pool: "luci.golang.shared-workers",
+	}
+	// Security swarming host.
+	internalSwarming = &swarmingConfig{
+		Host: "chrome-swarming.appspot.com",
+		Pool: "luci.golang.security-try-workers",
+	}
+)
 
 // imageConfig describes how many instances of a specific image type should
 // exist.
@@ -82,6 +89,15 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-key",
 			Image:    "3ec96f33cf17c85bd6d1bbf122c327bc9e5c62620c3ef9ff63e2db4feebdd8da",
 			MinCount: 10,
+		},
+	},
+	internalSwarming: {
+		{
+			Hostname: "darwin-amd64-14-security",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-security-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-14-security-key",
+			Image:    "3ec96f33cf17c85bd6d1bbf122c327bc9e5c62620c3ef9ff63e2db4feebdd8da",
+			MinCount: 1, // in the process of being brought up
 		},
 	},
 }
