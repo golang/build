@@ -162,6 +162,13 @@ luci.binding(
     groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
 )
 
+# Allow x/build/cmd/makemac to list security bots.
+luci.binding(
+    roles = "role/swarming.poolViewer",
+    realm = SECURITY_REALMS,
+    users = "makemac@symbolic-datum-552.iam.gserviceaccount.com",
+)
+
 # Allow users with the taskTriggerer role to impersonate the service accounts.
 luci.binding(
     roles = "role/swarming.taskServiceAccount",
