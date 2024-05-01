@@ -518,6 +518,19 @@ GO_BRANCHES = {
     "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
 }
 
+# INTERNAL_GO_BRANCHES mirrors GO_BRANCHES, but defines the branches to build
+# and test against for the go-internal/go repository.
+INTERNAL_GO_BRANCHES = {
+    "gotip": struct(branch_regexp = MAIN_BRANCH_NAME, bootstrap = "1.20.6"),
+    # The private-release-branches are per-point release, rather than
+    # per-major version, since we create them specially for each point
+    # release, and want to maintain that history. We use a regex to match
+    # all the point branches so that we don't need to manually update the
+    # config each time we issue a point release.
+    "go1.22": struct(branch_regexp = "private-release-branch.go1.22.\\d+", bootstrap = "1.20.6"),
+    "go1.21": struct(branch_regexp = "private-release-branch.go1.21.\\d+", bootstrap = "1.17.13"),
+}
+
 # EXTRA_GO_BRANCHES are Go branches that aren't used for project-wide testing
 # because they're out of scope per https://go.dev/doc/devel/release#policy,
 # but are used by specific golang.org/x repositories.
@@ -1947,7 +1960,7 @@ def _define_go_ci():
 
 def _define_go_internal_ci():
     for project_name in ["go", "net", "crypto"]:
-        for go_branch_short, go_branch in GO_BRANCHES.items():
+        for go_branch_short, go_branch in INTERNAL_GO_BRANCHES.items():
             # TODO(yifany): Simplify cq.location_filter once Tricium to CV
             # migration (go/luci/tricium) is done.
             cq_group_name = ("go-internal_%s_%s" % (project_name, go_branch_short)).replace(".", "-")
@@ -1965,7 +1978,7 @@ def _define_go_internal_ci():
                 ],
                 watch = cq.refset(
                     repo = "https://go-internal.googlesource.com/%s" % project_name,
-                    refs = ["refs/heads/%s" % go_branch.branch],
+                    refs = ["refs/heads/%s" % go_branch.branch_regexp],
                 ),
                 allow_submit_with_open_deps = True,
                 trust_dry_runner_deps = True,
