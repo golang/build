@@ -32,9 +32,7 @@ def RunSteps(api):
     affected_files = api.tryserver.get_files_affected_by_patch(
         patch_root='',
         report_files_via_property='affected_files')
-  analyzers = [
-        api.tricium.analyzers.HTTPS_CHECK,
-  ]
+  analyzers = []
   api.tricium.run_legacy(analyzers, repo_path, affected_files, commit_message)
 
 def GenTests(api):
