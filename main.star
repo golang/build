@@ -310,6 +310,23 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
     "solaris-amd64",
 ]
 
+# HOST_CONTACT_EMAILS is the contact information for a particular host.
+# These email addresses will recieve notifications about infra failures
+# on certain hosts.
+HOST_CONTACT_EMAILS = {
+    "netbsd-arm": ["bsiegert@google.com"],
+    "netbsd-arm64": ["bsiegert@google.com"],
+}
+
+HOST_NOTIFIERS = {
+    host: luci.notifier(
+        name = host + "-infra",
+        on_new_status = ["INFRA_FAILURE"],
+        notify_emails = emails,
+    )
+    for host, emails in HOST_CONTACT_EMAILS.items()
+}
+
 # SLOW_HOSTS lists "hosts" who are known to run slower than our typical fast
 # high-capacity machines. It is a mapping of the host to a test timeout scaling
 # factor. It also affects the decision of whether to include a builder in
@@ -1397,6 +1414,13 @@ def define_builder(env, project, go_branch_short, builder_type):
         expiration_timeout = time.day
         wait_for_capacity = True
 
+    # Define notifications for the builder.
+    notifiers = []
+
+    # Add a notification for machine owners on infra failures.
+    if host_type in HOST_NOTIFIERS:
+        notifiers.append(HOST_NOTIFIERS[host_type])
+
     # Create a helper to emit builder definitions, installing common fields from
     # the current context.
     def emit_builder(name, bucket, dimensions, properties, service_account, **kwargs):
@@ -1419,6 +1443,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             expiration_timeout = expiration_timeout,
             wait_for_capacity = wait_for_capacity,
             priority = env.priority,
+            notifies = notifiers,
             **kwargs
         )
 
