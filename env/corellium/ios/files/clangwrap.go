@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build ignore
-// +build ignore
 
 // The clanghost binary is like clangwrap.sh but for self-hosted iOS.
 //

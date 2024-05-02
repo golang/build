@@ -11,7 +11,6 @@
 // Reindex reindexes all the uploads with IDs starting with the given prefixes.
 
 //go:build cloud
-// +build cloud
 
 package main
 

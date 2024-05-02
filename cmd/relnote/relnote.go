@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.21
-
 // The relnote command works with release notes.
 // It can be used to look for unfinished notes and to generate the
 // final markdown file.
