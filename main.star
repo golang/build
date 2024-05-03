@@ -512,7 +512,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
-    "darwin-amd64_14": known_issue(issue_number = 67073),
 })
 
 # NO_NETWORK_BUILDERS are a subset of builder types
