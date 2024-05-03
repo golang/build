@@ -389,7 +389,7 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 	versionFile := wf.Task2(wd, "Generate VERSION file", version.GenerateVersionFile, nextVersion, timestamp)
 	wf.Output(wd, "VERSION file", versionFile)
 	head := wf.Task1(wd, "Read branch head", version.ReadBranchHead, branchVal)
-	srcSpec := wf.Task5(wd, "Select source spec", build.getGitSource, branchVal, head, wf.Const(""), wf.Const(""), versionFile)
+	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, head, wf.Const(""), versionFile)
 	source, artifacts, mods := build.addBuildTasks(wd, major, kind, nextVersion, timestamp, srcSpec)
 	wf.Output(wd, "Source", source)
 	wf.Output(wd, "Artifacts", artifacts)
@@ -434,11 +434,6 @@ func now(_ context.Context) (time.Time, error) {
 	return time.Now().UTC().Round(time.Second), nil
 }
 
-var securityProjectNameToProject = map[string]string{
-	"go-internal/go (new)":                "go",
-	"go-internal/golang/go-private (old)": "golang/go-private",
-}
-
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
 	wd *wf.Definition, major int, kind task.ReleaseKind, coordinators wf.Value[[]string],
@@ -459,23 +454,9 @@ func addSingleReleaseWorkflow(
 	milestones := wf.Task2(wd, "Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
 
-	securityProjectName := wf.Param(wd, wf.ParamDef[string]{
-		Name: "Security repository to retrieve ref from (optional)",
-		ParamType: workflow.ParamType[string]{
-			HTMLElement: "select",
-			HTMLSelectOptions: []string{
-				"go-internal/go (new)",
-				"go-internal/golang/go-private (old)",
-			},
-		},
-		Doc: `"go-internal/golang/go-private" is the old internal gerrit repository, "go-internal/go" is the new repository.`,
-	})
-	securityProject := wf.Task1(wd, "Convert security project name", func(ctx *wf.TaskContext, projectName string) (string, error) {
-		return securityProjectNameToProject[projectName], nil
-	}, securityProjectName)
 	securityRef := wf.Param(wd, wf.ParamDef[string]{Name: "Ref from the private repository to build from (optional)"})
-	securityCommit := wf.Task2(wd, "Read security ref", build.readSecurityRef, securityProject, securityRef)
-	srcSpec := wf.Task5(wd, "Select source spec", build.getGitSource, branchVal, startingHead, securityProject, securityCommit, versionFile, wf.After(checked))
+	securityCommit := wf.Task1(wd, "Read security ref", build.readSecurityRef, securityRef)
+	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, startingHead, securityCommit, versionFile, wf.After(checked))
 
 	// Build, test, and sign release.
 	source, signedAndTestedArtifacts, modules := build.addBuildTasks(wd, major, kind, nextVersion, timestamp, srcSpec)
@@ -629,6 +610,7 @@ type BuildReleaseTasks struct {
 	GerritProject            string
 	GerritHTTPClient         *http.Client // GerritHTTPClient is an HTTP client that authenticates to Gerrit instances. (Both public and private.)
 	PrivateGerritClient      task.GerritClient
+	PrivateGerritProject     string
 	GCSClient                *storage.Client
 	ScratchFS                *task.ScratchFS
 	SignedURL                string // SignedURL is a gs:// or file:// URL, no trailing slash.
@@ -647,24 +629,24 @@ type BuildReleaseTasks struct {
 
 var commitRE = regexp.MustCompile(`[a-f0-9]{40}`)
 
-func (b *BuildReleaseTasks) readSecurityRef(ctx *wf.TaskContext, project, ref string) (string, error) {
+func (b *BuildReleaseTasks) readSecurityRef(ctx *wf.TaskContext, ref string) (string, error) {
 	if ref == "" {
 		return "", nil
 	}
 	if commitRE.MatchString(ref) {
 		return ref, nil
 	}
-	commit, err := b.PrivateGerritClient.ReadBranchHead(ctx, project, ref)
+	commit, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, ref)
 	if err != nil {
 		return "", fmt.Errorf("%q doesn't appear to be a commit hash, but resolving it as a branch failed: %v", ref, err)
 	}
 	return commit, nil
 }
 
-func (b *BuildReleaseTasks) getGitSource(ctx *wf.TaskContext, branch, commit, securityProject, securityCommit, versionFile string) (sourceSpec, error) {
+func (b *BuildReleaseTasks) getGitSource(ctx *wf.TaskContext, branch, commit, securityCommit, versionFile string) (sourceSpec, error) {
 	client, project, rev := b.GerritClient, b.GerritProject, commit
 	if securityCommit != "" {
-		client, project, rev = b.PrivateGerritClient, securityProject, securityCommit
+		client, project, rev = b.PrivateGerritClient, b.PrivateGerritProject, securityCommit
 	}
 	return sourceSpec{
 		GitilesURL:  client.GitilesURL(),
@@ -736,7 +718,7 @@ func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, branch, versio
 	if err != nil {
 		return "", err
 	}
-	spec, err := b.getGitSource(ctx, branch, head, "", "", versionFile)
+	spec, err := b.getGitSource(ctx, branch, head, "", versionFile)
 	if err != nil {
 		return "", err
 	}
