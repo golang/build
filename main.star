@@ -1630,27 +1630,22 @@ def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit
     perf_props.update({
         "mode": GOLANGBUILD_MODES["PERF"],
     })
-
-    # Request c2-standard-16 machines for linux/amd64. This machine type provides
-    # a much more consistent hardware platform, which is useful for making a less
-    # noisy performance measurement.
     perf_dims = dict(base_dims)
     emit_builder(
         name = name,
         bucket = env.bucket,
         dimensions = perf_dims,
         properties = perf_props,
-        triggering_policy = triggering_policy(env, builder_type),
+        triggering_policy = triggering_policy(env, builder_type, concurrent_builds = 1),
         service_account = env.worker_sa,
         execution_timeout = 12 * time.hour,
     )
 
 # triggering_policy defines the LUCI Scheduler triggering policy for postsubmit builders.
 # Returns None for presubmit builders.
-def triggering_policy(env, builder_type):
+def triggering_policy(env, builder_type, concurrent_builds = 5):
     if env.bucket not in ["ci", "ci-workers"]:
         return None
-    concurrent_builds = 5
     if is_capacity_constrained(env.low_capacity_hosts, host_of(builder_type)):
         concurrent_builds = 1
     return scheduler.newest_first(
