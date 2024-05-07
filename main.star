@@ -424,6 +424,7 @@ BUILDER_TYPES = [
     "linux-amd64_c2s16-perf_vs_release",
     "linux-amd64_c2s16-perf_vs_tip",
     "linux-amd64_c3h88-perf_vs_parent",
+    "linux-amd64_c3h88-perf_vs_release",
     "linux-amd64_c3h88-perf_vs_tip",
     "linux-arm",
     "linux-arm64",
