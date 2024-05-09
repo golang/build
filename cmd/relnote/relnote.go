@@ -18,13 +18,16 @@ import (
 	"time"
 )
 
-var verbose = flag.Bool("v", false, "print verbose logging")
+var (
+	verbose = flag.Bool("v", false, "print verbose logging")
+	goroot  = flag.String("goroot", runtime.GOROOT(), "root of Go repo containing docs")
+)
 
 func usage() {
 	out := flag.CommandLine.Output()
 	fmt.Fprintf(out, "usage:\n")
-	fmt.Fprintf(out, "   relnote generate [GOROOT]\n")
-	fmt.Fprintf(out, "      generate release notes from doc/next under GOROOT (default: runtime.GOROOT())\n")
+	fmt.Fprintf(out, "   relnote generate\n")
+	fmt.Fprintf(out, "      generate release notes from doc/next\n")
 	fmt.Fprintf(out, "   relnote todo PREVIOUS_RELEASE_DATE\n")
 	fmt.Fprintf(out, "      report which release notes need to be written; use YYYY-MM-DD format for date of last release\n")
 	flag.PrintDefaults()
@@ -36,13 +39,8 @@ func main() {
 	flag.Usage = usage
 	flag.Parse()
 
-	goroot := runtime.GOROOT()
-	if goroot == "" {
-		log.Fatalf("missing GOROOT")
-	}
-
 	// Read internal/goversion to find the next release.
-	data, err := os.ReadFile(filepath.Join(goroot, "src/internal/goversion/goversion.go"))
+	data, err := os.ReadFile(filepath.Join(*goroot, "src/internal/goversion/goversion.go"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -66,7 +64,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("previous release date: %s", err)
 			}
-			nextDir := filepath.Join(goroot, "doc", "next")
+			nextDir := filepath.Join(*goroot, "doc", "next")
 			err = todo(os.Stdout, os.DirFS(nextDir), prevDateTime)
 		default:
 			err = fmt.Errorf("unknown command %q", cmd)
