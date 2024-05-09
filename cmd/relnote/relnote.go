@@ -12,75 +12,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"strings"
 	"time"
-
-	"golang.org/x/build/maintner"
-	"golang.org/x/build/repos"
 )
 
 var verbose = flag.Bool("v", false, "print verbose logging")
-
-// change is a change that was noted via a RELNOTE= comment.
-type change struct {
-	CL    *maintner.GerritCL
-	Note  string // the part after RELNOTE=
-	Issue *maintner.GitHubIssue
-}
-
-func (c change) ID() string {
-	switch {
-	default:
-		panic("invalid change")
-	case c.CL != nil:
-		return fmt.Sprintf("CL %d", c.CL.Number)
-	case c.Issue != nil:
-		return fmt.Sprintf("https://go.dev/issue/%d", c.Issue.Number)
-	}
-}
-
-func (c change) URL() string {
-	switch {
-	default:
-		panic("invalid change")
-	case c.CL != nil:
-		return fmt.Sprint("https://go.dev/cl/", c.CL.Number)
-	case c.Issue != nil:
-		return fmt.Sprint("https://go.dev/issue/", c.Issue.Number)
-	}
-}
-
-func (c change) Subject() string {
-	switch {
-	default:
-		panic("invalid change")
-	case c.CL != nil:
-		subj := c.CL.Subject()
-		subj = strings.TrimPrefix(subj, clPackage(c.CL)+":")
-		return strings.TrimSpace(subj)
-	case c.Issue != nil:
-		return issueSubject(c.Issue)
-	}
-}
-
-func (c change) TextLine() string {
-	switch {
-	default:
-		panic("invalid change")
-	case c.CL != nil:
-		subj := c.CL.Subject()
-		if c.Note != "yes" && c.Note != "y" {
-			subj += "; " + c.Note
-		}
-		return subj
-	case c.Issue != nil:
-		return issueSubject(c.Issue)
-	}
-}
 
 func usage() {
 	out := flag.CommandLine.Output()
@@ -140,53 +78,4 @@ func main() {
 		usage()
 		log.Fatal("missing subcommand")
 	}
-}
-
-// packagePrefix returns the package prefix at the start of s.
-// For example packagePrefix("net/http: add HTTP 5 support") == "net/http".
-// If there's no package prefix, packagePrefix returns "".
-func packagePrefix(s string) string {
-	i := strings.Index(s, ":")
-	if i < 0 {
-		return ""
-	}
-	s = s[:i]
-	if strings.Trim(s, "abcdefghijklmnopqrstuvwxyz0123456789/") != "" {
-		return ""
-	}
-	return s
-}
-
-// clPackage returns the package import path from the CL's commit message,
-// or "??" if it's formatted unconventionally.
-func clPackage(cl *maintner.GerritCL) string {
-	pkg := packagePrefix(cl.Subject())
-	if pkg == "" {
-		return "??"
-	}
-	if r := repos.ByGerritProject[cl.Project.Project()]; r == nil {
-		return "??"
-	} else {
-		pkg = path.Join(r.ImportPath, pkg)
-	}
-	return pkg
-}
-
-// issuePackage returns the package import path from the issue's title,
-// or "??" if it's formatted unconventionally.
-func issuePackage(issue *maintner.GitHubIssue) string {
-	pkg := packagePrefix(issue.Title)
-	if pkg == "" {
-		return "??"
-	}
-	return pkg
-}
-
-// issueSubject returns the issue's title with the package prefix removed.
-func issueSubject(issue *maintner.GitHubIssue) string {
-	pkg := packagePrefix(issue.Title)
-	if pkg == "" {
-		return issue.Title
-	}
-	return strings.TrimSpace(strings.TrimPrefix(issue.Title, pkg+":"))
 }
