@@ -31,29 +31,31 @@ type ToDo struct {
 // It takes the doc/next directory of the repo and the date of the last release.
 func todo(w io.Writer, fsys fs.FS, prevRelDate time.Time) error {
 	var todos []ToDo
+	addToDo := func(td ToDo) { todos = append(todos, td) }
 
-	add := func(td ToDo) { todos = append(todos, td) }
+	mentionedIssues := map[int]bool{} // issues mentioned in the existing relnotes
+	addIssue := func(num int) { mentionedIssues[num] = true }
 
-	if err := todosFromDocFiles(fsys, add); err != nil {
+	if err := infoFromDocFiles(fsys, addToDo, addIssue); err != nil {
 		return err
 	}
 	if !prevRelDate.IsZero() {
-		if err := todosFromCLs(prevRelDate, add); err != nil {
+		if err := todosFromCLs(prevRelDate, mentionedIssues, addToDo); err != nil {
 			return err
 		}
 	}
 	return writeToDos(w, todos)
 }
 
-// Collect TODOs from the markdown files in the main repo.
-func todosFromDocFiles(fsys fs.FS, add func(ToDo)) error {
+// Collect TODOs and issue numbers from the markdown files in the main repo.
+func infoFromDocFiles(fsys fs.FS, addToDo func(ToDo), addIssue func(int)) error {
 	// This is essentially a grep.
 	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !d.IsDir() && strings.HasSuffix(path, ".md") {
-			if err := todosFromFile(fsys, path, add); err != nil {
+			if err := infoFromFile(fsys, path, addToDo, addIssue); err != nil {
 				return err
 			}
 		}
@@ -61,7 +63,9 @@ func todosFromDocFiles(fsys fs.FS, add func(ToDo)) error {
 	})
 }
 
-func todosFromFile(dir fs.FS, filename string, add func(ToDo)) error {
+var issueRE = regexp.MustCompile("/issue/([0-9]+)")
+
+func infoFromFile(dir fs.FS, filename string, addToDo func(ToDo), addIssue func(int)) error {
 	f, err := dir.Open(filename)
 	if err != nil {
 		return err
@@ -71,17 +75,25 @@ func todosFromFile(dir fs.FS, filename string, add func(ToDo)) error {
 	ln := 0
 	for scan.Scan() {
 		ln++
-		if line := scan.Text(); strings.Contains(line, "TODO") {
-			add(ToDo{
+		line := scan.Text()
+		if strings.Contains(line, "TODO") {
+			addToDo(ToDo{
 				message:    line,
 				provenance: fmt.Sprintf("%s:%d", filename, ln),
 			})
+		}
+		for _, matches := range issueRE.FindAllStringSubmatch(line, -1) {
+			num, err := strconv.Atoi(matches[1])
+			if err != nil {
+				return fmt.Errorf("%s:%d: %v", filename, ln, err)
+			}
+			addIssue(num)
 		}
 	}
 	return scan.Err()
 }
 
-func todosFromCLs(cutoff time.Time, add func(ToDo)) error {
+func todosFromCLs(cutoff time.Time, mentionedIssues map[int]bool, add func(ToDo)) error {
 	ctx := context.Background()
 	// The maintner corpus doesn't track inline comments. See go.dev/issue/24863.
 	// So we need to use a Gerrit API client to fetch them instead. If maintner starts
@@ -120,7 +132,7 @@ func todosFromCLs(cutoff time.Time, add func(ToDo)) error {
 				}
 			}
 			// Add a TODO if the CL refers to an accepted proposal.
-			todoFromProposal(ctx, cl, gh, add)
+			todoFromProposal(cl, gh, mentionedIssues, add)
 			return nil
 		})
 	})
@@ -143,11 +155,12 @@ func todoFromRelnote(ctx context.Context, cl *maintner.GerritCL, gc *gerrit.Clie
 	return nil
 }
 
-func todoFromProposal(ctx context.Context, cl *maintner.GerritCL, gh *maintner.GitHubRepo, add func(ToDo)) {
+func todoFromProposal(cl *maintner.GerritCL, gh *maintner.GitHubRepo, mentionedIssues map[int]bool, add func(ToDo)) {
 	for _, num := range issueNumbers(cl) {
-		// TODO(jba): look for CL references in existing release notes to avoid adding TODOs for
-		// CLs that have already been documented.
-		if issue := gh.Issue(num); issue != nil && hasLabel(issue, "Proposal-Accepted") {
+		if mentionedIssues[num] {
+			continue
+		}
+		if issue := gh.Issue(int32(num)); issue != nil && hasLabel(issue, "Proposal-Accepted") {
 			// Add a TODO for all issues, regardless of when or whether they are closed.
 			// Any work on an accepted proposal is potentially worthy of a release note.
 			add(ToDo{
@@ -223,7 +236,7 @@ var numbersRE = regexp.MustCompile(`(?m)(?:^|\s|golang/go)#([0-9]{3,})`)
 var golangGoNumbersRE = regexp.MustCompile(`(?m)golang/go#([0-9]{3,})`)
 
 // issueNumbers returns the golang/go issue numbers referred to by the CL.
-func issueNumbers(cl *maintner.GerritCL) []int32 {
+func issueNumbers(cl *maintner.GerritCL) []int {
 	var re *regexp.Regexp
 	if cl.Project.Project() == "go" {
 		re = numbersRE
@@ -231,10 +244,10 @@ func issueNumbers(cl *maintner.GerritCL) []int32 {
 		re = golangGoNumbersRE
 	}
 
-	var list []int32
+	var list []int
 	for _, s := range re.FindAllStringSubmatch(cl.Commit.Msg, -1) {
 		if n, err := strconv.Atoi(s[1]); err == nil && n < 1e9 {
-			list = append(list, int32(n))
+			list = append(list, n)
 		}
 	}
 	// Remove duplicates.
