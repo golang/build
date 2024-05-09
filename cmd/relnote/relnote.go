@@ -8,7 +8,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -17,12 +16,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
-	"strconv"
 	"strings"
 	"time"
 
-	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/repos"
 )
@@ -146,24 +142,6 @@ func main() {
 	}
 }
 
-// findCLsWithRelNote finds CLs that contain a RELNOTE marker by
-// using a Gerrit API client. Returned map is keyed by CL number.
-func findCLsWithRelNote(client *gerrit.Client, since time.Time) (map[int]*gerrit.ChangeInfo, error) {
-	// Gerrit search operators are documented at
-	// https://gerrit-review.googlesource.com/Documentation/user-search.html#search-operators.
-	query := fmt.Sprintf(`status:merged branch:master since:%s (comment:"RELNOTE" OR comment:"RELNOTES")`,
-		since.Format("2006-01-02"))
-	cs, err := client.QueryChanges(context.Background(), query)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[int]*gerrit.ChangeInfo) // CL Number → CL.
-	for _, c := range cs {
-		m[c.ChangeNumber] = c
-	}
-	return m, nil
-}
-
 // packagePrefix returns the package prefix at the start of s.
 // For example packagePrefix("net/http: add HTTP 5 support") == "net/http".
 // If there's no package prefix, packagePrefix returns "".
@@ -194,40 +172,6 @@ func clPackage(cl *maintner.GerritCL) string {
 	return pkg
 }
 
-// clRelNote extracts a RELNOTE note from a Gerrit CL commit
-// message and any inline comments. If there isn't a RELNOTE
-// note, it returns the empty string.
-func clRelNote(cl *maintner.GerritCL, comments map[string][]gerrit.CommentInfo) string {
-	msg := cl.Commit.Msg
-	if strings.Contains(msg, "RELNOTE") {
-		return parseRelNote(msg)
-	}
-	// Since July 2020, Gerrit UI has replaced top-level comments
-	// with patchset-level inline comments, so don't bother looking
-	// for RELNOTE= in cl.Messages—there won't be any. Instead, do
-	// look through all inline comments that we got via Gerrit API.
-	for _, cs := range comments {
-		for _, c := range cs {
-			if strings.Contains(c.Message, "RELNOTE") {
-				return parseRelNote(c.Message)
-			}
-		}
-	}
-	return ""
-}
-
-// parseRelNote parses a RELNOTE annotation from the string s.
-// It returns the empty string if no such annotation exists.
-func parseRelNote(s string) string {
-	m := relNoteRx.FindStringSubmatch(s)
-	if m == nil {
-		return ""
-	}
-	return m[1]
-}
-
-var relNoteRx = regexp.MustCompile(`RELNOTES?=(.+)`)
-
 // issuePackage returns the package import path from the issue's title,
 // or "??" if it's formatted unconventionally.
 func issuePackage(issue *maintner.GitHubIssue) string {
@@ -245,36 +189,4 @@ func issueSubject(issue *maintner.GitHubIssue) string {
 		return issue.Title
 	}
 	return strings.TrimSpace(strings.TrimPrefix(issue.Title, pkg+":"))
-}
-
-func hasLabel(issue *maintner.GitHubIssue, label string) bool {
-	for _, l := range issue.Labels {
-		if l.Name == label {
-			return true
-		}
-	}
-	return false
-}
-
-var numbersRE = regexp.MustCompile(`(?m)(?:^|\s|golang/go)#([0-9]{3,})`)
-var golangGoNumbersRE = regexp.MustCompile(`(?m)golang/go#([0-9]{3,})`)
-
-// issueNumbers returns the golang/go issue numbers referred to by the CL.
-func issueNumbers(cl *maintner.GerritCL) []int32 {
-	var re *regexp.Regexp
-	if cl.Project.Project() == "go" {
-		re = numbersRE
-	} else {
-		re = golangGoNumbersRE
-	}
-
-	var list []int32
-	for _, s := range re.FindAllStringSubmatch(cl.Commit.Msg, -1) {
-		if n, err := strconv.Atoi(s[1]); err == nil && n < 1e9 {
-			list = append(list, int32(n))
-		}
-	}
-	// Remove duplicates.
-	slices.Sort(list)
-	return slices.Compact(list)
 }

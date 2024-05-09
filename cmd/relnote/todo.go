@@ -10,12 +10,16 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
+	"golang.org/x/exp/maps"
 )
 
 type ToDo struct {
@@ -34,7 +38,7 @@ func todo(w io.Writer, fsys fs.FS, prevRelDate time.Time) error {
 		return err
 	}
 	if !prevRelDate.IsZero() {
-		if err := todosFromRelnoteCLs(prevRelDate, add); err != nil {
+		if err := todosFromCLs(prevRelDate, add); err != nil {
 			return err
 		}
 	}
@@ -77,7 +81,7 @@ func todosFromFile(dir fs.FS, filename string, add func(ToDo)) error {
 	return scan.Err()
 }
 
-func todosFromRelnoteCLs(cutoff time.Time, add func(ToDo)) error {
+func todosFromCLs(cutoff time.Time, add func(ToDo)) error {
 	ctx := context.Background()
 	// The maintner corpus doesn't track inline comments. See go.dev/issue/24863.
 	// So we need to use a Gerrit API client to fetch them instead. If maintner starts
@@ -91,6 +95,7 @@ func todosFromRelnoteCLs(cutoff time.Time, add func(ToDo)) error {
 	if err != nil {
 		return err
 	}
+	gh := corpus.GitHub().Repo("golang", "go")
 	return corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
 		if gp.Server() != "go.googlesource.com" {
 			return nil
@@ -107,30 +112,151 @@ func todosFromRelnoteCLs(cutoff time.Time, add func(ToDo)) error {
 				// Was in a previous release; not for this one.
 				return nil
 			}
-			// TODO(jba): look for accepted proposals that don't have release notes.
+			// Add a TODO if the CL has a "RELNOTE=" comment.
+			// These are deprecated, but we look for them just in case.
 			if _, ok := matchedCLs[int(cl.Number)]; ok {
-				comments, err := gerritClient.ListChangeComments(context.Background(), fmt.Sprint(cl.Number))
-				if err != nil {
+				if err := todoFromRelnote(ctx, cl, gerritClient, add); err != nil {
 					return err
 				}
-				if rn := clRelNote(cl, comments); rn != "" {
-					if rn == "yes" || rn == "y" {
-						rn = "UNKNOWN"
-					}
-					add(ToDo{
-						message:    "TODO:" + rn,
-						provenance: fmt.Sprintf("RELNOTE comment in https://go.dev/cl/%d", cl.Number),
-					})
-				}
 			}
+			// Add a TODO if the CL refers to an accepted proposal.
+			todoFromProposal(ctx, cl, gh, add)
 			return nil
 		})
 	})
 }
 
+func todoFromRelnote(ctx context.Context, cl *maintner.GerritCL, gc *gerrit.Client, add func(ToDo)) error {
+	comments, err := gc.ListChangeComments(ctx, fmt.Sprint(cl.Number))
+	if err != nil {
+		return err
+	}
+	if rn := clRelNote(cl, comments); rn != "" {
+		if rn == "yes" || rn == "y" {
+			rn = "UNKNOWN"
+		}
+		add(ToDo{
+			message:    "TODO:" + rn,
+			provenance: fmt.Sprintf("RELNOTE comment in https://go.dev/cl/%d", cl.Number),
+		})
+	}
+	return nil
+}
+
+func todoFromProposal(ctx context.Context, cl *maintner.GerritCL, gh *maintner.GitHubRepo, add func(ToDo)) {
+	for _, num := range issueNumbers(cl) {
+		// TODO(jba): look for CL references in existing release notes to avoid adding TODOs for
+		// CLs that have already been documented.
+		if issue := gh.Issue(num); issue != nil && hasLabel(issue, "Proposal-Accepted") {
+			// Add a TODO for all issues, regardless of when or whether they are closed.
+			// Any work on an accepted proposal is potentially worthy of a release note.
+			add(ToDo{
+				message:    fmt.Sprintf("TODO: accepted proposal https://go.dev/issue/%d", num),
+				provenance: fmt.Sprintf("https://go.dev/cl/%d", cl.Number),
+			})
+		}
+	}
+}
+
+func hasLabel(issue *maintner.GitHubIssue, label string) bool {
+	for _, l := range issue.Labels {
+		if l.Name == label {
+			return true
+		}
+	}
+	return false
+}
+
+// findCLsWithRelNote finds CLs that contain a RELNOTE marker by
+// using a Gerrit API client. Returned map is keyed by CL number.
+func findCLsWithRelNote(client *gerrit.Client, since time.Time) (map[int]*gerrit.ChangeInfo, error) {
+	// Gerrit search operators are documented at
+	// https://gerrit-review.googlesource.com/Documentation/user-search.html#search-operators.
+	query := fmt.Sprintf(`status:merged branch:master since:%s (comment:"RELNOTE" OR comment:"RELNOTES")`,
+		since.Format("2006-01-02"))
+	cs, err := client.QueryChanges(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[int]*gerrit.ChangeInfo) // CL Number → CL.
+	for _, c := range cs {
+		m[c.ChangeNumber] = c
+	}
+	return m, nil
+}
+
+// clRelNote extracts a RELNOTE note from a Gerrit CL commit
+// message and any inline comments. If there isn't a RELNOTE
+// note, it returns the empty string.
+func clRelNote(cl *maintner.GerritCL, comments map[string][]gerrit.CommentInfo) string {
+	msg := cl.Commit.Msg
+	if strings.Contains(msg, "RELNOTE") {
+		return parseRelNote(msg)
+	}
+	// Since July 2020, Gerrit UI has replaced top-level comments
+	// with patchset-level inline comments, so don't bother looking
+	// for RELNOTE= in cl.Messages—there won't be any. Instead, do
+	// look through all inline comments that we got via Gerrit API.
+	for _, cs := range comments {
+		for _, c := range cs {
+			if strings.Contains(c.Message, "RELNOTE") {
+				return parseRelNote(c.Message)
+			}
+		}
+	}
+	return ""
+}
+
+var relNoteRx = regexp.MustCompile(`RELNOTES?=(.+)`)
+
+// parseRelNote parses a RELNOTE annotation from the string s.
+// It returns the empty string if no such annotation exists.
+func parseRelNote(s string) string {
+	m := relNoteRx.FindStringSubmatch(s)
+	if m == nil {
+		return ""
+	}
+	return m[1]
+}
+
+var numbersRE = regexp.MustCompile(`(?m)(?:^|\s|golang/go)#([0-9]{3,})`)
+var golangGoNumbersRE = regexp.MustCompile(`(?m)golang/go#([0-9]{3,})`)
+
+// issueNumbers returns the golang/go issue numbers referred to by the CL.
+func issueNumbers(cl *maintner.GerritCL) []int32 {
+	var re *regexp.Regexp
+	if cl.Project.Project() == "go" {
+		re = numbersRE
+	} else {
+		re = golangGoNumbersRE
+	}
+
+	var list []int32
+	for _, s := range re.FindAllStringSubmatch(cl.Commit.Msg, -1) {
+		if n, err := strconv.Atoi(s[1]); err == nil && n < 1e9 {
+			list = append(list, int32(n))
+		}
+	}
+	// Remove duplicates.
+	slices.Sort(list)
+	return slices.Compact(list)
+}
+
 func writeToDos(w io.Writer, todos []ToDo) error {
+	// Group TODOs with the same message. This simplifies the output when a single
+	// issue is implemented by multiple CLs.
+	byMessage := map[string][]ToDo{}
 	for _, td := range todos {
-		if _, err := fmt.Fprintf(w, "%s (from %s)\n", td.message, td.provenance); err != nil {
+		byMessage[td.message] = append(byMessage[td.message], td)
+	}
+	msgs := maps.Keys(byMessage)
+	slices.Sort(msgs) // for deterministic output
+	for _, msg := range msgs {
+		var provs []string
+		for _, td := range byMessage[msg] {
+			provs = append(provs, td.provenance)
+		}
+		if _, err := fmt.Fprintf(w, "%s (from %s)\n", msg, strings.Join(provs, ", ")); err != nil {
 			return err
 		}
 	}
