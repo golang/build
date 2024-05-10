@@ -488,7 +488,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     # The known issue for these builder types tracks the work of starting to add them.
     # Skip the builder definitions for x/ repos to reduce noise.
     # Once the builder is added and starts working in the main repo, x/ repos can be unskipped.
-    "aix-ppc64": known_issue(issue_number = 60440, skip_x_repos = True),
+    "aix-ppc64": known_issue(issue_number = 67299, skip_x_repos = True),
     "android-386": known_issue(issue_number = 61097, skip_x_repos = True),
     "android-amd64": known_issue(issue_number = 61097, skip_x_repos = True),
     "android-arm": known_issue(issue_number = 61097, skip_x_repos = True),
@@ -496,22 +496,22 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "dragonfly-amd64": known_issue(issue_number = 61092, skip_x_repos = True),
     "freebsd-386": known_issue(issue_number = 60468, skip_x_repos = True),
     "freebsd-amd64": known_issue(issue_number = 61095, skip_x_repos = True),
-    "freebsd-arm": known_issue(issue_number = 60440, skip_x_repos = True),
-    "freebsd-arm64": known_issue(issue_number = 60440, skip_x_repos = True),
-    "illumos-amd64": known_issue(issue_number = 60440, skip_x_repos = True),
+    "freebsd-arm": known_issue(issue_number = 67300, skip_x_repos = True),
+    "freebsd-arm64": known_issue(issue_number = 67301, skip_x_repos = True),
+    "illumos-amd64": known_issue(issue_number = 67302, skip_x_repos = True),
     "ios-amd64": known_issue(issue_number = 42177, skip_x_repos = True),
-    "ios-arm64": known_issue(issue_number = 60440, skip_x_repos = True),
-    "linux-mips": known_issue(issue_number = 60440, skip_x_repos = True),
-    "linux-mips64": known_issue(issue_number = 60440, skip_x_repos = True),
-    "linux-mips64le": known_issue(issue_number = 60440, skip_x_repos = True),
-    "linux-mipsle": known_issue(issue_number = 60440, skip_x_repos = True),
-    "linux-s390x": known_issue(issue_number = 60440, skip_x_repos = True),
+    "ios-arm64": known_issue(issue_number = 66360, skip_x_repos = True),
+    "linux-mips": known_issue(issue_number = 67303, skip_x_repos = True),
+    "linux-mips64": known_issue(issue_number = 67305, skip_x_repos = True),
+    "linux-mips64le": known_issue(issue_number = 67306, skip_x_repos = True),
+    "linux-mipsle": known_issue(issue_number = 67304, skip_x_repos = True),
+    "linux-s390x": known_issue(issue_number = 67307, skip_x_repos = True),
     "netbsd-386": known_issue(issue_number = 61120, skip_x_repos = True),
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
-    "openbsd-arm": known_issue(issue_number = 60440, skip_x_repos = True),
-    "openbsd-arm64": known_issue(issue_number = 60440, skip_x_repos = True),
-    "windows-arm": known_issue(issue_number = 60440, skip_x_repos = True),
+    "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
+    "openbsd-arm64": known_issue(issue_number = 67104, skip_x_repos = True),
+    "windows-arm": known_issue(issue_number = 67308, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
