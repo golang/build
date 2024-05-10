@@ -284,8 +284,6 @@ TBD_CAPACITY_HOSTS = [
     "netbsd-386",
     "netbsd-amd64",
     "openbsd-386",
-    "openbsd-arm",
-    "openbsd-arm64",
     "windows-arm",
 ]
 
@@ -302,6 +300,8 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
     "linux-riscv64",
     "netbsd-arm",
     "netbsd-arm64",
+    "openbsd-arm",
+    "openbsd-arm64",
     "openbsd-ppc64",
     "openbsd-riscv64",
     "plan9-386",
@@ -339,6 +339,9 @@ SLOW_HOSTS = {
     "linux-ppc64le_power9": 2,
     "netbsd-arm64": 2,
     "openbsd-amd64": 2,
+    "openbsd-arm": 5,
+    "openbsd-arm64": 5,
+    "openbsd-riscv64": 3,
 }
 
 # host_timeout_scale returns the default test timeout scale for a given host.
