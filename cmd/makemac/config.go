@@ -93,11 +93,39 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 	},
 	internalSwarming: {
 		{
+			Hostname: "darwin-amd64-10_15-security",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-10_15-security-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-10_15-security-key",
+			Image:    "57b56e0a86984934370bf00058b2bd708031d256104167a3bbbc5ff5aaaf6939",
+			MinCount: 1,
+		},
+		{
+			Hostname: "darwin-amd64-11-security",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-11-security-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-11-security-key",
+			Image:    "3279e7f8aef8a1d02ba0897de44e5306f94c8cacec3c8c662a897b810879f655",
+			MinCount: 1,
+		},
+		{
+			Hostname: "darwin-amd64-12-security",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-security-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-12-security-key",
+			Image:    "959a409833522fcba0be62c0c818d68b29d4e1be28d3cbf43dbbc81cb3e3fdeb",
+			MinCount: 1,
+		},
+		{
+			Hostname: "darwin-amd64-13-security",
+			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-security-cert",
+			Key:      "secret:symbolic-datum-552/darwin-amd64-13-security-key",
+			Image:    "30efbbd26e846da8158a7252d47b3adca15b30270668a95620ace3502cdcaa36",
+			MinCount: 1,
+		},
+		{
 			Hostname: "darwin-amd64-14-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-security-key",
 			Image:    "3ec96f33cf17c85bd6d1bbf122c327bc9e5c62620c3ef9ff63e2db4feebdd8da",
-			MinCount: 1, // in the process of being brought up
+			MinCount: 1,
 		},
 	},
 }
