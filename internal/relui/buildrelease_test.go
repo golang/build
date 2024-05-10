@@ -315,6 +315,14 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
+	checkTGZ(t, dlURL, files, "netbsd-arm.tar.gz", task.WebsiteFile{
+		OS:   "netbsd",
+		Arch: "arm" + map[int]string{21: "v6l", 22: "v6l"}[major],
+		Kind: "archive",
+	}, map[string]string{
+		"go/VERSION":                        versionFile,
+		"go/tool/something_orother/compile": "",
+	})
 	checkTGZ(t, dlURL, files, "darwin-amd64.tar.gz", task.WebsiteFile{
 		OS:   "darwin",
 		Arch: "amd64",

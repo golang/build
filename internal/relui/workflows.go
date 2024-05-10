@@ -1626,8 +1626,17 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 		if a.Target != nil {
 			f.OS = a.Target.GOOS
 			f.Arch = a.Target.GOARCH
-			if a.Target.GOARCH == "arm" {
+			if a.Target.GOOS == "linux" && a.Target.GOARCH == "arm" && slices.Contains(a.Target.ExtraEnv, "GOARM=6") {
 				f.Arch = "armv6l"
+			}
+			if task.CompareGoVersions(version, "go1.23") == -1 { // TODO: Delete this after Go 1.24.0 is out and this becomes dead code.
+				// Due to an oversight, we've been inadvertently setting the "arch" field
+				// of published download metadata to "armv6l" for all arm ports, not just
+				// linux/arm port as intended. Keep doing it for the rest of Go 1.22/1.21
+				// minor releases only.
+				if a.Target.GOARCH == "arm" {
+					f.Arch = "armv6l"
+				}
 			}
 		}
 		switch a.Suffix {

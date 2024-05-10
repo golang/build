@@ -8,12 +8,12 @@
 
 package task
 
-// compareGoVersions returns -1, 0, or +1 depending on whether
+// CompareGoVersions returns -1, 0, or +1 depending on whether
 // x < y, x == y, or x > y, interpreted as toolchain versions.
 // The versions x and y must begin with a "go" prefix: "go1.21" not "1.21".
 // Malformed versions compare less than well-formed versions and equal to each other.
 // The language version "go1.21" compares less than the release candidate and eventual releases "go1.21rc1" and "go1.21.0".
-func compareGoVersions(x, y string) int {
+func CompareGoVersions(x, y string) int {
 	vx := parse(x)
 	vy := parse(y)
 
