@@ -10,6 +10,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -29,22 +33,57 @@ type ToDo struct {
 
 // todo prints a report to w on which release notes need to be written.
 // It takes the doc/next directory of the repo and the date of the last release.
-func todo(w io.Writer, fsys fs.FS, prevRelDate time.Time) error {
+func todo(w io.Writer, goroot string, treeOpenDate time.Time) error {
+	// If not provided, determine when the tree was opened by looking
+	// at when the version file was updated.
+	if treeOpenDate.IsZero() {
+		var err error
+		treeOpenDate, err = findTreeOpenDate(goroot)
+		if err != nil {
+			return err
+		}
+	}
+	log.Printf("collecting TODOs from %s since %s", goroot, treeOpenDate.Format(time.DateOnly))
+
 	var todos []ToDo
 	addToDo := func(td ToDo) { todos = append(todos, td) }
 
 	mentionedIssues := map[int]bool{} // issues mentioned in the existing relnotes
 	addIssue := func(num int) { mentionedIssues[num] = true }
 
-	if err := infoFromDocFiles(fsys, addToDo, addIssue); err != nil {
+	nextDir := filepath.Join(goroot, "doc", "next")
+	if err := infoFromDocFiles(os.DirFS(nextDir), addToDo, addIssue); err != nil {
 		return err
 	}
-	if !prevRelDate.IsZero() {
-		if err := todosFromCLs(prevRelDate, mentionedIssues, addToDo); err != nil {
-			return err
-		}
+	if err := todosFromCLs(treeOpenDate, mentionedIssues, addToDo); err != nil {
+		return err
 	}
 	return writeToDos(w, todos)
+}
+
+// findTreeOpenDate returns the time of the most recent commit to the file that
+// determines the version of Go under development.
+func findTreeOpenDate(goroot string) (time.Time, error) {
+	versionFilePath := filepath.FromSlash("src/internal/goversion/goversion.go")
+	if _, err := exec.LookPath("git"); err != nil {
+		return time.Time{}, fmt.Errorf("looking for git binary: %v", err)
+	}
+	// List the most recent commit to versionFilePath, displaying the date and subject.
+	outb, err := exec.Command("git", "-C", goroot, "log", "-n", "1",
+		"--format=%cs %s", "--", versionFilePath).Output()
+	if err != nil {
+		return time.Time{}, err
+	}
+	out := string(outb)
+	// The commit messages follow a standard form. Check for the right words to avoid mistakenly
+	// choosing the wrong commit.
+	const updateString = "update version to"
+	if !strings.Contains(strings.ToLower(out), updateString) {
+		return time.Time{}, fmt.Errorf("cannot determine tree-open date: most recent commit for %s does not contain %q",
+			versionFilePath, updateString)
+	}
+	dateString, _, _ := strings.Cut(out, " ")
+	return time.Parse(time.DateOnly, dateString)
 }
 
 // Collect TODOs and issue numbers from the markdown files in the main repo.

@@ -5,13 +5,12 @@
 package main
 
 import (
-	"bytes"
+	"slices"
 	"testing"
 	"testing/fstest"
-	"time"
 )
 
-func TestToDo(t *testing.T) {
+func TestInfoFromDocFiles(t *testing.T) {
 	files := map[string]string{
 		"a.md": "TODO: write something",
 		"b.md": "nothing to do",
@@ -22,14 +21,20 @@ func TestToDo(t *testing.T) {
 	for name, contents := range files {
 		dir[name] = &fstest.MapFile{Data: []byte(contents)}
 	}
-	var buf bytes.Buffer
-	if err := todo(&buf, dir, time.Time{}); err != nil {
+	var got []ToDo
+	addToDo := func(td ToDo) { got = append(got, td) }
+	addIssue := func(int) {}
+	if err := infoFromDocFiles(dir, addToDo, addIssue); err != nil {
 		t.Fatal(err)
 	}
-	got := buf.String()
-	want := `TODO: write something (from a.md:1)
-`
-	if got != want {
-		t.Errorf("\ngot:\n%s\nwant:\n%s", got, want)
+	want := []ToDo{
+		{
+			message:    "TODO: write something",
+			provenance: "a.md:1",
+		},
+	}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("\ngot:\n%+v\nwant:\n%+v", got, want)
 	}
 }

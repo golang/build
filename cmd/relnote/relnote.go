@@ -19,8 +19,9 @@ import (
 )
 
 var (
-	verbose = flag.Bool("v", false, "print verbose logging")
-	goroot  = flag.String("goroot", runtime.GOROOT(), "root of Go repo containing docs")
+	verbose    = flag.Bool("v", false, "print verbose logging")
+	goroot     = flag.String("goroot", runtime.GOROOT(), "root of Go repo containing docs")
+	todosSince = flag.String("since", "", "earliest to look for TODOs, in YYYY-MM-DD format")
 )
 
 func usage() {
@@ -28,8 +29,8 @@ func usage() {
 	fmt.Fprintf(out, "usage:\n")
 	fmt.Fprintf(out, "   relnote generate\n")
 	fmt.Fprintf(out, "      generate release notes from doc/next\n")
-	fmt.Fprintf(out, "   relnote todo PREVIOUS_RELEASE_DATE\n")
-	fmt.Fprintf(out, "      report which release notes need to be written; use YYYY-MM-DD format for date of last release\n")
+	fmt.Fprintf(out, "   relnote todo\n")
+	fmt.Fprintf(out, "      report which release notes need to be written\n")
 	flag.PrintDefaults()
 }
 
@@ -54,18 +55,16 @@ func main() {
 	if cmd := flag.Arg(0); cmd != "" {
 		switch cmd {
 		case "generate":
-			err = generate(version, flag.Arg(1))
+			err = generate(version, *goroot)
 		case "todo":
-			prevDate := flag.Arg(1)
-			if prevDate == "" {
-				log.Fatal("need previous release date")
+			var sinceDate time.Time
+			if *todosSince != "" {
+				sinceDate, err = time.Parse(time.DateOnly, *todosSince)
+				if err != nil {
+					log.Fatalf("-since flag: %v", err)
+				}
 			}
-			prevDateTime, err := time.Parse("2006-01-02", prevDate)
-			if err != nil {
-				log.Fatalf("previous release date: %s", err)
-			}
-			nextDir := filepath.Join(*goroot, "doc", "next")
-			err = todo(os.Stdout, os.DirFS(nextDir), prevDateTime)
+			err = todo(os.Stdout, *goroot, sinceDate)
 		default:
 			err = fmt.Errorf("unknown command %q", cmd)
 		}
