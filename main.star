@@ -2024,6 +2024,8 @@ def _define_go_internal_ci():
             for builder_type in BUILDER_TYPES:
                 exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project_name, go_branch_short, builder_type, SECURITY_KNOWN_ISSUE_BUILDER_TYPES)
                 host_type = host_of(builder_type)
+                if host_type in DEFAULT_HOST_SUFFIX:
+                    host_type += "_" + DEFAULT_HOST_SUFFIX[host_type]
 
                 # The internal host only has access to some machines. As of
                 # writing, that means all the GCE-hosted (high-capacity) builders
@@ -2034,6 +2036,10 @@ def _define_go_internal_ci():
                     # swarming instance. This requires additional resources and
                     # work to set up, hence each such host needs to opt-in here.
                     "linux-arm",
+                    "darwin-amd64_10.15",
+                    "darwin-amd64_11",
+                    "darwin-amd64_12",
+                    "darwin-amd64_13",
                     "darwin-amd64_14",
                 ]:
                     # The list above is expected to contain only Google low-capacity hosts.
