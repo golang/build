@@ -1341,6 +1341,10 @@ def define_builder(env, project, go_branch_short, builder_type):
     if not is_fully_supported(base_dims) and (base_props["bootstrap_version"].startswith("1.20") or base_props["bootstrap_version"].startswith("1.1")):
         base_props["bootstrap_version"] = "1.21.0"
 
+    # Handle bootstrap for new ports.
+    if os == "openbsd" and arch == "ppc64":  # See go.dev/doc/go1.22#openbsd.
+        base_props["bootstrap_version"] = "1.22.0"
+
     if os == "darwin":
         # See available versions with: cipd instances -limit 0 infra_internal/ios/xcode/mac | less
         xcode_versions = {
