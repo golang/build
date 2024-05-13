@@ -341,6 +341,7 @@ SLOW_HOSTS = {
     "openbsd-amd64": 2,
     "openbsd-arm": 5,
     "openbsd-arm64": 5,
+    "openbsd-ppc64": 2,
     "openbsd-riscv64": 3,
 }
 
@@ -1704,10 +1705,13 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
 
     # Filter out old OS versions from new branches.
     if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22", "go1.21"]:
-        # Go 1.22 is last to support macOS 10.15.
+        # Go 1.22 is last to support macOS 10.15. See go.dev/doc/go1.22#darwin.
         return False, False, False, []
 
     # Filter out new ports on old release branches.
+    if os == "openbsd" and arch == "ppc64" and go_branch_short in ["go1.21"]:
+        # The openbsd/ppc64 port is new to Go 1.22. See go.dev/doc/go1.22#openbsd.
+        return False, False, False, []
     if os == "openbsd" and arch == "riscv64" and go_branch_short in ["go1.22", "go1.21"]:
         # The openbsd/riscv64 port is new to Go 1.23.
         return False, False, False, []
