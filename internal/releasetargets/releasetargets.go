@@ -8,6 +8,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -140,8 +141,11 @@ func sortedReleases() []int {
 	for rel := range allReleases {
 		releases = append(releases, rel)
 	}
+	for rel := range allPorts {
+		releases = append(releases, rel)
+	}
 	sort.Ints(releases)
-	return releases
+	return slices.Compact(releases)
 }
 
 var unbuildableOSs = map[string]bool{

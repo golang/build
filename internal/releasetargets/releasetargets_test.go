@@ -18,9 +18,13 @@ import (
 var update = flag.Bool("update", false, "controls whether to update releases.txt")
 
 func TestReleaseTargets(t *testing.T) {
-	out := &bytes.Buffer{}
-	for _, release := range sortedReleases() {
-		printRelease(out, release, TargetsForGo1Point(release))
+	releases := sortedReleases()
+	if len(releases) < 3 {
+		t.Errorf("sortedReleases returned %v (len %d); allReleases map and allports/go1.n.txt files are expected to cover a minimum of 3 releases (prev + curr + tip)", releases, len(releases))
+	}
+	var out bytes.Buffer
+	for _, rel := range releases {
+		printRelease(&out, rel, TargetsForGo1Point(rel))
 	}
 	if *update {
 		if err := os.WriteFile("releases.txt", out.Bytes(), 0); err != nil {
