@@ -2918,6 +2918,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	"linux-ppc64le-power10osu": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le_power10.
 	"linux-ppc64-sid-buildlet": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64_power8.
 	"linux-ppc64-sid-power10":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64_power10.
+	"linux-loong64-3a5000":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-loong64.
 
 	"netbsd-arm64-bsiegert": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-netbsd-arm64.
 
