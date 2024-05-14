@@ -371,7 +371,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-linux-loong64-3a5000": {
 		Notes:       "Loongson 3A5000 Box hosted by Loongson; loong64 is the short name of LoongArch 64 bit version",
-		Owners:      []*gophers.Person{gh("XiaodongLoong"), gh("abner-chenc")},
+		Owners:      []*gophers.Person{gh("abner-chenc")},
 		IsReverse:   true,
 		ExpectNum:   5,
 		GoBootstrap: "none",
