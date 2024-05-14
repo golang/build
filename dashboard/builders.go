@@ -44,6 +44,8 @@ var slowBotAliases = map[string]string{
 	"linux-ppc64le":         "",
 	"linux-ppc64le-power9":  "",
 	"linux-ppc64le-power10": "",
+	"loong64":               "",
+	"linux-loong64":         "",
 
 	"386":             "linux-386",
 	"aix":             "aix-ppc64",
@@ -72,7 +74,6 @@ var slowBotAliases = map[string]string{
 	"ios":             "ios-arm64-corellium",
 	"linux":           "linux-amd64",
 	"linux-arm":       "linux-arm-aws",
-	"linux-loong64":   "linux-loong64-3a5000",
 	"linux-mips":      "linux-mips-rtrk",
 	"linux-mips64":    "linux-mips64-rtrk",
 	"linux-mips64le":  "linux-mips64le-rtrk",
@@ -80,7 +81,6 @@ var slowBotAliases = map[string]string{
 	"linux-riscv64":   "linux-riscv64-unmatched",
 	"linux-s390x":     "linux-s390x-ibm",
 	"longtest":        "linux-amd64-longtest",
-	"loong64":         "linux-loong64-3a5000",
 	"mips":            "linux-mips-rtrk",
 	"mips64":          "linux-mips64-rtrk",
 	"mips64le":        "linux-mips64le-rtrk",
@@ -2937,7 +2937,19 @@ var BuildersPortedToLUCI = map[string]bool{
 // stopPortedBuilder reports whether the named ported builder should be stopped,
 // instead of just made invisible in the web UI.
 func stopPortedBuilder(builderName string) (stop bool) {
-	return strings.Contains(builderName, "-wasm-") || strings.Contains(builderName, "linux-ppc64")
+	nameKeyList := []string{
+		"linux-loong64",
+		"linux-ppc64",
+		"-wasm-",
+	}
+
+	for _, key := range nameKeyList {
+		if strings.Contains(builderName, key) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // addBuilder adds c to the Builders map after doing some checks.

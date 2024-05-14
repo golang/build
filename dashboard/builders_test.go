@@ -518,11 +518,12 @@ func TestBuilderConfig(t *testing.T) {
 
 		{b("linux-amd64", "net"), both},
 
-		{b("linux-loong64-3a5000", "go"), onlyPost},
-		{b("linux-loong64-3a5000@go1.99", "go"), onlyPost},
-		{b("linux-loong64-3a5000", "sys"), onlyPost},
-		{b("linux-loong64-3a5000@go1.99", "sys"), onlyPost},
-		{b("linux-loong64-3a5000", "net"), onlyPost},
+		// Builders for linux/loong64 are fully ported to LUCI and stopped in the coordinator.
+		{b("linux-loong64-3a5000", "go"), none},
+		{b("linux-loong64-3a5000@go1.99", "go"), none},
+		{b("linux-loong64-3a5000", "sys"), none},
+		{b("linux-loong64-3a5000@go1.99", "sys"), none},
+		{b("linux-loong64-3a5000", "net"), none},
 
 		// OpenBSD 7.2.
 		{b("openbsd-amd64-72", "go"), both},
