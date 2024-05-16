@@ -448,6 +448,7 @@ var tasks = []struct {
 }{
 	// Tasks that are specific to the golang/go repo.
 	{"kicktrain", (*gopherbot).getOffKickTrain},
+	{"label access issues", (*gopherbot).labelAccessIssues},
 	{"label build issues", (*gopherbot).labelBuildIssues},
 	{"label compiler/runtime issues", (*gopherbot).labelCompilerRuntimeIssues},
 	{"label mobile issues", (*gopherbot).labelMobileIssues},
@@ -1077,6 +1078,15 @@ func (b *gopherbot) setVSCodeGoMilestones(ctx context.Context) error {
 			return nil
 		}
 		return b.setMilestone(ctx, vscode.ID(), gi, vscodeUntriaged)
+	})
+}
+
+func (b *gopherbot) labelAccessIssues(ctx context.Context) error {
+	return b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
+		if !strings.HasPrefix(gi.Title, "access: ") || gi.HasLabel("Access") || gi.HasEvent("unlabeled") {
+			return nil
+		}
+		return b.addLabel(ctx, b.gorepo.ID(), gi, "Access")
 	})
 }
 
