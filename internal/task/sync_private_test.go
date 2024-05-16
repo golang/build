@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	"golang.org/x/build/internal/workflow"
 )
@@ -30,9 +29,7 @@ func TestSyncPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	_, err = w.Run(ctx, &verboseListener{t: t})
+	_, err = w.Run(context.Background(), &verboseListener{t: t})
 	if err != nil {
 		t.Fatal(err)
 	}

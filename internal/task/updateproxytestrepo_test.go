@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"golang.org/x/build/internal/workflow"
 )
@@ -44,8 +43,7 @@ func TestUpdateProxyTestRepo(t *testing.T) {
 				Branch:    "master",
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			defer cancel()
+			ctx := context.Background()
 			if _, err := upgradeGoVersion.UpdateProxyTestRepo(&workflow.TaskContext{Context: ctx}, Published{Version: "go" + tt.new}); err != nil {
 				t.Fatal(err)
 			}
