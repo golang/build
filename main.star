@@ -332,17 +332,19 @@ HOST_NOTIFIERS = {
 # factor. It also affects the decision of whether to include a builder in
 # presubmit testing by default (slow high-capacity hosts aren't included).
 SLOW_HOSTS = {
+    "freebsd-riscv64": 4,
     "linux-ppc64_power10": 2,
     "linux-ppc64_power8": 2,
     "linux-ppc64le_power10": 2,
     "linux-ppc64le_power8": 2,
     "linux-ppc64le_power9": 2,
+    "linux-riscv64": 2,
     "netbsd-arm64": 2,
     "openbsd-amd64": 2,
     "openbsd-arm": 5,
     "openbsd-arm64": 5,
     "openbsd-ppc64": 2,
-    "openbsd-riscv64": 3,
+    "openbsd-riscv64": 4,
 }
 
 # host_timeout_scale returns the default test timeout scale for a given host.
@@ -478,7 +480,6 @@ def known_issue(issue_number, skip_x_repos = False):
     )
 
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "freebsd-riscv64": known_issue(issue_number = 63482),
     "netbsd-arm": known_issue(issue_number = 63698),
     "openbsd-ppc64": known_issue(issue_number = 63480),
     "openbsd-riscv64": known_issue(issue_number = 64176),
