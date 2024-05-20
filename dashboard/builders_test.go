@@ -102,42 +102,6 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-72",
 				"windows-386-2016",
 				"windows-amd64-2016",
-
-				"misc-compile-windows-arm",
-				"misc-compile-windows-arm64",
-				"misc-compile-darwin-amd64",
-				"misc-compile-darwin-arm64",
-				"misc-compile-linux-mips",
-				"misc-compile-linux-mips64",
-				"misc-compile-linux-mipsle",
-				"misc-compile-linux-mips64le",
-				"misc-compile-linux-ppc64",
-				"misc-compile-linux-ppc64le",
-				"misc-compile-aix-ppc64",
-				"misc-compile-freebsd-386",
-				"misc-compile-freebsd-arm",
-				"misc-compile-freebsd-arm64",
-				"misc-compile-freebsd-riscv64",
-				"misc-compile-netbsd-386",
-				"misc-compile-netbsd-amd64",
-				"misc-compile-netbsd-arm",
-				"misc-compile-netbsd-arm64",
-				"misc-compile-openbsd-386",
-				"misc-compile-openbsd-arm",
-				"misc-compile-openbsd-arm64",
-				"misc-compile-openbsd-ppc64-go1.22",
-				"misc-compile-openbsd-riscv64-go1.23",
-				"misc-compile-plan9-386",
-				"misc-compile-plan9-amd64",
-				"misc-compile-plan9-arm",
-				"misc-compile-solaris-amd64",
-				"misc-compile-illumos-amd64",
-				"misc-compile-dragonfly-amd64",
-				"misc-compile-linux-loong64",
-				"misc-compile-linux-riscv64",
-				"misc-compile-linux-s390x",
-				"misc-compile-linux-arm",
-				"misc-compile-linux-arm-arm5",
 			},
 		},
 		{
@@ -153,41 +117,6 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-72",
 				"windows-386-2016",
 				"windows-amd64-2016",
-
-				"misc-compile-windows-arm",
-				"misc-compile-windows-arm64",
-				"misc-compile-darwin-amd64",
-				"misc-compile-darwin-arm64",
-				"misc-compile-linux-mips",
-				"misc-compile-linux-mips64",
-				"misc-compile-linux-mipsle",
-				"misc-compile-linux-mips64le",
-				"misc-compile-linux-ppc64",
-				"misc-compile-linux-ppc64le",
-				"misc-compile-aix-ppc64",
-				"misc-compile-freebsd-386",
-				"misc-compile-freebsd-arm",
-				"misc-compile-freebsd-arm64",
-				"misc-compile-freebsd-riscv64",
-				"misc-compile-netbsd-386",
-				"misc-compile-netbsd-amd64",
-				"misc-compile-netbsd-arm",
-				"misc-compile-netbsd-arm64",
-				"misc-compile-openbsd-386",
-				"misc-compile-openbsd-arm",
-				"misc-compile-openbsd-arm64",
-				"misc-compile-openbsd-ppc64-go1.22", // New to Go 1.22.
-				"misc-compile-plan9-386",
-				"misc-compile-plan9-amd64",
-				"misc-compile-plan9-arm",
-				"misc-compile-solaris-amd64",
-				"misc-compile-illumos-amd64",
-				"misc-compile-dragonfly-amd64",
-				"misc-compile-linux-loong64",
-				"misc-compile-linux-riscv64",
-				"misc-compile-linux-s390x",
-				"misc-compile-linux-arm",
-				"misc-compile-linux-arm-arm5",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
@@ -209,40 +138,6 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-72",
 				"windows-386-2016",
 				"windows-amd64-2016",
-
-				"misc-compile-windows-arm",
-				"misc-compile-windows-arm64",
-				"misc-compile-darwin-amd64",
-				"misc-compile-darwin-arm64",
-				"misc-compile-linux-mips",
-				"misc-compile-linux-mips64",
-				"misc-compile-linux-mipsle",
-				"misc-compile-linux-mips64le",
-				"misc-compile-linux-ppc64",
-				"misc-compile-linux-ppc64le",
-				"misc-compile-aix-ppc64",
-				"misc-compile-freebsd-386",
-				"misc-compile-freebsd-arm",
-				"misc-compile-freebsd-arm64",
-				"misc-compile-freebsd-riscv64",
-				"misc-compile-netbsd-386",
-				"misc-compile-netbsd-amd64",
-				"misc-compile-netbsd-arm",
-				"misc-compile-netbsd-arm64",
-				"misc-compile-openbsd-386",
-				"misc-compile-openbsd-arm",
-				"misc-compile-openbsd-arm64",
-				"misc-compile-plan9-386",
-				"misc-compile-plan9-amd64",
-				"misc-compile-plan9-arm",
-				"misc-compile-solaris-amd64",
-				"misc-compile-illumos-amd64",
-				"misc-compile-dragonfly-amd64",
-				"misc-compile-linux-loong64",
-				"misc-compile-linux-riscv64",
-				"misc-compile-linux-s390x",
-				"misc-compile-linux-arm",
-				"misc-compile-linux-arm-arm5",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
@@ -278,42 +173,6 @@ func TestTrybots(t *testing.T) {
 				"openbsd-amd64-72",
 				"windows-386-2016",
 				"windows-amd64-2016",
-
-				"misc-compile-windows-arm",
-				"misc-compile-windows-arm64",
-				"misc-compile-darwin-amd64",
-				"misc-compile-darwin-arm64",
-				"misc-compile-linux-mips",
-				"misc-compile-linux-mips64",
-				"misc-compile-linux-mipsle",
-				"misc-compile-linux-mips64le",
-				"misc-compile-linux-ppc64",
-				"misc-compile-linux-ppc64le",
-				"misc-compile-aix-ppc64",
-				"misc-compile-freebsd-386",
-				"misc-compile-freebsd-arm",
-				"misc-compile-freebsd-arm64",
-				"misc-compile-freebsd-riscv64",
-				"misc-compile-netbsd-386",
-				"misc-compile-netbsd-amd64",
-				"misc-compile-netbsd-arm",
-				"misc-compile-netbsd-arm64",
-				"misc-compile-openbsd-386",
-				"misc-compile-openbsd-arm",
-				"misc-compile-openbsd-arm64",
-				"misc-compile-openbsd-ppc64-go1.22",
-				"misc-compile-openbsd-riscv64-go1.23",
-				"misc-compile-plan9-386",
-				"misc-compile-plan9-amd64",
-				"misc-compile-plan9-arm",
-				"misc-compile-solaris-amd64",
-				"misc-compile-illumos-amd64",
-				"misc-compile-dragonfly-amd64",
-				"misc-compile-linux-loong64",
-				"misc-compile-linux-riscv64",
-				"misc-compile-linux-s390x",
-				"misc-compile-linux-arm",
-				"misc-compile-linux-arm-arm5",
 			},
 		},
 		{
@@ -980,6 +839,11 @@ func TestCrossCompileOnlyBuilders(t *testing.T) {
 //
 // The special pseudo-port 'linux-arm-arm5' is tested in TestMiscCompileLinuxGOARM5.
 func TestTryBotsCompileAllPorts(t *testing.T) {
+	if migration.StopLegacyMiscCompileTryBots {
+		t.Log("nothing to test since legacy misc-compile trybots are stopped")
+		return
+	}
+
 	ports, err := listPorts()
 	if err != nil {
 		t.Fatal("listPorts:", err)
@@ -1070,6 +934,11 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 // the TestTryBotsCompileAllPorts wouldn't report if the misc-compile
 // TryBot that covers is accidentally removed. Check it explicitly.
 func TestMiscCompileLinuxGOARM5(t *testing.T) {
+	if migration.StopLegacyMiscCompileTryBots {
+		t.Log("nothing to test since legacy misc-compile trybots are stopped")
+		return
+	}
+
 	for _, b := range Builders {
 		if !strings.HasPrefix(b.Name, "misc-compile-") {
 			continue

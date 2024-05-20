@@ -9,7 +9,7 @@ package migration
 import "strings"
 
 const (
-	StopLegacyMiscCompileTryBots = false
+	StopLegacyMiscCompileTryBots = true
 )
 
 // BuildersPortedToLUCI lists coordinator builders that have been ported

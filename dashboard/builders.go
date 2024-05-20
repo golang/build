@@ -1614,6 +1614,10 @@ func init() {
 	// runs buildall.bash on the specified target ("$goos-$goarch").
 	// If min is non-zero, it specifies the minimum Go 1.x version.
 	addMiscCompileGo1 := func(min int, goos, goarch, extraSuffix string, extraEnv ...string) {
+		if migration.StopLegacyMiscCompileTryBots {
+			return
+		}
+
 		var v types.MajorMinor
 		var alsoNote string
 		if min != 0 {
@@ -2904,29 +2908,6 @@ func addBuilder(c BuildConfig) {
 	}
 
 	Builders[c.Name] = &c
-}
-
-// tryNewMiscCompile is an intermediate step towards adding a real addMiscCompile TryBot.
-//
-// It adds a post-submit-only builder with KnownIssue, GoDeps set to the provided values,
-// and runs on a limited set of branches to get test results without potential disruption
-// for contributors. It can be modified as needed when onboarding a misc-compile builder.
-func tryNewMiscCompile(goos, goarch, extraSuffix string, knownIssue int, goDeps []string, extraEnv ...string) {
-	if knownIssue == 0 {
-		panic("tryNewMiscCompile: knownIssue parameter must be non-zero")
-	}
-	platform := goos + "-" + goarch + extraSuffix
-	addBuilder(BuildConfig{
-		Name:         "misc-compile-" + platform,
-		HostType:     "host-linux-amd64-bullseye",
-		buildsRepo:   miscCompileBuildSet(goos, goarch),
-		KnownIssues:  []int{knownIssue},
-		GoDeps:       goDeps,
-		env:          append(extraEnv, "GOOS="+goos, "GOARCH="+goarch, "GO_DISABLE_OUTBOUND_NETWORK=1"),
-		CompileOnly:  true,
-		SkipSnapshot: true,
-		Notes:        fmt.Sprintf("Tries make.bash (or compile-only go test) for "+platform+" See go.dev/issue/%d.", knownIssue),
-	})
 }
 
 // fasterTrybots is a distTestAdjust policy function.
