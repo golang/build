@@ -5,20 +5,15 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	spb "go.chromium.org/luci/swarming/proto/api_v2"
 	"golang.org/x/build/internal/macservice"
-	"golang.org/x/build/internal/secret"
 )
-
-func init() {
-	secret.InitFlagSupport(context.Background())
-}
 
 // recordMacServiceClient is a macserviceClient that records mutating requests.
 type recordMacServiceClient struct {
@@ -353,10 +348,11 @@ func TestAddNewLeases(t *testing.T) {
 	// * On "swarming2":
 	//   * "image-a" wants 1 instances.
 	//
-	// addNewLeases should create:
+	// addNewLeases should add 4 leases that create:
 	// * 1 "image-a" instance on "swarming1"
 	// * 1 "image-a" instance on "swarming2"
 	// * 2 "image-b" instances on "swarming1"
+	// while resolving a total of 6 secrets (2 per unique image config).
 	config := map[*swarmingConfig][]imageConfig{
 		swarming1: {
 			{
@@ -413,20 +409,39 @@ func TestAddNewLeases(t *testing.T) {
 		},
 	}
 
-	var mc recordMacServiceClient
-	addNewLeases(&mc, config, leases)
+	var secretsResolved int
+	resolveSecret := func(value string) (string, error) {
+		want := []string{"dummy-cert", "dummy-key"}
+		if !slices.Contains(want, value) {
+			return "", fmt.Errorf("resolveSecret called with unexpected value %q, want one of %q", value, want)
+		}
+		secretsResolved++
+		return value + "-pretend-secret", nil
+	}
 
-	leaseASwarm1, err := makeLeaseRequest(swarming1, &config[swarming1][0])
+	var mc recordMacServiceClient
+	addNewLeases(&mc, config, leases, resolveSecret)
+
+	if got, want := secretsResolved, 6; got != want {
+		t.Errorf("addNewLeases resolved %d secrets, want %d", got, want)
+	}
+	secretsResolved = 0
+
+	leaseASwarm1, err := makeLeaseRequest(swarming1, &config[swarming1][0], resolveSecret)
 	if err != nil {
 		t.Fatalf("makeLeaseRequest(a, swarm1) got err %v want nil", err)
 	}
-	leaseBSwarm1, err := makeLeaseRequest(swarming1, &config[swarming1][1])
+	leaseBSwarm1, err := makeLeaseRequest(swarming1, &config[swarming1][1], resolveSecret)
 	if err != nil {
 		t.Fatalf("makeLeaseRequest(b, swarm1) got err %v want nil", err)
 	}
-	leaseASwarm2, err := makeLeaseRequest(swarming2, &config[swarming2][0])
+	leaseASwarm2, err := makeLeaseRequest(swarming2, &config[swarming2][0], resolveSecret)
 	if err != nil {
 		t.Fatalf("makeLeaseRequest(a, swarm2) got err %v want nil", err)
+	}
+
+	if got, want := secretsResolved, 6; got != want {
+		t.Errorf("3 makeLeaseRequest calls resolved %d secrets, want %d", got, want)
 	}
 
 	got := mc.lease

@@ -65,11 +65,13 @@ const (
 )
 
 func main() {
-	secret.InitFlagSupport(context.Background())
+	if err := secret.InitFlagSupport(context.Background()); err != nil {
+		log.Fatalln(err)
+	}
 	flag.Parse()
 
 	if err := run(); err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 }
 
@@ -140,7 +142,7 @@ func runOnce(ctx context.Context, config map[*swarmingConfig][]imageConfig, mc m
 	handleDeadBots(mc, bots, leases)
 	renewLeases(mc, leases)
 	handleObsoleteLeases(mc, config, leases)
-	addNewLeases(mc, config, leases)
+	addNewLeases(mc, config, leases, secret.DefaultResolver.ResolveSecret)
 }
 
 // leaseSwarmingHost returns the swarming host a managed lease belongs to.
@@ -488,12 +490,12 @@ func handleObsoleteLeases(mc macServiceClient, config map[*swarmingConfig][]imag
 	}
 }
 
-func makeLeaseRequest(sc *swarmingConfig, ic *imageConfig) (macservice.LeaseRequest, error) {
-	cert, err := secret.DefaultResolver.ResolveSecret(ic.Cert)
+func makeLeaseRequest(sc *swarmingConfig, ic *imageConfig, resolveSecret func(string) (string, error)) (macservice.LeaseRequest, error) {
+	cert, err := resolveSecret(ic.Cert)
 	if err != nil {
 		return macservice.LeaseRequest{}, fmt.Errorf("error resolving certificate secret: %w", err)
 	}
-	key, err := secret.DefaultResolver.ResolveSecret(ic.Key)
+	key, err := resolveSecret(ic.Key)
 	if err != nil {
 		return macservice.LeaseRequest{}, fmt.Errorf("error resolving key secret: %w", err)
 	}
@@ -537,7 +539,10 @@ func makeLeaseRequest(sc *swarmingConfig, ic *imageConfig) (macservice.LeaseRequ
 // addNewLeases adds new MacService leases as needed to ensure that there are
 // at least Count makemac-managed leases of each configured image type.
 // Removing leases if they exceed Count is done by handleObsoleteLeases.
-func addNewLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig, leases map[string]macservice.Instance) {
+func addNewLeases(
+	mc macServiceClient, config map[*swarmingConfig][]imageConfig, leases map[string]macservice.Instance,
+	resolveSecret func(string) (string, error),
+) {
 	log.Printf("Checking if new leases are required...")
 
 	// Count images per swarming host. Each host gets a different
@@ -591,7 +596,7 @@ func addNewLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig,
 			}
 
 			log.Printf("Host %s: image %s: creating %d new leases", sc.Host, config.Image, need)
-			req, err := makeLeaseRequest(sc, config)
+			req, err := makeLeaseRequest(sc, config, resolveSecret)
 			if err != nil {
 				log.Printf("Host %s: image %s: creating lease request: error %v", sc.Host, config.Image, err)
 				continue
