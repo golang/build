@@ -1645,7 +1645,7 @@ def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit
         bucket = env.bucket,
         dimensions = perf_dims,
         properties = perf_props,
-        triggering_policy = triggering_policy(env, builder_type, concurrent_builds = 1),
+        triggering_policy = triggering_policy(env, builder_type, concurrent_builds = 3),
         service_account = env.worker_sa,
         execution_timeout = 12 * time.hour,
     )
