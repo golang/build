@@ -61,6 +61,7 @@ RUN apt-get update && apt-get install -y \
 	bzr \
 	ca-certificates \
 	curl \
+	ed \
 	fonts-droid-fallback \
 	fossil \
 	gcc \
@@ -80,6 +81,7 @@ RUN apt-get update && apt-get install -y \
 	lsof \
 	make \
 	mercurial \
+	nano \
 	netbase \
 	openssh-server \
 	procps \
