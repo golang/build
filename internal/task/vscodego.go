@@ -5,6 +5,7 @@
 package task
 
 import (
+	"archive/zip"
 	"errors"
 	"fmt"
 	"io"
@@ -124,6 +125,9 @@ func (t *VSCodeGoReleaseTask) buildVSCGO(ctx *wf.TaskContext, version string) ([
 		})
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	var eg errgroup.Group
 	for i := range artifacts {
@@ -136,12 +140,23 @@ func (t *VSCodeGoReleaseTask) buildVSCGO(ctx *wf.TaskContext, version string) ([
 				return err
 			}
 			defer in.Close()
-			name, out, err := t.ScratchFS.OpenWrite(ctx, platform+"-"+filepath.Base(path))
+			name, out, err := t.ScratchFS.OpenWrite(ctx, platform+"-vscgo.zip")
 			if err != nil {
+				out.Close()
 				return err
 			}
-			if _, err := io.Copy(out, in); err != nil {
+			// write as zip file.
+			zw := zip.NewWriter(out)
+			f, err := zw.Create(filepath.Base(path))
+			if err != nil {
 				out.Close()
+				return err
+			}
+			if _, err := io.Copy(f, in); err != nil {
+				out.Close()
+				return err
+			}
+			if err := zw.Close(); err != nil {
 				return err
 			}
 			if err := out.Close(); err != nil {

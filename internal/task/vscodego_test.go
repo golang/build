@@ -5,10 +5,13 @@
 package task
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
-	"os"
+	"fmt"
+	"io"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -126,19 +129,43 @@ esac
 					Platform: p.Platform,
 				})
 			}
-			sortSlice := cmpopts.SortSlices(func(x, y goBuildArtifact) bool { return x.Platform < y.Platform })
+			sortSlice := cmpopts.SortSlices(
+				func(x, y goBuildArtifact) bool { return x.Platform < y.Platform },
+			)
 			ignoreFilename := cmpopts.IgnoreFields(goBuildArtifact{}, "Filename")
 			if diff := cmp.Diff(buildArtifacts, want, sortSlice, ignoreFilename); diff != "" {
 				t.Fatal(diff)
 			}
 			// HACK: Reading directly from the scratch filesystem.
-			// XXX: is there a better way??
 			envMap := make(map[string][]string)
 			for _, p := range vscgoPlatforms {
 				envMap[p.Platform] = p.Env
 			}
+			re := regexp.MustCompile(`-([a-z0-9]+-[a-z0-9]+)-vscgo\.zip$`)
 			for _, a := range buildArtifacts {
-				data, err := os.ReadFile(filepath.Join(scratchDir, w.ID.String(), a.Filename))
+				m := re.FindStringSubmatch(a.Filename)
+				if m == nil {
+					t.Errorf(
+						"artifact file with unexpected file name: %q, want <platform>-<arch>-vscgo.zip",
+						a.Filename,
+					)
+					continue
+				}
+				platform := m[1]
+				if platform != a.Platform {
+					t.Errorf(
+						"artifact file with unexpected platform: %q, want %q",
+						a.Platform,
+						platform,
+					)
+					continue
+				}
+				// The output files are zip files.
+				executable := "vscgo"
+				if strings.HasPrefix(platform, "win32") {
+					executable = "vscgo.exe"
+				}
+				data, err := extractFileZip(t, filepath.Join(scratchDir, w.ID.String(), a.Filename), executable)
 				if err != nil {
 					t.Errorf("%v: %v", a.Platform, err)
 				}
@@ -146,8 +173,30 @@ esac
 				if !bytes.Contains(data, []byte(strings.Join(envs, " "))) {
 					t.Errorf("%v: unexpected contents: %s", a.Platform, data)
 				}
-
 			}
 		})
 	}
+}
+
+func extractFileZip(t *testing.T, zipfile, fileToExtract string) ([]byte, error) {
+	r, err := zip.OpenReader(zipfile)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	// Iterate through the files in the archive,
+	// return the contents of the requested file.
+	for _, f := range r.File {
+		if f.Name != fileToExtract {
+			t.Errorf("unexpected file in zip: %q", f.Name)
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, err
+		}
+		return io.ReadAll(rc)
+	}
+	return nil, fmt.Errorf("file %q not found", fileToExtract)
 }
