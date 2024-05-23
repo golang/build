@@ -15,15 +15,16 @@ function BandChart(data, {
 	repository,
 	minViewDeltaPercent,
 	higherIsBetter,
+	history,
 } = {}) {
 	// Compute values.
-	const C = d3.map(data, d => d.CommitHash);
-	const X = d3.map(data, d => d.CommitDate);
+	const CT = d3.map(data, d => d.CommitDate);
+	const X = d3.map(data, d => d.CommitHash);
 	const Y = d3.map(data, d => d.Center);
 	const Y1 = d3.map(data, d => d.Low);
 	const Y2 = d3.map(data, d => d.High);
 	const I = d3.range(X.length);
-	if (defined === undefined) defined = (d, i) => !isNaN(X[i]) && !isNaN(Y1[i]) && !isNaN(Y2[i]);
+	if (defined === undefined) defined = (d, i) => !isNaN(Y1[i]) && !isNaN(Y2[i]);
 	const D = d3.map(data, defined);
 
 	const xRange = [marginLeft, width - marginRight]; // [left, right]
@@ -74,9 +75,9 @@ function BandChart(data, {
 	}
 
 	// Construct scales and axes.
-	const xOrdTicks = d3.range(xRange[0], xRange[1], (xRange[1]-xRange[0])/(X.length-1));
+	const xOrdTicks = d3.range(xRange[0], xRange[1], (xRange[1]-xRange[0])/(history.length-1));
 	xOrdTicks.push(xRange[1]);
-	const xScale = d3.scaleOrdinal(X, xOrdTicks);
+	const xScale = d3.scaleOrdinal(d3.map(history, d => d.Hash), xOrdTicks);
 	const yScale = d3.scaleLinear(yDomain, yRange);
 	const yAxis = d3.axisLeft(yScale).ticks(height / 40, "+%");
 
@@ -196,8 +197,8 @@ function BandChart(data, {
 	// Add a harder gridline for Y=0 to make it stand out.
 
 	const line0 = d3.line()
-		.defined(i => D[i])
-		.x(i => xScale(X[i]))
+		.defined(i => xRange[i])
+		.x(i => xRange[i])
 		.y(i => yScale(0))
 
 	svg.append("path")
@@ -250,21 +251,24 @@ function BandChart(data, {
 		.selectAll("path")
 		.data(I)
 		.join("a")
-			.attr("xlink:href", (d, i) => "https://go.googlesource.com/"+repository+"/+show/"+C[i])
+			.attr("xlink:href", (d, i) => "https://go.googlesource.com/"+repository+"/+show/"+X[i])
 			.append("rect")
 				.attr("pointer-events", "all")
 				.attr("x", (d, i) => {
 					if (i == 0) {
-						return xOrdTicks[i];
+						return xScale(X[i]);
 					}
-					return xOrdTicks[i-1]+(xOrdTicks[i]-xOrdTicks[i-1])/2;
+					return xScale(X[i]) - (xScale(X[i])-xScale(X[i-1]))/2;
 				})
 				.attr("y", marginTop)
 				.attr("width", (d, i) => {
-					if (i == 0 || i == X.length-1) {
-						return (xOrdTicks[1]-xOrdTicks[0]) / 2;
+					if (i == 0) {
+						return (xScale(X[i+1])-xScale(X[i]))/2;
 					}
-					return xOrdTicks[1]-xOrdTicks[0];
+					if (i == X.length-1) {
+						return (xScale(X[i])-xScale(X[i-1]))/2;
+					}
+					return (xScale(X[i])-xScale(X[i-1]))/2 + (xScale(X[i+1])-xScale(X[i]))/2;
 				})
 				.attr("height", height-marginTop-marginBottom)
 				.on("mouseover", (d, i) => {
@@ -291,11 +295,11 @@ function BandChart(data, {
 							.attr("text-anchor", "end")
 							.attr("font-family", "sans-serif")
 							.attr("font-size", 12)
-							.text(C[i].slice(0, 7) + " ("
+							.text(X[i].slice(0, 7) + " ("
 								+ Intl.DateTimeFormat([], {
 									dateStyle: "long",
 									timeStyle: "short"
-								}).format(X[i])
+								}).format(CT[i])
 								+ ")")
 						)
 						.call(g => g.append('text')

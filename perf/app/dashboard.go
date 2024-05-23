@@ -15,6 +15,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,6 +23,8 @@ import (
 
 	"github.com/influxdata/influxdb-client-go/v2/api"
 	"github.com/influxdata/influxdb-client-go/v2/api/query"
+	"go.chromium.org/luci/common/api/gitiles"
+	gpb "go.chromium.org/luci/common/proto/gitiles"
 	"golang.org/x/build/internal/influx"
 	"golang.org/x/build/third_party/bandchart"
 )
@@ -37,6 +40,12 @@ func (a *App) dashboardRegisterOnMux(mux *http.ServeMux) {
 	mux.Handle("/dashboard/", http.FileServer(http.FS(dashboardFS)))
 	mux.Handle("/dashboard/third_party/bandchart/", http.StripPrefix("/dashboard/third_party/bandchart/", http.FileServer(http.FS(bandchart.FS))))
 	mux.HandleFunc("/dashboard/data.json", a.dashboardData)
+}
+
+// DataJSON is the result of accessing the data.json endpoint.
+type DataJSON struct {
+	Benchmarks []*BenchmarkJSON
+	Commits    []Commit
 }
 
 // BenchmarkJSON contains the timeseries values for a single benchmark name +
@@ -638,6 +647,19 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		branch = "master"
 	}
 
+	historyBranch := branch
+	if repository != "go" {
+		historyBranch = "master"
+	}
+	commits, err := fetchGitHistory(ctx, gitilesHost, repository, historyBranch, start, end)
+	if err != nil {
+		log.Printf("Fetching git history: %v", err)
+		http.Error(w, "Error fetching git history", 500)
+		return
+	}
+	// Commits come out newest-first, we want oldest-first.
+	slices.Reverse(commits)
+
 	benchmark := r.FormValue("benchmark")
 	unit := r.FormValue("unit")
 	var benchmarks []*BenchmarkJSON
@@ -676,8 +698,61 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		w = &gzipResponseWriter{w: gz, ResponseWriter: w}
 	}
 
-	if err := json.NewEncoder(w).Encode(benchmarks); err != nil {
+	if err := json.NewEncoder(w).Encode(&DataJSON{Benchmarks: benchmarks, Commits: commits}); err != nil {
 		log.Printf("Error encoding results: %v", err)
 		http.Error(w, "Internal error, see logs", 500)
 	}
+}
+
+const gitilesHost = "go.googlesource.com"
+
+type Commit struct {
+	Hash string
+	Date time.Time
+}
+
+func fetchGitHistory(ctx context.Context, gitilesHost, repository, branch string, start, end time.Time) ([]Commit, error) {
+	log.Printf("Fetching git history for %s/%s @ %s [%s, %s]", gitilesHost, repository, branch, start, end)
+
+	fetchStart := time.Now()
+	defer func() {
+		log.Printf("Git history query time: %s", time.Since(fetchStart))
+	}()
+
+	c := new(http.Client)
+	client, err := gitiles.NewRESTClient(c, gitilesHost, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %v", err)
+	}
+	var commits []Commit
+	var pageToken string
+	for {
+		resp, err := client.Log(ctx, &gpb.LogRequest{
+			Project:    repository,
+			Committish: "refs/heads/" + branch,
+			PageSize:   500,
+			PageToken:  pageToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to obtain log: %v", err)
+		}
+		for _, c := range resp.GetLog() {
+			commitTime := c.GetCommitter().GetTime().AsTime()
+			if commitTime.After(end) {
+				continue
+			}
+			if commitTime.Before(start) {
+				return commits, nil
+			}
+			commits = append(commits, Commit{
+				Hash: c.GetId(),
+				Date: commitTime,
+			})
+		}
+		if resp.GetNextPageToken() == "" {
+			break
+		}
+		pageToken = resp.GetNextPageToken()
+	}
+	return commits, nil
 }

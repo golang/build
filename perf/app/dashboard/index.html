@@ -146,7 +146,7 @@ function removeLoadingMessage() {
 	loading.parentNode.removeChild(loading);
 }
 
-function addCharts(benchmarks, repository) {
+function addCharts(benchmarks, repository, commits) {
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
@@ -220,6 +220,7 @@ function addCharts(benchmarks, repository) {
 			repository: repository,
 			minViewDeltaPercent: minViewDeltaPercent,
 			higherIsBetter: bench.HigherIsBetter,
+			history: commits,
 		}));
 		grid.appendChild(item);
 		addedChart = true;
@@ -240,7 +241,7 @@ function idToCommit(id) {
 	return null;
 }
 
-function addTable(bench, unit, repository) {
+function addTable(bench, unit, repository, commits) {
 	let commitSelected = idToCommit(window.location.hash.slice(1));
 	let dashboard = document.getElementById("dashboard");
 
@@ -383,6 +384,8 @@ function failure(name, response) {
 	dashboard.appendChild(message);
 }
 
+let now = new Date();
+
 // Fill search boxes from query params.
 function prefillSearch() {
 	let params = new URLSearchParams(window.location.search);
@@ -422,9 +425,6 @@ function prefillSearch() {
 	if (end) {
 		input.value = end;
 	} else {
-		// Default to now.
-		let now = new Date();
-
 		// toISOString always uses UTC, then we just chop off the end
 		// of string to get the datetime-local format of
 		// 2000-12-31T15:00.
@@ -451,13 +451,21 @@ fetch(dataURL)
 		}
 		return response.json();
 	})
-	.then(function(benchmarks) {
-		// Convert CommitDate to a proper date.
+	.then(function(data) {
+		let benchmarks = data.Benchmarks;
+		let commits = data.Commits;
+
+		// Convert CommitDate and Date to a proper dates.
 		benchmarks.forEach(function(b) {
 			b.Values.forEach(function(v) {
 				v.CommitDate = new Date(v.CommitDate);
 			});
 		});
+		commits.forEach(function(c) {
+			c.Date = new Date(c.Date);
+		})
+
+		// Figure out the date range we care about.
 
 		// If we have an explicit unit, then there should be just one result.
 		if (unit) {
@@ -465,9 +473,9 @@ fetch(dataURL)
 				failure(benchmark, "got more that one benchmark when a unit was specified");
 				throw new Error("Data fetch failed");
 			}
-			addTable(benchmarks[0], unit, repository);
+			addTable(benchmarks[0], unit, repository, commits);
 		} else {
-			addCharts(benchmarks, repository);
+			addCharts(benchmarks, repository, commits);
 		}
 	});
 </script>
