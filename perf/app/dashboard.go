@@ -198,50 +198,31 @@ func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, start, end tim
 	// Keep benchmarks with the same name grouped together, which is
 	// assumed by the JS.
 	benchmarks := []struct{ name, unit string }{
-		{
-			name: "Tile38QueryLoad",
-			unit: "sec/op",
-		},
-		{
-			name: "Tile38QueryLoad",
-			unit: "p50-latency-sec",
-		},
-		{
-			name: "Tile38QueryLoad",
-			unit: "p90-latency-sec",
-		},
-		{
-			name: "Tile38QueryLoad",
-			unit: "p99-latency-sec",
-		},
-		{
-			name: "Tile38QueryLoad",
-			unit: "average-RSS-bytes",
-		},
-		{
-			name: "Tile38QueryLoad",
-			unit: "peak-RSS-bytes",
-		},
-		{
-			name: "GoBuildKubelet",
-			unit: "sec/op",
-		},
-		{
-			name: "GoBuildKubeletLink",
-			unit: "sec/op",
-		},
-		{
-			name: "RegexMatch-16",
-			unit: "sec/op",
-		},
-		{
-			name: "BuildJSON-16",
-			unit: "sec/op",
-		},
-		{
-			name: "ZapJSON-16",
-			unit: "sec/op",
-		},
+		{"Tile38QueryLoad-16", "sec/op"},
+		{"Tile38QueryLoad-16", "p50-latency-sec"},
+		{"Tile38QueryLoad-16", "p90-latency-sec"},
+		{"Tile38QueryLoad-16", "p99-latency-sec"},
+		{"Tile38QueryLoad-16", "average-RSS-bytes"},
+		{"Tile38QueryLoad-16", "peak-RSS-bytes"},
+		{"Tile38QueryLoad-88", "sec/op"},
+		{"Tile38QueryLoad-88", "p50-latency-sec"},
+		{"Tile38QueryLoad-88", "p90-latency-sec"},
+		{"Tile38QueryLoad-88", "p99-latency-sec"},
+		{"Tile38QueryLoad-88", "average-RSS-bytes"},
+		{"Tile38QueryLoad-88", "peak-RSS-bytes"},
+		{"EtcdPut-16", "sec/op"},
+		{"EtcdPut-16", "p50-latency-sec"},
+		{"EtcdPut-16", "p90-latency-sec"},
+		{"EtcdPut-16", "p99-latency-sec"},
+		{"EtcdPut-16", "average-RSS-bytes"},
+		{"EtcdPut-16", "peak-RSS-bytes"},
+		{"GoBuildKubelet-16", "sec/op"},
+		{"GoBuildKubeletLink-16", "sec/op"},
+		{"GoBuildKubelet-88", "sec/op"},
+		{"GoBuildKubeletLink-88", "sec/op"},
+		{"RegexMatch-16", "sec/op"},
+		{"BuildJSON-16", "sec/op"},
+		{"ZapJSON-16", "sec/op"},
 	}
 
 	ret := make([]*BenchmarkJSON, 0, len(benchmarks))
