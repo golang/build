@@ -95,6 +95,11 @@ function BandChart(data, {
 		.attr("width", xRange[1] - xRange[0])
 		.attr("height", yRange[0] - yRange[1]);
 
+	// Set up the params for the link to the unit page.
+	let unitLinkParams = new URLSearchParams(window.location.search);
+	unitLinkParams.set("unit", unit);
+	unitLinkParams.set("benchmark", benchmark);
+
 	// Title (unit).
 	svg.append("g")
 		.attr("transform", `translate(${marginLeft},0)`)
@@ -104,7 +109,7 @@ function BandChart(data, {
 			.attr("x2", width - marginLeft - marginRight)
 			.attr("stroke-opacity", 0.1))
 		.call(g => g.append("a")
-			.attr("xlink:href", "?benchmark=" + benchmark + "&unit=" + unit)
+			.attr("xlink:href", "?" + unitLinkParams.toString())
 			.append("text")
 				.attr("x", xRange[0]-40)
 				.attr("y", 24)
@@ -251,7 +256,7 @@ function BandChart(data, {
 		.selectAll("path")
 		.data(I)
 		.join("a")
-			.attr("xlink:href", (d, i) => "https://go.googlesource.com/"+repository+"/+show/"+X[i])
+			.attr("xlink:href", (d, i) => "?" + unitLinkParams.toString() + "#commit" + X[i])
 			.append("rect")
 				.attr("pointer-events", "all")
 				.attr("x", (d, i) => {
