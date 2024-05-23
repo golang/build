@@ -659,7 +659,7 @@ func (c *Client) ListReviewers(ctx context.Context, changeID string) ([]Reviewer
 
 // HashtagsInput is the request body used when modifying a CL's hashtags.
 //
-// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#hashtags-input
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#hashtags-input
 type HashtagsInput struct {
 	Add    []string `json:"add"`
 	Remove []string `json:"remove"`
@@ -669,7 +669,7 @@ type HashtagsInput struct {
 // and removing hashtags in one request. On success it returns the new
 // set of hashtags.
 //
-// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#set-hashtags
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#set-hashtags
 func (c *Client) SetHashtags(ctx context.Context, changeID string, hashtags HashtagsInput) ([]string, error) {
 	var res []string
 	err := c.do(ctx, &res, "POST", fmt.Sprintf("/changes/%s/hashtags", changeID), reqBodyJSON{&hashtags})
@@ -688,11 +688,18 @@ func (c *Client) RemoveHashtags(ctx context.Context, changeID string, tags ...st
 
 // GetHashtags returns a CL's current hashtags.
 //
-// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#get-hashtags
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-hashtags
 func (c *Client) GetHashtags(ctx context.Context, changeID string) ([]string, error) {
 	var res []string
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/changes/%s/hashtags", changeID))
 	return res, err
+}
+
+// DeleteTopic deletes the topic of a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#delete-topic.
+func (c *Client) DeleteTopic(ctx context.Context, changeID string) error {
+	return c.do(ctx, nil, "DELETE", "/changes/"+changeID+"/topic", wantResStatus(http.StatusNoContent))
 }
 
 // AbandonChange abandons the given change.

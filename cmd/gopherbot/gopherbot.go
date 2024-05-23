@@ -485,6 +485,7 @@ var tasks = []struct {
 	{"cl2issue", (*gopherbot).cl2issue},
 	{"congratulate new contributors", (*gopherbot).congratulateNewContributors},
 	{"un-wait CLs", (*gopherbot).unwaitCLs},
+	{"convert wait-release topic to hashtag", (*gopherbot).topicToHashtag},
 }
 
 // gardenIssues reports whether GopherBot should perform general issue
@@ -1625,6 +1626,31 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 			return nil
 		})
 	})
+}
+
+// topicToHashtag converts CLs with 'wait-release' topic
+// to the likely intended uses of 'wait-release' hashtag.
+func (b *gopherbot) topicToHashtag(ctx context.Context) error {
+	waitTopicCLs, err := b.gerrit.QueryChanges(ctx, "status:open topic:wait-release")
+	if err != nil {
+		return err
+	}
+	for _, cl := range waitTopicCLs {
+		if *dryRun {
+			log.Printf("[dry run] would replace 'wait-release' topic with hashtag on CL %d (%.32s…)", cl.ChangeNumber, cl.Subject)
+			continue
+		}
+		_, err := b.gerrit.AddHashtags(ctx, cl.ID, "wait-release")
+		if err != nil {
+			return err
+		}
+		err = b.gerrit.DeleteTopic(ctx, cl.ID)
+		if err != nil {
+			return err
+		}
+		log.Printf("https://go.dev/cl/%d: replaced 'wait-release' topic with hashtag", cl.ChangeNumber)
+	}
+	return nil
 }
 
 // onLatestCL checks whether cl's metadata is up to date with Gerrit's

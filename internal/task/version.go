@@ -239,7 +239,7 @@ func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, revi
 func (t *VersionTasks) UnwaitWaitReleaseCLs(ctx *workflow.TaskContext) (result struct{}, _ error) {
 	waitingCLs, err := t.Gerrit.QueryChanges(ctx, "status:open hashtag:wait-release")
 	if err != nil {
-		return struct{}{}, nil
+		return struct{}{}, err
 	}
 	ctx.Printf("Processing %d open Gerrit CL with wait-release hashtag.", len(waitingCLs))
 	for _, cl := range waitingCLs {
