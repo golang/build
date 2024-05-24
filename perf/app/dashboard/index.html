@@ -319,13 +319,19 @@ function addTable(bench, unit, repository, commits) {
 		min -= amt;
 	}
 
+	// Create a map of hashes to values.
+	let valuesByCommit = new Map();
+	for (let i = 0; i < bench.Values.length; i++) {
+		valuesByCommit.set(bench.Values[i].CommitHash, bench.Values[i])
+	}
+
 	// Iterate backwards, showing the most recent first.
-	for (let i = bench.Values.length-1; i >= 0; i--) {
-		const v = bench.Values[i];
+	for (let i = commits.length-1; i >= 0; i--) {
+		const c = commits[i];
 
 		// Create a row per value.
 		const row = document.createElement("tr");
-		if (commitSelected && commitSelected === v.CommitHash) {
+		if (commitSelected && commitSelected === c.Hash) {
 			row.classList.add("selected");
 		}
 
@@ -333,24 +339,42 @@ function addTable(bench, unit, repository, commits) {
 		row.appendChild(createCell(Intl.DateTimeFormat([], {
 			dateStyle: "long",
 			timeStyle: "short",
-		}).format(v.CommitDate), false));
+		}).format(c.Date), false));
 
 		// Commit hash.
-		const commitCell = createCommitCell(v.CommitHash, repository);
-		commitCell.id = commitToId(v.CommitHash);
+		const commitCell = createCommitCell(c.Hash, repository);
+		commitCell.id = commitToId(c.Hash);
 		row.appendChild(commitCell);
 
-		// Range visualization.
-		const range = createCell("", false);
-		range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 48, bench.Unit, bench.HigherIsBetter));
-		range.classList.add("Dashboard-table-range")
-		row.appendChild(range);
+		if (valuesByCommit.has(c.Hash)) {
+			const v = valuesByCommit.get(c.Hash);
 
-		// Baseline commit hash.
-		row.appendChild(createCommitCell(v.BaselineCommitHash, repository));
+			// Range visualization.
+			const range = createCell("", false);
+			range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 48, bench.Unit, bench.HigherIsBetter));
+			range.classList.add("Dashboard-table-range")
+			row.appendChild(range);
 
-		// Benchmarks commit hash.
-		row.appendChild(createCommitCell(v.BenchmarksCommitHash, "benchmarks"));
+			// Baseline commit hash.
+			row.appendChild(createCommitCell(v.BaselineCommitHash, repository));
+
+			// Benchmarks commit hash.
+			row.appendChild(createCommitCell(v.BenchmarksCommitHash, "benchmarks"));
+		} else {
+			// Row without info.
+			const range = createCell("", false);
+			range.appendChild(NoDataRange(min, max, 640, 48));
+			range.classList.add("Dashboard-table-range");
+			row.appendChild(range);
+
+			const baselineNA = createCell("N/A", false);
+			baselineNA.classList.add("Dashboard-table-commit");
+			row.appendChild(baselineNA);
+
+			const benchmarksNA = createCell("N/A", false);
+			benchmarksNA.classList.add("Dashboard-table-commit");
+			row.appendChild(benchmarksNA);
+		}
 
 		table.appendChild(row);
 	}
