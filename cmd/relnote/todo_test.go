@@ -23,8 +23,7 @@ func TestInfoFromDocFiles(t *testing.T) {
 	}
 	var got []ToDo
 	addToDo := func(td ToDo) { got = append(got, td) }
-	addIssue := func(int) {}
-	if err := infoFromDocFiles(dir, addToDo, addIssue); err != nil {
+	if err := infoFromDocFiles(dir, mentioned{}, addToDo); err != nil {
 		t.Fatal(err)
 	}
 	want := []ToDo{

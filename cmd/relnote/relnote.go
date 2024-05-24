@@ -27,10 +27,11 @@ var (
 func usage() {
 	out := flag.CommandLine.Output()
 	fmt.Fprintf(out, "usage:\n")
-	fmt.Fprintf(out, "   relnote generate\n")
+	fmt.Fprintf(out, "   relnote [flags] generate\n")
 	fmt.Fprintf(out, "      generate release notes from doc/next\n")
-	fmt.Fprintf(out, "   relnote todo\n")
+	fmt.Fprintf(out, "   relnote [flags] todo\n")
 	fmt.Fprintf(out, "      report which release notes need to be written\n")
+	fmt.Fprintln(out)
 	flag.PrintDefaults()
 }
 

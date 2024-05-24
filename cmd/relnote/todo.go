@@ -48,18 +48,25 @@ func todo(w io.Writer, goroot string, treeOpenDate time.Time) error {
 	var todos []ToDo
 	addToDo := func(td ToDo) { todos = append(todos, td) }
 
-	mentionedIssues := map[int]bool{} // issues mentioned in the existing relnotes
-	addIssue := func(num int) { mentionedIssues[num] = true }
-
+	mentioned := mentioned{Issues: make(map[int]bool), CLs: make(map[int]bool)}
 	nextDir := filepath.Join(goroot, "doc", "next")
-	if err := infoFromDocFiles(os.DirFS(nextDir), addToDo, addIssue); err != nil {
+	if err := infoFromDocFiles(os.DirFS(nextDir), mentioned, addToDo); err != nil {
 		return err
 	}
-	if err := todosFromCLs(treeOpenDate, mentionedIssues, addToDo); err != nil {
+	if err := todosFromCLs(treeOpenDate, mentioned, addToDo); err != nil {
 		return err
 	}
 	return writeToDos(w, todos)
 }
+
+// mentioned collects mentions within the existing relnotes.
+type mentioned struct {
+	Issues map[int]bool
+	CLs    map[int]bool
+}
+
+func (m mentioned) AddIssue(num int) { m.Issues[num] = true }
+func (m mentioned) AddCL(num int)    { m.CLs[num] = true }
 
 // findTreeOpenDate returns the time of the most recent commit to the file that
 // determines the version of Go under development.
@@ -87,14 +94,14 @@ func findTreeOpenDate(goroot string) (time.Time, error) {
 }
 
 // Collect TODOs and issue numbers from the markdown files in the main repo.
-func infoFromDocFiles(fsys fs.FS, addToDo func(ToDo), addIssue func(int)) error {
+func infoFromDocFiles(fsys fs.FS, mentioned mentioned, addToDo func(ToDo)) error {
 	// This is essentially a grep.
 	return fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !d.IsDir() && strings.HasSuffix(path, ".md") {
-			if err := infoFromFile(fsys, path, addToDo, addIssue); err != nil {
+			if err := infoFromFile(fsys, path, mentioned, addToDo); err != nil {
 				return err
 			}
 		}
@@ -102,9 +109,20 @@ func infoFromDocFiles(fsys fs.FS, addToDo func(ToDo), addIssue func(int)) error 
 	})
 }
 
-var issueRE = regexp.MustCompile("/issue/([0-9]+)")
+var (
+	issueRE            = regexp.MustCompile("/issue/([1-9][0-9]*)")
+	issueViaFilenameRE = regexp.MustCompile(`^\d+-stdlib/\d+-minor/.+/([1-9][0-9]*).md$`)
+	clRE               = regexp.MustCompile("CL ([1-9][0-9]*)")
+)
 
-func infoFromFile(dir fs.FS, filename string, addToDo func(ToDo), addIssue func(int)) error {
+func infoFromFile(dir fs.FS, filename string, mentioned mentioned, addToDo func(ToDo)) error {
+	if matches := issueViaFilenameRE.FindStringSubmatch(filename); matches != nil {
+		num, err := strconv.Atoi(matches[1])
+		if err != nil {
+			return fmt.Errorf("%s: %v", filename, err)
+		}
+		mentioned.AddIssue(num)
+	}
 	f, err := dir.Open(filename)
 	if err != nil {
 		return err
@@ -126,13 +144,20 @@ func infoFromFile(dir fs.FS, filename string, addToDo func(ToDo), addIssue func(
 			if err != nil {
 				return fmt.Errorf("%s:%d: %v", filename, ln, err)
 			}
-			addIssue(num)
+			mentioned.AddIssue(num)
+		}
+		for _, matches := range clRE.FindAllStringSubmatch(line, -1) {
+			num, err := strconv.Atoi(matches[1])
+			if err != nil {
+				return fmt.Errorf("%s:%d: %v", filename, ln, err)
+			}
+			mentioned.AddCL(num)
 		}
 	}
 	return scan.Err()
 }
 
-func todosFromCLs(cutoff time.Time, mentionedIssues map[int]bool, add func(ToDo)) error {
+func todosFromCLs(cutoff time.Time, mentioned mentioned, add func(ToDo)) error {
 	ctx := context.Background()
 	// The maintner corpus doesn't track inline comments. See go.dev/issue/24863.
 	// So we need to use a Gerrit API client to fetch them instead. If maintner starts
@@ -165,13 +190,13 @@ func todosFromCLs(cutoff time.Time, mentionedIssues map[int]bool, add func(ToDo)
 			}
 			// Add a TODO if the CL has a "RELNOTE=" comment.
 			// These are deprecated, but we look for them just in case.
-			if _, ok := matchedCLs[int(cl.Number)]; ok {
+			if _, ok := matchedCLs[int(cl.Number)]; ok && !mentioned.CLs[int(cl.Number)] {
 				if err := todoFromRelnote(ctx, cl, gerritClient, add); err != nil {
 					return err
 				}
 			}
 			// Add a TODO if the CL refers to an accepted proposal.
-			todoFromProposal(cl, gh, mentionedIssues, add)
+			todoFromProposal(cl, gh, mentioned.Issues, add)
 			return nil
 		})
 	})
@@ -184,10 +209,10 @@ func todoFromRelnote(ctx context.Context, cl *maintner.GerritCL, gc *gerrit.Clie
 	}
 	if rn := clRelNote(cl, comments); rn != "" {
 		if rn == "yes" || rn == "y" {
-			rn = "UNKNOWN"
+			rn = fmt.Sprintf("CL %d has a RELNOTE comment without a suggested text", cl.Number)
 		}
 		add(ToDo{
-			message:    "TODO:" + rn,
+			message:    "TODO: " + rn,
 			provenance: fmt.Sprintf("RELNOTE comment in https://go.dev/cl/%d", cl.Number),
 		})
 	}
@@ -308,6 +333,7 @@ func writeToDos(w io.Writer, todos []ToDo) error {
 		for _, td := range byMessage[msg] {
 			provs = append(provs, td.provenance)
 		}
+		slices.Sort(provs) // for deterministic output
 		if _, err := fmt.Fprintf(w, "%s (from %s)\n", msg, strings.Join(provs, ", ")); err != nil {
 			return err
 		}
