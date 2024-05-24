@@ -255,6 +255,8 @@ openbsd-arm64   openbsd    arm64      (cross-compiled via distpack)
 
 openbsd-ppc64   openbsd    ppc64      (cross-compiled via distpack)
 
+openbsd-riscv64 openbsd    riscv64    (cross-compiled via distpack)
+
 plan9-386       plan9      386        (cross-compiled via distpack)
 
 plan9-amd64     plan9      amd64      (cross-compiled via distpack)
