@@ -17,6 +17,16 @@ function BandChart(data, {
 	higherIsBetter,
 	history,
 } = {}) {
+	// Compute a set of valid hashes so we can filter out any bad values.
+	// This is to work around a bug where some test results have bad commits
+	// attached to them.
+	// TODO(mknyszek): Consider doing this data cleaning server-side.
+	let historySet = new Set();
+	for (let i = 0; i < history.length; i++) {
+		historySet.add(history[i].Hash);
+	}
+	data = data.filter(d => historySet.has(d.CommitHash));
+
 	// Compute values.
 	const CT = d3.map(data, d => d.CommitDate);
 	const X = d3.map(data, d => d.CommitHash);
