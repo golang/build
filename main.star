@@ -1346,6 +1346,8 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Handle bootstrap for new ports.
     if os == "openbsd" and arch == "ppc64":  # See go.dev/doc/go1.22#openbsd.
         base_props["bootstrap_version"] = "1.22.0"
+    if os == "openbsd" and arch == "riscv64":  # See go.dev/issue/55999, https://tip.golang.org/doc/go1.23#openbsd.
+        base_props["bootstrap_version"] = "1.23-devel-20240524222355-377646589d5f"
 
     if os == "darwin":
         # See available versions with: cipd instances -limit 0 infra_internal/ios/xcode/mac | less
