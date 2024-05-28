@@ -1108,6 +1108,12 @@ def dimensions_of(host_type):
     else:
         cipd_platform = host
 
+    if goos == "plan9":  # TODO(go.dev/issue/62025): Simplify builder definition.
+        return {
+            "cipd_platform": "linux-amd64",
+            "id": "%s-%s" % (goos, goarch),
+        }
+
     dims = {"cipd_platform": cipd_platform}
     if os != None:
         dims["os"] = os
@@ -1131,6 +1137,9 @@ def is_fully_supported(dims):
     Args:
         dims: The dimensions of a task/bot.
     """
+
+    if "id" in dims:  # TODO(go.dev/issue/62025): Simplify builder definition.
+        return False
 
     supported_cipd_platforms = [
         "%s-%s" % (os, arch)
@@ -1266,6 +1275,9 @@ def define_builder(env, project, go_branch_short, builder_type):
     os, arch, suffix, run_mods = split_builder_type(builder_type)
     host_type = host_of(builder_type)
     hostos, hostarch, _, _ = split_builder_type(host_type)
+
+    if os == "plan9":  # TODO(go.dev/issue/62025): Simplify builder definition.
+        hostos, hostarch = "linux", "amd64"
 
     # Construct the basic properties that will apply to all builders for
     # this combination.
