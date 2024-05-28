@@ -25,6 +25,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # make: used for setting up benchmarks in the x/benchmark builders
 # mercurial: mercurial VCS supported by cmd/go
 # netbase: for net package tests, issue 42750
+# patch: used for building some benchmarks
 # procps: misc basic tool
 # psmisc: misc basic tool
 # strace: optionally used by some net/http tests
@@ -57,6 +58,7 @@ RUN apt-get update && apt-get install -y \
 	nano \
 	netbase \
 	openssh-server \
+	patch \
 	procps \
 	psmisc \
 	strace \
