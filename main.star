@@ -388,6 +388,7 @@ BUILDER_TYPES = [
     "android-arm64",
     "darwin-amd64-longtest",
     "darwin-amd64-nocgo",
+    "darwin-amd64-race",
     "darwin-amd64_10.15",
     "darwin-amd64_11",
     "darwin-amd64_12",
