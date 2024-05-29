@@ -41,6 +41,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # gdb: optionally used by runtime tests for gdb
 # gfortran: for compiling cgo with fortran support (multilib for 386)
 # git: git VCS supported by cmd/go
+# g++: used for building some benchmarks
 # less: misc basic tool
 # libc6-dev-i386: for 32-bit builds
 # libc6-dev: for building Go's bootstrap 'dist' prog
@@ -71,6 +72,7 @@ RUN apt-get update && apt-get install -y \
 	gfortran \
 	gfortran-multilib \
 	git \
+	g++ \
 	iptables \
 	iproute2 \
 	less \
