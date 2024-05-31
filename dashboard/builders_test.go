@@ -125,6 +125,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-arm64",
 				"misc-compile-openbsd-ppc64-go1.22",
 				"misc-compile-openbsd-riscv64-go1.23",
+				"misc-compile-plan9-386",
 				"misc-compile-plan9-amd64",
 				"misc-compile-plan9-arm",
 				"misc-compile-solaris-amd64",
@@ -174,6 +175,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-arm",
 				"misc-compile-openbsd-arm64",
 				"misc-compile-openbsd-ppc64-go1.22", // New to Go 1.22.
+				"misc-compile-plan9-386",
 				"misc-compile-plan9-amd64",
 				"misc-compile-plan9-arm",
 				"misc-compile-solaris-amd64",
@@ -228,6 +230,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-386",
 				"misc-compile-openbsd-arm",
 				"misc-compile-openbsd-arm64",
+				"misc-compile-plan9-386",
 				"misc-compile-plan9-amd64",
 				"misc-compile-plan9-arm",
 				"misc-compile-solaris-amd64",
@@ -298,6 +301,7 @@ func TestTrybots(t *testing.T) {
 				"misc-compile-openbsd-arm64",
 				"misc-compile-openbsd-ppc64-go1.22",
 				"misc-compile-openbsd-riscv64-go1.23",
+				"misc-compile-plan9-386",
 				"misc-compile-plan9-amd64",
 				"misc-compile-plan9-arm",
 				"misc-compile-solaris-amd64",
@@ -987,7 +991,6 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	// when the work of adding a new port is actively underway.
 	knownMissing := map[string]bool{
 		"openbsd-mips64": true, // go.dev/issue/58110
-		"plan9-386":      true, // go.dev/issue/67502
 
 		"js-wasm":     true, // Fully ported to LUCI and stopped in the coordinator.
 		"wasip1-wasm": true, // Fully ported to LUCI and stopped in the coordinator.

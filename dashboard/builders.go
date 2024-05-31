@@ -1669,7 +1669,7 @@ func init() {
 	addMiscCompile("openbsd", "arm64")
 	addMiscCompileGo1(22, "openbsd", "ppc64", "-go1.22")
 	addMiscCompileGo1(23, "openbsd", "riscv64", "-go1.23")
-	//addMiscCompile("plan9", "386") is disabled due to go.dev/issue/67502.
+	addMiscCompile("plan9", "386")
 	addMiscCompile("plan9", "amd64")
 	addMiscCompile("plan9", "arm")
 	addMiscCompile("solaris", "amd64")
