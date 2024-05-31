@@ -27,6 +27,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	"darwin-amd64-13":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-darwin-amd64_13.
 	"darwin-amd64-longtest": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-darwin-amd64-longtest.
 	"darwin-amd64-nocgo":    true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-darwin-amd64-nocgo.
+	"darwin-amd64-race":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-darwin-amd64-race.
 	"darwin-arm64-11":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-darwin-arm64_11.
 	"darwin-arm64-12":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-darwin-arm64_12.
 
