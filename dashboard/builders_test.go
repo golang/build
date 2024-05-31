@@ -100,8 +100,9 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm64",
 				"openbsd-amd64-72",
-				"windows-386-2016",
-				"windows-amd64-2016",
+				// Stopped.
+				//"windows-386-2016",
+				//"windows-amd64-2016",
 			},
 		},
 		{
@@ -115,14 +116,16 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm64",
 				"openbsd-amd64-72",
-				"windows-386-2016",
-				"windows-amd64-2016",
+				// Stopped.
+				//"windows-386-2016",
+				//"windows-amd64-2016",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
 				"linux-amd64-longtest",
 				"linux-arm64-longtest",
-				"windows-amd64-longtest",
+				// Stopped.
+				//"windows-amd64-longtest",
 			},
 		},
 		{
@@ -136,14 +139,16 @@ func TestTrybots(t *testing.T) {
 				"linux-amd64-race",
 				"linux-arm64",
 				"openbsd-amd64-72",
-				"windows-386-2016",
-				"windows-amd64-2016",
+				// Stopped.
+				//"windows-386-2016",
+				//"windows-amd64-2016",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
 				"linux-386-longtest",
 				"linux-amd64-longtest",
 				"linux-arm64-longtest",
-				"windows-amd64-longtest",
+				// Stopped.
+				//"windows-amd64-longtest",
 			},
 		},
 		{
@@ -171,8 +176,9 @@ func TestTrybots(t *testing.T) {
 				"netbsd-amd64-9_3",
 				"openbsd-386-72",
 				"openbsd-amd64-72",
-				"windows-386-2016",
-				"windows-amd64-2016",
+				// Stopped.
+				//"windows-386-2016",
+				//"windows-amd64-2016",
 			},
 		},
 		{
@@ -181,7 +187,8 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"linux-amd64",
 				"linux-amd64-race",
-				"windows-amd64-2016",
+				// Stopped.
+				//"windows-amd64-2016",
 			},
 		},
 		{
@@ -669,7 +676,11 @@ func TestBuilderConfig(t *testing.T) {
 
 			gotTry := bc.BuildsRepoTryBot(tt.br.repo, tt.br.branch, tt.br.goBranch)
 			if tt.want&isTrybot != 0 && !gotTry {
-				t.Errorf("not trybot, but expected")
+				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder(bc.Name); stopped {
+					t.Logf("not a trybot builder because it's intentionally stopped")
+				} else {
+					t.Errorf("not trybot, but expected")
+				}
 			}
 			if tt.want&notTrybot != 0 && gotTry {
 				t.Errorf("unexpectedly a trybot")

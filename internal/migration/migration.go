@@ -91,6 +91,7 @@ var BuildersPortedToLUCI = map[string]bool{
 func StopPortedBuilder(builderName string) (stop bool) {
 	nameKeyList := []string{
 		"darwin-",
+		"windows-",
 		"linux-loong64",
 		"linux-ppc64",
 		"-wasm-",
