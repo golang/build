@@ -144,7 +144,6 @@ func addHealthChecker(mux *http.ServeMux, hc *healthChecker) {
 var basePinErr atomic.Value
 
 func addHealthCheckers(ctx context.Context, mux *http.ServeMux, sc *secret.Client) {
-	addHealthChecker(mux, newMacOSARM64Checker())
 	addHealthChecker(mux, newBasepinChecker())
 	addHealthChecker(mux, newGitMirrorChecker())
 	addHealthChecker(mux, newGitHubAPIChecker(ctx, sc))

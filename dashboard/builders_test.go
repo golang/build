@@ -657,7 +657,11 @@ func TestBuilderConfig(t *testing.T) {
 			}
 			gotPost := bc.BuildsRepoPostSubmit(tt.br.repo, tt.br.branch, tt.br.goBranch)
 			if tt.want&isBuilder != 0 && !gotPost {
-				t.Errorf("not a post-submit builder, but expected")
+				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder(bc.Name); stopped {
+					t.Logf("not a post-submit builder because it's intentionally stopped")
+				} else {
+					t.Errorf("not a post-submit builder, but expected")
+				}
 			}
 			if tt.want&notBuilder != 0 && gotPost {
 				t.Errorf("unexpectedly a post-submit builder")
