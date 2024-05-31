@@ -25,8 +25,14 @@ func TestUITemplateDataBuilder(t *testing.T) {
 	origBuilders := dashboard.Builders
 	defer func() { dashboard.Builders = origBuilders }()
 	dashboard.Builders = map[string]*dashboard.BuildConfig{
-		"linux-amd64": origBuilders["linux-amd64"],
-		"linux-386":   origBuilders["linux-386"],
+		"linux-amd64": {
+			Name:     "linux-amd64",
+			HostType: "host-linux-amd64-bullseye",
+		},
+		"linux-386": {
+			Name:     "linux-386",
+			HostType: "host-linux-amd64-bullseye",
+		},
 	}
 
 	tests := []struct {

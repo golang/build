@@ -225,8 +225,8 @@ func TestXRepoBranches(t *testing.T) {
 		v := bs.NameAndBranch()
 		t.Logf("build[%d]: %s", i, v)
 	}
-	if len(ts.builds) < 3 {
-		t.Fatalf("expected at least 3 builders, got %v", len(ts.builds))
+	if len(ts.builds) == 0 {
+		t.Fatal("no builders in try set, want at least 1")
 	}
 }
 

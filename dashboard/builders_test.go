@@ -93,12 +93,13 @@ func TestTrybots(t *testing.T) {
 			branch: "master",
 			want: []string{
 				"freebsd-amd64-12_3",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-boringcrypto",
-				"linux-amd64-newinliner",
-				"linux-amd64-race",
-				"linux-arm64",
+				// Stopped.
+				//"linux-386",
+				//"linux-amd64",
+				//"linux-amd64-boringcrypto",
+				//"linux-amd64-newinliner",
+				//"linux-amd64-race",
+				//"linux-arm64",
 				"openbsd-amd64-72",
 				// Stopped.
 				//"windows-386-2016",
@@ -110,21 +111,22 @@ func TestTrybots(t *testing.T) {
 			branch: "release-branch.go1.22",
 			want: []string{
 				"freebsd-amd64-12_3",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-boringcrypto",
-				"linux-amd64-race",
-				"linux-arm64",
+				// Stopped.
+				//"linux-386",
+				//"linux-amd64",
+				//"linux-amd64-boringcrypto",
+				//"linux-amd64-race",
+				//"linux-arm64",
 				"openbsd-amd64-72",
 				// Stopped.
 				//"windows-386-2016",
 				//"windows-amd64-2016",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
-				"linux-386-longtest",
-				"linux-amd64-longtest",
-				"linux-arm64-longtest",
 				// Stopped.
+				//"linux-386-longtest",
+				//"linux-amd64-longtest",
+				//"linux-arm64-longtest",
 				//"windows-amd64-longtest",
 			},
 		},
@@ -133,21 +135,22 @@ func TestTrybots(t *testing.T) {
 			branch: "release-branch.go1.21",
 			want: []string{
 				"freebsd-amd64-12_3",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-boringcrypto",
-				"linux-amd64-race",
-				"linux-arm64",
+				// Stopped.
+				//"linux-386",
+				//"linux-amd64",
+				//"linux-amd64-boringcrypto",
+				//"linux-amd64-race",
+				//"linux-arm64",
 				"openbsd-amd64-72",
 				// Stopped.
 				//"windows-386-2016",
 				//"windows-amd64-2016",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
-				"linux-386-longtest",
-				"linux-amd64-longtest",
-				"linux-arm64-longtest",
 				// Stopped.
+				//"linux-386-longtest",
+				//"linux-amd64-longtest",
+				//"linux-arm64-longtest",
 				//"windows-amd64-longtest",
 			},
 		},
@@ -157,8 +160,9 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"linux-amd64-androidemu",
-				"linux-amd64",
-				"linux-amd64-race",
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-race",
 			},
 		},
 		{
@@ -168,11 +172,12 @@ func TestTrybots(t *testing.T) {
 				"freebsd-386-13_0",
 				"freebsd-amd64-12_3",
 				"freebsd-amd64-13_0",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
-				"linux-amd64-race",
-				"linux-arm64",
+				// Stopped.
+				//"linux-386",
+				//"linux-amd64",
+				//"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
+				//"linux-amd64-race",
+				//"linux-arm64",
 				"netbsd-amd64-9_3",
 				"openbsd-386-72",
 				"openbsd-amd64-72",
@@ -184,27 +189,29 @@ func TestTrybots(t *testing.T) {
 		{
 			repo:   "exp",
 			branch: "master",
-			want: []string{
-				"linux-amd64",
-				"linux-amd64-race",
+			want:   []string{
 				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-race",
 				//"windows-amd64-2016",
 			},
 		},
 		{
 			repo:   "vulndb",
 			branch: "master",
-			want: []string{
-				"linux-amd64",
-				"linux-amd64-race",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-race",
 			},
 		},
 		{
 			repo:   "website",
 			branch: "master",
-			want: []string{
-				"linux-amd64",
-				"linux-amd64-race",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-race",
 			},
 		},
 	}
@@ -256,21 +263,23 @@ func TestPostSubmit(t *testing.T) {
 		{
 			repo:   "vulndb",
 			branch: "master",
-			want: []string{
-				"linux-amd64",
-				"linux-amd64-longtest",
-				"linux-amd64-race",
-				"linux-amd64-longtest-race",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-longtest",
+				//"linux-amd64-race",
+				//"linux-amd64-longtest-race",
 			},
 		},
 		{
 			repo:   "website",
 			branch: "master",
-			want: []string{
-				"linux-amd64",
-				"linux-amd64-longtest",
-				"linux-amd64-race",
-				"linux-amd64-longtest-race",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-longtest",
+				//"linux-amd64-race",
+				//"linux-amd64-longtest-race",
 			},
 		},
 	}
@@ -731,6 +740,10 @@ func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
 }
 
 func TestShouldRunDistTest(t *testing.T) {
+	if stopped := migration.BuildersPortedToLUCI["linux-amd64"] && migration.StopPortedBuilder("linux-amd64"); stopped {
+		t.Skip("test can't be used because linux builders are stopped")
+	}
+
 	type buildMode int
 	const (
 		tryMode    buildMode = 0
