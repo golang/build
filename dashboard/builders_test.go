@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/build/internal/migration"
 )
 
 func TestOSARCHAccessors(t *testing.T) {
@@ -1239,7 +1241,7 @@ func TestHostsSort(t *testing.T) {
 func TestBuildersPortedToLUCI(t *testing.T) {
 	// Check that map keys refer to builder names that exist,
 	// otherwise the entry is a no-op. Mostly to catch typos.
-	for name := range BuildersPortedToLUCI {
+	for name := range migration.BuildersPortedToLUCI {
 		if _, ok := Builders[name]; !ok {
 			t.Errorf("BuildersPortedToLUCI contains an unknown legacy builder name %v", name)
 		}

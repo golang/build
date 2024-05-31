@@ -23,6 +23,7 @@ import (
 	"cloud.google.com/go/datastore"
 	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/migration"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"google.golang.org/grpc"
@@ -128,7 +129,7 @@ func (d *Handler) getBuilders(conf map[string]*dashboard.BuildConfig, luci lucip
 		if !b.BuildsRepoPostSubmit("go", "master", "master") {
 			continue
 		}
-		if dashboard.BuildersPortedToLUCI[b.Name] && len(luci.Builders) > 0 {
+		if migration.BuildersPortedToLUCI[b.Name] && len(luci.Builders) > 0 {
 			// Don't display old builders that have been ported
 			// to LUCI if willing to show LUCI builders as well.
 			continue

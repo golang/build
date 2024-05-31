@@ -26,6 +26,7 @@ import (
 	bbpb "go.chromium.org/luci/buildbucket/proto"
 	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/migration"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
@@ -482,7 +483,7 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 			}
 			if len(luci.Builders) > 0 {
 				for name := range builders {
-					if dashboard.BuildersPortedToLUCI[name] {
+					if migration.BuildersPortedToLUCI[name] {
 						// Don't display old builders that have been ported
 						// to LUCI if willing to show LUCI builders as well.
 						delete(builders, name)
@@ -525,7 +526,7 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 	}
 	if len(luci.Builders) > 0 {
 		for name := range builders {
-			if dashboard.BuildersPortedToLUCI[name] {
+			if migration.BuildersPortedToLUCI[name] {
 				// Don't display old builders that have been ported
 				// to LUCI if willing to show LUCI builders as well.
 				delete(builders, name)
