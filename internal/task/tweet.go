@@ -351,11 +351,15 @@ func tweetImage(published Published, rnd *rand.Rand) (imagePNG []byte, imageText
 	if err != nil {
 		return nil, "", err
 	}
+	goarch := a.GOARCH()
+	if CompareGoVersions(a.Version, "go1.23") == -1 && a.OS != "linux" { // TODO: Delete this after Go 1.24.0 is out and this becomes dead code.
+		goarch = strings.TrimSuffix(goarch, "v6l")
+	}
 	var buf bytes.Buffer
 	if err := goCmdTmpl.Execute(&buf, map[string]string{
 		"GoVer":    published.Version,
 		"GOOS":     a.OS,
-		"GOARCH":   a.GOARCH(),
+		"GOARCH":   goarch,
 		"Filename": a.Filename,
 		"ZeroSize": fmt.Sprintf("%*d", digits(a.Size), 0),
 		"HalfSize": fmt.Sprintf("%*d", digits(a.Size), a.Size/2),
