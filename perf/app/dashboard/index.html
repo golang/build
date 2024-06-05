@@ -57,13 +57,7 @@ license that can be found in the LICENSE file.
 					<option>tools</option>
 				</select>
 				Go branch:
-				<select id="branch-select" name="branch">
-					<option>master</option>
-					<option>release-branch.go1.19</option>
-					<option>release-branch.go1.20</option>
-					<option>release-branch.go1.21</option>
-					<option>release-branch.go1.22</option>
-				</select>
+				<select id="branch-select" name="branch"></select>
 				Duration (days):
 				<div class="Dashboard-duration">
 					<input id="days-input" type="number" name="days" value="30" />
@@ -411,7 +405,7 @@ function failure(name, response) {
 let now = new Date();
 
 // Fill search boxes from query params.
-function prefillSearch() {
+function prefillSearch(formFields) {
 	let params = new URLSearchParams(window.location.search);
 
 	let benchmark = params.get('benchmark');
@@ -435,7 +429,11 @@ function prefillSearch() {
 	let branch = params.get('branch');
 	if (branch) {
 		let select = document.getElementById('branch-select');
-		select.value = branch;
+		if (branch === "latest-release") {
+			select.value = formFields.LatestReleaseBranch;
+		} else {
+			select.value = branch;
+		}
 	}
 
 	let days = params.get('days');
@@ -457,7 +455,23 @@ function prefillSearch() {
 		input.value = now.toISOString().slice(0, 16);
 	}
 }
-prefillSearch()
+fetch('./formfields.json')
+	.then(response => {
+		if (!response.ok) {
+			throw new Error("Form fields fetch failed");
+		}
+		return response.json();
+	})
+	.then(function(formFields) {
+		let select = document.getElementById('branch-select');
+		for (const i in formFields.Branches) {
+			var opt = document.createElement('option');
+			opt.value = formFields.Branches[i];
+			opt.innerText = formFields.Branches[i];
+			select.appendChild(opt);
+		}
+		prefillSearch(formFields);
+	});
 
 // Grab the repository so we can plumb it into UI elements.
 // prefillSearch set this up for us just now.
@@ -466,7 +480,7 @@ const repository = document.getElementById('repository-select').value;
 // Fetch content.
 let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
 let unit = (new URLSearchParams(window.location.search)).get('unit');
-let dataURL = './data.json' + window.location.search;  // Pass through all URL params.
+let dataURL = './data.json' + window.location.search; // Pass through all URL params.
 fetch(dataURL)
 	.then(response => {
 		if (!response.ok) {

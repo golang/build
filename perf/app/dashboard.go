@@ -7,6 +7,7 @@ package app
 import (
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/influxdata/influxdb-client-go/v2/api"
@@ -26,7 +28,15 @@ import (
 	"go.chromium.org/luci/common/api/gitiles"
 	gpb "go.chromium.org/luci/common/proto/gitiles"
 	"golang.org/x/build/internal/influx"
+	maintnerpb "golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/third_party/bandchart"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+)
+
+const (
+	gitilesHost  = "go.googlesource.com"
+	maintnerHost = "maintner.golang.org:443"
 )
 
 // /dashboard/ displays a dashboard of benchmark results over time for
@@ -40,6 +50,7 @@ func (a *App) dashboardRegisterOnMux(mux *http.ServeMux) {
 	mux.Handle("/dashboard/", http.FileServer(http.FS(dashboardFS)))
 	mux.Handle("/dashboard/third_party/bandchart/", http.StripPrefix("/dashboard/third_party/bandchart/", http.FileServer(http.FS(bandchart.FS))))
 	mux.HandleFunc("/dashboard/data.json", a.dashboardData)
+	mux.HandleFunc("/dashboard/formfields.json", a.formFields)
 }
 
 // DataJSON is the result of accessing the data.json endpoint.
@@ -626,6 +637,13 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 	branch := r.FormValue("branch")
 	if branch == "" {
 		branch = "master"
+	} else if branch == "latest-release" {
+		releases, err := goReleasesCache.Get(ctx)
+		if err != nil {
+			log.Printf("Fetching latest release: %v", err)
+			http.Error(w, "Error fetching latest release", 500)
+		}
+		branch = latestRelease(releases).BranchName
 	}
 
 	historyBranch := branch
@@ -685,8 +703,6 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-const gitilesHost = "go.googlesource.com"
-
 type Commit struct {
 	Hash string
 	Date time.Time
@@ -736,4 +752,87 @@ func fetchGitHistory(ctx context.Context, gitilesHost, repository, branch string
 		pageToken = resp.GetNextPageToken()
 	}
 	return commits, nil
+}
+
+// formFields handles the formfields.json endpoint.
+func (a *App) formFields(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Grab the releases.
+	releases, err := goReleasesCache.Get(ctx)
+	if err != nil {
+		log.Printf("Error fetching releases: %v", err)
+		http.Error(w, "Internal error, see logs", 500)
+	}
+
+	// Form the response.
+	resp := FormFieldsJSON{
+		Branches:            []string{"master"},
+		LatestReleaseBranch: latestRelease(releases).BranchName,
+	}
+	for _, release := range releases {
+		resp.Branches = append(resp.Branches, release.BranchName)
+	}
+
+	// Encode and write the response.
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(&resp); err != nil {
+		log.Printf("Error encoding results: %v", err)
+		http.Error(w, "Internal error, see logs", 500)
+	}
+}
+
+type FormFieldsJSON struct {
+	Branches            []string
+	LatestReleaseBranch string
+}
+
+type goReleases struct {
+	mu       sync.Mutex
+	releases []*maintnerpb.GoRelease
+	latest   *maintnerpb.GoRelease
+	fetched  time.Time
+}
+
+func (r *goReleases) Get(ctx context.Context) ([]*maintnerpb.GoRelease, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.fetched.IsZero() && time.Since(r.fetched) < time.Hour {
+		return r.releases, nil
+	}
+
+	dialOpts := []grpc.DialOption{
+		grpc.WithBlock(),
+		grpc.WithTimeout(10 * time.Second),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{NextProtos: []string{"h2"}})),
+	}
+	cc, err := grpc.Dial(maintnerHost, dialOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("unable to dial %q: %w", maintnerHost, err)
+	}
+	maintnerClient := maintnerpb.NewMaintnerServiceClient(cc)
+
+	resp, err := maintnerClient.ListGoReleases(ctx, &maintnerpb.ListGoReleasesRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list go releases: %w", err)
+	}
+	r.releases = resp.GetReleases()
+	r.fetched = time.Now()
+
+	return r.releases, nil
+}
+
+var goReleasesCache goReleases
+
+func latestRelease(releases []*maintnerpb.GoRelease) *maintnerpb.GoRelease {
+	var highestMajor int32
+	var latest *maintnerpb.GoRelease
+	for _, release := range releases {
+		if release.Major > highestMajor {
+			highestMajor = release.Major
+			latest = release
+		}
+	}
+	return latest
 }
