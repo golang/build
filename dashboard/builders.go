@@ -153,7 +153,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-10_15-aws": {
 		IsReverse:       true,
-		ExpectNum:       2,
+		ExpectNum:       0, // was 2 before migration to LUCI
 		Notes:           "AWS macOS Catalina (10.15) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
@@ -161,7 +161,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-11-aws": {
 		IsReverse:       true,
-		ExpectNum:       2,
+		ExpectNum:       0, // was 2 before migration to LUCI
 		Notes:           "AWS macOS Big Sur (11) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
@@ -169,7 +169,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-12-aws": {
 		IsReverse:       true,
-		ExpectNum:       6,
+		ExpectNum:       0, // was 6 before migration to LUCI
 		Notes:           "AWS macOS Monterey (12) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
@@ -177,7 +177,7 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-darwin-amd64-13-aws": {
 		IsReverse:       true,
-		ExpectNum:       2,
+		ExpectNum:       0, // was 2 before migration to LUCI
 		Notes:           "AWS macOS Ventura (13) VM under QEMU",
 		SSHUsername:     "gopher",
 		HermeticReverse: true, // we destroy the VM when done & recreate
@@ -186,13 +186,13 @@ var Hosts = map[string]*HostConfig{
 	"host-darwin-arm64-11": {
 		IsReverse:     true,
 		Notes:         "macOS Big Sur (11) ARM64 (M1) on Mac minis in a Google office",
-		ExpectNum:     3,
+		ExpectNum:     0, // was 3 before migration to LUCI
 		SSHUsername:   "gopher",
 		GoogleReverse: true,
 	},
 	"host-darwin-arm64-12": {
 		IsReverse:     true,
-		ExpectNum:     3,
+		ExpectNum:     0, // was 3 before migration to LUCI
 		Notes:         "macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office",
 		SSHUsername:   "gopher",
 		GoogleReverse: true,
@@ -571,7 +571,7 @@ var Hosts = map[string]*HostConfig{
 		Notes:     "Azure windows 11 arm64 VMs",
 		HostArch:  "windows-arm64",
 		IsReverse: true,
-		ExpectNum: 2,
+		ExpectNum: 0, // was 2 before migration to LUCI
 	},
 }
 
