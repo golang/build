@@ -55,6 +55,11 @@ The commit title and commit message body come from the GitHub PR title and descr
 The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
 `,
 		},
+		{
+			title: `[release-branch.go1.22] os/exec: on Windows look for extensions in Run if not already done`,
+			body:  goodCommitBody,
+			want:  "",
+		},
 	}
 	for _, tt := range tests {
 		t.Run("title "+tt.title, func(t *testing.T) {
