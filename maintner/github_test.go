@@ -21,8 +21,7 @@ import (
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/go-github/github"
-
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/maintner/maintpb"
 )
 

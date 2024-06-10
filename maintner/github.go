@@ -23,9 +23,8 @@ import (
 
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/gregjones/httpcache"
-
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
@@ -1923,12 +1922,15 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 	owner, repo := p.gr.id.Owner, p.gr.id.Repo
 	morePages := true // at least try the first. might be empty.
 	for morePages {
-		ics, res, err := p.githubDirect.Issues.ListComments(ctx, owner, repo, int(issueNum), &github.IssueListCommentsOptions{
-			Since:       since,
-			Direction:   "asc",
-			Sort:        "updated",
+		opt := &github.IssueListCommentsOptions{
+			Direction:   github.String("asc"),
+			Sort:        github.String("updated"),
 			ListOptions: github.ListOptions{PerPage: 100},
-		})
+		}
+		if !since.IsZero() {
+			opt.Since = &since
+		}
+		ics, res, err := p.githubDirect.Issues.ListComments(ctx, owner, repo, int(issueNum), opt)
 		if canRetry(ctx, err) {
 			continue
 		} else if ge, ok := err.(*github.ErrorResponse); ok && (ge.Response.StatusCode == http.StatusNotFound || ge.Response.StatusCode == http.StatusGone) {

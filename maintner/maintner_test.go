@@ -16,7 +16,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/ptypes"
 	google_protobuf "github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/maintner/maintpb"
 )
 

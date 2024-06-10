@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/shurcooL/githubv4"
 	wf "golang.org/x/build/internal/workflow"
 	goversion "golang.org/x/build/maintner/maintnerd/maintapi/version"

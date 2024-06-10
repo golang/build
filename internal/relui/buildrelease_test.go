@@ -27,7 +27,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/google/uuid"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/build/gerrit"

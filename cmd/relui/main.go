@@ -25,7 +25,7 @@ import (
 	cloudbuild "cloud.google.com/go/cloudbuild/apiv1/v2"
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/shurcooL/githubv4"
 	"go.chromium.org/luci/auth"

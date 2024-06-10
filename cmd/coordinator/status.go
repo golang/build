@@ -28,7 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"go.opencensus.io/stats"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"

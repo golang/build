@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/oauth2"
