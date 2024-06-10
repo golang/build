@@ -789,7 +789,15 @@ Please visit Gerrit at %s.
 		return err
 	}
 
-	if newCL {
+	checkCommonMistakes := newCL
+	if releaseOrInternalBranch := strings.HasPrefix(pr.Base.GetRef(), "release-branch.") ||
+		strings.HasPrefix(pr.Base.GetRef(), "internal-branch."); releaseOrInternalBranch {
+		// The rules for commit messages on release and internal branches
+		// are different, so don't use the same rules for checking for
+		// common mistakes.
+		checkCommonMistakes = false
+	}
+	if checkCommonMistakes {
 		// Check if we spot any problems with the CL according to our internal
 		// set of rules, and if so, add an unresolved comment to Gerrit.
 		// If the author responds to this, it also helps a reviewer see the author has
