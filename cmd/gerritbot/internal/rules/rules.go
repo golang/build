@@ -115,7 +115,7 @@ var ruleGroups = [][]rule{
 					// We also allow things like "go/types, types2: ..." (but not "hello, fun world: ...").
 					return "", ""
 				}
-				if change.Repo == "go" && strings.Contains(start, "release-branch.go1.22") {
+				if change.Repo == "go" && strings.Contains(start, "release-branch") {
 					// Consider backport.
 					return "", ""
 				}
