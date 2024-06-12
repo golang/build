@@ -104,9 +104,9 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 			name: "announce-rc",
 			in: releaseAnnouncement{
 				Kind:    KindRC,
-				Version: "go1.19rc6",
+				Version: "go1.23rc3",
 			},
-			wantSubject: "Go 1.19 Release Candidate 6 is released",
+			wantSubject: "Go 1.23 Release Candidate 3 is released",
 		},
 		{
 			name: "announce-major",

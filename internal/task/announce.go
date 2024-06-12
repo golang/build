@@ -441,6 +441,10 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 		return fmt.Sprintf("1.%d", x), nil
 	},
+	// atLeast reports whether v1 >= v2.
+	"atLeast": func(v1, v2 string) bool {
+		return CompareGoVersions(v1, v2) >= 0
+	},
 	// build extracts the pre-release build number of a valid Go version.
 	// For example, build("go1.19beta2") == "2".
 	"build": func(v string) (string, error) {
