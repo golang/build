@@ -284,7 +284,7 @@ func main() {
 func gomoteServerClient(ctx context.Context) protos.GomoteServiceClient {
 	grpcClient, err := iapclient.GRPCClient(ctx, *serverAddr)
 	if err != nil {
-		logAndExitf("dialing the server=%s failed with: %s", *serverAddr, err)
+		logAndExitf("dialing the server=%s failed with: %s\n", *serverAddr, err)
 	}
 	return protos.NewGomoteServiceClient(grpcClient)
 }
