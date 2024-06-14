@@ -127,6 +127,7 @@ const (
 	metaKeyPassword = "password"
 	metaKeyTLSCert  = "tls-cert"
 	metaKeyTLSkey   = "tls-key"
+	windowsWorkdir  = `C:\workdir`
 )
 
 func main() {
@@ -198,7 +199,7 @@ func main() {
 		case "windows":
 			// We want a short path on Windows, due to
 			// Windows issues with maximum path lengths.
-			*workDir = `C:\workdir`
+			*workDir = windowsWorkdir
 			if err := os.MkdirAll(*workDir, 0755); err != nil {
 				log.Fatalf("error creating workdir: %v", err)
 			}

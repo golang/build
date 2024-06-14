@@ -447,8 +447,8 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 // This makes the new SSH session easier to use for Go testing.
 func (ss *SSHServer) setupRemoteSSHEnvSwarm(builderType, workDir string, f io.Writer) {
 	if strings.Contains(builderType, "windows") {
-		// TODO(65826) find a universal way of setting the working directory.
-		fmt.Fprintf(f, `cd %s`+"\r\n", workDir)
+		// The working directory is set in the Windows pseudo console client used in the buildlet.
+		// go.dev/issue/65826
 		return
 	}
 	fmt.Fprintf(f, "cd %s\n", workDir)
