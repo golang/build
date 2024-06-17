@@ -1,7 +1,7 @@
 Hello gophers,
 
-We have just released go1.23rc3, a release candidate version of Go 1.23.
-It is cut from release-branch.go1.23 at the revision tagged go1.23rc3.
+We have just released go1.23rc1, a release candidate version of Go 1.23.
+It is cut from release-branch.go1.23 at the revision tagged go1.23rc1.
 
 Please try your production load tests and unit tests with the new version.
 Your help testing these pre-release versions is invaluable.
@@ -9,20 +9,25 @@ Your help testing these pre-release versions is invaluable.
 Report any problems using the issue tracker:
 https://go.dev/issue/new
 
-If you have Go installed already, an easy way to try go1.23rc3
+If you have Go installed already, an easy way to try go1.23rc1
 is by using the go command:
 
-$ go install golang.org/dl/go1.23rc3@latest
-$ go1.23rc3 download
+$ go install golang.org/dl/go1.23rc1@latest
+$ go1.23rc1 download
 
 You can download binary and source distributions from the usual place:
-https://go.dev/dl/#go1.23rc3
+https://go.dev/dl/#go1.23rc1
 
 To help validate the release, consider opting in to Go toolchain telemetry <https://go.dev/doc/telemetry>.
-If you're using go command version go1.23rc1 or later, you can opt in by
-running the following command:
+You can opt in by running the following command:
 
-$ go telemetry on
+$ go1.23rc1 telemetry on
+
+If you use the gopls language server in your development workflow, please note
+that gopls v0.16.0-pre.1 is currently required for this release candidate.
+Install it with:
+
+$ go1.23rc1 install golang.org/x/tools/gopls@v0.16.0-pre.1
 
 To find out what has changed in Go 1.23, read the draft release notes:
 https://tip.golang.org/doc/go1.23

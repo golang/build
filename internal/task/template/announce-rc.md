@@ -14,20 +14,36 @@ https://go.dev/issue/new
 If you have Go installed already, an easy way to try {{.Version}}
 is by using the go command:
 
+```
 $ go install golang.org/dl/{{.Version}}@latest
 $ {{.Version}} download
+```
 
 You can download binary and source distributions from the usual place:
 https://go.dev/dl/#{{.Version}}
 
-{{ if atLeast .Version "go1.23" }}
-To help validate the release, consider opting in to [Go toolchain telemetry](https://go.dev/doc/telemetry).
-If you're using go command version go1.23rc1 or later, you can opt in by
-running the following command:
+{{/* TODO(rfindley): update the go1.23rc1 sections once Go 1.23 is out. */ -}}
 
-$ go telemetry on
+{{ if eq .Version "go1.23rc1" }}
+To help validate the release, consider opting in to [Go toolchain telemetry](https://go.dev/doc/telemetry).
+You can opt in by running the following command:
+
+```
+$ go1.23rc1 telemetry on
+```
 
 {{ end -}}
+
+{{ if eq .Version "go1.23rc1" }}
+If you use the gopls language server in your development workflow, please note
+that gopls v0.16.0-pre.1 is currently required for this release candidate.
+Install it with:
+
+```
+$ go1.23rc1 install golang.org/x/tools/gopls@v0.16.0-pre.1
+```
+
+{{end -}}
 
 To find out what has changed in Go {{.Version|major}}, read the draft release notes:
 https://tip.golang.org/doc/go{{.Version|major}}

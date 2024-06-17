@@ -13,8 +13,10 @@ https://go.dev/dl/#{{.Version}}
 If you have Go installed already, an easy way to try {{.Version}}
 is by using the go command:
 
+```
 $ go install golang.org/dl/{{.Version}}@latest
 $ {{.Version}} download
+```
 
 To compile from source using a Git clone, update to the release with
 `git checkout {{.Version}}` and build as usual.
