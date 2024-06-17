@@ -330,6 +330,7 @@ func main() {
 			{goRepo, 40593}: true,
 			{goRepo, 40600}: true,
 			{goRepo, 41211}: true,
+			{goRepo, 41268}: true, // transferred to https://github.com/golang/tour/issues/1042
 			{goRepo, 41336}: true,
 			{goRepo, 41649}: true,
 			{goRepo, 41650}: true,
@@ -365,6 +366,8 @@ func main() {
 			{goRepo, 45201}: true,
 			{goRepo, 45202}: true,
 			{goRepo, 47140}: true,
+			{goRepo, 62987}: true,
+			{goRepo, 67913}: true,
 
 			{vscode, 298}:  true,
 			{vscode, 524}:  true,
@@ -373,6 +376,9 @@ func main() {
 			{vscode, 773}:  true,
 			{vscode, 959}:  true,
 			{vscode, 1402}: true,
+			{vscode, 2260}: true, // transferred to https://go.dev/issue/53080
+			{vscode, 2548}: true,
+			{vscode, 2781}: true, // transferred to https://go.dev/issue/60435
 		},
 	}
 	for n := int32(55359); n <= 55828; n++ {
@@ -639,9 +645,15 @@ func (b *gopherbot) setMilestone(ctx context.Context, repoID maintner.GitHubRepo
 	if *dryRun {
 		return nil
 	}
-	_, _, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(gi.Number), &github.IssueRequest{
+	_, resp, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(gi.Number), &github.IssueRequest{
 		Milestone: github.Int(m.Number),
 	})
+	if err != nil && resp != nil && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone) {
+		// An issue can become gone on GitHub without maintner realizing it. See go.dev/issue/30184.
+		log.Printf("setMilestone: Issue %v#%v returned %s when trying to set milestone. Skipping. See go.dev/issue/30184.", repoID, gi.Number, resp.Status)
+		b.deletedIssues[githubIssue{repoID, gi.Number}] = true
+		return nil
+	}
 	return err
 }
 
@@ -954,15 +966,15 @@ func (b *gopherbot) labelProposals(ctx context.Context) error {
 		if !strings.HasPrefix(gi.Title, "proposal:") && !strings.HasPrefix(gi.Title, "Proposal:") {
 			return nil
 		}
-		// Add Milestone if missing:
-		if gi.Milestone.IsNone() && !gi.HasEvent("milestoned") && !gi.HasEvent("demilestoned") {
-			if err := b.setMilestone(ctx, b.gorepo.ID(), gi, proposal); err != nil {
-				return err
-			}
-		}
 		// Add Proposal label if missing:
 		if !gi.HasLabel("Proposal") && !gi.HasEvent("unlabeled") {
 			if err := b.addLabel(ctx, b.gorepo.ID(), gi, "Proposal"); err != nil {
+				return err
+			}
+		}
+		// Add Milestone if missing:
+		if gi.Milestone.IsNone() && !gi.HasEvent("milestoned") && !gi.HasEvent("demilestoned") {
+			if err := b.setMilestone(ctx, b.gorepo.ID(), gi, proposal); err != nil {
 				return err
 			}
 		}
