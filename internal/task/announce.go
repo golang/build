@@ -661,8 +661,8 @@ func renderMarkdown(r io.Reader) (html, text string, _ error) {
 // of our test data, since without a browser plain text is more readable than HTML.)
 //
 // The output is mostly plain text that doesn't preserve Markdown syntax (for example,
-// `code` is rendered without backticks), though there is very lightweight formatting
-// applied (links are written as "text <URL>").
+// `code` is rendered without backticks, code blocks aren't indented, and so on),
+// though there is very lightweight formatting applied (links are written as "text <URL>").
 //
 // We can in theory choose to delete this renderer at any time if its maintenance costs
 // start to outweight its benefits, since Markdown by definition is designed to be human
@@ -685,7 +685,7 @@ func (markdownToTextRenderer) Render(w io.Writer, source []byte, n ast.Node) err
 				switch n.PreviousSibling().Kind() {
 				default:
 					fmt.Fprint(w, "\n\n")
-				case ast.KindCodeBlock:
+				case ast.KindCodeBlock, ast.KindFencedCodeBlock:
 					// A code block always ends with a newline, so only need one more.
 					fmt.Fprintln(w)
 				}
@@ -707,11 +707,15 @@ func (markdownToTextRenderer) Render(w io.Writer, source []byte, n ast.Node) err
 					// If we're in a list, indent accordingly.
 					fmt.Fprint(w, strings.Repeat("\t", len(markers)))
 				}
-			case *ast.CodeBlock:
-				indent := strings.Repeat("\t", len(markers)+1) // Indent if in a list, plus one more since it's a code block.
+			case *ast.CodeBlock, *ast.FencedCodeBlock:
+				// Code blocks are printed as is in plain text.
 				for i := 0; i < n.Lines().Len(); i++ {
 					s := n.Lines().At(i)
-					fmt.Fprint(w, indent, string(source[s.Start:s.Stop]))
+					if i != 0 {
+						// If we're in a list, indent inner lines accordingly.
+						fmt.Fprint(w, strings.Repeat("\t", len(markers)))
+					}
+					fmt.Fprint(w, string(source[s.Start:s.Stop]))
 				}
 			case *ast.AutoLink:
 				// Auto-links are printed as is in plain text.

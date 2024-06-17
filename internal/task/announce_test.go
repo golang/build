@@ -401,6 +401,20 @@ There may be security fixes following the [security policy](https://go.dev/secur
 
 	Some description of the problem here.
 
+		Regular Code Block
+		Can
+		Be
+		Here
+
+	Another paragraph.
+
+	` + "```" + `
+	Fenced Code Block
+	Can
+	Be
+	Here
+	` + "```" + `
+
 	Markdown allows one to use backslash escapes, like \_underscore\_
 	or \*literal asterisks\*, so we might encounter that.
 
@@ -415,8 +429,11 @@ To builds from source, use
 
 An easy way to try go1.19beta1
 is by using the go command:
+
+` + "```" + `
 $ go install example.org@latest
 $ example download
+` + "```" + `
 
 That's all for now.
 `
@@ -445,6 +462,18 @@ There may be security fixes following the security policy <https://go.dev/securi
 
 	Some description of the problem here.
 
+	Regular Code Block
+	Can
+	Be
+	Here
+
+	Another paragraph.
+
+	Fenced Code Block
+	Can
+	Be
+	Here
+
 	Markdown allows one to use backslash escapes, like \_underscore\_
 	or \*literal asterisks\*, so we might encounter that.
 
@@ -459,6 +488,7 @@ git checkout.
 
 An easy way to try go1.19beta1
 is by using the go command:
+
 $ go install example.org@latest
 $ example download
 
