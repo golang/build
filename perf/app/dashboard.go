@@ -484,11 +484,7 @@ func changeScore(l1, c1, h1, l2, c2, h2 float64) float64 {
 }
 
 func isHigherBetter(unit string) bool {
-	switch unit {
-	case "B/s", "ops/s":
-		return true
-	}
-	return false
+	return unit == "B/s" || strings.HasSuffix(unit, "ops/s") || strings.HasSuffix(unit, "ops/sec") || strings.HasSuffix(unit, "ops")
 }
 
 func worstRegression(b *BenchmarkJSON) *RegressionJSON {
