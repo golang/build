@@ -536,6 +536,7 @@ MAIN_BRANCH_NAME = "master"
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
     "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.20.6"),
+    "go1.23": struct(branch = "release-branch.go1.23", bootstrap = "1.20.6"),
     "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.20.6"),
     "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
 }
@@ -549,6 +550,7 @@ INTERNAL_GO_BRANCHES = {
     # release, and want to maintain that history. We use a regex to match
     # all the point branches so that we don't need to manually update the
     # config each time we issue a point release.
+    "go1.23": struct(branch_regexp = "private-release-branch.go1.23.\\d+", bootstrap = "1.20.6"),
     "go1.22": struct(branch_regexp = "private-release-branch.go1.22.\\d+", bootstrap = "1.20.6"),
     "go1.21": struct(branch_regexp = "private-release-branch.go1.21.\\d+", bootstrap = "1.17.13"),
 }
