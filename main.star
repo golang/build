@@ -805,6 +805,9 @@ RUN_MODS = dict(
                 "src/{,cmd/}go[.]{mod,sum}",
                 "src/{,cmd/}vendor/.+",
                 "src/.+_bundle.go",
+                # Enable longtest builders on go against tip if files in the crypto/tls tree are modified,
+                # so that the BoGo test suite is run.
+                "src/crypto/tls/.+",
             ],
             "protobuf": [],
         }),
