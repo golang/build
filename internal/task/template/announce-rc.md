@@ -34,17 +34,6 @@ $ go1.23rc1 telemetry on
 
 {{ end -}}
 
-{{ if eq .Version "go1.23rc1" }}
-If you use the gopls language server in your development workflow, please note
-that gopls v0.16.0-pre.1 is currently required for this release candidate.
-Install it with:
-
-```
-$ go1.23rc1 install golang.org/x/tools/gopls@v0.16.0-pre.1
-```
-
-{{end -}}
-
 To find out what has changed in Go {{.Version|major}}, read the draft release notes:
 https://tip.golang.org/doc/go{{.Version|major}}
 
