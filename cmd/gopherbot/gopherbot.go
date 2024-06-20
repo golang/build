@@ -2802,8 +2802,11 @@ func isDocumentationTitle(t string) bool {
 	if strings.Contains(t, "godoc:") { // in x/tools, or the dozen places people file it as
 		return false
 	}
-	return strings.Contains(t, "document") ||
-		strings.Contains(t, "docs ")
+	if strings.Contains(t, "docs ") {
+		return true
+	}
+	return strings.Contains(t, "document") &&
+		regexp.MustCompile(`\bdocument\b`).MatchString(t)
 }
 
 func isGoplsTitle(t string) bool {
