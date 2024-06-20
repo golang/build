@@ -343,7 +343,7 @@ SLOW_HOSTS = {
     "openbsd-amd64": 2,
     "openbsd-arm": 5,
     "openbsd-arm64": 5,
-    "openbsd-ppc64": 2,
+    "openbsd-ppc64": 3,
     "openbsd-riscv64": 4,
 }
 
