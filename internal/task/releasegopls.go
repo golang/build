@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/mod/semver"
 )
@@ -28,7 +29,7 @@ type PrereleaseGoplsTasks struct {
 
 // NewDefinition create a new workflow definition for gopls pre-release.
 func (r *PrereleaseGoplsTasks) NewDefinition() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	// TODO(hxjiang): provide potential release versions in the relui where the
 	// coordinator can choose which version to release instead of manual input.
@@ -533,7 +534,7 @@ type ReleaseGoplsTasks struct {
 
 // NewDefinition create a new workflow definition for gopls release.
 func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	version := wf.Param(wd, wf.ParamDef[string]{Name: "pre-release version"})
 

@@ -205,7 +205,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 
 func testRelease(t *testing.T, prevTag string, major int, wantVersion string, kind task.ReleaseKind) {
 	deps := newReleaseTestDeps(t, prevTag, major, wantVersion)
-	wd := workflow.New()
+	wd := workflow.New(workflow.ACL{})
 
 	deps.gerrit.wantReviewers = []string{"heschi", "dmitshur"}
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, major, kind, workflow.Const(deps.gerrit.wantReviewers))
@@ -396,7 +396,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	}
 
 	// Run the release.
-	wd := workflow.New()
+	wd := workflow.New(workflow.ACL{})
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
@@ -440,7 +440,7 @@ func TestAdvisoryTestsFail(t *testing.T) {
 	}
 
 	// Run the release.
-	wd := workflow.New()
+	wd := workflow.New(workflow.ACL{})
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 

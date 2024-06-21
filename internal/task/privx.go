@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 )
 
@@ -31,7 +32,7 @@ type PrivXPatch struct {
 }
 
 func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam, groups.SecurityTeam}})
 	// TODO: this should be simpler, CL number + patchset?
 	clNumber := wf.Param(wd, wf.ParamDef[string]{Name: "go-internal CL number", Example: "536316"})
 	reviewers := wf.Param(wd, reviewersParam)

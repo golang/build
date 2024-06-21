@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/sync/errgroup"
 )
@@ -44,7 +45,7 @@ var vscgoVersionParam = wf.ParamDef[string]{
 }
 
 func (t *VSCodeGoReleaseTask) NewDefinition() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	version := wf.Param(wd, vscgoVersionParam)
 	unsignedArtifacts := wf.Task1(wd, "build vscgo", t.buildVSCGO, version)

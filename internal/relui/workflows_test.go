@@ -53,7 +53,7 @@ func TestAwaitFunc(t *testing.T) {
 			didWork := make(chan struct{}, 2)
 			success := make(chan interface{})
 			done := make(chan interface{})
-			wd := workflow.New()
+			wd := workflow.New(workflow.ACL{})
 
 			awaitFunc := func(ctx *workflow.TaskContext) error {
 				_, err := task.AwaitCondition(ctx, 10*time.Millisecond, func() (int, bool, error) {

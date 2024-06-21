@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 )
 
@@ -22,7 +23,7 @@ type BundleNSSRootsTask struct {
 }
 
 func (x *BundleNSSRootsTask) NewDefinition() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam, groups.SecurityTeam}})
 	reviewers := wf.Param(wd, reviewersParam)
 
 	done := wf.Task1(wd, "Update bundle", x.UpdateBundle, reviewers)

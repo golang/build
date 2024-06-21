@@ -210,7 +210,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 
 	counter := 0
 	blockingChan := make(chan bool)
-	wd := workflow.New()
+	wd := workflow.New(workflow.ACL{})
 	nothing := workflow.Task0(wd, "needs retry", func(ctx context.Context) (string, error) {
 		// Send twice so that the test can stop us mid-execution.
 		for i := 0; i < 2; i++ {
@@ -272,7 +272,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 }
 
 func newTestEchoWorkflow() *workflow.Definition {
-	wd := workflow.New()
+	wd := workflow.New(workflow.ACL{})
 	echo := func(ctx context.Context, greeting string, names []string) (string, error) {
 		return fmt.Sprintf("%v %v", greeting, strings.Join(names, " ")), nil
 	}

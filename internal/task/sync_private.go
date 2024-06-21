@@ -7,6 +7,7 @@ package task
 import (
 	"fmt"
 
+	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 )
 
@@ -17,7 +18,7 @@ type PrivateMasterSyncTask struct {
 }
 
 func (t *PrivateMasterSyncTask) NewDefinition() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam, groups.SecurityTeam}})
 	// We use a Task, instead of an Action, even though we don't actually want
 	// to return any result, because nothing depends on the Action, and if we
 	// use an Action the definition will tell us we don't reference it anywhere

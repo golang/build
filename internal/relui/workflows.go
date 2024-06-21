@@ -36,6 +36,7 @@ import (
 	"golang.org/x/build/internal/installer/windowsmsi"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/relui/db"
+	"golang.org/x/build/internal/relui/groups"
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
@@ -201,7 +202,7 @@ Their first names will be included at the end of the release announcement, and C
 // newEchoWorkflow returns a runnable wf.Definition for
 // development.
 func newEchoWorkflow() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	wf.Output(wd, "greeting", wf.Task1(wd, "greeting", echo, wf.Param(wd, wf.ParamDef[string]{Name: "greeting"})))
 	wf.Output(wd, "farewell", wf.Task1(wd, "farewell", echo, wf.Param(wd, wf.ParamDef[string]{Name: "farewell"})))
 	return wd
@@ -272,7 +273,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		{[]int{currentMajor - 1}},               // Previous minor only.
 	}
 	for _, r := range releases {
-		wd := wf.New()
+		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 
 		versions := wf.Task1(wd, "Get next versions", version.GetNextMinorVersions, wf.Const(r.majors))
 		targetDate := wf.Param(wd, targetDateParam)
@@ -293,7 +294,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 	// Register workflows for miscellaneous tasks that happen as part of the Go release cycle.
 	{
 		// Register a "ping early-in-cycle issues" workflow.
-		wd := wf.New()
+		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 		openTreeURL := wf.Param(wd, wf.ParamDef[string]{
 			Name:    "Open Tree URL",
 			Doc:     `Open Tree URL is the URL of an announcement that the tree is open for general Go 1.x development.`,
@@ -312,7 +313,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 	}
 	{
 		// Register an "unwait wait-release CLs" workflow.
-		wd := wf.New()
+		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 		unwaited := wf.Task0(wd, "Unwait wait-release CLs", version.UnwaitWaitReleaseCLs)
 		wf.Output(wd, "unwaited", unwaited)
 		h.RegisterDefinition("unwait wait-release CLs", wd)
@@ -345,7 +346,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		releases = append(releases, release{currentMajor, task.KindMajor, "final"})
 	}
 	for _, r := range releases {
-		wd := wf.New()
+		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 
 		coordinators := wf.Param(wd, releaseCoordinators)
 
@@ -377,7 +378,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 }
 
 func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.VersionTasks, build *BuildReleaseTasks, major int, kind task.ReleaseKind) {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 
 	nextVersion := wf.Task2(wd, "Get next version", version.GetNextVersion, wf.Const(major), wf.Const(kind))
 	branch := fmt.Sprintf("release-branch.go1.%d", major)
@@ -399,7 +400,7 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 }
 
 func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int) (*wf.Definition, error) {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 
 	coordinators := wf.Param(wd, releaseCoordinators)
 	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators)

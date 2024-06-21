@@ -25,7 +25,7 @@ func TestTrivial(t *testing.T) {
 		return arg, nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	wf.Task1(wd, "echo", echo, wf.Const("hello world"))
 	greeting := wf.Task1(wd, "echo", echo, wf.Const("hello world"))
 	wf.Output(wd, "greeting", greeting)
@@ -57,7 +57,7 @@ func TestDependency(t *testing.T) {
 		return "hello world", nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	firstDep := wf.Action0(wd, "first action", action)
 	secondDep := wf.Task0(wd, "check action", checkAction, wf.After(firstDep))
 	wf.Output(wd, "greeting", wf.Task0(wd, "say hi", hi, wf.After(secondDep)))
@@ -77,7 +77,7 @@ func TestDependencyError(t *testing.T) {
 		return "", fmt.Errorf("unexpected error")
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	dep := wf.Action0(wd, "failing action", action)
 	wf.Output(wd, "output", wf.Task0(wd, "task", task, wf.After(dep)))
 	w := startWorkflow(t, wd, nil)
@@ -94,7 +94,7 @@ func TestSub(t *testing.T) {
 		return s1 + " " + s2, nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	sub1 := wd.Sub("sub1")
 	g1 := wf.Task0(sub1, "Greeting", hi)
 	sub2 := wd.Sub("sub2")
@@ -119,7 +119,7 @@ func TestSplitJoin(t *testing.T) {
 		return strings.Join(s, ","), nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	in := wf.Task1(wd, "echo", echo, wf.Const("string #"))
 	add1 := wf.Task2(wd, "add 1", appendInt, in, wf.Const(1))
 	add2 := wf.Task2(wd, "add 2", appendInt, in, wf.Const(2))
@@ -153,7 +153,7 @@ func TestParallelism(t *testing.T) {
 		}
 		return "", ctx.Err()
 	}
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	out1 := wf.Task0(wd, "block #1", block1)
 	out2 := wf.Task0(wd, "block #2", block2)
 	wf.Output(wd, "out1", out1)
@@ -168,7 +168,7 @@ func TestParameters(t *testing.T) {
 		return arg, nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	param1 := wf.Param(wd, wf.ParamDef[string]{Name: "param1"})
 	param2 := wf.Param(wd, wf.ParamDef[string]{Name: "param2"})
 	out1 := wf.Task1(wd, "echo 1", echo, param1)
@@ -225,7 +225,7 @@ func TestExpansion(t *testing.T) {
 		return strings.Join(args, " "), nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	v1 := wf.Task0(wd, "first", first)
 	v2 := wf.Task0(wd, "second", second)
 	wf.Output(wd, "second", v2)
@@ -250,7 +250,7 @@ func TestResumeExpansion(t *testing.T) {
 		counter++
 		return "", nil
 	}
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	result := wf.Expand0(wd, "expand", func(wd *wf.Definition) (wf.Value[string], error) {
 		return wf.Task0(wd, "succeeds", succeeds), nil
 	})
@@ -271,7 +271,7 @@ func TestResumeExpansion(t *testing.T) {
 
 func TestRetryExpansion(t *testing.T) {
 	counter := 0
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	out := wf.Expand0(wd, "expand", func(wd *wf.Definition) (wf.Value[string], error) {
 		counter++
 		if counter == 1 {
@@ -311,7 +311,7 @@ func TestManualRetry(t *testing.T) {
 		return "hi", nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	wf.Output(wd, "result", wf.Task0(wd, "needs retry", needsRetry))
 
 	w := startWorkflow(t, wd, nil)
@@ -342,7 +342,7 @@ func TestAutomaticRetry(t *testing.T) {
 		return "hi", nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	wf.Output(wd, "result", wf.Task0(wd, "needs retry", needsRetry))
 
 	w := startWorkflow(t, wd, nil)
@@ -363,7 +363,7 @@ func TestAutomaticRetryDisabled(t *testing.T) {
 		return "", fmt.Errorf("do not pass go")
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	wf.Output(wd, "result", wf.Task0(wd, "no retry", noRetry))
 
 	w := startWorkflow(t, wd, nil)
@@ -409,7 +409,7 @@ func testWatchdog(t *testing.T, success bool) {
 		return "huh? what?", nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	wf.Output(wd, "result", wf.Task0(wd, "sleepy", maybeLog))
 
 	w := startWorkflow(t, wd, nil)
@@ -428,7 +428,7 @@ func TestLogging(t *testing.T) {
 		return arg, nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	out := wf.Task1(wd, "log", log, wf.Const("hey there"))
 	wf.Output(wd, "out", out)
 
@@ -481,7 +481,7 @@ func TestResume(t *testing.T) {
 		}
 		return "not blocked", nil
 	}
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	v1 := wf.Task0(wd, "run once", runOnlyOnce)
 	v2 := wf.Task1(wd, "block", maybeBlock, v1)
 	wf.Output(wd, "output", v2)
@@ -536,7 +536,7 @@ func TestBadMarshaling(t *testing.T) {
 		return badResult{"hi"}, nil
 	}
 
-	wd := wf.New()
+	wd := wf.New(wf.ACL{})
 	wf.Output(wd, "greeting", wf.Task0(wd, "greet", greet))
 	w := startWorkflow(t, wd, nil)
 	if got, want := runToFailure(t, w, nil, "greet"), "JSON marshaling"; !strings.Contains(got, want) {

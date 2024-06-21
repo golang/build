@@ -21,6 +21,7 @@ import (
 	"go.chromium.org/luci/auth/identity"
 	"go.chromium.org/luci/server/auth"
 	"go.chromium.org/luci/server/auth/authdb"
+	"go.chromium.org/luci/server/auth/authtest"
 	"go.chromium.org/luci/server/auth/authdb/dump"
 	"go.chromium.org/luci/server/caching"
 	"golang.org/x/oauth2"
@@ -110,4 +111,16 @@ func (db *AuthDatabase) IsMemberOfAny(ctx context.Context, ident string, groups 
 	}
 
 	return db.db.IsMember(ctx, identity.Identity(ident), groups)
+}
+
+func NewDevDatabase() *AuthDatabase {
+	return &AuthDatabase{db: authdb.DevServerDB{}}
+}
+
+func NewTestDatabase(memberships [][2]string) *AuthDatabase {
+	var datums []authtest.MockedDatum
+	for _, membership := range memberships {
+		datums = append(datums, authtest.MockMembership(identity.Identity(membership[0]), membership[1]))
+	}
+	return &AuthDatabase{db: authtest.NewFakeDB(datums...)}
 }

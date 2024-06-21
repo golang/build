@@ -34,6 +34,7 @@ import (
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/access"
+	"golang.org/x/build/internal/criadb"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui"
@@ -72,6 +73,7 @@ var (
 	swarmingRealm   = flag.String("swarming-realm", "", "Swarming realm to run tasks in")
 
 	buildbucketHost = flag.String("buildbucket-host", "", "Buildbucket host to use for tasks")
+	criaService     = flag.String("cria-service", "chrome-infra-auth", "CrIA service name")
 )
 
 func main() {
@@ -356,15 +358,26 @@ func main() {
 	if err := w.ResumeAll(ctx); err != nil {
 		log.Printf("w.ResumeAll() = %v", err)
 	}
-	var h http.Handler = relui.NewServer(dbPool, w, base, siteHeader, ms)
+	var prod bool // are we operating from symbolic-datum-552
+	var criaDB *criadb.AuthDatabase
 	if metadata.OnGCE() {
 		project, err := metadata.ProjectID()
 		if err != nil {
 			log.Fatalln("failed to read project ID from metadata server")
 		}
-		if project == "symbolic-datum-552" {
-			h = access.RequireIAPAuthHandler(h, access.IAPSkipAudienceValidation)
+		prod = project == "symbolic-datum-552"
+		if prod {
+			criaDB, err = criadb.NewDatabase(*criaService)
+			if err != nil {
+				log.Fatalf("failed to create cria authdb: %s", err)
+			}
 		}
+	} else {
+		criaDB = criadb.NewDevDatabase()
+	}
+	var h http.Handler = relui.NewServer(dbPool, w, base, siteHeader, ms, criaDB)
+	if prod {
+		h = access.RequireIAPAuthHandler(h, access.IAPSkipAudienceValidation)
 	}
 	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: GRPCHandler(grpcServer, h)}))
 }

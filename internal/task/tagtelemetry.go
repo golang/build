@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/mod/semver"
 )
@@ -24,7 +25,7 @@ type TagTelemetryTasks struct {
 }
 
 func (t *TagTelemetryTasks) NewDefinition() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	reviewers := wf.Param(wd, reviewersParam)
 	changeID := wf.Task1(wd, "generate config CL", t.GenerateConfig, reviewers)

@@ -54,12 +54,19 @@ import (
 	"github.com/google/uuid"
 )
 
+type ACL struct {
+	// In order to interact with a workflow, the user must be a member
+	// of one of any of the following groups.
+	Groups []string
+}
+
 // New creates a new workflow definition.
-func New() *Definition {
+func New(acl ACL) *Definition {
 	return &Definition{
 		definitionState: &definitionState{
 			tasks:   make(map[string]*taskDefinition),
 			outputs: make(map[string]metaValue),
+			acl:     acl,
 		},
 	}
 }
@@ -82,7 +89,7 @@ func (d *Definition) name(name string) string {
 }
 
 func (d *Definition) shallowClone() *Definition {
-	clone := New()
+	clone := New(d.acl)
 	clone.namePrefix = d.namePrefix
 	clone.parameters = append([]MetaParameter(nil), d.parameters...)
 	for k, v := range d.tasks {
@@ -94,10 +101,20 @@ func (d *Definition) shallowClone() *Definition {
 	return clone
 }
 
+// AuthorizedGroups returns the list of groups which are authorized to create,
+// approve, stop, and retry this workflow. If any user can preform these
+// actions, a nil slice is returned.
+func (d *Definition) AuthorizedGroups() []string {
+	return d.acl.Groups
+}
+
 type definitionState struct {
 	parameters []MetaParameter // Ordered according to registration, unique parameter names.
 	tasks      map[string]*taskDefinition
 	outputs    map[string]metaValue
+	// list of groups that are allowed to interact with the associated
+	// definition.
+	acl ACL
 }
 
 // A TaskOption affects the execution of a task but is not an argument to its function.

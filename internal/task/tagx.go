@@ -20,6 +20,7 @@ import (
 	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/releasetargets"
+	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/exp/slices"
 	"golang.org/x/mod/modfile"
@@ -34,7 +35,7 @@ type TagXReposTasks struct {
 }
 
 func (x *TagXReposTasks) NewDefinition() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 	reviewers := wf.Param(wd, reviewersParam)
 	repos := wf.Task0(wd, "Select repositories", x.SelectRepos)
 	done := wf.Expand2(wd, "Create plan", x.BuildPlan, repos, reviewers)
@@ -43,7 +44,7 @@ func (x *TagXReposTasks) NewDefinition() *wf.Definition {
 }
 
 func (x *TagXReposTasks) NewSingleDefinition() *wf.Definition {
-	wd := wf.New()
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 	reviewers := wf.Param(wd, reviewersParam)
 	repos := wf.Task0(wd, "Load all repositories", x.SelectRepos)
 	name := wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "tools"})
