@@ -804,8 +804,8 @@ RUN_MODS = dict(
             "build": [],
             "go": [
                 # Enable longtest builders on go against tip if files related to vendored code are modified.
-                "src/.+/go[.](mod|sum)",
-                "src/.+/vendor/.+",
+                "src(|/.+)/go[.](mod|sum)",
+                "src(|/.+)/vendor/.+",
                 "src/.+_bundle.go",
                 # Enable longtest builders on go against tip if files in the crypto/tls tree are modified,
                 # so that the BoGo test suite is run.
