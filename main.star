@@ -804,8 +804,8 @@ RUN_MODS = dict(
             "build": [],
             "go": [
                 # Enable longtest builders on go against tip if files related to vendored code are modified.
-                "src/{,cmd/}go[.]{mod,sum}",
-                "src/{,cmd/}vendor/.+",
+                "src/.+/go[.](mod|sum)",
+                "src/.+/vendor/.+",
                 "src/.+_bundle.go",
                 # Enable longtest builders on go against tip if files in the crypto/tls tree are modified,
                 # so that the BoGo test suite is run.
@@ -912,7 +912,7 @@ RUN_MODS = dict(
     ssacheck = make_run_mod(
         add_props = {"compile_only": True},
         add_env = {"GO_GCFLAGS": "-d=ssa/check/on"},
-        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/{ssa,ssagen}/.+"]),
+        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/(ssa|ssagen)/.+"]),
     ),
 
     # Build and test with the staticlockranking GOEXPERIMENT, which validates the runtime's
