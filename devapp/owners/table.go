@@ -482,6 +482,18 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{rsc, iant},
 	},
+	"go/src/internal/runtime/atomic": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{austin, khr, mknyszek, mauri870},
+	},
+	"go/src/internal/runtime/sys": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{austin, khr},
+	},
+	"go/src/internal/runtime/syscall": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, mknyszek, austin},
+	},
 	"go/src/internal/singleflight": {
 		Primary: []Owner{bradfitz, iant},
 	},
@@ -628,18 +640,6 @@ var entries = map[string]*Entry{
 	"go/src/runtime/coverage": {
 		Primary:   []Owner{thanm},
 		Secondary: []Owner{compilerTeam},
-	},
-	"go/src/runtime/internal/atomic": {
-		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{austin, khr, mknyszek, mauri870},
-	},
-	"go/src/runtime/internal/sys": {
-		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{austin, khr},
-	},
-	"go/src/runtime/internal/syscall": {
-		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{prattmic, mknyszek, austin},
 	},
 	"go/src/runtime/metrics": {
 		Primary:   []Owner{runtimeTeam},
