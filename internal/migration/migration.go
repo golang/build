@@ -39,6 +39,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	"linux-arm-aws":                 true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm.
 	"linux-amd64":                   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64.
 	"linux-amd64-longtest":          true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-longtest.
+	"linux-amd64-perf":              true, // Available in the form of multiple linux-amd64_…-perf_vs_… LUCI builders.
 	"linux-amd64-race":              true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-race.
 	"linux-amd64-longtest-race":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-longtest-race.
 	"linux-amd64-racecompile":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-racecompile.
