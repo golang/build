@@ -109,6 +109,11 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx *wf.TaskContext, input ger
 
 	var reviewerInputs []gerrit.ReviewerInput
 	for _, r := range reviewerEmails {
+		if r == "joedian@golang.org" {
+			// A temporary workaround for 'https://go-review.googlesource.com/accounts/joedian@golang.org' being 404.
+			// TODO(go.dev/issue/68276): Generalize this.
+			continue
+		}
 		reviewerInputs = append(reviewerInputs, gerrit.ReviewerInput{Reviewer: r})
 	}
 	if err := c.Client.SetReview(ctx, changeID, "current", gerrit.ReviewInput{
