@@ -72,7 +72,6 @@ var (
 	sameer        = gh("Sajmani")
 	samthanawalla = gh("samthanawalla")
 	shinfan       = gh("shinfan")
-	suzmue        = gh("suzmue")
 	taking        = gh("timothy-king")
 	thanm         = gh("thanm")
 	tklauser      = gh("tklauser")
@@ -925,7 +924,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/refactor": {
 		Primary:   []Owner{toolsTeam},
-		Secondary: []Owner{findleyr, suzmue},
+		Secondary: []Owner{findleyr, adonovan},
 	},
 	"tools/txtar": {
 		Primary: []Owner{matloob},
@@ -1019,5 +1018,5 @@ var wasmOwners = []Owner{neelance, cherryyz}
 
 var modProxyOwners = &Entry{
 	Primary:   []Owner{toolsTeam},
-	Secondary: []Owner{suzmue, findleyr, hyangah},
+	Secondary: []Owner{samthanawalla, findleyr, hyangah},
 }
