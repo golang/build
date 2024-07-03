@@ -80,6 +80,7 @@ func init() {
 	x("mod")
 	x("net", desc("additional networking packages"))
 	x("oauth2")
+	x("oscar", desc("open source contributor agent architecture"))
 	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
 	x("pkgsite", desc("home of the pkg.go.dev website"), enableCSR("go-discovery"))
 	x("pkgsite-metrics", desc("code for serving pkg.go.dev/metrics"), enableCSR("go-ecosystem"))
