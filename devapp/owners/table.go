@@ -796,6 +796,9 @@ var entries = map[string]*Entry{
 	"oauth2": {
 		Secondary: []Owner{jbd, shinfan, codyoss},
 	},
+	"oscar": {
+		Primary: []Owner{rsc},
+	},
 	"perf": {
 		Primary: []Owner{runtimeTeam, releaseTeam},
 	},
