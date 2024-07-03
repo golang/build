@@ -656,6 +656,7 @@ PROJECTS = {
     "mod": PT.CORE,
     "net": PT.CORE,
     "oauth2": PT.LIBRARY,
+    "oscar": PT.TOOL,
     "perf": PT.TOOL,
     "pkgsite": PT.TOOL,
     "pkgsite-metrics": PT.TOOL,
