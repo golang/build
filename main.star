@@ -1738,6 +1738,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         # The openbsd/riscv64 port is new to Go 1.23.
         return False, False, False, []
 
+    # Filter out new projects on old release branches.
+    if project == "oscar" and go_branch_short in ["go1.21", "go1.22"]:
+        return False, False, False, []
+
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
     enable_types = None
