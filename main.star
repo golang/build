@@ -776,6 +776,14 @@ def define_for_optional_presubmit_only(projects):
 
     return f
 
+# define the builder for all but listed projects.
+def define_for_projects_except(projects):
+    def f(port, project, go_branch_short):
+        run = project not in projects
+        return (run, False, False, [])
+
+    return f
+
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
@@ -820,6 +828,7 @@ RUN_MODS = dict(
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
     misccompile = make_run_mod(
         add_props = {"compile_only": True, "misc_ports": True},
+        enabled = define_for_projects_except(["oscar"])
     ),
 
     # Build and test with the newinliner GOEXPERIMENT.
