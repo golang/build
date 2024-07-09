@@ -828,7 +828,7 @@ RUN_MODS = dict(
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
     misccompile = make_run_mod(
         add_props = {"compile_only": True, "misc_ports": True},
-        enabled = define_for_projects_except(["oscar"])
+        enabled = define_for_projects_except(["oscar"]),
     ),
 
     # Build and test with the newinliner GOEXPERIMENT.
