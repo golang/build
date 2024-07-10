@@ -468,6 +468,7 @@ var tasks = []struct {
 	{"handle telemetry issues", (*gopherbot).handleTelemetryIssues},
 	{"open cherry pick issues", (*gopherbot).openCherryPickIssues},
 	{"close cherry pick issues", (*gopherbot).closeCherryPickIssues},
+	{"close luci-config issues", (*gopherbot).closeLUCIConfigIssues},
 	{"set subrepo milestones", (*gopherbot).setSubrepoMilestones},
 	{"set misc milestones", (*gopherbot).setMiscMilestones},
 	{"apply minor release milestones", (*gopherbot).setMinorMilestones},
@@ -1859,7 +1860,7 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 }
 
 // closeCherryPickIssues closes cherry-pick issues when CLs are merged to
-// release branches, as GitHub only does that on merge to master.
+// release branches, as GitHub only does that on merge to the main branch.
 func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 	cherryPickIssues := make(map[int32]*maintner.GitHubIssue) // by GitHub Issue Number
 	b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
@@ -1902,13 +1903,50 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 				}
 				printIssue("close-cherry-pick", ref.Repo.ID(), gi)
 				if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, fmt.Sprintf(
-					"Closed by merging %s to %s.", cl.Commit.Hash, cl.Branch())); err != nil {
+					"Closed by merging [CL %d](https://go.dev/cl/%d) (commit %s) to `%s`.", cl.Number, cl.Number, cl.Commit.Hash, cl.Branch())); err != nil {
 					return err
 				}
 				return b.closeGitHubIssue(ctx, ref.Repo.ID(), gi.Number, completed)
 			}
 			return nil
 		})
+	})
+}
+
+// closeLUCIConfigIssues closes specified issues when CLs are merged to the
+// luci-config branch, as GitHub only does that on merge to the main branch.
+func (b *gopherbot) closeLUCIConfigIssues(ctx context.Context) error {
+	buildProject := b.corpus.Gerrit().Project("go.googlesource.com", "build")
+	if buildProject == nil {
+		return fmt.Errorf("no go.googlesource.com/build Gerrit project in corpus")
+	}
+	monthAgo := time.Now().Add(-30 * 24 * time.Hour)
+	return buildProject.ForeachCLUnsorted(func(cl *maintner.GerritCL) error {
+		if cl.Commit.CommitTime.Before(monthAgo) {
+			// If the CL was last updated over a month ago, assume (as an
+			// optimization) that gopherbot already processed this CL.
+			return nil
+		}
+		if cl.Status != "merged" || cl.Private || cl.Branch() != "luci-config" {
+			return nil
+		}
+		for _, ref := range cl.GitHubIssueRefs {
+			if ref.Repo != b.gorepo {
+				continue
+			}
+			gi := b.gorepo.Issue(ref.Number)
+			if gi == nil || gi.NotExist || gi.PullRequest || gi.Locked || b.deletedIssues[githubIssue{ref.Repo.ID(), gi.Number}] ||
+				gi.Closed || gi.HasEvent("reopened") || !strings.Contains(cl.Commit.Msg, fmt.Sprintf("\nFixes golang/go#%d", gi.Number)) {
+				continue
+			}
+			printIssue("close luci-config issues", ref.Repo.ID(), gi)
+			if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, fmt.Sprintf(
+				"Closed by merging [CL %d](https://go.dev/cl/%d) (commit %s@%s) to `%s`.", cl.Number, cl.Number, ref.Repo.ID(), cl.Commit.Hash, cl.Branch())); err != nil {
+				return err
+			}
+			return b.closeGitHubIssue(ctx, ref.Repo.ID(), gi.Number, completed)
+		}
+		return nil
 	})
 }
 
@@ -2129,11 +2167,11 @@ var assignReviewersOptOut = map[string]bool{
 // using the go.dev/s/owners API.
 func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 	const tagNoOwners = "no-owners"
-	b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
+	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
 		if gp.Project() == "scratch" || gp.Server() != "go.googlesource.com" {
 			return nil
 		}
-		gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+		return gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
 			if cl.Private || cl.WorkInProgress() || time.Since(cl.Created) < 10*time.Minute {
 				return nil
 			}
@@ -2235,9 +2273,7 @@ func (b *gopherbot) assignReviewersToCLs(ctx context.Context) error {
 			}
 			return nil
 		})
-		return nil
 	})
-	return nil
 }
 
 func sameReviewers(reviewers []string, review gerrit.ReviewInput) bool {
@@ -2274,26 +2310,25 @@ outer:
 
 // abandonScratchReviews abandons Gerrit CLs in the "scratch" project if they've been open for over a week.
 func (b *gopherbot) abandonScratchReviews(ctx context.Context) error {
+	scratchProject := b.corpus.Gerrit().Project("go.googlesource.com", "scratch")
+	if scratchProject == nil {
+		return fmt.Errorf("no go.googlesource.com/scratch Gerrit project in corpus")
+	}
 	tooOld := time.Now().Add(-24 * time.Hour * 7)
-	return b.corpus.Gerrit().ForeachProjectUnsorted(func(gp *maintner.GerritProject) error {
-		if gp.Project() != "scratch" || gp.Server() != "go.googlesource.com" {
+	return scratchProject.ForeachOpenCL(func(cl *maintner.GerritCL) error {
+		if b.deletedChanges[gerritChange{scratchProject.Project(), cl.Number}] || !cl.Meta.Commit.CommitTime.Before(tooOld) {
 			return nil
 		}
-		return gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
-			if b.deletedChanges[gerritChange{gp.Project(), cl.Number}] || !cl.Meta.Commit.CommitTime.Before(tooOld) {
-				return nil
-			}
-			if *dryRun {
-				log.Printf("[dry-run] would've closed scratch CL https://go.dev/cl/%d ...", cl.Number)
-				return nil
-			}
-			log.Printf("closing scratch CL https://go.dev/cl/%d ...", cl.Number)
-			err := b.gerrit.AbandonChange(ctx, fmt.Sprint(cl.Number), "Auto-abandoning old scratch review.")
-			if err != nil && strings.Contains(err.Error(), "404 Not Found") {
-				return nil
-			}
-			return err
-		})
+		if *dryRun {
+			log.Printf("[dry-run] would've closed scratch CL https://go.dev/cl/%d ...", cl.Number)
+			return nil
+		}
+		log.Printf("closing scratch CL https://go.dev/cl/%d ...", cl.Number)
+		err := b.gerrit.AbandonChange(ctx, fmt.Sprint(cl.Number), "Auto-abandoning old scratch review.")
+		if err != nil && strings.Contains(err.Error(), "404 Not Found") {
+			return nil
+		}
+		return err
 	})
 }
 
