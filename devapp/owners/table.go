@@ -583,7 +583,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{neild, rsc},
 	},
 	"go/src/os": {
-		Primary: []Owner{rsc, r, iant, bradfitz, gri},
+		Primary: []Owner{rsc, iant, bradfitz, gri},
 	},
 	"go/src/os/exec": {
 		Primary: []Owner{bradfitz, iant},
