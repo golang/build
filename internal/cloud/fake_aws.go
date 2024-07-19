@@ -16,8 +16,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
-func init() { mrand.Seed(time.Now().UnixNano()) }
-
 // FakeAWSClient provides a fake AWS Client used to test the AWS client
 // functionality.
 type FakeAWSClient struct {

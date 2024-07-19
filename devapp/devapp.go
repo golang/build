@@ -10,10 +10,8 @@ import (
 	"context"
 	"flag"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
-	"time"
 
 	"golang.org/x/build/internal/https"
 )
@@ -34,7 +32,6 @@ func init() {
 func main() {
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
-	rand.Seed(time.Now().UnixNano())
 
 	s := newServer(http.NewServeMux(), *staticDir, *templateDir, *reload)
 	ctx := context.Background()

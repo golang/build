@@ -15,12 +15,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"net/mail"
 	"net/url"
 	"strings"
-	"time"
 
 	cloudbuild "cloud.google.com/go/cloudbuild/apiv1/v2"
 	"cloud.google.com/go/compute/metadata"
@@ -77,7 +75,6 @@ var (
 )
 
 func main() {
-	rand.Seed(time.Now().Unix())
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
