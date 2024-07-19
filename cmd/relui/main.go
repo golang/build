@@ -72,6 +72,8 @@ var (
 	swarmingAccount = flag.String("swarming-account", "", "Service account to use for Swarming tasks")
 	swarmingPool    = flag.String("swarming-pool", "", "Swarming pool to run tasks in")
 	swarmingRealm   = flag.String("swarming-realm", "", "Swarming realm to run tasks in")
+
+	buildbucketHost = flag.String("buildbucket-host", "", "Buildbucket host to use for tasks")
 )
 
 func main() {
@@ -134,9 +136,13 @@ func main() {
 	gitClient := &task.Git{}
 	gitClient.UseOAuth2Auth(creds.TokenSource)
 	mailFunc := task.NewSendGridMailClient(*sendgridAPIKey).SendMail
-	mastodonClient, err := task.NewMastodonClient(mastodonAPI)
-	if err != nil {
-		log.Fatalln(err)
+	var mastodonClient task.Poster
+	if mastodonAPI != (secret.MastodonCredentials{}) {
+		var err error
+		mastodonClient, err = task.NewMastodonClient(mastodonAPI)
+		if err != nil {
+			log.Fatalln("task.NewMastodonClient:", err)
+		}
 	}
 	commTasks := task.CommunicationTasks{
 		AnnounceMailTasks: task.AnnounceMailTasks{
@@ -168,36 +174,41 @@ func main() {
 		ScriptAccount: *cloudBuildAccount,
 		ScratchURL:    *scratchFilesBase + "/build-outputs",
 	}
-	swarmingClient, err := swarming.NewClient(ctx, swarming.ClientOptions{
-		ServiceURL: *swarmingURL,
-		Auth: auth.Options{
-			GCEAllowAsDefault: true,
-		},
-	})
-	if err != nil {
-		log.Fatal(err)
+	var swarmingClient swarming.Client
+	if *swarmingURL != "" {
+		var err error
+		swarmingClient, err = swarming.NewClient(ctx, swarming.ClientOptions{
+			ServiceURL: *swarmingURL,
+			Auth: auth.Options{
+				GCEAllowAsDefault: true,
+			},
+		})
+		if err != nil {
+			log.Fatalln("swarming.NewClient:", err)
+		}
 	}
-	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, auth.Options{GCEAllowAsDefault: true}).Client()
-	if err != nil {
-		log.Fatal(err)
-	}
-	buildsClient := pb.NewBuildsClient(&prpc.Client{
-		C:    luciHTTPClient,
-		Host: "cr-buildbucket.appspot.com",
-	})
-	buildersClient := pb.NewBuildersClient(&prpc.Client{
-		C:    luciHTTPClient,
-		Host: "cr-buildbucket.appspot.com",
-	})
-	buildBucketClient := &task.RealBuildBucketClient{
-		BuildersClient: buildersClient,
-		BuildsClient:   buildsClient,
+	var buildBucketClient task.BuildBucketClient
+	if *buildbucketHost != "" {
+		luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, auth.Options{GCEAllowAsDefault: true}).Client()
+		if err != nil {
+			log.Fatalln("auth.NewAuthenticator:", err)
+		}
+		buildBucketClient = &task.RealBuildBucketClient{
+			BuildersClient: pb.NewBuildersClient(&prpc.Client{
+				C:    luciHTTPClient,
+				Host: *buildbucketHost,
+			}),
+			BuildsClient: pb.NewBuildsClient(&prpc.Client{
+				C:    luciHTTPClient,
+				Host: *buildbucketHost,
+			}),
+		}
 	}
 
 	var dbPool db.PGDBTX
 	dbPool, err = pgxpool.Connect(ctx, *pgConnect)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("pgxpool.Connect:", err)
 	}
 	defer dbPool.Close()
 	dbPool = &relui.MetricsDB{dbPool}
@@ -342,7 +353,7 @@ func main() {
 	if metadata.OnGCE() {
 		project, err := metadata.ProjectID()
 		if err != nil {
-			log.Fatal("failed to read project ID from metadata server")
+			log.Fatalln("failed to read project ID from metadata server")
 		}
 		if project == "symbolic-datum-552" {
 			h = access.RequireIAPAuthHandler(h, access.IAPSkipAudienceValidation)

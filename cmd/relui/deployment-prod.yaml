@@ -53,6 +53,7 @@ spec:
             - "--swarming-account=relui-tasks@symbolic-datum-552.iam.gserviceaccount.com"
             - "--swarming-pool=luci.golang.security-try-workers"
             - "--swarming-realm=golang:security-try-workers"
+            - "--buildbucket-host=cr-buildbucket.appspot.com"
           readinessProbe:
             httpGet:
               path: /healthz
