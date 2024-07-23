@@ -809,12 +809,12 @@ RUN_MODS = dict(
         add_props = {"long_test": True},
         test_timeout_scale = 5,
         enabled = define_for_presubmit_only_for_projs_or_on_release_branches({
-            "build": [],
             "benchmarks": [
                 # Enable longtest builders on x/benchmarks if files related to sweet are modified,
                 # so that the sweet end-to-end test is run.
                 "sweet/.+[.]go",
             ],
+            "build": [],
             "go": [
                 # Enable longtest builders on go against tip if files related to vendored code are modified.
                 "src(|/.+)/go[.](mod|sum)",
