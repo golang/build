@@ -259,7 +259,6 @@ GOOGLE_LOW_CAPACITY_HOSTS = [
 # When the work to add a host is underway, its entry should either move to the
 # LOW_CAPACITY_HOSTS list below, or removed if it's not low-capacity.
 TBD_CAPACITY_HOSTS = [
-    "aix-ppc64",
     "android-386",
     "android-amd64",
     "android-arm",
@@ -290,6 +289,7 @@ TBD_CAPACITY_HOSTS = [
 # LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
 # They need to match the builder type, excluding any run mods.
 LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
+    "aix-ppc64",
     "freebsd-riscv64",
     "linux-loong64",
     "linux-ppc64_power10",
