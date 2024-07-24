@@ -4,4 +4,4 @@
 
 # golang.org/x/build/cmd/retrybuilds
 
-The retrybuilds command clears build failures from the build.golang.org dashboard to force them to be rebuilt.
+The retrybuilds command reruns requested builds for the Go project on the LUCI infrastructure.
