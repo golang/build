@@ -79,7 +79,9 @@ func builders() (bt []builderType) {
 }
 
 func swarmingBuilders() ([]string, error) {
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	client := gomoteServerClient(ctx)
 	resp, err := client.ListSwarmingBuilders(ctx, &protos.ListSwarmingBuildersRequest{})
 	if err != nil {
@@ -89,6 +91,8 @@ func swarmingBuilders() ([]string, error) {
 }
 
 func create(args []string) error {
+	log.SetFlags(0)
+
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 
 	fs.Usage = func() {
@@ -126,49 +130,59 @@ func create(args []string) error {
 			os.Exit(1)
 		}
 	}
-	var status bool
-	fs.BoolVar(&status, "status", true, "print regular status updates while waiting")
-	var count int
-	fs.IntVar(&count, "count", 1, "number of instances to create")
-	var setup bool
-	fs.BoolVar(&setup, "setup", false, "set up the instance by pushing GOROOT and building the Go toolchain")
-	var newGroup string
-	fs.StringVar(&newGroup, "new-group", "", "also create a new group and add the new instances to it")
-	var useGolangbuild bool
-	fs.BoolVar(&useGolangbuild, "use-golangbuild", true, "disable the installation of build dependencies installed by golangbuild")
+	var cfg createConfig
+	fs.BoolVar(&cfg.printStatus, "status", true, "print regular status updates while waiting")
+	fs.IntVar(&cfg.count, "count", 1, "number of instances to create")
+	fs.BoolVar(&cfg.setup, "setup", false, "set up the instance by pushing GOROOT and building the Go toolchain")
+	fs.StringVar(&cfg.newGroup, "new-group", "", "also create a new group and add the new instances to it")
+	fs.BoolVar(&cfg.useGolangbuild, "use-golangbuild", true, "disable the installation of build dependencies installed by golangbuild")
 
 	fs.Parse(args)
 	if fs.NArg() != 1 {
 		fs.Usage()
 	}
 	builderType := fs.Arg(0)
+	_, err := createInstances(context.Background(), builderType, &cfg)
+	return err
+}
 
+type createConfig struct {
+	printStatus    bool
+	count          int
+	setup          bool
+	newGroup       string
+	useGolangbuild bool
+}
+
+func createInstances(ctx context.Context, builderType string, cfg *createConfig) ([]string, error) {
 	var groupMu sync.Mutex
 	group := activeGroup
 	var err error
-	if newGroup != "" {
-		group, err = doCreateGroup(newGroup)
+	if cfg.newGroup != "" {
+		group, err = doCreateGroup(cfg.newGroup)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if group == nil && os.Getenv("GOMOTE_GROUP") != "" {
 		group, err = doCreateGroup(os.Getenv("GOMOTE_GROUP"))
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
+	var instancesMu sync.Mutex
+	var instances []string
 	var tmpOutDir string
 	var tmpOutDirOnce sync.Once
-	eg, ctx := errgroup.WithContext(context.Background())
+	eg, ctx := errgroup.WithContext(ctx)
 	client := gomoteServerClient(ctx)
-	for i := 0; i < count; i++ {
+	for i := 0; i < cfg.count; i++ {
 		i := i
 		eg.Go(func() error {
 			start := time.Now()
 			var exp []string
-			if !useGolangbuild {
+			if !cfg.useGolangbuild {
 				exp = append(exp, "disable-golang-build")
 			}
 			stream, err := client.CreateInstance(ctx, &protos.CreateInstanceRequest{BuilderType: builderType, ExperimentOption: exp})
@@ -184,19 +198,24 @@ func create(args []string) error {
 					break updateLoop
 				case err != nil:
 					return fmt.Errorf("failed to create buildlet (%d): %w", i+1, err)
-				case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && status:
-					fmt.Fprintf(os.Stderr, "# still creating %s (%d) after %v; %d requests ahead of you\n", builderType, i+1, time.Since(start).Round(time.Second), update.GetWaitersAhead())
+				case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && cfg.printStatus:
+					log.Printf("# still creating %s (%d) after %v; %d requests ahead of you\n", builderType, i+1, time.Since(start).Round(time.Second), update.GetWaitersAhead())
 				case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
 					inst = update.GetInstance().GetGomoteId()
 				}
 			}
 			fmt.Println(inst)
+
+			instancesMu.Lock()
+			instances = append(instances, inst)
+			instancesMu.Unlock()
+
 			if group != nil {
 				groupMu.Lock()
 				group.Instances = append(group.Instances, inst)
 				groupMu.Unlock()
 			}
-			if !setup {
+			if !cfg.setup {
 				return nil
 			}
 
@@ -210,13 +229,13 @@ func create(args []string) error {
 			}
 
 			// Push GOROOT.
-			detailedProgress := count == 1
+			detailedProgress := cfg.count == 1
 			goroot, err := getGOROOT()
 			if err != nil {
 				return err
 			}
 			if !detailedProgress {
-				fmt.Fprintf(os.Stderr, "# Pushing GOROOT %q to %q...\n", goroot, inst)
+				log.Printf("# Pushing GOROOT %q to %q...\n", goroot, inst)
 			}
 			if err := doPush(ctx, inst, goroot, false, detailedProgress); err != nil {
 				return err
@@ -235,9 +254,9 @@ func create(args []string) error {
 			}
 			defer func() {
 				outf.Close()
-				fmt.Fprintf(os.Stderr, "# Wrote results from %q to %q.\n", inst, outf.Name())
+				log.Printf("# Wrote results from %q to %q.\n", inst, outf.Name())
 			}()
-			fmt.Fprintf(os.Stderr, "# Streaming results from %q to %q...\n", inst, outf.Name())
+			log.Printf("# Streaming results from %q to %q...\n", inst, outf.Name())
 
 			// If this is the only command running, print to stdout too, for convenience and
 			// backwards compatibility.
@@ -245,16 +264,18 @@ func create(args []string) error {
 			if detailedProgress {
 				outputs = append(outputs, os.Stdout)
 			} else {
-				fmt.Fprintf(os.Stderr, "# Running %q on %q...\n", cmd, inst)
+				log.Printf("# Running %q on %q...\n", cmd, inst)
 			}
 			return doRun(ctx, inst, cmd, []string{}, runWriters(outputs...))
 		})
 	}
 	if err := eg.Wait(); err != nil {
-		return err
+		return nil, err
 	}
 	if group != nil {
-		return storeGroup(group)
+		if err := storeGroup(group); err != nil {
+			return nil, err
+		}
 	}
-	return nil
+	return instances, nil
 }

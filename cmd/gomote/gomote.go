@@ -35,6 +35,7 @@ To list the subcommands, run "gomote" without arguments:
 	  puttar     extract a tar.gz to a buildlet
 	  rm         delete files or directories
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
+	  repro      reproduce a build by LUCI build ID
 	  run        run a command on a buildlet
 	  ssh        ssh to a buildlet
 
@@ -221,6 +222,7 @@ func registerCommands() {
 	registerCommand("put", "put files on a buildlet", put)
 	registerCommand("putbootstrap", "put bootstrap toolchain in place", putBootstrap)
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
+	registerCommand("repro", "reproduce a build environment in a new buildlet", repro)
 	registerCommand("rdp", "Unimplimented: RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
 	registerCommand("rm", "delete files or directories", rm)
 	registerCommand("run", "run a command on a buildlet", run)
