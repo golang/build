@@ -682,13 +682,16 @@ def projects_of_type(types):
         if PROJECTS[project] in types
     ]
 
-# make_run_mod returns a run_mod that adds the given properties and environment
-# variables. If set, enabled is a function that returns three booleans to
-# affect the builder it's being added to:
-# - exists, whether the builder should be created at all
-# - presubmit, whether the builder should be run in presubmit by default
-# - postsubmit, whether the builder should run in postsubmit
-# - presubmit location filters, any cq.location_filter to apply to presubmit
+# make_run_mod returns a run_mod that adds the given properties and
+# environment variables.
+#
+# enabled is an optional function that returns four values that are
+# used to affect the builder that the run_mod is being added to:
+# - exists - false means the builder should not be created at all
+# - presubmit - false means the builder should not run in presubmit by default
+# - postsubmit - false means the builder should not run in postsubmit
+# - presubmit location filters - any cq.location_filter to apply to presubmit
+# If enabled is not provided, the builder defaults are used as is for the run_mod.
 def make_run_mod(add_props = {}, add_env = {}, enabled = None, test_timeout_scale = 1):
     def apply_mod(props, project):
         props.update(add_props)
@@ -779,7 +782,7 @@ def define_for_optional_presubmit_only(projects):
 def define_for_projects_except(projects):
     def f(port, project, go_branch_short):
         run = project not in projects
-        return (run, False, False, [])
+        return (run, run, run, [])
 
     return f
 
