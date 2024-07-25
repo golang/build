@@ -300,97 +300,23 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 				return err
 			}
 			for _, b := range builds {
-				id := b.GetId()
-				var commit, goCommit string
-				prop := b.GetOutput().GetProperties().GetFields()
-				for _, s := range prop["sources"].GetListValue().GetValues() {
-					x := s.GetStructValue().GetFields()["gitilesCommit"].GetStructValue().GetFields()
-					c := x["id"].GetStringValue()
-					switch repo := x["project"].GetStringValue(); repo {
-					case dash.Repo:
-						commit = c
-					case "go":
-						goCommit = c
-					default:
-						log.Fatalf("repo mismatch: %s %s %s", repo, dash.Repo, buildURL(id))
-					}
+				r := c.GetBuildResult(groupContext, dash.Repo, builder, b)
+				if r == nil {
+					continue
 				}
-				if commit == "" {
-					switch b.GetStatus() {
-					case bbpb.Status_SUCCESS:
-						log.Fatalf("empty commit: %s", buildURL(id))
-					default:
-						// unfinished build, or infra failure, ignore
-						continue
-					}
-				}
-				buildTime := b.GetEndTime().AsTime()
-				if r0 := buildMap[commit]; r0 != nil {
+				if r0 := buildMap[r.Commit]; r0 != nil {
 					// A build already exists for the same builder and commit.
 					// Maybe manually retried, or different go commits on same subrepo commit.
 					// Pick the one ended at later time.
 					const printDup = false
 					if printDup {
-						fmt.Printf("skip duplicate build: %s %s %d %d\n", bName, shortHash(commit), id, r0.ID)
+						fmt.Printf("skip duplicate build: %s %s %d %d\n", bName, shortHash(r.Commit), r.ID, r0.ID)
 					}
-					if buildTime.Before(r0.BuildTime) {
+					if r.BuildTime.Before(r0.BuildTime) {
 						continue
 					}
 				}
-				rdb := b.GetInfra().GetResultdb()
-				if rdb.GetHostname() != resultDBHost {
-					log.Fatalf("ResultDB host mismatch: %s %s %s", rdb.GetHostname(), resultDBHost, buildURL(id))
-				}
-				if b.GetBuilder().GetBuilder() != bName { // sanity check
-					log.Fatalf("builder mismatch: %s %s %s", b.GetBuilder().GetBuilder(), bName, buildURL(id))
-				}
-				r := &BuildResult{
-					ID:                      id,
-					Status:                  b.GetStatus(),
-					Commit:                  commit,
-					GoCommit:                goCommit,
-					BuildTime:               buildTime,
-					Builder:                 bName,
-					BuilderConfigProperties: builder.BuilderConfigProperties,
-					InvocationID:            rdb.GetInvocation(),
-				}
-				if r.Status == bbpb.Status_FAILURE {
-					links := prop["failure"].GetStructValue().GetFields()["links"].GetListValue().GetValues()
-					for _, l := range links {
-						m := l.GetStructValue().GetFields()
-						if strings.Contains(m["name"].GetStringValue(), "(combined output)") {
-							r.LogURL = m["url"].GetStringValue()
-							break
-						}
-					}
-					if r.LogURL == "" {
-						// No log URL, Probably a build failure.
-						// E.g. https://ci.chromium.org/ui/b/8759448820419452721
-						// Use the build's stderr instead.
-						for _, l := range b.GetOutput().GetLogs() {
-							if l.GetName() == "stderr" {
-								r.LogURL = l.GetViewUrl()
-								break
-							}
-						}
-					}
-
-					// Fetch the stderr of the failed step.
-					steps := b.GetSteps()
-				stepLoop:
-					for i := len(steps) - 1; i >= 0; i-- {
-						s := steps[i]
-						if s.GetStatus() == bbpb.Status_FAILURE {
-							for _, l := range s.GetLogs() {
-								if l.GetName() == "stderr" || l.GetName() == "output" {
-									r.StepLogURL = l.GetViewUrl()
-									break stepLoop
-								}
-							}
-						}
-					}
-				}
-				buildMap[commit] = r
+				buildMap[r.Commit] = r
 			}
 			return nil
 		})
@@ -414,6 +340,127 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 	}
 
 	return nil
+}
+
+// GetBuildResult gets the build result of a given build.
+func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Builder, b *bbpb.Build) *BuildResult {
+	id := b.GetId()
+	var commit, goCommit string
+	prop := b.GetOutput().GetProperties().GetFields()
+	for _, s := range prop["sources"].GetListValue().GetValues() {
+		x := s.GetStructValue().GetFields()["gitilesCommit"].GetStructValue().GetFields()
+		c := x["id"].GetStringValue()
+		switch bRepo := x["project"].GetStringValue(); bRepo {
+		case repo:
+			commit = c
+		case "go":
+			goCommit = c
+		default:
+			log.Fatalf("repo mismatch: %s %s %s", bRepo, repo, buildURL(id))
+		}
+	}
+	if commit == "" {
+		switch b.GetStatus() {
+		case bbpb.Status_SUCCESS:
+			log.Fatalf("empty commit: %s", buildURL(id))
+		default:
+			// unfinished build, or infra failure, ignore
+			return nil
+		}
+	}
+	buildTime := b.GetEndTime().AsTime()
+	rdb := b.GetInfra().GetResultdb()
+	if rdb.GetHostname() != resultDBHost {
+		log.Fatalf("ResultDB host mismatch: %s %s %s", rdb.GetHostname(), resultDBHost, buildURL(id))
+	}
+	bName := builder.Name
+	if b.GetBuilder().GetBuilder() != bName { // coherence check
+		log.Fatalf("builder mismatch: %s %s %s", b.GetBuilder().GetBuilder(), bName, buildURL(id))
+	}
+	r := &BuildResult{
+		ID:                      id,
+		Status:                  b.GetStatus(),
+		Commit:                  commit,
+		GoCommit:                goCommit,
+		BuildTime:               buildTime,
+		Builder:                 bName,
+		BuilderConfigProperties: builder.BuilderConfigProperties,
+		InvocationID:            rdb.GetInvocation(),
+	}
+	if r.Status == bbpb.Status_FAILURE {
+		links := prop["failure"].GetStructValue().GetFields()["links"].GetListValue().GetValues()
+		for _, l := range links {
+			m := l.GetStructValue().GetFields()
+			if strings.Contains(m["name"].GetStringValue(), "(combined output)") {
+				r.LogURL = m["url"].GetStringValue()
+				break
+			}
+		}
+		if r.LogURL == "" {
+			// No log URL, Probably a build failure.
+			// E.g. https://ci.chromium.org/ui/b/8759448820419452721
+			// Use the build's stderr instead.
+			for _, l := range b.GetOutput().GetLogs() {
+				if l.GetName() == "stderr" {
+					r.LogURL = l.GetViewUrl()
+					break
+				}
+			}
+		}
+
+		// Fetch the stderr of the failed step.
+		steps := b.GetSteps()
+	stepLoop:
+		for i := len(steps) - 1; i >= 0; i-- {
+			s := steps[i]
+			if s.GetStatus() == bbpb.Status_FAILURE {
+				for _, l := range s.GetLogs() {
+					if l.GetName() == "stderr" || l.GetName() == "output" {
+						r.StepLogURL = l.GetViewUrl()
+						break stepLoop
+					}
+				}
+			}
+		}
+	}
+	return r
+}
+
+// GetBuild gets the information (builder info and build result) of a single build,
+// given build ID.
+func (c *LUCIClient) GetBuild(ctx context.Context, id int64) (*BuildResult, error) {
+	if c.TraceSteps {
+		log.Println("GetBuild", id)
+	}
+	mask, err := fieldmaskpb.New((*bbpb.Build)(nil), "id", "builder", "output", "status", "steps", "infra", "end_time")
+	if err != nil {
+		return nil, err
+	}
+	b, err := c.BuildsClient.GetBuild(ctx, &bbpb.GetBuildRequest{
+		Id:   id,
+		Mask: &bbpb.BuildMask{Fields: mask},
+	})
+	if err != nil {
+		return nil, err
+	}
+	bi, err := c.BuildersClient.GetBuilder(ctx, &bbpb.GetBuilderRequest{
+		Id: &bbpb.BuilderID{
+			Project: "golang",
+			Bucket:  "ci",
+			Builder: b.GetBuilder().GetBuilder(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var p BuilderConfigProperties
+	err = json.Unmarshal([]byte(bi.GetConfig().GetProperties()), &p)
+	if err != nil {
+		return nil, err
+	}
+	builder := Builder{bi.GetId().GetBuilder(), &p}
+	r := c.GetBuildResult(ctx, builder.Repo, builder, b)
+	return r, nil
 }
 
 func (c *LUCIClient) ReadBoards(ctx context.Context, boards []*Dashboard, since time.Time) error {
@@ -519,7 +566,7 @@ func (c *LUCIClient) FindFailures(ctx context.Context, boards []*Dashboard) []*B
 				if r == nil {
 					continue
 				}
-				if r.Builder != b.Name { // sanity check
+				if r.Builder != b.Name { // coherence check
 					log.Fatalf("builder mismatch: %s %s", b.Name, r.Builder)
 				}
 

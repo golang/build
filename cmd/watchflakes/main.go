@@ -13,6 +13,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ const timeLimit = 45 * 24 * time.Hour
 const maxFailPerBuild = 3
 
 var (
+	build   = flag.String("build", "", "a particular build ID or URL to analyze (mainly for debugging)")
 	md      = flag.Bool("md", false, "print Markdown output suitable for GitHub issues")
 	post    = flag.Bool("post", false, "post updates to GitHub issues")
 	repeat  = flag.Duration("repeat", 0, "keep running with specified `period`; zero means to run once and exit")
@@ -100,13 +102,34 @@ func main() {
 	}
 Repeat:
 	startTime := time.Now()
-	boards, err := c.ListBoards(ctx)
-	if err != nil {
-		log.Fatalln("ListBoards:", err)
+	var boards []*Dashboard
+	if *build == "" {
+		// fetch the dashboard
+		var err error
+		boards, err = c.ListBoards(ctx)
+		if err != nil {
+			log.Fatalln("ListBoards:", err)
+		}
+		c.ReadBoards(ctx, boards, startTime.Add(-timeLimit))
+		skipBrokenCommits(boards)
+		skipBrokenBuilders(boards)
+	} else {
+		id, err := strconv.ParseInt(strings.TrimPrefix(*build, "https://ci.chromium.org/b/"), 10, 64)
+		if err != nil {
+			log.Fatalf("invalid build ID for -build flag: %q\n\texpect a build ID or https://ci.chromium.org/b/ URL", *build)
+		}
+		r, err := c.GetBuild(ctx, id)
+		if err != nil {
+			log.Fatalf("GetBuild %d: %v", id, err)
+		}
+		// make a one-entry board
+		board := &Dashboard{
+			Builders: []Builder{{r.Builder, r.BuilderConfigProperties}},
+			Commits:  []Commit{{Hash: r.Commit}},
+			Results:  [][]*BuildResult{{r}},
+		}
+		boards = []*Dashboard{board}
 	}
-	c.ReadBoards(ctx, boards, startTime.Add(-timeLimit))
-	skipBrokenCommits(boards)
-	skipBrokenBuilders(boards)
 
 	failRes := c.FindFailures(ctx, boards)
 	c.FetchLogs(failRes)
@@ -119,7 +142,7 @@ Repeat:
 
 	// Load GitHub issues
 	var issues []*Issue
-	issues, err = readIssues(issues)
+	issues, err := readIssues(issues)
 	if err != nil {
 		log.Fatal(err)
 	}
