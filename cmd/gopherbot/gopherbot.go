@@ -1941,7 +1941,7 @@ func (b *gopherbot) closeLUCIConfigIssues(ctx context.Context) error {
 			}
 			printIssue("close luci-config issues", ref.Repo.ID(), gi)
 			if err := b.addGitHubComment(ctx, ref.Repo, gi.Number, fmt.Sprintf(
-				"Closed by merging [CL %d](https://go.dev/cl/%d) (commit %s@%s) to `%s`.", cl.Number, cl.Number, ref.Repo.ID(), cl.Commit.Hash, cl.Branch())); err != nil {
+				"Closed by merging [CL %d](https://go.dev/cl/%d) (commit golang/%s@%s) to `%s`.", cl.Number, cl.Number, cl.Project.Project(), cl.Commit.Hash, cl.Branch())); err != nil {
 				return err
 			}
 			return b.closeGitHubIssue(ctx, ref.Repo.ID(), gi.Number, completed)
