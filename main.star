@@ -778,6 +778,13 @@ def define_for_optional_presubmit_only(projects):
 
     return f
 
+def define_for_optional_presubmit_only_ending_at(projects, x):
+    def f(port, project, go_branch_short):
+        exists = project in projects and (go_branch_short != "gotip" and go_branch_short <= x)
+        return (exists, False, False, [])
+
+    return f
+
 # define the builder for all but listed projects.
 def define_for_projects_except(projects):
     def f(port, project, go_branch_short):
@@ -942,10 +949,10 @@ RUN_MODS = dict(
     # Build and test with the gotypesalias GODEBUG, which enables
     # explicit representation of type aliases.
     #
-    # The builder can be removed once gotypesalias=1 is the default.
+    # The builder exists only up to Go 1.22 since gotypesalias=1 is the default in Go 1.23+.
     typesalias = make_run_mod(
         add_env = {"GODEBUG": "gotypesalias=1"},
-        enabled = define_for_optional_presubmit_only(["go", "tools"]),
+        enabled = define_for_optional_presubmit_only_ending_at(["go", "tools"], "go1.22"),
     ),
 )
 
