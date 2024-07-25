@@ -7,6 +7,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/coordinator/pool"
+	"golang.org/x/build/internal/migration"
 )
 
 // TestParseOutputAndHeader tests header parsing by parseOutputAndHeader.
@@ -217,7 +219,11 @@ func TestModulesEnv(t *testing.T) {
 	// In testing we never initialize
 	// pool.NewGCEConfiguration().GKENodeHostname(), so we get this odd
 	// concatenation back.
-	const gkeModuleProxy = "http://:30157"
+	gkeModuleProxy := "http://:30157"
+	if migration.StopInternalModuleProxy {
+		// If the internal module proxy is stopped, expect the Go module mirror to be used instead.
+		gkeModuleProxy = "https://proxy.golang.org"
+	}
 
 	testCases := []struct {
 		desc string
@@ -320,8 +326,12 @@ func TestModulesEnv(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			want := tc.want
+			if migration.StopInternalModuleProxy && slices.Contains(want, "GOPROXY=https://proxy.golang.org") {
+				want = append(want, "GO_DISABLE_OUTBOUND_NETWORK=0")
+			}
 			got := tc.st.modulesEnv()
-			if diff := cmp.Diff(tc.want, got); diff != "" {
+			if diff := cmp.Diff(want, got); diff != "" {
 				t.Errorf("buildStatus.modulesEnv() mismatch (-want, +got)\n%s", diff)
 			}
 		})

@@ -10,9 +10,15 @@ import (
 	"io"
 	"log"
 	"net/http"
+
+	"golang.org/x/build/internal/migration"
 )
 
 func listenAndServeInternalModuleProxy() {
+	if migration.StopInternalModuleProxy {
+		log.Println("not running internal module proxy")
+		return
+	}
 	err := http.ListenAndServe(":8123", http.HandlerFunc(proxyModuleCache))
 	log.Fatalf("error running internal module proxy: %v", err)
 }

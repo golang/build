@@ -32,6 +32,7 @@ import (
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/coordinator/schedule"
+	"golang.org/x/build/internal/migration"
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/internal/spanlog"
@@ -1300,12 +1301,22 @@ func (st *buildStatus) modulesEnv() (env []string) {
 	case pool.NewGCEConfiguration().BuildEnv() == nil || !pool.NewGCEConfiguration().BuildEnv().IsProd:
 		// Dev mode; use the system default.
 		env = append(env, "GOPROXY="+os.Getenv("GOPROXY"))
-	case st.conf.IsGCE():
+	case st.conf.IsGCE() && !migration.StopInternalModuleProxy:
 		// On GCE; the internal proxy is accessible, prefer that.
 		env = append(env, "GOPROXY="+internalModuleProxy())
 	default:
 		// Everything else uses the public proxy.
 		env = append(env, "GOPROXY=https://proxy.golang.org")
+
+		if migration.StopInternalModuleProxy {
+			// If the internal module proxy is stopped, we can't disable outbound
+			// network without also breaking downloading of module dependencies
+			// (since proxy.golang.org would be inaccessible). Disabling outbound
+			// network is a nice-to-have to detect tests that accidentally try to
+			// use the internet in -short test mode, and that functionality is
+			// handled by LUCI, so it's fine not to do it in the coordinator now.
+			env = append(env, "GO_DISABLE_OUTBOUND_NETWORK=0")
+		}
 	}
 
 	return env

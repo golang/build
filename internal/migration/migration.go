@@ -10,6 +10,7 @@ import "strings"
 
 const (
 	StopLegacyMiscCompileTryBots = true
+	StopInternalModuleProxy      = true
 )
 
 // BuildersPortedToLUCI lists coordinator builders that have been ported
