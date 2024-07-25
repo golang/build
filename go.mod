@@ -8,7 +8,6 @@ require (
 	cloud.google.com/go/compute/metadata v0.3.0
 	cloud.google.com/go/datastore v1.13.0
 	cloud.google.com/go/errorreporting v0.3.0
-	cloud.google.com/go/pubsub v1.33.0
 	cloud.google.com/go/secretmanager v1.11.1
 	cloud.google.com/go/security v1.15.1
 	cloud.google.com/go/storage v1.31.0
