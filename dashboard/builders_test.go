@@ -100,8 +100,7 @@ func TestTrybots(t *testing.T) {
 				//"linux-amd64-newinliner",
 				//"linux-amd64-race",
 				//"linux-arm64",
-				"openbsd-amd64-72",
-				// Stopped.
+				//"openbsd-amd64-72",
 				//"windows-386-2016",
 				//"windows-amd64-2016",
 			},
@@ -117,8 +116,7 @@ func TestTrybots(t *testing.T) {
 				//"linux-amd64-boringcrypto",
 				//"linux-amd64-race",
 				//"linux-arm64",
-				"openbsd-amd64-72",
-				// Stopped.
+				//"openbsd-amd64-72",
 				//"windows-386-2016",
 				//"windows-amd64-2016",
 
@@ -141,8 +139,7 @@ func TestTrybots(t *testing.T) {
 				//"linux-amd64-boringcrypto",
 				//"linux-amd64-race",
 				//"linux-arm64",
-				"openbsd-amd64-72",
-				// Stopped.
+				//"openbsd-amd64-72",
 				//"windows-386-2016",
 				//"windows-amd64-2016",
 
@@ -180,8 +177,8 @@ func TestTrybots(t *testing.T) {
 				//"linux-arm64",
 				"netbsd-amd64-9_3",
 				"openbsd-386-72",
-				"openbsd-amd64-72",
 				// Stopped.
+				//"openbsd-amd64-72",
 				//"windows-386-2016",
 				//"windows-amd64-2016",
 			},
@@ -673,7 +670,7 @@ func TestBuilderConfig(t *testing.T) {
 			}
 			gotPost := bc.BuildsRepoPostSubmit(tt.br.repo, tt.br.branch, tt.br.goBranch)
 			if tt.want&isBuilder != 0 && !gotPost {
-				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder(bc.Name); stopped {
+				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder; stopped {
 					t.Logf("not a post-submit builder because it's intentionally stopped")
 				} else {
 					t.Errorf("not a post-submit builder, but expected")
@@ -685,7 +682,7 @@ func TestBuilderConfig(t *testing.T) {
 
 			gotTry := bc.BuildsRepoTryBot(tt.br.repo, tt.br.branch, tt.br.goBranch)
 			if tt.want&isTrybot != 0 && !gotTry {
-				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder(bc.Name); stopped {
+				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder; stopped {
 					t.Logf("not a trybot builder because it's intentionally stopped")
 				} else {
 					t.Errorf("not trybot, but expected")
@@ -740,7 +737,7 @@ func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
 }
 
 func TestShouldRunDistTest(t *testing.T) {
-	if stopped := migration.BuildersPortedToLUCI["linux-amd64"] && migration.StopPortedBuilder("linux-amd64"); stopped {
+	if stopped := migration.BuildersPortedToLUCI["linux-amd64"] && migration.StopPortedBuilder; stopped {
 		t.Skip("test can't be used because linux builders are stopped")
 	}
 

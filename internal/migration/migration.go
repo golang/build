@@ -6,17 +6,19 @@
 // now-legacy build infrastructure to the new LUCI build infrastructure.
 package migration
 
-import "strings"
-
 const (
 	StopLegacyMiscCompileTryBots = true
 	StopInternalModuleProxy      = true
+
+	// StopPortedBuilder controls whether ported builders should be stopped,
+	// instead of just made invisible in the web UI.
+	StopPortedBuilder = true
 )
 
 // BuildersPortedToLUCI lists coordinator builders that have been ported
 // over to LUCI and don't need to continue to run. Their results will be
 // hidden from the build.golang.org page and new builds won't be started
-// if StopPortedBuilder (below) returns true.
+// if StopPortedBuilder (above) is true.
 //
 // See go.dev/issue/65913
 // and go.dev/issue/63471.
@@ -86,25 +88,4 @@ var BuildersPortedToLUCI = map[string]bool{
 	"wasip1-wasm-wasmer":   true, // Would be 'wasip1-wasm_wasmer' but put off until go.dev/issue/59907 picks up activity.
 	"wasip1-wasm-wasmtime": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-wasip1-wasm_wasmtime.
 	"wasip1-wasm-wazero":   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-wasip1-wasm_wazero.
-}
-
-// StopPortedBuilder reports whether the named ported builder should be stopped,
-// instead of just made invisible in the web UI.
-func StopPortedBuilder(builderName string) (stop bool) {
-	nameKeyList := []string{
-		"darwin-",
-		"linux-",
-		"windows-",
-		"linux-loong64",
-		"linux-ppc64",
-		"-wasm-",
-	}
-
-	for _, key := range nameKeyList {
-		if strings.Contains(builderName, key) {
-			return true
-		}
-	}
-
-	return false
 }

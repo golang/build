@@ -2902,7 +2902,7 @@ func addBuilder(c BuildConfig) {
 		panic(fmt.Sprintf("build config %q host type inconsistent (must be Reverse, Image, or VM)", c.Name))
 	}
 
-	if migration.BuildersPortedToLUCI[c.Name] && migration.StopPortedBuilder(c.Name) {
+	if migration.BuildersPortedToLUCI[c.Name] && migration.StopPortedBuilder {
 		c.buildsRepo = func(_, _, _ string) bool { return false }
 		c.Notes = "Unavailable in the coordinator. Use LUCI (https://go.dev/wiki/LUCI) instead."
 	}
