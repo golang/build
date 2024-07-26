@@ -597,13 +597,20 @@ func snippet(log string) string {
 func coalesceFailures(fs []*Failure) []*Failure {
 	var res []*Failure
 	// A subtest fail may cause the parent test to fail, combine them.
+	// So is a test failure causing package-level failure.
 	var cur *Failure
 	for _, f := range fs {
-		if cur != nil && strings.HasPrefix(f.TestID, cur.TestID+"/") {
-			// f is a subtest of cur. Consume cur, replace with f.
-			res[len(res)-1] = f
-			cur = f
-			continue
+		if cur != nil {
+			cpkg, ctst := splitTestID(cur.TestID)
+			if (ctst == "" && strings.HasPrefix(f.TestID, cpkg+".")) ||
+				strings.HasPrefix(f.TestID, cur.TestID+"/") {
+				// 1. cur is a package-level failure, and f is a test in that package
+				// 2. f is a subtest of cur.
+				// In either case, consume cur, replace with f.
+				res[len(res)-1] = f
+				cur = f
+				continue
+			}
 		}
 		cur = f
 		res = append(res, f)
@@ -619,10 +626,21 @@ func coalesceFailures(fs []*Failure) []*Failure {
 		return strings.Contains(f.LogText, "--- FAIL") &&
 			(!strings.Contains(last.LogText, "--- FAIL") || len(f.LogText) > len(last.LogText))
 	}
+	siblingSubtests := func(f, last *Failure) bool {
+		pkg, tst := splitTestID(f.TestID)
+		pkg2, tst2 := splitTestID(last.TestID)
+		if pkg != pkg2 {
+			return false
+		}
+		par, _, ok := strings.Cut(tst, "/")
+		par2, _, ok2 := strings.Cut(tst2, "/")
+		return ok && ok2 && par == par2
+	}
 	cur = nil
+	fs = res
 	res = fs[:0]
 	for _, f := range fs {
-		if cur != nil && strings.HasPrefix(f.TestID, cur.TestID+"/") {
+		if cur != nil && siblingSubtests(f, cur) {
 			if moreLikelyUseful(f, res[len(res)-1]) {
 				res[len(res)-1] = f
 			}

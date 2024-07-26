@@ -538,7 +538,8 @@ func splitTestID(testid string) (string, string) {
 			return pkg, sep[1:] + test // add back "Test" prefix (without ".")
 		}
 	}
-	return "", testid
+	// Maybe a package-level target (e.g. build failure).
+	return testid, ""
 }
 
 func buildURL(buildID int64) string { // keep in sync with buildUrlRE in github.go
