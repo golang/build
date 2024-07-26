@@ -413,9 +413,6 @@ func (ss *SwarmingServer) validBuilders(ctx context.Context) (map[string]*buildb
 			continue
 		}
 		name := bID.GetBuilder()
-		if !strings.HasPrefix(name, "go") {
-			continue
-		}
 		if !strings.HasSuffix(name, "-test_only") {
 			continue
 		}
@@ -434,9 +431,6 @@ func (ss *SwarmingServer) validBuilders(ctx context.Context) (map[string]*buildb
 			continue
 		}
 		name := bID.GetBuilder()
-		if !strings.HasPrefix(name, "go") {
-			continue
-		}
 		if _, ok := builders[name]; ok {
 			// should not happen
 			continue
