@@ -36,6 +36,8 @@ const timeLimit = 45 * 24 * time.Hour
 
 const maxFailPerBuild = 3
 
+const tooManyToBeFlakes = 4
+
 var (
 	build   = flag.String("build", "", "a particular build ID or URL to analyze (mainly for debugging)")
 	md      = flag.Bool("md", false, "print Markdown output suitable for GitHub issues")
@@ -228,6 +230,20 @@ Repeat:
 			}
 		}
 	}
+	for _, issue := range issues {
+		if issue.Number == 0 && len(issue.Post) >= tooManyToBeFlakes && issue.Post[0].Top {
+			// New issue. Check if it is failing consistently at top.
+			top := 0
+			for _, fp := range issue.Post {
+				if fp.Top {
+					top++
+				}
+			}
+			if top >= tooManyToBeFlakes {
+				issue.Title += " [consistent failure]"
+			}
+		}
+	}
 
 	if query != nil {
 		format := (*FailurePost).Text
@@ -324,13 +340,15 @@ func skipBrokenCommits(boards []*Dashboard) {
 // skipBrokenBuilders identifies builders that were consistently broken
 // (at least tooManyToBeFlakes failures in a row) and then turned ok.
 // It changes those consistent failures to SKIP.
+//
+// It does not skip consistent failures at the top (latest few commits).
+// Instead, it sets Top to true on them.
 func skipBrokenBuilders(boards []*Dashboard) {
-	const tooManyToBeFlakes = 4
-
 	for _, dash := range boards {
 		for _, rs := range dash.Results {
-			bad := 100 // squash failures at the top of the dashboard, which may turn out to be consistent
+			bad := 0
 			badStart := 0
+			top := true
 			skip := func(i int) { // skip the i-th result
 				if rs[i] != nil {
 					fmt.Printf("skip: builder %s was broken at %s (%s %s)\n", rs[i].Builder, shortHash(rs[i].Commit), dash.Repo, dash.GoBranch)
@@ -343,10 +361,24 @@ func skipBrokenBuilders(boards []*Dashboard) {
 				}
 				switch r.Status {
 				case bbpb.Status_SUCCESS:
+					if top && bad < tooManyToBeFlakes {
+						// Skip the run at the top.
+						// Too few to tell if it is flaky or consistent.
+						// It may also get fixed soon.
+						for j := 0; j < i; j++ {
+							skip(j)
+						}
+					}
+					top = false
 					bad = 0
 					continue
 				case bbpb.Status_FAILURE:
 					bad++
+					if top {
+						// Set Top to true, but don't skip.
+						r.Top = true
+						continue
+					}
 				default: // ignore other status
 					continue
 				}
@@ -368,7 +400,7 @@ func skipBrokenBuilders(boards []*Dashboard) {
 			// even if there are just a few of them. Otherwise we get
 			// spurious flakes when there's one bad entry before the
 			// cutoff and lots after the cutoff.
-			if bad > 0 && badStart > 0 {
+			if bad > 0 {
 				for j := badStart; j < len(rs); j++ {
 					skip(j)
 				}

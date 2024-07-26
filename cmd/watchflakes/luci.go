@@ -108,6 +108,7 @@ type BuildResult struct {
 	StepLogURL   string // textual log of the (last) failed step, if any
 	StepLogText  string
 	Failures     []*Failure
+	Top          bool // whether this is a consistent failure at the top (tip)
 }
 
 type Commit struct {
