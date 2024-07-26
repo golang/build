@@ -328,10 +328,12 @@ HOST_NOTIFIERS = {
 }
 
 # SLOW_HOSTS lists "hosts" who are known to run slower than our typical fast
-# high-capacity machines. It is a mapping of the host to a test timeout scaling
-# factor. It also affects the decision of whether to include a builder in
-# presubmit testing by default (slow high-capacity hosts aren't included).
+# high-capacity machines. It is a mapping of the host to a base test timeout
+# scaling factor; run_mods may multiply this scaling factor further. It also
+# affects the decision of whether to include a builder in presubmit testing
+# by default (slow high-capacity hosts aren't included).
 SLOW_HOSTS = {
+    "darwin-amd64": 2,  # see go.dev/issue/65040
     "freebsd-riscv64": 4,
     "linux-ppc64_power10": 2,
     "linux-ppc64_power8": 2,
