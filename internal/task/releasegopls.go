@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/mod/semver"
 )
@@ -26,36 +27,71 @@ func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
 	// TODO(hxjiang): provide potential release versions in the relui where the
 	// coordinator can choose which version to release instead of manual input.
 	version := wf.Param(wd, wf.ParamDef[string]{Name: "version"})
-	isValid := wf.Task1(wd, "validating input version", r.isValidVersion, version)
-	wf.Output(wd, "valid", isValid)
+	semversion := wf.Task1(wd, "validating input version", r.isValidVersion, version)
+	_ = wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semversion)
 	return wd
 }
 
-func (r *ReleaseGoplsTasks) isValidVersion(ctx *wf.TaskContext, ver string) (bool, error) {
+// createBranchIfMinor create the release branch if the input version is a minor
+// release.
+// All patch releases under the same minor version share the same release branch.
+func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semversion) error {
+	branch := fmt.Sprintf("gopls-release-branch.%v.%v", semv.Major, semv.Minor)
+
+	// Require gopls release branch existence if this is a non-minor release.
+	if semv.Patch != 0 {
+		_, err := r.Gerrit.ReadBranchHead(ctx, "tools", branch)
+		return err
+	}
+
+	// Return early if the branch already exist.
+	// This scenario should only occur if the initial minor release flow failed
+	// or was interrupted and subsequently re-triggered.
+	if _, err := r.Gerrit.ReadBranchHead(ctx, "tools", branch); err == nil {
+		return nil
+	}
+
+	// Create the release branch using the revision from the head of master branch.
+	head, err := r.Gerrit.ReadBranchHead(ctx, "tools", "master")
+	if err != nil {
+		return err
+	}
+
+	ctx.Printf("Creating branch %s at revision %s.\n", branch, head)
+	_, err = r.Gerrit.CreateBranch(ctx, "tools", branch, gerrit.BranchInput{Revision: head})
+	return err
+}
+
+func (r *ReleaseGoplsTasks) isValidVersion(ctx *wf.TaskContext, ver string) (semversion, error) {
 	if !semver.IsValid(ver) {
-		return false, nil
+		return semversion{}, fmt.Errorf("the input %q version does not follow semantic version schema", ver)
 	}
 
 	versions, err := r.possibleGoplsVersions(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to get latest Gopls version tags from x/tool: %w", err)
+		return semversion{}, fmt.Errorf("failed to get latest Gopls version tags from x/tool: %w", err)
 	}
 
-	return slices.Contains(versions, ver), nil
+	if !slices.Contains(versions, ver) {
+		return semversion{}, fmt.Errorf("the input %q is not next version of any existing versions", ver)
+	}
+
+	semver, _ := parseSemver(ver)
+	return semver, nil
 }
 
 // semversion is a parsed semantic version.
 type semversion struct {
-	major, minor, patch int
-	pre                 string
+	Major, Minor, Patch int
+	Pre                 string
 }
 
 // parseSemver attempts to parse semver components out of the provided semver
 // v. If v is not valid semver in canonical form, parseSemver returns false.
 func parseSemver(v string) (_ semversion, ok bool) {
 	var parsed semversion
-	v, parsed.pre, _ = strings.Cut(v, "-")
-	if _, err := fmt.Sscanf(v, "v%d.%d.%d", &parsed.major, &parsed.minor, &parsed.patch); err == nil {
+	v, parsed.Pre, _ = strings.Cut(v, "-")
+	if _, err := fmt.Sscanf(v, "v%d.%d.%d", &parsed.Major, &parsed.Minor, &parsed.Patch); err == nil {
 		ok = true
 	}
 	return parsed, ok
@@ -89,32 +125,32 @@ func (r *ReleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]string
 		semv, ok := parseSemver(v)
 		semVersions = append(semVersions, semv)
 
-		if majorMinorPatch[semv.major] == nil {
-			majorMinorPatch[semv.major] = map[int]map[int]bool{}
+		if majorMinorPatch[semv.Major] == nil {
+			majorMinorPatch[semv.Major] = map[int]map[int]bool{}
 		}
-		if majorMinorPatch[semv.major][semv.minor] == nil {
-			majorMinorPatch[semv.major][semv.minor] = map[int]bool{}
+		if majorMinorPatch[semv.Major][semv.Minor] == nil {
+			majorMinorPatch[semv.Major][semv.Minor] = map[int]bool{}
 		}
-		majorMinorPatch[semv.major][semv.minor][semv.patch] = true
+		majorMinorPatch[semv.Major][semv.Minor][semv.Patch] = true
 	}
 
 	var possible []string
 	seen := map[string]bool{}
 	for _, v := range semVersions {
-		nextMajor := fmt.Sprintf("v%d.%d.%d", v.major+1, 0, 0)
-		if _, ok := majorMinorPatch[v.major+1]; !ok && !seen[nextMajor] {
+		nextMajor := fmt.Sprintf("v%d.%d.%d", v.Major+1, 0, 0)
+		if _, ok := majorMinorPatch[v.Major+1]; !ok && !seen[nextMajor] {
 			seen[nextMajor] = true
 			possible = append(possible, nextMajor)
 		}
 
-		nextMinor := fmt.Sprintf("v%d.%d.%d", v.major, v.minor+1, 0)
-		if _, ok := majorMinorPatch[v.major][v.minor+1]; !ok && !seen[nextMinor] {
+		nextMinor := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor+1, 0)
+		if _, ok := majorMinorPatch[v.Major][v.Minor+1]; !ok && !seen[nextMinor] {
 			seen[nextMinor] = true
 			possible = append(possible, nextMinor)
 		}
 
-		nextPatch := fmt.Sprintf("v%d.%d.%d", v.major, v.minor, v.patch+1)
-		if _, ok := majorMinorPatch[v.major][v.minor][v.patch+1]; !ok && !seen[nextPatch] {
+		nextPatch := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch+1)
+		if _, ok := majorMinorPatch[v.Major][v.Minor][v.Patch+1]; !ok && !seen[nextPatch] {
 			seen[nextPatch] = true
 			possible = append(possible, nextPatch)
 		}

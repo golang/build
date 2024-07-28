@@ -220,7 +220,24 @@ func (g *FakeGerrit) ReadBranchHead(ctx context.Context, project, branch string)
 	}
 	// TODO: If the branch doesn't exist, return an error matching gerrit.ErrResourceNotExist.
 	out, err := repo.dir.RunCommand(ctx, "rev-parse", "refs/heads/"+branch)
-	return strings.TrimSpace(string(out)), err
+	if err != nil {
+		// Returns empty string if the error is nil to align the same behavior with
+		// the real Gerrit client.
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func (g *FakeGerrit) CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error) {
+	repo, err := g.repo(project)
+	if err != nil {
+		return "", err
+	}
+	if _, err = repo.dir.RunCommand(ctx, "branch", branch, input.Revision); err != nil {
+		return "", err
+	}
+
+	return g.ReadBranchHead(ctx, project, branch)
 }
 
 func (g *FakeGerrit) ReadFile(ctx context.Context, project string, commit string, file string) ([]byte, error) {

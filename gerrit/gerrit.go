@@ -844,6 +844,14 @@ type BranchInfo struct {
 	CanDelete bool   `json:"can_delete"`
 }
 
+// The BranchInput entity contains information for the creation of a new branch.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#branch-input
+type BranchInput struct {
+	Ref      string `json:"ref,omitempty"`
+	Revision string `json:"revision,omitempty"`
+	// ValidationOptions is optional.
+}
+
 // GetProjectBranches returns the branches for the project name. The branches are stored in a map
 // keyed by reference.
 func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[string]BranchInfo, error) {
@@ -865,6 +873,15 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 func (c *Client) GetBranch(ctx context.Context, project, branch string) (BranchInfo, error) {
 	var res BranchInfo
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s", url.PathEscape(project), branch))
+	return res, err
+}
+
+// CreateBranch create a new branch in the project.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#create-branch
+func (c *Client) CreateBranch(ctx context.Context, project, branch string, input BranchInput) (BranchInfo, error) {
+	var res BranchInfo
+	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s/branches/%s", url.PathEscape(project), url.PathEscape(branch)), reqBodyJSON{&input}, wantResStatus(http.StatusCreated))
 	return res, err
 }
 
