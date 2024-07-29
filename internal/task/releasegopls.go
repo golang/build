@@ -5,9 +5,11 @@
 package task
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
@@ -17,7 +19,8 @@ import (
 // ReleaseGoplsTasks implements a new workflow definition include all the tasks
 // to release a gopls.
 type ReleaseGoplsTasks struct {
-	Gerrit GerritClient
+	Gerrit     GerritClient
+	CloudBuild CloudBuildClient
 }
 
 // NewDefinition create a new workflow definition for releasing gopls.
@@ -27,16 +30,24 @@ func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
 	// TODO(hxjiang): provide potential release versions in the relui where the
 	// coordinator can choose which version to release instead of manual input.
 	version := wf.Param(wd, wf.ParamDef[string]{Name: "version"})
+	reviewers := wf.Param(wd, reviewersParam)
 	semversion := wf.Task1(wd, "validating input version", r.isValidVersion, version)
-	_ = wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semversion)
+	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semversion)
+	changeID := wf.Task2(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semversion, reviewers, wf.After(branchCreated))
+	_ = wf.Action1(wd, "await config CL submission", r.AwaitSubmission, changeID)
 	return wd
+}
+
+// goplsReleaseBranchName returns the branch name for given input release version.
+func goplsReleaseBranchName(semv semversion) string {
+	return fmt.Sprintf("gopls-release-branch.%v.%v", semv.Major, semv.Minor)
 }
 
 // createBranchIfMinor create the release branch if the input version is a minor
 // release.
 // All patch releases under the same minor version share the same release branch.
 func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semversion) error {
-	branch := fmt.Sprintf("gopls-release-branch.%v.%v", semv.Major, semv.Minor)
+	branch := goplsReleaseBranchName(semv)
 
 	// Require gopls release branch existence if this is a non-minor release.
 	if semv.Patch != 0 {
@@ -59,6 +70,77 @@ func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semver
 
 	ctx.Printf("Creating branch %s at revision %s.\n", branch, head)
 	_, err = r.Gerrit.CreateBranch(ctx, "tools", branch, gerrit.BranchInput{Revision: head})
+	return err
+}
+
+// updateCodeReviewConfig ensures codereview.cfg contains the expected
+// configuration.
+//
+// It returns the change ID, or "" if the CL was not created.
+func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string) (string, error) {
+	const configFile = "codereview.cfg"
+	const configFmt = `issuerepo: golang/go
+branch: %s
+parent-branch: master
+`
+
+	branch := goplsReleaseBranchName(semv)
+	clTitle := fmt.Sprintf("all: update %s for %s", configFile, branch)
+
+	// Query for an existing pending config CL, to avoid duplication.
+	query := fmt.Sprintf(`message:%q status:open owner:gobot@golang.org repo:tools branch:%q -age:7d`, clTitle, branch)
+	changes, err := r.Gerrit.QueryChanges(ctx, query)
+	if err != nil {
+		return "", err
+	}
+	if len(changes) > 0 {
+		ctx.Printf("not creating CL: found existing CL %d", changes[0].ChangeNumber)
+		return changes[0].ChangeID, nil
+	}
+
+	head, err := r.Gerrit.ReadBranchHead(ctx, "tools", branch)
+	if err != nil {
+		return "", err
+	}
+
+	before, err := r.Gerrit.ReadFile(ctx, "tools", head, configFile)
+	if err != nil && !errors.Is(err, gerrit.ErrResourceNotExist) {
+		return "", err
+	}
+
+	after := fmt.Sprintf(configFmt, branch)
+	// Skip CL creation as config has not changed.
+	if string(before) == after {
+		return "", nil
+	}
+
+	changeInput := gerrit.ChangeInput{
+		Project: "tools",
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the %s.", clTitle, configFile),
+		Branch:  branch,
+	}
+
+	files := map[string]string{
+		configFile: string(after),
+	}
+
+	ctx.Printf("creating auto-submit change to %s under branch %q in x/tools repo.", configFile, branch)
+	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
+}
+
+// AwaitSubmission waits for the CL with the given change ID to be submitted.
+//
+// The return value is the submitted commit hash, or "" if changeID is "".
+func (r *ReleaseGoplsTasks) AwaitSubmission(ctx *wf.TaskContext, changeID string) error {
+	if changeID == "" {
+		ctx.Printf("not awaiting: no CL was created")
+		return nil
+	}
+
+	ctx.Printf("awaiting review/submit of %v", ChangeLink(changeID))
+	_, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
+		return r.Gerrit.Submitted(ctx, changeID, "")
+	})
 	return err
 }
 

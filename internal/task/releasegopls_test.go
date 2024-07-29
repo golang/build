@@ -158,7 +158,7 @@ func TestCreateBranchIfMinor(t *testing.T) {
 				t.Errorf("createBranchIfMinor() should return nil but return err: %v", err)
 			}
 
-			// Created branch should have same revision as master branch's HEAD.
+			// Created branch should have same revision as master branch's head.
 			if tc.wantBranch != "" {
 				gotRevision, err := gerritClient.ReadBranchHead(ctx, "tools", tc.wantBranch)
 				if err != nil {
@@ -167,6 +167,147 @@ func TestCreateBranchIfMinor(t *testing.T) {
 				if masterHead != gotRevision {
 					t.Errorf("createBranchIfMinor() = %q, want %q", gotRevision, masterHead)
 				}
+			}
+		})
+	}
+}
+
+func TestUpdateCodeReviewConfig(t *testing.T) {
+	ctx := context.Background()
+	testcases := []struct {
+		name       string
+		version    string
+		config     string
+		wantCommit bool
+		wantConfig string
+	}{
+		{
+			name:       "should update the codereview.cfg with version 1.2 for input minor release 1.2.0",
+			version:    "v1.2.0",
+			config:     "foo",
+			wantCommit: true,
+			wantConfig: `issuerepo: golang/go
+branch: gopls-release-branch.1.2
+parent-branch: master
+`,
+		},
+		{
+			name:       "should update the codereview.cfg with version 1.2 for input patch release 1.2.3",
+			version:    "v1.2.3",
+			config:     "foo",
+			wantCommit: true,
+			wantConfig: `issuerepo: golang/go
+branch: gopls-release-branch.1.2
+parent-branch: master
+`,
+		},
+		{
+			name:    "no need to update the config for a minor release 1.3.0",
+			version: "v1.3.0",
+			config: `issuerepo: golang/go
+branch: gopls-release-branch.1.3
+parent-branch: master
+`,
+			wantCommit: false,
+			wantConfig: `issuerepo: golang/go
+branch: gopls-release-branch.1.3
+parent-branch: master
+`,
+		},
+		{
+			name:    "no need to update the config for a patch release 1.3.3",
+			version: "v1.3.3",
+			config: `issuerepo: golang/go
+branch: gopls-release-branch.1.3
+parent-branch: master
+`,
+			wantCommit: false,
+			wantConfig: `issuerepo: golang/go
+branch: gopls-release-branch.1.3
+parent-branch: master
+`,
+		},
+	}
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tools := NewFakeRepo(t, "tools")
+			_ = tools.Commit(map[string]string{
+				"go.mod": "module golang.org/x/tools\n",
+				"go.sum": "\n",
+			})
+			_ = tools.Commit(map[string]string{
+				"codereview.cfg": tc.config,
+			})
+
+			gerritClient := NewFakeGerrit(t, tools)
+
+			headMaster, err := gerritClient.ReadBranchHead(ctx, "tools", "master")
+			if err != nil {
+				t.Fatalf("ReadBranchHead should be able to get revision of master branch's head: %v", err)
+			}
+
+			configMaster, err := gerritClient.ReadFile(ctx, "tools", headMaster, "codereview.cfg")
+			if err != nil {
+				t.Fatalf("ReadFile should be able to read the codereview.cfg file from master branch head: %v", err)
+			}
+
+			semv, _ := parseSemver(tc.version)
+			releaseBranch := goplsReleaseBranchName(semv)
+			if _, err := gerritClient.CreateBranch(ctx, "tools", releaseBranch, gerrit.BranchInput{Revision: headMaster}); err != nil {
+				t.Fatalf("failed to create the branch %q: %v", releaseBranch, err)
+			}
+
+			headRelease, err := gerritClient.ReadBranchHead(ctx, "tools", releaseBranch)
+			if err != nil {
+				t.Fatalf("ReadBranchHead should be able to get revision of release branch's head: %v", err)
+			}
+
+			tasks := &ReleaseGoplsTasks{
+				Gerrit:     gerritClient,
+				CloudBuild: NewFakeCloudBuild(t, gerritClient, "", nil, fakeGo),
+			}
+
+			_, err = tasks.updateCodeReviewConfig(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv, nil)
+			if err != nil {
+				t.Fatalf("updateCodeReviewConfig() returns error: %v", err)
+			}
+
+			// master branch's head commit should not change.
+			headMasterAfter, err := gerritClient.ReadBranchHead(ctx, "tools", "master")
+			if err != nil {
+				t.Fatalf("ReadBranchHead() should be able to get revision of master branch's head: %v", err)
+			}
+			if headMasterAfter != headMaster {
+				t.Errorf("updateCodeReviewConfig() should not change master branch's head, got = %s want = %s", headMasterAfter, headMaster)
+			}
+
+			// master branch's head codereview.cfg content should not change.
+			configMasterAfter, err := gerritClient.ReadFile(ctx, "tools", headMasterAfter, "codereview.cfg")
+			if err != nil {
+				t.Fatalf("ReadFile() should be able to read the codereview.cfg file from master branch head: %v", err)
+			}
+			if diff := cmp.Diff(configMaster, configMasterAfter); diff != "" {
+				t.Errorf("updateCodeReviewConfig() should not change codereview.cfg content in master branch (-want +got) \n %s", diff)
+			}
+
+			// verify the release branch commit have the expected behavior.
+			headReleaseAfter, err := gerritClient.ReadBranchHead(ctx, "tools", releaseBranch)
+			if err != nil {
+				t.Fatalf("ReadBranchHead() should be able to get revision of master branch's head: %v", err)
+			}
+			if tc.wantCommit && headReleaseAfter == headRelease {
+				t.Errorf("updateCodeReviewConfig() should have one commit to release branch, head of branch got = %s want = %s", headRelease, headReleaseAfter)
+			} else if !tc.wantCommit && headReleaseAfter != headRelease {
+				t.Errorf("updateCodeReviewConfig() should have not change release branch's head, got = %s want = %s", headRelease, headReleaseAfter)
+			}
+
+			// verify the release branch configreview.cfg have the expected content.
+			configReleaseAfter, err := gerritClient.ReadFile(ctx, "tools", headReleaseAfter, "codereview.cfg")
+			if err != nil {
+				t.Fatalf("ReadFile() should be able to read the codereview.cfg file from release branch head: %v", err)
+			}
+			if diff := cmp.Diff(tc.wantConfig, string(configReleaseAfter)); diff != "" {
+				t.Errorf("codereview.cfg mismatch (-want +got) \n %s", diff)
 			}
 		})
 	}
