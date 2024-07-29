@@ -103,9 +103,14 @@ func create(args []string) error {
 		fmt.Fprintln(os.Stderr, "$GOMOTE_GROUP doesn't exist, and there's no other group")
 		fmt.Fprintln(os.Stderr, "specified, it will be created and new instances will be")
 		fmt.Fprintln(os.Stderr, "added to that group.")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Run 'gomote create -list' to see a list of valid builder")
+		fmt.Fprintln(os.Stderr, "types.")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
-		fmt.Fprintln(os.Stderr, "\nValid types:")
 		if luciDisabled() {
+			fmt.Fprintln(os.Stderr, "\nValid types:")
 			for _, bt := range builders() {
 				var warn string
 				if bt.IsReverse {
@@ -117,19 +122,11 @@ func create(args []string) error {
 				}
 				fmt.Fprintf(os.Stderr, "  * %s%s\n", bt.Name, warn)
 			}
-			os.Exit(1)
-		} else {
-			swarmingBuilders, err := swarmingBuilders()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, " %s\n", err)
-			} else {
-				for _, builder := range swarmingBuilders {
-					fmt.Fprintf(os.Stderr, "  * %s\n", builder)
-				}
-			}
-			os.Exit(1)
 		}
+		os.Exit(1)
 	}
+	var listBuilders bool
+	fs.BoolVar(&listBuilders, "list", false, "list builder types and exit")
 	var cfg createConfig
 	fs.BoolVar(&cfg.printStatus, "status", true, "print regular status updates while waiting")
 	fs.IntVar(&cfg.count, "count", 1, "number of instances to create")
@@ -138,6 +135,16 @@ func create(args []string) error {
 	fs.BoolVar(&cfg.useGolangbuild, "use-golangbuild", true, "disable the installation of build dependencies installed by golangbuild")
 
 	fs.Parse(args)
+	if listBuilders {
+		swarmingBuilders, err := swarmingBuilders()
+		if err != nil {
+			return err
+		}
+		for _, builder := range swarmingBuilders {
+			fmt.Fprintln(os.Stdout, builder)
+		}
+		return nil
+	}
 	if fs.NArg() != 1 {
 		fs.Usage()
 	}
