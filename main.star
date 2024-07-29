@@ -1913,6 +1913,24 @@ def _define_go_ci():
                         disable_reuse = True,
                     )
 
+                # Add an x/website builder to the Go presubmit
+                # but only when release notes are being edited.
+                # This is to catch problems with Markdown/HTML.
+                # See go.dev/issue/68633.
+                if project == "go" and builder_type == "linux-amd64" and go_branch_short == "gotip":
+                    luci.cq_tryjob_verifier(
+                        builder = PUBLIC_TRY_ENV.bucket + "/" + builder_name("website", go_branch_short, builder_type),
+                        cq_group = cq_group.name,
+                        disable_reuse = True,
+                        location_filters = [
+                            cq.location_filter(
+                                gerrit_host_regexp = "go-review.googlesource.com",
+                                gerrit_project_regexp = "^%s$" % project,
+                                path_regexp = "doc/next/.+",
+                            ),
+                        ],
+                    )
+
             # For golang.org/x/tools, also include coverage for extra Go versions.
             if project == "tools" and go_branch_short == "gotip":
                 for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
