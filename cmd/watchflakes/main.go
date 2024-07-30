@@ -92,16 +92,18 @@ func main() {
 	}
 
 	// Load LUCI dashboards
-	ctx := context.Background()
 	c := NewLUCIClient(runtime.GOMAXPROCS(0) * 4)
 	c.TraceSteps = true
 
 	var ticker *time.Ticker
+	timeout := 30 * time.Minute // default timeout for one-off run
 	if *repeat != 0 {
 		ticker = time.NewTicker(*repeat)
+		timeout = *repeat * 2 // expected to finish in one repeat cycle, give some extra room
 	}
 Repeat:
 	startTime := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	var boards []*Dashboard
 	if *build == "" {
 		// fetch the dashboard
@@ -110,7 +112,10 @@ Repeat:
 		if err != nil {
 			log.Fatalln("ListBoards:", err)
 		}
-		c.ReadBoards(ctx, boards, startTime.Add(-timeLimit))
+		err = c.ReadBoards(ctx, boards, startTime.Add(-timeLimit))
+		if err != nil {
+			log.Fatalln("ReadBoards:", err)
+		}
 		skipBrokenCommits(boards)
 		skipBrokenBuilders(boards)
 	} else {
@@ -267,6 +272,8 @@ Repeat:
 			posts++
 		}
 	}
+
+	cancel()
 
 	log.Printf("Done. %d boards, %d failures, %d issues, %d posts, in %v\n", len(boards), len(failRes), len(issues), posts, time.Since(startTime))
 
