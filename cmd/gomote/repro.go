@@ -31,8 +31,6 @@ func repro(args []string) error {
 	if luciDisabled() {
 		return fmt.Errorf("repro subcommand is only available for LUCI builds")
 	}
-	log.SetFlags(0)
-
 	fs := flag.NewFlagSet("repro", flag.ContinueOnError)
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "repro usage: gomote repro [repro-opts] <build ID>")

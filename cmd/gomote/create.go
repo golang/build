@@ -91,10 +91,7 @@ func swarmingBuilders() ([]string, error) {
 }
 
 func create(args []string) error {
-	log.SetFlags(0)
-
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
-
 	fs.Usage = func() {
 		fmt.Fprintln(os.Stderr, "create usage: gomote create [create-opts] <type>")
 		fmt.Fprintln(os.Stderr)
