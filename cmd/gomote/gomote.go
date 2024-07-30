@@ -27,6 +27,7 @@ To list the subcommands, run "gomote" without arguments:
 	  destroy    destroy a buildlet
 	  gettar     extract a tar.gz from a buildlet
 	  list       list active buildlets
+	  login      create authentication credentials for the gomote services
 	  ls         list the contents of a directory on a buildlet
 	  ping       test whether a buildlet is alive and reachable
 	  push       sync your GOROOT directory to the buildlet
@@ -215,8 +216,9 @@ func registerCommands() {
 	registerCommand("destroy", "destroy a buildlet", destroy)
 	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
 	registerCommand("group", "manage groups of instances", group)
-	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
 	registerCommand("list", "list active buildlets", list)
+	registerCommand("login", "authenticate with the gomote service", login)
+	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
 	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
 	registerCommand("push", "sync your GOROOT directory to the buildlet", push)
 	registerCommand("put", "put files on a buildlet", put)

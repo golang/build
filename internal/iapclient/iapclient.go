@@ -103,6 +103,11 @@ type codeResponse struct {
 	VerificationURL string `json:"verification_url"`
 }
 
+const (
+	configSubDir = "gomote"
+	tokenFile    = "iap-refresh-tv-token"
+)
+
 func writeToken(refresh *oauth2.Token) error {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -112,11 +117,22 @@ func writeToken(refresh *oauth2.Token) error {
 	if err != nil {
 		return err
 	}
-	err = os.MkdirAll(filepath.Join(configDir, "gomote"), 0755)
+	err = os.MkdirAll(filepath.Join(configDir, configSubDir), 0755)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(configDir, "gomote/iap-refresh-tv-token"), refreshBytes, 0600)
+	return os.WriteFile(filepath.Join(configDir, configSubDir, tokenFile), refreshBytes, 0600)
+}
+
+func removeToken() error {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(configDir, configSubDir, tokenFile)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func cachedToken() (*oauth2.Token, error) {
@@ -124,7 +140,7 @@ func cachedToken() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	refreshBytes, err := os.ReadFile(filepath.Join(configDir, "gomote/iap-refresh-tv-token"))
+	refreshBytes, err := os.ReadFile(filepath.Join(configDir, configSubDir, tokenFile))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -139,6 +155,16 @@ func cachedToken() (*oauth2.Token, error) {
 		return nil, nil
 	}
 	return &refreshToken, nil
+}
+
+// TokenSource returns a TokenSource that can be used to access Go's
+// IAP-protected sites. It will delete any existing authentication token
+// credentials and prompt for login.
+func TokenSourceForceLogin(ctx context.Context) (oauth2.TokenSource, error) {
+	if err := removeToken(); err != nil {
+		return nil, fmt.Errorf("failed to delete existing token file: %s", err)
+	}
+	return TokenSource(ctx)
 }
 
 // TokenSource returns a TokenSource that can be used to access Go's
