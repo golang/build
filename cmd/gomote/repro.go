@@ -273,19 +273,12 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) 
 			continue
 		}
 		if rest, ok := strings.CutPrefix(t.pkg, "golang.org/x/"); ok {
-			// BUG(mknyszek): This does not adequately capture nested modules, so a failed test in
-			// a nested module will produce a command that doesn't quite work. The fix is straightforward:
-			// move path components from the package path to the working direectory path. But, it would
-			// be better if we could do this on behalf of the user.
-			if pkgPath, ok := strings.CutPrefix(rest, project); ok {
-				t.projPath = "./x_" + project
-				t.path = "." + pkgPath
+			if strings.HasPrefix(rest, project) {
+				t.path = "./x_" + rest
 			} else {
 				// We are almsot definitely unable to run this test -- something went very wrong.
 				unknownTests = append(unknownTests, result.TestId)
 			}
-		} else {
-			t.projPath = "./goroot"
 		}
 		if bench {
 			benchmarks = append(benchmarks, t)
@@ -294,10 +287,10 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) 
 		}
 	}
 	for _, t := range tests {
-		log.Printf("$ gomote run -dir %s goroot/bin/go test -run='%s' %s", t.projPath, t.regexp(), t.pkgPath())
+		log.Printf("$ gomote run -dir %s goroot/bin/go test -run='%s' .", t.pkgPath(), t.regexp())
 	}
 	for _, t := range benchmarks {
-		log.Printf("$ gomote run -dir %s goroot/bin/go test -run='^$' -bench='%s' %s", t.projPath, t.regexp(), t.pkgPath())
+		log.Printf("$ gomote run -dir %s goroot/bin/go test -run='^$' -bench='%s' .", t.pkgPath(), t.regexp())
 	}
 	for _, pkg := range specialPackages {
 		log.Printf("$ gomote run -dir ./goroot goroot/bin/go tool dist test %s", pkg)
@@ -312,10 +305,9 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) 
 }
 
 type test struct {
-	pkg      string
-	name     string
-	projPath string
-	path     string // Relative to projPath.
+	pkg  string
+	name string
+	path string // Relative to workdir.
 }
 
 func (t test) pkgPath() string {
