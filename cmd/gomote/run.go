@@ -144,7 +144,7 @@ func run(args []string) error {
 		if len(runSet) > 1 {
 			// There's more than one instance running the command, so let's
 			// be explicit about that.
-			log.Printf("# Running command on %q...\n", inst)
+			log.Printf("Running command on %q...\n", inst)
 		}
 		eg.Go(func() error {
 			// Create a file to write output to so it doesn't get lost.
@@ -154,9 +154,9 @@ func run(args []string) error {
 			}
 			defer func() {
 				outf.Close()
-				log.Printf("# Wrote results from %q to %q.\n", inst, outf.Name())
+				log.Printf("Wrote results from %q to %q.\n", inst, outf.Name())
 			}()
-			log.Printf("# Streaming results from %q to %q...\n", inst, outf.Name())
+			log.Printf("Streaming results from %q to %q...\n", inst, outf.Name())
 
 			outputs := []io.Writer{outf}
 			// If this is the only command running, print to stdout too, for convenience and
@@ -203,10 +203,10 @@ func run(args []string) error {
 					return fmt.Errorf("failed to truncate output file %q: %w", outf.Name(), err)
 				}
 
-				log.Printf("# No match found on %q, running again...\n", inst)
+				log.Printf("No match found on %q, running again...\n", inst)
 			}
 			if until != nil {
-				log.Printf("# Match found on %q.\n", inst)
+				log.Printf("Match found on %q.\n", inst)
 			}
 			if ce != nil {
 				// N.B. If err this wasn't a cmdFailedError
@@ -226,7 +226,7 @@ func run(args []string) error {
 					return nil
 				}
 				defer f.Close()
-				log.Printf("# Downloading work dir tarball for %q to %q...\n", inst, f.Name())
+				log.Printf("Downloading work dir tarball for %q to %q...\n", inst, f.Name())
 				if err := doGetTar(ctx, inst, ".", f); err != nil {
 					log.Printf("failed to retrieve instance tarball: %v", err)
 					return nil
@@ -242,7 +242,7 @@ func run(args []string) error {
 	// running. We still want to handle them, though, because we want to make sure
 	// we exit with a non-zero exit code to reflect the command failure.
 	for _, ce := range cmdsFailed {
-		log.Printf("# Command %q failed on %q: %v\n", ce.cmd, ce.inst, err)
+		log.Printf("Command %q failed on %q: %v\n", ce.cmd, ce.inst, err)
 	}
 	if len(cmdsFailed) > 0 {
 		return errors.New("one or more commands failed")

@@ -58,7 +58,7 @@ func getTar(args []string) error {
 				return nil
 			}
 			defer f.Close()
-			log.Printf("# Downloading tarball for %q to %q...\n", inst, f.Name())
+			log.Printf("Downloading tarball for %q to %q...\n", inst, f.Name())
 			return doGetTar(ctx, inst, dir, f)
 		})
 	}

@@ -267,7 +267,7 @@ func main() {
 			// ahead with it. We don't need this with the flag
 			// because it's explicit.
 			if err == nil {
-				log.Printf("# Using group %q from GOMOTE_GROUP\n", *groupName)
+				log.Printf("Using group %q from GOMOTE_GROUP\n", *groupName)
 			}
 			// Note that an invalid group in GOMOTE_GROUP is OK.
 		}

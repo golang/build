@@ -203,7 +203,7 @@ func createInstances(ctx context.Context, builderType string, cfg *createConfig)
 				case err != nil:
 					return fmt.Errorf("failed to create buildlet (%d): %w", i+1, err)
 				case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && cfg.printStatus:
-					log.Printf("# still creating %s (%d) after %v; %d requests ahead of you\n", builderType, i+1, time.Since(start).Round(time.Second), update.GetWaitersAhead())
+					log.Printf("still creating %s (%d) after %v; %d requests ahead of you\n", builderType, i+1, time.Since(start).Round(time.Second), update.GetWaitersAhead())
 				case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
 					inst = update.GetInstance().GetGomoteId()
 				}
@@ -239,7 +239,7 @@ func createInstances(ctx context.Context, builderType string, cfg *createConfig)
 				return err
 			}
 			if !detailedProgress {
-				log.Printf("# Pushing GOROOT %q to %q...\n", goroot, inst)
+				log.Printf("Pushing GOROOT %q to %q...\n", goroot, inst)
 			}
 			if err := doPush(ctx, inst, goroot, false, detailedProgress); err != nil {
 				return err
@@ -258,9 +258,9 @@ func createInstances(ctx context.Context, builderType string, cfg *createConfig)
 			}
 			defer func() {
 				outf.Close()
-				log.Printf("# Wrote results from %q to %q.\n", inst, outf.Name())
+				log.Printf("Wrote results from %q to %q.\n", inst, outf.Name())
 			}()
-			log.Printf("# Streaming results from %q to %q...\n", inst, outf.Name())
+			log.Printf("Streaming results from %q to %q...\n", inst, outf.Name())
 
 			// If this is the only command running, print to stdout too, for convenience and
 			// backwards compatibility.
@@ -268,7 +268,7 @@ func createInstances(ctx context.Context, builderType string, cfg *createConfig)
 			if detailedProgress {
 				outputs = append(outputs, os.Stdout)
 			} else {
-				log.Printf("# Running %q on %q...\n", cmd, inst)
+				log.Printf("Running %q on %q...\n", cmd, inst)
 			}
 			return doRun(ctx, inst, cmd, []string{}, runWriters(outputs...))
 		})

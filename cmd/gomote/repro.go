@@ -126,7 +126,7 @@ func repro(args []string) error {
 			return fmt.Errorf("expected mode property on build %d to have type float64, but it did not: found %T; try updating gomote?", buildID, value)
 		}
 		if int(mode) == 1 /*MODE_COORDINATOR*/ {
-			log.Print("# Detected coordinator-mode builder; fetching child builds to use to initialize gomote.")
+			log.Print("Detected coordinator-mode builder; fetching child builds to use to initialize gomote.")
 			resp, err := bc.SearchBuilds(ctx, &bbpb.SearchBuildsRequest{Predicate: &bbpb.BuildPredicate{ChildOf: int64(buildID)}})
 			if err != nil {
 				return fmt.Errorf("fetching children of %d: %v", buildID, err)
@@ -138,14 +138,14 @@ func repro(args []string) error {
 			gomoteReproID = resp.Builds[0].Id
 		}
 	}
-	log.Printf("# Selected build %d to initialize the gomote.", gomoteReproID)
+	log.Printf("Selected build %d to initialize the gomote.", gomoteReproID)
 
-	log.Printf("# Creating %d instance(s) of type %s...", cfg.count, gomoteBuilderType)
+	log.Printf("Creating %d instance(s) of type %s...", cfg.count, gomoteBuilderType)
 	instances, err := createInstances(ctx, gomoteBuilderType, &cfg)
 	if err != nil {
 		return err
 	}
-	log.Printf("# Initializing %d instance(s) with environment of %d...", len(instances), gomoteReproID)
+	log.Printf("Initializing %d instance(s) with environment of %d...", len(instances), gomoteReproID)
 	if err := initReproInstances(ctx, instances, gomoteReproID); err != nil {
 		return err
 	}
@@ -174,9 +174,9 @@ func initReproInstances(ctx context.Context, instances []string, reproBuildID in
 			}
 			defer func() {
 				outf.Close()
-				log.Printf("# Wrote results from %q to %q.", inst, outf.Name())
+				log.Printf("Wrote results from %q to %q.", inst, outf.Name())
 			}()
-			log.Printf("# Streaming results from %q to %q...", inst, outf.Name())
+			log.Printf("Streaming results from %q to %q...", inst, outf.Name())
 
 			// If this is the only command running, print to stdout too, for convenience and
 			// backwards compatibility.
@@ -185,7 +185,7 @@ func initReproInstances(ctx context.Context, instances []string, reproBuildID in
 				// Emit detailed progress.
 				outputs = append(outputs, os.Stdout)
 			} else {
-				log.Printf("# Initializing gomote %q...", inst)
+				log.Printf("Initializing gomote %q...", inst)
 			}
 			return doRun(
 				ctx,
@@ -214,7 +214,7 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) 
 		return fmt.Errorf("expected project property on build %d to have type string, but it did not: found %v; try updating gomote?", build.Id, projValue)
 	}
 
-	log.Printf("# Fetching test results for %d", build.Id)
+	log.Printf("Fetching test results for %d", build.Id)
 	rc := rdbpb.NewResultDBClient(&prpc.Client{
 		C:    hc,
 		Host: chromeinfra.ResultDBHost,
@@ -231,7 +231,7 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) 
 		return fmt.Errorf("querying test results: %v", err)
 	}
 	if len(resp.TestResults) > 0 {
-		log.Printf("# Found failed tests. Commands to reproduce:")
+		log.Printf("Found failed tests. Commands to reproduce:")
 	}
 	var unknownTests []string
 	var packageFailures []string
@@ -294,19 +294,19 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) 
 		}
 	}
 	for _, t := range tests {
-		log.Printf("# $ gomote run -dir %s goroot/bin/go test -run='%s' %s", t.projPath, t.regexp(), t.pkgPath())
+		log.Printf("$ gomote run -dir %s goroot/bin/go test -run='%s' %s", t.projPath, t.regexp(), t.pkgPath())
 	}
 	for _, t := range benchmarks {
-		log.Printf("# $ gomote run -dir %s goroot/bin/go test -run='^$' -bench='%s' %s", t.projPath, t.regexp(), t.pkgPath())
+		log.Printf("$ gomote run -dir %s goroot/bin/go test -run='^$' -bench='%s' %s", t.projPath, t.regexp(), t.pkgPath())
 	}
 	for _, pkg := range specialPackages {
-		log.Printf("# $ gomote run -dir ./goroot goroot/bin/go tool dist test %s", pkg)
+		log.Printf("$ gomote run -dir ./goroot goroot/bin/go tool dist test %s", pkg)
 	}
 	for _, pkg := range packageFailures {
-		log.Printf("# Note: Found package-level test failure for %s.", pkg)
+		log.Printf("Note: Found package-level test failure for %s.", pkg)
 	}
 	for _, name := range unknownTests {
-		log.Printf("# Note: Unable to parse name of failed test %s.", name)
+		log.Printf("Note: Unable to parse name of failed test %s.", name)
 	}
 	return nil
 }

@@ -54,7 +54,7 @@ func destroy(args []string) error {
 		fs.Usage()
 	}
 	for _, name := range destroySet {
-		log.Printf("# Destroying %s\n", name)
+		log.Printf("Destroying %s\n", name)
 		ctx := context.Background()
 		client := gomoteServerClient(ctx)
 		if _, err := client.DestroyInstance(ctx, &protos.DestroyInstanceRequest{
