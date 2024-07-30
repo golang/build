@@ -235,6 +235,7 @@ var (
 
 func main() {
 	log.SetFlags(0)
+	log.SetPrefix("# ")
 
 	// Set up and parse global flags.
 	groupName := flag.String("group", os.Getenv("GOMOTE_GROUP"), "name of the gomote group to apply commands to (default is $GOMOTE_GROUP)")
