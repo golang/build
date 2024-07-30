@@ -33,13 +33,13 @@ func repro(args []string) error {
 	}
 	fs := flag.NewFlagSet("repro", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "repro usage: gomote repro [repro-opts] <build ID>")
+		log.Print("repro usage: gomote repro [repro-opts] <build ID>")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "If there's a valid group specified, new instances are")
-		fmt.Fprintln(os.Stderr, "automatically added to the group. If the group in")
-		fmt.Fprintln(os.Stderr, "$GOMOTE_GROUP doesn't exist, and there's no other group")
-		fmt.Fprintln(os.Stderr, "specified, it will be created and new instances will be")
-		fmt.Fprintln(os.Stderr, "added to that group.")
+		log.Print("If there's a valid group specified, new instances are")
+		log.Print("automatically added to the group. If the group in")
+		log.Print("$GOMOTE_GROUP doesn't exist, and there's no other group")
+		log.Print("specified, it will be created and new instances will be")
+		log.Print("added to that group.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

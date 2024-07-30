@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,10 +32,10 @@ func group(args []string) error {
 			cmds = append(cmds, cmd)
 		}
 		sort.Strings(cmds)
-		fmt.Fprintf(os.Stderr, "Usage of gomote group: gomote [global-flags] group <cmd> [cmd-flags]\n\n")
-		fmt.Fprintf(os.Stderr, "Commands:\n\n")
+		log.Printf("Usage of gomote group: gomote [global-flags] group <cmd> [cmd-flags]\n\n")
+		log.Printf("Commands:\n\n")
 		for _, name := range cmds {
-			fmt.Fprintf(os.Stderr, "  %-8s %s\n", name, cm[name].desc)
+			log.Printf("  %-8s %s\n", name, cm[name].desc)
 		}
 		fmt.Fprintln(os.Stderr)
 		os.Exit(1)
@@ -49,7 +50,7 @@ func group(args []string) error {
 
 func createGroup(args []string) error {
 	usage := func() {
-		fmt.Fprintln(os.Stderr, "group create usage: gomote group create <name>")
+		log.Print("group create usage: gomote group create <name>")
 		os.Exit(1)
 	}
 	if len(args) != 1 {
@@ -69,7 +70,7 @@ func doCreateGroup(name string) (*groupData, error) {
 
 func destroyGroup(args []string) error {
 	usage := func() {
-		fmt.Fprintln(os.Stderr, "group destroy usage: gomote group destroy <name>")
+		log.Print("group destroy usage: gomote group destroy <name>")
 		os.Exit(1)
 	}
 	if len(args) != 1 {
@@ -86,21 +87,21 @@ func destroyGroup(args []string) error {
 		return err
 	}
 	if os.Getenv("GOMOTE_GROUP") == name {
-		fmt.Fprintln(os.Stderr, "You may wish to now clear GOMOTE_GROUP.")
+		log.Print("You may wish to now clear GOMOTE_GROUP.")
 	}
 	return nil
 }
 
 func addToGroup(args []string) error {
 	usage := func() {
-		fmt.Fprintln(os.Stderr, "group add usage: gomote group add [instances ...]")
+		log.Print("group add usage: gomote group add [instances ...]")
 		os.Exit(1)
 	}
 	if len(args) == 0 {
 		usage()
 	}
 	if activeGroup == nil {
-		fmt.Fprintln(os.Stderr, "No active group found. Use -group or GOMOTE_GROUP.")
+		log.Print("No active group found. Use -group or GOMOTE_GROUP.")
 		usage()
 	}
 	ctx := context.Background()
@@ -115,14 +116,14 @@ func addToGroup(args []string) error {
 
 func removeFromGroup(args []string) error {
 	usage := func() {
-		fmt.Fprintln(os.Stderr, "group add usage: gomote group add [instances ...]")
+		log.Print("group add usage: gomote group add [instances ...]")
 		os.Exit(1)
 	}
 	if len(args) == 0 {
 		usage()
 	}
 	if activeGroup == nil {
-		fmt.Fprintln(os.Stderr, "No active group found. Use -group or GOMOTE_GROUP.")
+		log.Print("No active group found. Use -group or GOMOTE_GROUP.")
 		usage()
 	}
 	newInstances := make([]string, 0, len(activeGroup.Instances))
@@ -145,7 +146,7 @@ func removeFromGroup(args []string) error {
 
 func listGroups(args []string) error {
 	usage := func() {
-		fmt.Fprintln(os.Stderr, "group list usage: gomote group list")
+		log.Print("group list usage: gomote group list")
 		os.Exit(1)
 	}
 	if len(args) != 0 {

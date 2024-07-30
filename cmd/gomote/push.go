@@ -32,7 +32,7 @@ func push(args []string) error {
 	var dryRun bool
 	fs.BoolVar(&dryRun, "dry-run", false, "print what would be done only")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "push usage: gomote push <instance>")
+		log.Print("push usage: gomote push <instance>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -59,7 +59,7 @@ func push(args []string) error {
 	for _, inst := range pushSet {
 		inst := inst
 		eg.Go(func() error {
-			fmt.Fprintf(os.Stderr, "# Pushing GOROOT %q to %q...\n", goroot, inst)
+			log.Printf("# Pushing GOROOT %q to %q...\n", goroot, inst)
 			return doPush(ctx, inst, goroot, dryRun, detailedProgress)
 		})
 	}

@@ -151,7 +151,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"sort"
@@ -188,14 +187,14 @@ func sortedCommands() []string {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `Usage of gomote: gomote [global-flags] <cmd> [cmd-flags]
+	log.Printf(`Usage of gomote: gomote [global-flags] <cmd> [cmd-flags]
 
 Global flags:
 `)
 	flag.PrintDefaults()
-	fmt.Fprintf(os.Stderr, "Commands:\n\n")
+	log.Printf("Commands:\n\n")
 	for _, name := range sortedCommands() {
-		fmt.Fprintf(os.Stderr, "  %-13s %s\n", name, commands[name].des)
+		log.Printf("  %-13s %s\n", name, commands[name].des)
 	}
 	os.Exit(1)
 }
@@ -258,7 +257,7 @@ func main() {
 		if os.Getenv("GOMOTE_GROUP") != *groupName {
 			// Only fail hard since it was specified by the flag.
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failure: %v\n", err)
+				log.Printf("Failure: %v\n", err)
 				usage()
 			}
 		} else {
@@ -267,7 +266,7 @@ func main() {
 			// ahead with it. We don't need this with the flag
 			// because it's explicit.
 			if err == nil {
-				fmt.Fprintf(os.Stderr, "# Using group %q from GOMOTE_GROUP\n", *groupName)
+				log.Printf("# Using group %q from GOMOTE_GROUP\n", *groupName)
 			}
 			// Note that an invalid group in GOMOTE_GROUP is OK.
 		}
@@ -276,7 +275,7 @@ func main() {
 	cmdName := args[0]
 	cmd, ok := commands[cmdName]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Unknown command %q\n", cmdName)
+		log.Printf("Unknown command %q\n", cmdName)
 		usage()
 	}
 	if err := cmd.run(args[1:]); err != nil {
@@ -296,7 +295,7 @@ func gomoteServerClient(ctx context.Context) protos.GomoteServiceClient {
 
 // logAndExitf is equivalent to Printf to Stderr followed by a call to os.Exit(1).
 func logAndExitf(format string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, v...)
+	log.Printf(format, v...)
 	os.Exit(1)
 }
 

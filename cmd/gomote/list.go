@@ -8,6 +8,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ import (
 func list(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "list usage: gomote list")
+		log.Print("list usage: gomote list")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

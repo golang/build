@@ -93,21 +93,21 @@ func swarmingBuilders() ([]string, error) {
 func create(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "create usage: gomote create [create-opts] <type>")
+		log.Print("create usage: gomote create [create-opts] <type>")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "If there's a valid group specified, new instances are")
-		fmt.Fprintln(os.Stderr, "automatically added to the group. If the group in")
-		fmt.Fprintln(os.Stderr, "$GOMOTE_GROUP doesn't exist, and there's no other group")
-		fmt.Fprintln(os.Stderr, "specified, it will be created and new instances will be")
-		fmt.Fprintln(os.Stderr, "added to that group.")
+		log.Print("If there's a valid group specified, new instances are")
+		log.Print("automatically added to the group. If the group in")
+		log.Print("$GOMOTE_GROUP doesn't exist, and there's no other group")
+		log.Print("specified, it will be created and new instances will be")
+		log.Print("added to that group.")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Run 'gomote create -list' to see a list of valid builder")
-		fmt.Fprintln(os.Stderr, "types.")
+		log.Print("Run 'gomote create -list' to see a list of valid builder")
+		log.Print("types.")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Flags:")
+		log.Print("Flags:")
 		fs.PrintDefaults()
 		if luciDisabled() {
-			fmt.Fprintln(os.Stderr, "\nValid types:")
+			log.Print("\nValid types:")
 			for _, bt := range builders() {
 				var warn string
 				if bt.IsReverse {
@@ -117,7 +117,7 @@ func create(args []string) error {
 						warn = "   [limited capacity]"
 					}
 				}
-				fmt.Fprintf(os.Stderr, "  * %s%s\n", bt.Name, warn)
+				log.Printf("  * %s%s\n", bt.Name, warn)
 			}
 		}
 		os.Exit(1)
