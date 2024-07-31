@@ -347,6 +347,7 @@ SLOW_HOSTS = {
     "openbsd-arm64": 5,
     "openbsd-ppc64": 3,
     "openbsd-riscv64": 4,
+    "windows-arm64": 2,
 }
 
 # host_timeout_scale returns the default test timeout scale for a given host.
