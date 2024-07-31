@@ -22,21 +22,26 @@ import (
 	gpb "go.chromium.org/luci/common/proto/gitiles"
 	"go.chromium.org/luci/grpc/prpc"
 	rdbpb "go.chromium.org/luci/resultdb/proto/v1"
+	spb "go.chromium.org/luci/swarming/proto/api_v2"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const resultDBHost = "results.api.cr.dev"
-const crBuildBucketHost = "cr-buildbucket.appspot.com"
-const gitilesHost = "go.googlesource.com"
+const (
+	crBuildBucketHost = "cr-buildbucket.appspot.com"
+	gitilesHost       = "go.googlesource.com"
+	resultDBHost      = "results.api.cr.dev"
+	swarmingHost      = "chromium-swarm.appspot.com"
+)
 
 // LUCIClient is a LUCI client.
 type LUCIClient struct {
 	HTTPClient     *http.Client
-	GitilesClient  gpb.GitilesClient
-	BuildsClient   bbpb.BuildsClient
+	BotsClient     spb.BotsClient
 	BuildersClient bbpb.BuildersClient
+	BuildsClient   bbpb.BuildsClient
+	GitilesClient  gpb.GitilesClient
 	ResultDBClient rdbpb.ResultDBClient
 
 	// TraceSteps controls whether to log each step name as it's executed.
@@ -68,8 +73,13 @@ func NewLUCIClient(nProc int) *LUCIClient {
 		C:    c,
 		Host: resultDBHost,
 	})
+	botsClient := spb.NewBotsClient(&prpc.Client{
+		C:    c,
+		Host: swarmingHost,
+	})
 	return &LUCIClient{
 		HTTPClient:     c,
+		BotsClient:     botsClient,
 		GitilesClient:  gitilesClient,
 		BuildsClient:   buildsClient,
 		BuildersClient: buildersClient,
@@ -133,6 +143,12 @@ type Failure struct {
 	Status  rdbpb.TestStatus
 	LogURL  string
 	LogText string
+}
+
+type Bot struct {
+	ID          string
+	Dead        bool
+	Quarantined bool
 }
 
 // ListCommits fetches the list of commits from Gerrit.
@@ -664,6 +680,58 @@ func (c *LUCIClient) fetchLogsForBuild(r *BuildResult) {
 			f.LogText = fetchURL(f.LogURL)
 		}
 	}
+}
+
+// filter enables the creation of filter functions which can remove bots
+// from the list of returned bots.
+type filter func(bot *spb.BotInfo) bool
+
+// filterOutDarwin filters out darwin machines which no longer exist.
+func filterOutDarwin(bot *spb.BotInfo) bool {
+	return strings.HasPrefix(bot.BotId, "darwin-")
+}
+
+// ListBrokenBots lists bots that are either dead or quarantined. This list is limited
+// to the bots in the shared-workers pool since they are generally the contributor provided
+// bots. Arbitrary filters can be applied to filter out builders.
+func (c *LUCIClient) ListBrokenBots(ctx context.Context, filters ...filter) ([]Bot, error) {
+	if c.TraceSteps {
+		log.Println("ListBrokenBots")
+	}
+	checkFilters := func(bot *spb.BotInfo) bool {
+		for _, f := range filters {
+			if f(bot) {
+				return true
+			}
+		}
+		return false
+	}
+	var brokenBots []Bot
+	var cursor string
+nextCursor:
+	resp, err := c.BotsClient.ListBots(ctx, &spb.BotsRequest{
+		Limit:  1000,
+		Cursor: cursor,
+		Dimensions: []*spb.StringPair{
+			&spb.StringPair{Key: "pool", Value: "luci.golang.shared-workers"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, bot := range resp.GetItems() {
+		if checkFilters(bot) {
+			continue
+		}
+		if bot.IsDead || bot.Quarantined {
+			brokenBots = append(brokenBots, Bot{ID: bot.BotId, Dead: bot.IsDead, Quarantined: bot.Quarantined})
+		}
+	}
+	if resp.GetCursor() != "" {
+		cursor = resp.GetCursor()
+		goto nextCursor
+	}
+	return brokenBots, nil
 }
 
 func fetchURL(url string) string {
