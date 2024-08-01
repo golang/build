@@ -312,3 +312,65 @@ parent-branch: master
 		})
 	}
 }
+
+func TestNextPrerelease(t *testing.T) {
+	ctx := context.Background()
+	testcases := []struct {
+		name    string
+		tags    []string
+		version string
+		want    int
+	}{
+		{
+			name:    "next pre-release is 2",
+			tags:    []string{"gopls/v0.16.0-pre.0", "gopls/v0.16.0-pre.1"},
+			version: "v0.16.0",
+			want:    2,
+		},
+		{
+			name:    "next pre-release is 2 regardless of other minor or patch version",
+			tags:    []string{"gopls/v0.16.0-pre.0", "gopls/v0.16.0-pre.1", "gopls/v0.16.1-pre.1", "gopls/v0.2.0-pre.3"},
+			version: "v0.16.0",
+			want:    2,
+		},
+		{
+			name:    "next pre-release is 2 regardless of non-int prerelease version",
+			tags:    []string{"gopls/v0.16.0-pre.0", "gopls/v0.16.0-pre.1", "gopls/v0.16.0-pre.foo", "gopls/v0.16.0-pre.bar"},
+			version: "v0.16.0",
+			want:    2,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tools := NewFakeRepo(t, "tools")
+			commit := tools.Commit(map[string]string{
+				"go.mod": "module golang.org/x/tools\n",
+				"go.sum": "\n",
+			})
+
+			for _, tag := range tc.tags {
+				tools.Tag(tag, commit)
+			}
+
+			gerrit := NewFakeGerrit(t, tools)
+
+			tasks := &ReleaseGoplsTasks{
+				Gerrit: gerrit,
+			}
+
+			semv, ok := parseSemver(tc.version)
+			if !ok {
+				t.Fatalf("parseSemver(%q) should success", tc.version)
+			}
+			got, err := tasks.nextPrerelease(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv)
+			if err != nil {
+				t.Fatalf("nextPrerelease(%q) should not return error: %v", tc.version, err)
+			}
+
+			if tc.want != got {
+				t.Errorf("nextPrerelease(%q) = %v want %v", tc.version, got, tc.want)
+			}
+		})
+	}
+}
