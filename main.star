@@ -420,6 +420,7 @@ BUILDER_TYPES = [
     "linux-amd64-goamd64v3",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
+    "linux-amd64-longtest-swissmap",
     "linux-amd64-misccompile",
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
@@ -745,10 +746,10 @@ def define_for_presubmit_only_for_ports_or_on_release_branches(ports):
 
 # define the builder only for the go project at versions after x, useful for
 # non-default build modes that were created at x.
-def define_for_go_starting_at(x):
+def define_for_go_starting_at(x, presubmit = True, postsubmit = True):
     def f(port, project, go_branch_short):
         run = project == "go" and (go_branch_short == "gotip" or go_branch_short >= x)
-        return (run, run, run, [])
+        return (run, run and presubmit, run and postsubmit, [])
 
     return f
 
@@ -851,6 +852,14 @@ RUN_MODS = dict(
     newinliner = make_run_mod(
         add_env = {"GOEXPERIMENT": "newinliner"},
         enabled = define_for_go_starting_at("go1.22"),
+    ),
+
+    # Build and test with the swissmap GOEXPERIMENT.
+    #
+    # This can be deleted when GOEXPERIMENT=swissmap is enabled by default.
+    swissmap = make_run_mod(
+        add_env = {"GOEXPERIMENT": "swissmap"},
+        enabled = define_for_go_starting_at("go1.24", presubmit = False),
     ),
 
     # Build and test with cgo disabled.
