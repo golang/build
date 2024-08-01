@@ -237,9 +237,10 @@ func updateText(issue *Issue) string {
 	return b.String()
 }
 
-// reportNew creates and returns a new issue for reporting the failure.
-// If *post is false, reportNew returns a fake issue with number 0.
-func reportNew(fp *FailurePost) (*Issue, error) {
+// prepareNew creates and returns a new issue for reporting the failure.
+// It doesn't post the issue to GitHub. If *post is true, one needs to
+// call postNew to post.
+func prepareNew(fp *FailurePost) (*Issue, error) {
 	var pattern, title string
 	if fp.Pkg != "" {
 		pattern = fmt.Sprintf("pkg == %q && test == %q", fp.Pkg, fp.Test)
@@ -272,11 +273,7 @@ func reportNew(fp *FailurePost) (*Issue, error) {
 	}
 
 	issue := new(Issue)
-	if *post {
-		issue.Issue = newIssue(title, msg.String())
-	} else {
-		issue.Issue = &github.Issue{Title: title, Body: msg.String()}
-	}
+	issue.Issue = &github.Issue{Title: title, Body: msg.String()}
 	findScript(issue)
 	if issue.Error != "" {
 		return nil, fmt.Errorf("cannot find script in generated issue:\nBody:\n%s\n\nError:\n%s", issue.Body, issue.Error)
@@ -333,11 +330,11 @@ func readComments(issue *Issue) {
 	issue.Stale = false
 }
 
-// newIssue creates a new issue with the given title and body,
+// postNew creates a new issue with the given title and body,
 // setting the NeedsInvestigation label and placing the issue int
 // the Test Flakes project.
 // It automatically adds signature to the body.
-func newIssue(title, body string) *github.Issue {
+func postNew(title, body string) *github.Issue {
 	var args []any
 	if lab := labels["NeedsInvestigation"]; lab != nil {
 		args = append(args, lab)

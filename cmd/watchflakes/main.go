@@ -201,7 +201,7 @@ Repeat:
 					if *verbose {
 						fmt.Printf("%s: new issue\n", fp.URL)
 					}
-					issue, err := reportNew(fp)
+					issue, err := prepareNew(fp)
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -249,6 +249,9 @@ Repeat:
 	posts := 0
 	for _, issue := range issues {
 		if len(issue.Post) > 0 {
+			if *post && issue.Number == 0 {
+				issue.Issue = postNew(issue.Title, issue.Body)
+			}
 			fmt.Printf(" - new for #%d %s\n", issue.Number, issue.Title)
 			for _, fp := range issue.Post {
 				fmt.Printf("    - %s\n      %s\n", fp, fp.URL)
