@@ -34,10 +34,14 @@ func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
 	reviewers := wf.Param(wd, reviewersParam)
 	semversion := wf.Task1(wd, "validating input version", r.isValidVersion, version)
 	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semversion)
-	changeID := wf.Task2(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semversion, reviewers, wf.After(branchCreated))
-	submitted := wf.Action1(wd, "await config CL submission", r.AwaitSubmission, changeID)
-	changeID = wf.Task2(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semversion, reviewers, wf.After(submitted))
-	_ = wf.Action1(wd, "await gopls' x/tools dependency CL submission", r.AwaitSubmission, changeID)
+
+	configChangeID := wf.Task2(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semversion, reviewers, wf.After(branchCreated))
+	configCommit := wf.Task1(wd, "await config CL submission", r.AwaitSubmission, configChangeID)
+
+	dependencyChangeID := wf.Task2(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semversion, reviewers, wf.After(configCommit))
+	dependencyCommit := wf.Task1(wd, "await gopls' x/tools dependency CL submission", r.AwaitSubmission, dependencyChangeID)
+
+	_ = wf.Action1(wd, "verify installing latest gopls in release branch using go install", r.verifyGoplsInstallation, dependencyCommit)
 	return wd
 }
 
@@ -101,10 +105,6 @@ func (r *ReleaseGoplsTasks) openCL(ctx *wf.TaskContext, branch, title string) (s
 // otherwise it returns an empty string indicating no update is necessary.
 func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string) (string, error) {
 	const configFile = "codereview.cfg"
-	const configFmt = `issuerepo: golang/go
-branch: %s
-parent-branch: master
-`
 
 	branch := goplsReleaseBranchName(semv)
 	clTitle := fmt.Sprintf("all: update %s for %s", configFile, branch)
@@ -127,7 +127,10 @@ parent-branch: master
 	if err != nil && !errors.Is(err, gerrit.ErrResourceNotExist) {
 		return "", err
 	}
-
+	const configFmt = `issuerepo: golang/go
+branch: %s
+parent-branch: master
+`
 	after := fmt.Sprintf(configFmt, branch)
 	// Skip CL creation as config has not changed.
 	if string(before) == after {
@@ -148,7 +151,7 @@ parent-branch: master
 	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
 }
 
-// nextPrerelease go through the tags in tools repo that matches with the given
+// nextPrerelease inspects the tags in tools repo that match with the given
 // version and find the next pre-release version.
 func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (int, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
@@ -187,14 +190,6 @@ func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion)
 //
 // It returns the change ID, or "" if the CL was not created.
 func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, reviewers []string) (string, error) {
-	const scriptFmt = `cp gopls/go.mod gopls/go.mod.before
-cp gopls/go.sum gopls/go.sum.before
-cd gopls
-go mod edit -dropreplace=golang.org/x/tools
-go get -u golang.org/x/tools@%s
-go mod tidy -compat=1.19
-`
-
 	pre, err := r.nextPrerelease(ctx, semv)
 	if err != nil {
 		return "", fmt.Errorf("failed to find the next prerelease version: %w", err)
@@ -212,13 +207,16 @@ go mod tidy -compat=1.19
 	}
 
 	outputFiles := []string{"gopls/go.mod.before", "gopls/go.mod", "gopls/go.sum.before", "gopls/go.sum"}
-	// TODO(hxjiang): Replacing branch with the latest non-pinned commit in the
-	// release branch. Rationale:
-	// 1. Module proxy might return an outdated commit when using the branch name
-	// (to be confirmed with samthanawalla@).
-	// 2. Pinning x/tools using the latest commit from a branch isn't idempotent.
-	// It's best to avoid pinning x/tools to a version that's effectively another
-	// pin.
+	const scriptFmt = `cp gopls/go.mod gopls/go.mod.before
+cp gopls/go.sum gopls/go.sum.before
+cd gopls
+go mod edit -dropreplace=golang.org/x/tools
+go get -u golang.org/x/tools@%s
+go mod tidy -compat=1.19
+`
+	// TODO(hxjiang): Replacing branch with the latest commit in the release
+	// branch. Module proxy might return an outdated commit when using the branch
+	// name (to be confirmed with samthanawalla@).
 	build, err := r.CloudBuild.RunScript(ctx, fmt.Sprintf(scriptFmt, branch), "tools", outputFiles)
 	if err != nil {
 		return "", err
@@ -252,20 +250,50 @@ go mod tidy -compat=1.19
 	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changedFiles)
 }
 
+func (r *ReleaseGoplsTasks) verifyGoplsInstallation(ctx *wf.TaskContext, commit string) error {
+	if commit == "" {
+		return fmt.Errorf("the input commit should not be empty")
+	}
+	const scriptFmt = `go install golang.org/x/tools/gopls@%s &> install.log
+$(go env GOPATH)/bin/gopls version &> version.log
+echo -n "package main
+
+func main () {
+	const a = 2
+	b := a
+}" > main.go
+$(go env GOPATH)/bin/gopls references -d main.go:4:8 &> smoke.log
+`
+
+	ctx.Printf("verify gopls with commit %s\n", commit)
+	build, err := r.CloudBuild.RunScript(ctx, fmt.Sprintf(scriptFmt, commit), "", []string{"install.log", "version.log", "smoke.log"})
+	if err != nil {
+		return err
+	}
+
+	outputs, err := buildToOutputs(ctx, r.CloudBuild, build)
+	if err != nil {
+		return err
+	}
+	ctx.Printf("verify gopls installation process:\n%s\n", outputs["install.log"])
+	ctx.Printf("verify gopls version:\n%s\n", outputs["version.log"])
+	ctx.Printf("verify gopls functionality with gopls references smoke test:\n%s\n", outputs["smoke.log"])
+	return nil
+}
+
 // AwaitSubmission waits for the CL with the given change ID to be submitted.
 //
 // The return value is the submitted commit hash, or "" if changeID is "".
-func (r *ReleaseGoplsTasks) AwaitSubmission(ctx *wf.TaskContext, changeID string) error {
+func (r *ReleaseGoplsTasks) AwaitSubmission(ctx *wf.TaskContext, changeID string) (string, error) {
 	if changeID == "" {
 		ctx.Printf("not awaiting: no CL was created")
-		return nil
+		return "", nil
 	}
 
 	ctx.Printf("awaiting review/submit of %v", ChangeLink(changeID))
-	_, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
+	return AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
 		return r.Gerrit.Submitted(ctx, changeID, "")
 	})
-	return err
 }
 
 func (r *ReleaseGoplsTasks) isValidVersion(ctx *wf.TaskContext, ver string) (semversion, error) {
