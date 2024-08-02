@@ -194,7 +194,13 @@ nextPage:
 	}
 	for _, b := range resp.GetBuilders() {
 		var p BuilderConfigProperties
-		json.Unmarshal([]byte(b.GetConfig().GetProperties()), &p)
+		err := json.Unmarshal([]byte(b.GetConfig().GetProperties()), &p)
+		if err != nil {
+			return nil, err
+		}
+		if p.KnownIssue != 0 {
+			continue
+		}
 		if all || (p.Repo == repo && p.GoBranch == goBranch) {
 			builders = append(builders, Builder{b.GetId().GetBuilder(), &p})
 		}
