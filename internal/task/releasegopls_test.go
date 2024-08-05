@@ -319,25 +319,25 @@ func TestNextPrerelease(t *testing.T) {
 		name    string
 		tags    []string
 		version string
-		want    int
+		want    string
 	}{
 		{
 			name:    "next pre-release is 2",
 			tags:    []string{"gopls/v0.16.0-pre.0", "gopls/v0.16.0-pre.1"},
 			version: "v0.16.0",
-			want:    2,
+			want:    "pre.2",
 		},
 		{
 			name:    "next pre-release is 2 regardless of other minor or patch version",
 			tags:    []string{"gopls/v0.16.0-pre.0", "gopls/v0.16.0-pre.1", "gopls/v0.16.1-pre.1", "gopls/v0.2.0-pre.3"},
 			version: "v0.16.0",
-			want:    2,
+			want:    "pre.2",
 		},
 		{
 			name:    "next pre-release is 2 regardless of non-int prerelease version",
 			tags:    []string{"gopls/v0.16.0-pre.0", "gopls/v0.16.0-pre.1", "gopls/v0.16.0-pre.foo", "gopls/v0.16.0-pre.bar"},
 			version: "v0.16.0",
-			want:    2,
+			want:    "pre.2",
 		},
 	}
 

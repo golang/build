@@ -32,16 +32,20 @@ func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
 	// coordinator can choose which version to release instead of manual input.
 	version := wf.Param(wd, wf.ParamDef[string]{Name: "version"})
 	reviewers := wf.Param(wd, reviewersParam)
+
 	semversion := wf.Task1(wd, "validating input version", r.isValidVersion, version)
+	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrerelease, semversion)
+
 	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semversion)
 
 	configChangeID := wf.Task2(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semversion, reviewers, wf.After(branchCreated))
 	configCommit := wf.Task1(wd, "await config CL submission", r.AwaitSubmission, configChangeID)
 
-	dependencyChangeID := wf.Task2(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semversion, reviewers, wf.After(configCommit))
+	dependencyChangeID := wf.Task3(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semversion, prerelease, reviewers, wf.After(configCommit))
 	dependencyCommit := wf.Task1(wd, "await gopls' x/tools dependency CL submission", r.AwaitSubmission, dependencyChangeID)
 
-	_ = wf.Action1(wd, "verify installing latest gopls in release branch using go install", r.verifyGoplsInstallation, dependencyCommit)
+	verified := wf.Action1(wd, "verify installing latest gopls in release branch using go install", r.verifyGoplsInstallation, dependencyCommit)
+	_ = wf.Task3(wd, "tag pre-release", r.tagPrerelease, semversion, prerelease, dependencyCommit, wf.After(verified))
 	return wd
 }
 
@@ -152,11 +156,11 @@ parent-branch: master
 }
 
 // nextPrerelease inspects the tags in tools repo that match with the given
-// version and find the next pre-release version.
-func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (int, error) {
+// version and find the next prerelease version.
+func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
-		return -1, fmt.Errorf("failed to list tags for tools repo: %w", err)
+		return "", fmt.Errorf("failed to list tags for tools repo: %w", err)
 	}
 
 	max := 0
@@ -182,21 +186,20 @@ func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion)
 		}
 	}
 
-	return max + 1, nil
+	return fmt.Sprintf("pre.%v", max+1), nil
 }
 
 // updateXToolsDependency ensures gopls sub module have the correct x/tools
 // version as dependency.
 //
 // It returns the change ID, or "" if the CL was not created.
-func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, reviewers []string) (string, error) {
-	pre, err := r.nextPrerelease(ctx, semv)
-	if err != nil {
-		return "", fmt.Errorf("failed to find the next prerelease version: %w", err)
+func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, pre string, reviewers []string) (string, error) {
+	if pre == "" {
+		return "", fmt.Errorf("the input pre-release version should not be empty")
 	}
 
 	branch := goplsReleaseBranchName(semv)
-	clTitle := fmt.Sprintf("gopls: update go.mod for v%v.%v.%v-pre.%v", semv.Major, semv.Minor, semv.Patch, pre)
+	clTitle := fmt.Sprintf("gopls: update go.mod for v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
 	openCL, err := r.openCL(ctx, branch, clTitle)
 	if err != nil {
 		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
@@ -281,6 +284,23 @@ $(go env GOPATH)/bin/gopls references -d main.go:4:8 &> smoke.log
 	return nil
 }
 
+func (r *ReleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversion, commit, pre string) (string, error) {
+	if commit == "" {
+		return "", fmt.Errorf("the input commit should not be empty")
+	}
+	if pre == "" {
+		return "", fmt.Errorf("the input pre-release version should not be empty")
+	}
+
+	tag := fmt.Sprintf("gopls/v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
+	ctx.Printf("tag commit %s with tag %s", commit, tag)
+	if err := r.Gerrit.Tag(ctx, "tools", tag, commit); err != nil {
+		return "", err
+	}
+
+	return tag, nil
+}
+
 // AwaitSubmission waits for the CL with the given change ID to be submitted.
 //
 // The return value is the submitted commit hash, or "" if changeID is "".
@@ -334,16 +354,16 @@ func parseSemver(v string) (_ semversion, ok bool) {
 func (s *semversion) prereleaseVersion() (int, error) {
 	parts := strings.Split(s.Pre, ".")
 	if len(parts) == 1 {
-		return -1, fmt.Errorf(`prerelease version does not contain any "."`)
+		return -1, fmt.Errorf(`pre-release version does not contain any "."`)
 	}
 
 	if len(parts) > 2 {
-		return -1, fmt.Errorf(`prerelease version contains %v "."`, len(parts)-1)
+		return -1, fmt.Errorf(`pre-release version contains %v "."`, len(parts)-1)
 	}
 
 	pre, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return -1, fmt.Errorf("failed to convert prerelease version to int %q: %w", pre, err)
+		return -1, fmt.Errorf("failed to convert pre-release version to int %q: %w", pre, err)
 	}
 
 	return pre, nil
