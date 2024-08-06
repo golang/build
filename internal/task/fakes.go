@@ -30,7 +30,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-github/v48/github"
 	"github.com/google/uuid"
+	"github.com/shurcooL/githubv4"
 	pb "go.chromium.org/luci/buildbucket/proto"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gcsfs"
@@ -868,4 +870,124 @@ func (c *FakeBuildBucketClient) SearchBuilds(ctx context.Context, pred *pb.Build
 		return nil, nil
 	}
 	return []int64{rand.Int63()}, nil
+}
+
+type FakeGitHub struct {
+	// Milestones is a map from milestone ID to milestone name.
+	Milestones map[int]string
+	// Issues is a map from issue number to issue details.
+	// this map contains all the Issues attached to all milestones and Issues that
+	// does not attach to milestone.
+	Issues map[int]*github.Issue
+
+	// The following fields modify behavior of the fake to test
+	// certain special scenarios.
+
+	DisallowComments bool // if set, return an error from PostComment
+	lastIssueNumber  int  // last issue number created by nextIssueNumber, or 0
+	lastMilestoneID  int  // last milestone ID created by nextMilestoneID, or 0
+}
+
+func (f *FakeGitHub) nextMilestoneID() int {
+	for {
+		f.lastMilestoneID++
+		if _, ok := f.Milestones[f.lastMilestoneID]; !ok {
+			return f.lastMilestoneID
+		}
+	}
+}
+
+func (f *FakeGitHub) nextIssueNumber() int {
+	for {
+		f.lastIssueNumber++
+		if _, ok := f.Issues[f.lastIssueNumber]; !ok {
+			return f.lastIssueNumber
+		}
+	}
+}
+
+func (f *FakeGitHub) FetchMilestone(_ context.Context, owner, repo, name string, create bool) (int, error) {
+	for id, n := range f.Milestones {
+		if n == name {
+			return id, nil
+		}
+	}
+
+	if create {
+		newID := f.nextMilestoneID()
+		f.Milestones[newID] = name
+		return newID, nil
+	}
+	return 0, fmt.Errorf("milestone %q not found and create parameter is false", name)
+}
+
+func (f *FakeGitHub) FetchMilestoneIssues(_ context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error) {
+	if _, ok := f.Milestones[milestoneID]; !ok {
+		return nil, fmt.Errorf("milestone %v not found", milestoneID)
+	}
+	issueLabels := map[int]map[string]bool{}
+	for number, issue := range f.Issues {
+		if issue.Milestone == nil {
+			continue
+		}
+
+		if *issue.Milestone.ID != int64(milestoneID) {
+			continue
+		}
+
+		issueLabels[number] = map[string]bool{}
+		for _, label := range issue.Labels {
+			issueLabels[number][*label.Name] = true
+		}
+	}
+	return issueLabels, nil
+}
+
+func (*FakeGitHub) EditIssue(_ context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	return nil, nil, nil
+}
+
+func (f *FakeGitHub) CreateIssue(ctx context.Context, owner string, repo string, request *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	if f.Issues == nil {
+		f.Issues = map[int]*github.Issue{}
+	}
+
+	issueNumber := f.nextIssueNumber()
+	f.Issues[issueNumber] = &github.Issue{Number: &issueNumber, Title: request.Title, Body: request.Body}
+	if request.Labels != nil {
+		for _, l := range *request.Labels {
+			f.Issues[issueNumber].Labels = append(f.Issues[issueNumber].Labels, &github.Label{Name: &l})
+		}
+	}
+	if request.Milestone != nil {
+		if _, ok := f.Milestones[*request.Milestone]; !ok {
+			return nil, nil, fmt.Errorf("the milestone does not exist: %v", *request.Milestone)
+		}
+		f.Issues[issueNumber].Milestone = &github.Milestone{ID: pointTo(int64(*request.Milestone))}
+	}
+	return f.GetIssue(ctx, owner, repo, issueNumber)
+}
+
+func (f *FakeGitHub) GetIssue(_ context.Context, owner string, repo string, number int) (*github.Issue, *github.Response, error) {
+	if issue, ok := f.Issues[number]; !ok {
+		return nil, nil, fmt.Errorf("the issue %v does not exist", number)
+	} else {
+		return issue, nil, nil
+	}
+}
+
+func (*FakeGitHub) EditMilestone(_ context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
+	return nil, nil, nil
+}
+
+func (f *FakeGitHub) PostComment(_ context.Context, _ githubv4.ID, _ string) error {
+	if f.DisallowComments {
+		return fmt.Errorf("pretend that PostComment failed")
+	}
+	return nil
+}
+
+func pointTo[T any](i T) *T {
+	a := i
+	return &a
 }

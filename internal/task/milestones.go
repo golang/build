@@ -300,8 +300,14 @@ type GitHubClientInterface interface {
 	// and their labels.
 	FetchMilestoneIssues(ctx context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error)
 
+	// See github.Client.Issues.Create.
+	CreateIssue(ctx context.Context, owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
+
 	// See github.Client.Issues.Edit.
 	EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
+
+	// See github.Client.Issues.Get.
+	GetIssue(ctx context.Context, owner string, repo string, number int) (*github.Issue, *github.Response, error)
 
 	// See github.Client.Issues.EditMilestone.
 	EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error)
@@ -442,6 +448,14 @@ more:
 
 func (c *GitHubClient) EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
 	return c.V3.Issues.Edit(ctx, owner, repo, number, issue)
+}
+
+func (c *GitHubClient) CreateIssue(ctx context.Context, owner string, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	return c.V3.Issues.Create(ctx, owner, repo, issue)
+}
+
+func (c *GitHubClient) GetIssue(ctx context.Context, owner string, repo string, number int) (*github.Issue, *github.Response, error) {
+	return c.V3.Issues.Get(ctx, owner, repo, number)
 }
 
 func (c *GitHubClient) EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {

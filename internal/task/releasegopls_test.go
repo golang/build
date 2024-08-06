@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
 )
@@ -267,7 +268,7 @@ parent-branch: master
 				CloudBuild: NewFakeCloudBuild(t, gerritClient, "", nil, fakeGo),
 			}
 
-			_, err = tasks.updateCodeReviewConfig(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv, nil)
+			_, err = tasks.updateCodeReviewConfig(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv, nil, 0)
 			if err != nil {
 				t.Fatalf("updateCodeReviewConfig() returns error: %v", err)
 			}
@@ -370,6 +371,76 @@ func TestNextPrerelease(t *testing.T) {
 
 			if tc.want != got {
 				t.Errorf("nextPrerelease(%q) = %v want %v", tc.version, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCreateReleaseIssue(t *testing.T) {
+	ctx := context.Background()
+	testcases := []struct {
+		name       string
+		version    string
+		fakeGithub FakeGitHub
+		wantErr    bool
+		wantIssue  int64
+	}{
+		{
+			name:      "milestone does not exist",
+			version:   "v0.16.2",
+			wantErr:   true,
+			wantIssue: -1,
+		},
+		{
+			name:    "irrelevant milestone exist",
+			version: "v0.16.2",
+			fakeGithub: FakeGitHub{
+				Milestones: map[int]string{1: "gopls/v0.16.1"},
+			},
+			wantErr:   true,
+			wantIssue: -1,
+		},
+		{
+			name:    "milestone exist, issue is missing, workflow should create this issue",
+			version: "v0.16.2",
+			fakeGithub: FakeGitHub{
+				Milestones: map[int]string{1: "gopls/v0.16.2"},
+			},
+			wantErr:   false,
+			wantIssue: 1,
+		},
+		{
+			name:    "milestone exist, issue exist, workflow should reuse the issue",
+			version: "v0.16.2",
+			fakeGithub: FakeGitHub{
+				Milestones: map[int]string{1: "gopls/v0.16.2"},
+				Issues:     map[int]*github.Issue{2: {Number: pointTo(2), Title: pointTo("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: pointTo(int64(1))}}},
+			},
+			wantErr:   false,
+			wantIssue: 2,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := &ReleaseGoplsTasks{
+				Github: &tc.fakeGithub,
+			}
+
+			semv, ok := parseSemver(tc.version)
+			if !ok {
+				t.Fatalf("parseSemver(%q) should success", tc.version)
+			}
+			gotIssue, err := tasks.createReleaseIssue(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv)
+
+			if tc.wantErr && err == nil {
+				t.Errorf("createReleaseIssue(%s) should return error but return nil", tc.version)
+			} else if !tc.wantErr && err != nil {
+				t.Errorf("createReleaseIssue(%s) should return nil but return err: %v", tc.version, err)
+			}
+
+			if tc.wantIssue != gotIssue {
+				t.Errorf("createReleaseIssue(%s) = %v, want %v", tc.version, gotIssue, tc.wantIssue)
 			}
 		})
 	}

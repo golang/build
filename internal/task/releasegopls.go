@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/mod/semver"
@@ -20,6 +21,7 @@ import (
 // ReleaseGoplsTasks implements a new workflow definition include all the tasks
 // to release a gopls.
 type ReleaseGoplsTasks struct {
+	Github     GitHubClientInterface
 	Gerrit     GerritClient
 	CloudBuild CloudBuildClient
 }
@@ -36,17 +38,76 @@ func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
 	semversion := wf.Task1(wd, "validating input version", r.isValidVersion, version)
 	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrerelease, semversion)
 
-	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semversion)
+	issue := wf.Task1(wd, "create release git issue", r.createReleaseIssue, semversion)
+	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semversion, wf.After(issue))
 
-	configChangeID := wf.Task2(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semversion, reviewers, wf.After(branchCreated))
+	configChangeID := wf.Task3(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semversion, reviewers, issue, wf.After(branchCreated))
 	configCommit := wf.Task1(wd, "await config CL submission", r.AwaitSubmission, configChangeID)
 
-	dependencyChangeID := wf.Task3(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semversion, prerelease, reviewers, wf.After(configCommit))
+	dependencyChangeID := wf.Task4(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semversion, prerelease, reviewers, issue, wf.After(configCommit))
 	dependencyCommit := wf.Task1(wd, "await gopls' x/tools dependency CL submission", r.AwaitSubmission, dependencyChangeID)
 
 	verified := wf.Action1(wd, "verify installing latest gopls in release branch using go install", r.verifyGoplsInstallation, dependencyCommit)
 	_ = wf.Task3(wd, "tag pre-release", r.tagPrerelease, semversion, prerelease, dependencyCommit, wf.After(verified))
 	return wd
+}
+
+// createReleaseIssue attempts to locate the release issue associated with the
+// given milestone. If no such issue exists, a new one is created.
+//
+// Returns the ID of the release issue (either newly created or pre-existing).
+// Returns error if the release milestone does not exist or is closed.
+func (r *ReleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semversion) (int64, error) {
+	versionString := fmt.Sprintf("v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+	milestoneName := fmt.Sprintf("gopls/%s", versionString)
+	// All milestones and issues resides under go repo.
+	milestoneID, err := r.Github.FetchMilestone(ctx, "golang", "go", milestoneName, false)
+	if err != nil {
+		return -1, err
+	}
+	ctx.Printf("found release milestone %v", milestoneID)
+	issues, err := r.Github.FetchMilestoneIssues(ctx, "golang", "go", milestoneID)
+	if err != nil {
+		return -1, err
+	}
+
+	title := fmt.Sprintf("x/tools/gopls: release version %s", versionString)
+	for id := range issues {
+		issue, _, err := r.Github.GetIssue(ctx, "golang", "go", id)
+		if err != nil {
+			return -1, err
+		}
+		if title == issue.GetTitle() {
+			ctx.Printf("found existing releasing issue %v", id)
+			return int64(id), nil
+		}
+	}
+
+	content := fmt.Sprintf(`This issue tracks progress toward releasing gopls@%s
+
+- [ ] create or update %s
+- [ ] update go.mod/go.sum (remove x/tools replace, update x/tools version)
+- [ ] tag gopls/%s-pre.1
+- [ ] update Github milestone
+- [ ] write release notes
+- [ ] smoke test features
+- [ ] tag gopls/%s
+- [ ] (if vX.Y.0 release): update dependencies in master for the next release
+`, versionString, goplsReleaseBranchName(semv), versionString, versionString)
+	// TODO(hxjiang): accept a new parameter release coordinator.
+	assignee := "h9jiang"
+	issue, _, err := r.Github.CreateIssue(ctx, "golang", "go", &github.IssueRequest{
+		Title:     &title,
+		Body:      &content,
+		Labels:    &[]string{"gopls", "Tools"},
+		Assignee:  &assignee,
+		Milestone: &milestoneID,
+	})
+	if err != nil {
+		return -1, fmt.Errorf("failed to create release tracking issue for %q: %w", versionString, err)
+	}
+	ctx.Printf("created releasing issue %v", *issue.Number)
+	return int64(*issue.Number), nil
 }
 
 // goplsReleaseBranchName returns the branch name for given input release version.
@@ -107,7 +168,7 @@ func (r *ReleaseGoplsTasks) openCL(ctx *wf.TaskContext, branch, title string) (s
 //
 // It returns the change ID required to update the config if changes are needed,
 // otherwise it returns an empty string indicating no update is necessary.
-func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string) (string, error) {
+func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string, issue int64) (string, error) {
 	const configFile = "codereview.cfg"
 
 	branch := goplsReleaseBranchName(semv)
@@ -143,7 +204,7 @@ parent-branch: master
 
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",
-		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the %s.", clTitle, configFile),
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the %s.\n\nFor golang/go#%v", clTitle, configFile, issue),
 		Branch:  branch,
 	}
 
@@ -193,7 +254,7 @@ func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion)
 // version as dependency.
 //
 // It returns the change ID, or "" if the CL was not created.
-func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, pre string, reviewers []string) (string, error) {
+func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, pre string, reviewers []string, issue int64) (string, error) {
 	if pre == "" {
 		return "", fmt.Errorf("the input pre-release version should not be empty")
 	}
@@ -246,7 +307,7 @@ go mod tidy -compat=1.19
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",
 		Branch:  branch,
-		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the go.mod go.sum.", clTitle),
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the go.mod go.sum.\n\nFor golang/go#%v", clTitle, issue),
 	}
 
 	ctx.Printf("creating auto-submit change under branch %q in x/tools repo.", branch)

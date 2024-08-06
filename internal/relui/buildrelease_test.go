@@ -27,9 +27,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/google/go-github/v48/github"
 	"github.com/google/uuid"
-	"github.com/shurcooL/githubv4"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/gcsfs"
@@ -149,7 +147,10 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		GoProject:  "go",
 	}
 	milestoneTasks := &task.MilestoneTasks{
-		Client:    fakeGitHub{},
+		Client: &task.FakeGitHub{
+			Milestones:       map[int]string{0: "Go1.18", 1: "Go1.23", 2: "Go1.22.1"},
+			DisallowComments: true,
+		},
 		RepoOwner: "golang",
 		RepoName:  "go",
 		ApproveAction: func(ctx *workflow.TaskContext) error {
@@ -683,28 +684,6 @@ func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx *workflow.TaskContext, 
 		return "", fmt.Errorf("unexpected reviewers for CL: %v", diff)
 	}
 	return g.FakeGerrit.CreateAutoSubmitChange(ctx, input, reviewers, contents)
-}
-
-type fakeGitHub struct{}
-
-func (fakeGitHub) FetchMilestone(_ context.Context, owner, repo, name string, create bool) (int, error) {
-	return 0, nil
-}
-
-func (fakeGitHub) FetchMilestoneIssues(_ context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error) {
-	return nil, nil
-}
-
-func (fakeGitHub) EditIssue(_ context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
-	return nil, nil, nil
-}
-
-func (fakeGitHub) EditMilestone(_ context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
-	return nil, nil, nil
-}
-
-func (fakeGitHub) PostComment(_ context.Context, _ githubv4.ID, _ string) error {
-	return fmt.Errorf("pretend that PostComment failed")
 }
 
 type verboseListener struct {
