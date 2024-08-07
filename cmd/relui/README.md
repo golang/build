@@ -52,6 +52,18 @@ copy the results to your GCS bucket.
 PGHOST=localhost PGDATABASE=relui-dev PGUSER=postgres go run . -listen-http=localhost:8080 -cloud-build-project PROJECT_ID -scratch-files-base gs://GCS_BUCKET_NAME
 ```
 
+### Enable GitHub Client in your local relui
+
+Use github [token](https://github.com/settings/tokens/new) page to generate a
+new access token.
+
+Run relui with additional parameters `-github-token`. The local relui will use
+your personal credential to talk to github.
+
+```bash
+PGHOST=localhost PGDATABASE=relui-dev PGUSER=postgres go run . -listen-http=localhost:8080 -github-token TOKEN
+```
+
 ### Updating Queries
 
 Create or edit SQL files in `internal/relui/queries`.
