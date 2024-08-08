@@ -796,6 +796,25 @@ def define_for_projects_except(projects):
 
     return f
 
+# define_for_issue68798 is a custom policy for go.dev/issue/68798.
+# It shouldn't be needed beyond Go 1.24.
+def define_for_issue68798():
+    def f(port, project, go_branch_short):
+        exists = project in ["go", "tools"]
+        if go_branch_short != "gotip" and go_branch_short <= "go1.22":
+            # The builder exists as optional presubmit up to Go 1.22,
+            # since gotypesalias=0 was the default back then and not
+            # all tests are guaranteed to pass.
+            presubmit, postsubmit = False, False
+        else:
+            # Starting with Go 1.23, gotypesalias=1 is the default, so
+            # a builder that sets it explicitly in the environment is expected to be a no-op.
+            # Run it anyway to confirm that's the case for reasons motivated in go.dev/issue/68798.
+            presubmit, postsubmit = False, True
+        return (exists, presubmit, postsubmit, [])
+
+    return f
+
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
@@ -959,11 +978,9 @@ RUN_MODS = dict(
 
     # Build and test with the gotypesalias GODEBUG, which enables
     # explicit representation of type aliases.
-    #
-    # The builder exists only up to Go 1.22 since gotypesalias=1 is the default in Go 1.23+.
     typesalias = make_run_mod(
         add_env = {"GODEBUG": "gotypesalias=1"},
-        enabled = define_for_optional_presubmit_only_ending_at(["go", "tools"], "go1.22"),
+        enabled = define_for_issue68798(),
     ),
 )
 
