@@ -241,7 +241,7 @@ func init() {
 	addPerson("Alex Bramley", "a.bramley@gmail.com", "@fluffle")
 	addPerson("Alex Browne", "stephenalexbrowne@gmail.com", "@albrow")
 	addPerson("Alex Carol", "alex.carol.c@gmail.com", "@alexcarol")
-	addPerson("Alex Crawford", "alex@acrawford.com")
+	addPerson("Alex Crawford", "golang@code.acrawford.com")
 	addPerson("Alex Flint", "alex.flint@gmail.com")
 	addPerson("Alex Jin", "toalexjin@gmail.com", "@toalexjin")
 	addPerson("Alex Kohler", "alexjohnkohler@gmail.com", "@alexkohler")
