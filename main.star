@@ -810,7 +810,7 @@ def define_for_issue68798():
             # Starting with Go 1.23, gotypesalias=1 is the default, so
             # a builder that sets it explicitly in the environment is expected to be a no-op.
             # Run it anyway to confirm that's the case for reasons motivated in go.dev/issue/68798.
-            presubmit, postsubmit = False, True
+            presubmit, postsubmit = True, True
         return (exists, presubmit, postsubmit, [])
 
     return f
