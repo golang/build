@@ -18,16 +18,16 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-// ReleaseGoplsTasks implements a new workflow definition include all the tasks
-// to release a gopls.
-type ReleaseGoplsTasks struct {
+// PrereleaseGoplsTasks implements a new workflow definition include all the tasks
+// to create a gopls pre-release candidate.
+type PrereleaseGoplsTasks struct {
 	Github     GitHubClientInterface
 	Gerrit     GerritClient
 	CloudBuild CloudBuildClient
 }
 
-// NewDefinition create a new workflow definition for releasing gopls.
-func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
+// NewDefinition create a new workflow definition for gopls pre-release.
+func (r *PrereleaseGoplsTasks) NewDefinition() *wf.Definition {
 	wd := wf.New()
 
 	// TODO(hxjiang): provide potential release versions in the relui where the
@@ -57,7 +57,7 @@ func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
 //
 // Returns the ID of the release issue (either newly created or pre-existing).
 // Returns error if the release milestone does not exist or is closed.
-func (r *ReleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semversion) (int64, error) {
+func (r *PrereleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semversion) (int64, error) {
 	versionString := fmt.Sprintf("v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
 	milestoneName := fmt.Sprintf("gopls/%s", versionString)
 	// All milestones and issues resides under go repo.
@@ -118,7 +118,7 @@ func goplsReleaseBranchName(semv semversion) string {
 // createBranchIfMinor create the release branch if the input version is a minor
 // release.
 // All patch releases under the same minor version share the same release branch.
-func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semversion) error {
+func (r *PrereleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semversion) error {
 	branch := goplsReleaseBranchName(semv)
 
 	// Require gopls release branch existence if this is a non-minor release.
@@ -150,7 +150,7 @@ func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semver
 //
 // It returns an empty string if no such CL is found, otherwise it returns the
 // CL's change ID.
-func (r *ReleaseGoplsTasks) openCL(ctx *wf.TaskContext, branch, title string) (string, error) {
+func (r *PrereleaseGoplsTasks) openCL(ctx *wf.TaskContext, branch, title string) (string, error) {
 	// Query for an existing pending config CL, to avoid duplication.
 	query := fmt.Sprintf(`message:%q status:open owner:gobot@golang.org repo:tools branch:%q -age:7d`, title, branch)
 	changes, err := r.Gerrit.QueryChanges(ctx, query)
@@ -168,7 +168,7 @@ func (r *ReleaseGoplsTasks) openCL(ctx *wf.TaskContext, branch, title string) (s
 //
 // It returns the change ID required to update the config if changes are needed,
 // otherwise it returns an empty string indicating no update is necessary.
-func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string, issue int64) (string, error) {
+func (r *PrereleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string, issue int64) (string, error) {
 	const configFile = "codereview.cfg"
 
 	branch := goplsReleaseBranchName(semv)
@@ -218,7 +218,7 @@ parent-branch: master
 
 // nextPrerelease inspects the tags in tools repo that match with the given
 // version and find the next prerelease version.
-func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
+func (r *PrereleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
 		return "", fmt.Errorf("failed to list tags for tools repo: %w", err)
@@ -254,7 +254,7 @@ func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion)
 // version as dependency.
 //
 // It returns the change ID, or "" if the CL was not created.
-func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, pre string, reviewers []string, issue int64) (string, error) {
+func (r *PrereleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, pre string, reviewers []string, issue int64) (string, error) {
 	if pre == "" {
 		return "", fmt.Errorf("the input pre-release version should not be empty")
 	}
@@ -314,7 +314,7 @@ go mod tidy -compat=1.19
 	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changedFiles)
 }
 
-func (r *ReleaseGoplsTasks) verifyGoplsInstallation(ctx *wf.TaskContext, commit string) error {
+func (r *PrereleaseGoplsTasks) verifyGoplsInstallation(ctx *wf.TaskContext, commit string) error {
 	if commit == "" {
 		return fmt.Errorf("the input commit should not be empty")
 	}
@@ -345,7 +345,7 @@ $(go env GOPATH)/bin/gopls references -d main.go:4:8 &> smoke.log
 	return nil
 }
 
-func (r *ReleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversion, commit, pre string) (string, error) {
+func (r *PrereleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversion, commit, pre string) (string, error) {
 	if commit == "" {
 		return "", fmt.Errorf("the input commit should not be empty")
 	}
@@ -365,7 +365,7 @@ func (r *ReleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversion, 
 // AwaitSubmission waits for the CL with the given change ID to be submitted.
 //
 // The return value is the submitted commit hash, or "" if changeID is "".
-func (r *ReleaseGoplsTasks) AwaitSubmission(ctx *wf.TaskContext, changeID string) (string, error) {
+func (r *PrereleaseGoplsTasks) AwaitSubmission(ctx *wf.TaskContext, changeID string) (string, error) {
 	if changeID == "" {
 		ctx.Printf("not awaiting: no CL was created")
 		return "", nil
@@ -377,7 +377,7 @@ func (r *ReleaseGoplsTasks) AwaitSubmission(ctx *wf.TaskContext, changeID string
 	})
 }
 
-func (r *ReleaseGoplsTasks) isValidVersion(ctx *wf.TaskContext, ver string) (semversion, error) {
+func (r *PrereleaseGoplsTasks) isValidVersion(ctx *wf.TaskContext, ver string) (semversion, error) {
 	if !semver.IsValid(ver) {
 		return semversion{}, fmt.Errorf("the input %q version does not follow semantic version schema", ver)
 	}
@@ -432,7 +432,7 @@ func (s *semversion) prereleaseVersion() (int, error) {
 
 // possibleGoplsVersions identifies suitable versions for the upcoming release
 // based on the current tags in the repo.
-func (r *ReleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]string, error) {
+func (r *PrereleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
 		return nil, err

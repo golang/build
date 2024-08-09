@@ -71,7 +71,7 @@ func TestPossibleGoplsVersions(t *testing.T) {
 
 			gerrit := NewFakeGerrit(t, tools)
 
-			tasks := &ReleaseGoplsTasks{
+			tasks := &PrereleaseGoplsTasks{
 				Gerrit: gerrit,
 			}
 
@@ -146,7 +146,7 @@ func TestCreateBranchIfMinor(t *testing.T) {
 				}
 			}
 
-			tasks := &ReleaseGoplsTasks{
+			tasks := &PrereleaseGoplsTasks{
 				Gerrit: gerritClient,
 			}
 
@@ -263,7 +263,7 @@ parent-branch: master
 				t.Fatalf("ReadBranchHead should be able to get revision of release branch's head: %v", err)
 			}
 
-			tasks := &ReleaseGoplsTasks{
+			tasks := &PrereleaseGoplsTasks{
 				Gerrit:     gerritClient,
 				CloudBuild: NewFakeCloudBuild(t, gerritClient, "", nil, fakeGo),
 			}
@@ -356,7 +356,7 @@ func TestNextPrerelease(t *testing.T) {
 
 			gerrit := NewFakeGerrit(t, tools)
 
-			tasks := &ReleaseGoplsTasks{
+			tasks := &PrereleaseGoplsTasks{
 				Gerrit: gerrit,
 			}
 
@@ -423,7 +423,7 @@ func TestCreateReleaseIssue(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			tasks := &ReleaseGoplsTasks{
+			tasks := &PrereleaseGoplsTasks{
 				Github: &tc.fakeGithub,
 			}
 
