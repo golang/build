@@ -1974,7 +1974,7 @@ func init() {
 		numTryTestHelpers: 3,
 		env: []string{
 			"GOOS=js", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
-			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm:/workdir/go/lib/wasm",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1",
 		},
 	})
@@ -2803,7 +2803,7 @@ func init() {
 		numTryTestHelpers: 3,
 		env: []string{
 			"GOOS=wasip1", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
-			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm:/workdir/go/lib/wasm",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1", "GOWASIRUNTIME=wazero",
 		},
 	})
@@ -2822,7 +2822,7 @@ func init() {
 		numTryTestHelpers: 3,
 		env: []string{
 			"GOOS=wasip1", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
-			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm:/workdir/go/lib/wasm",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1", "GOWASIRUNTIME=wasmtime",
 		},
 	})
@@ -2841,7 +2841,7 @@ func init() {
 		numTryTestHelpers: 3,
 		env: []string{
 			"GOOS=wasip1", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
-			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm:/workdir/go/lib/wasm",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1", "GOWASIRUNTIME=wasmer",
 		},
 	})
@@ -2860,7 +2860,7 @@ func init() {
 		numTryTestHelpers: 3,
 		env: []string{
 			"GOOS=wasip1", "GOARCH=wasm", "GOHOSTOS=linux", "GOHOSTARCH=amd64",
-			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm:/workdir/go/lib/wasm",
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/workdir/go/misc/wasm",
 			"GO_DISABLE_OUTBOUND_NETWORK=1", "GOWASIRUNTIME=wasmedge",
 		},
 	})
