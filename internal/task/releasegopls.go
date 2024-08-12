@@ -285,13 +285,14 @@ func (r *PrereleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv 
 cp gopls/go.sum gopls/go.sum.before
 cd gopls
 go mod edit -dropreplace=golang.org/x/tools
-go get -u golang.org/x/tools@%s
+go get golang.org/x/tools@%s
 go mod tidy -compat=1.19
 `
-	// TODO(hxjiang): Replacing branch with the latest commit in the release
-	// branch. Module proxy might return an outdated commit when using the branch
-	// name (to be confirmed with samthanawalla@).
-	build, err := r.CloudBuild.RunScript(ctx, fmt.Sprintf(scriptFmt, branch), "tools", outputFiles)
+	head, err := r.Gerrit.ReadBranchHead(ctx, "tools", branch)
+	if err != nil {
+		return "", err
+	}
+	build, err := r.CloudBuild.RunScript(ctx, fmt.Sprintf(scriptFmt, head), "tools", outputFiles)
 	if err != nil {
 		return "", err
 	}
