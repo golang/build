@@ -726,6 +726,9 @@ var entries = map[string]*Entry{
 	"go/misc/wasm": {
 		Primary: wasmOwners,
 	},
+	"go/lib/wasm": {
+		Primary: wasmOwners,
+	},
 
 	// golang.org/x/ repositories.
 	"arch": {
