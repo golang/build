@@ -644,16 +644,6 @@ INTERNAL_GO_BRANCHES = {
     SECOND_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[SECOND_GO].branch + ".+", "private-internal-branch." + SECOND_GO + "-vendor"]),
 }
 
-# TOOLS_GO_BRANCHES are Go branches that aren't used for project-wide testing
-# because they're out of scope per https://go.dev/doc/devel/release#policy,
-# but are used by only by the golang.org/x/tools repository for a while longer.
-#
-# This was removed after Go 1.23.0 was released per go.dev/issue/65917 and
-# after the special case for the go1.23 branch covered remaining needs for
-# gopls v0.17.0 and all of its minor releases.
-TOOLS_GO_BRANCHES = {
-}
-
 # We set build priorities by environment. These should always be lower than the
 # build priority for gomote requests, which is 20 (lower number means higher priority).
 PRIORITY = struct(
@@ -1617,7 +1607,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     Args:
         env: the environment the builder runs in.
         project: A go project defined in `PROJECTS`.
-        go_branch_short: A go repository branch name defined in `GO_BRANCHES` or `TOOLS_GO_BRANCHES`.
+        go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
 
     Returns:
@@ -1636,7 +1626,6 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Construct the basic properties that will apply to all builders for
     # this combination.
     known_go_branches = dict(GO_BRANCHES)
-    known_go_branches.update(TOOLS_GO_BRANCHES)
     base_props = {
         "project": project,
         # NOTE: LUCI will pass in the commit information. This is
@@ -2317,17 +2306,6 @@ def _define_go_ci():
                         disable_reuse = True,
                     )
 
-            # For golang.org/x/tools, also include coverage for extra Go versions.
-            if project == "tools" and go_branch_short == "gotip":
-                for extra_go_release, _ in TOOLS_GO_BRANCHES.items():
-                    builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
-                    try_builder, _, _ = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
-                    luci.cq_tryjob_verifier(
-                        builder = try_builder,
-                        cq_group = cq_group.name,
-                        disable_reuse = True,
-                    )
-
     # Postsubmit.
     console_generators = []
     postsubmit_builders_by_port = {}
@@ -2354,14 +2332,6 @@ def _define_go_ci():
                     postsubmit_builders_with_go_repo_trigger[name] = True
                     for name in triggers:
                         postsubmit_builders_with_go_repo_trigger[name] = True
-
-            # For golang.org/x/tools, also include coverage for extra Go versions.
-            if project == "tools" and go_branch_short == "gotip":
-                for extra_go_release, _ in TOOLS_GO_BRANCHES.items():
-                    builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
-                    ci_builder, _, _ = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
-                    postsubmit_builders[ci_builder] = struct(builder_type = builder_type)
-                    postsubmit_builders_with_go_repo_trigger[ci_builder] = True
 
             # Collect all the postsubmit builders by port and project.
             for name, b in postsubmit_builders.items() + postsubmit_builders_known_issue.items():
