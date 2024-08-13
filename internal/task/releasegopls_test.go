@@ -520,11 +520,100 @@ func TestIsValidPrerelease(t *testing.T) {
 				Gerrit: NewFakeGerrit(t, tools),
 			}
 
-			err := tasks.isValidPrereleaseVersion(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, tc.version)
+			_, err := tasks.isValidPrereleaseVersion(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, tc.version)
 			if tc.wantErr && err == nil {
 				t.Errorf("isValidPrereleaseVersion() should return error but return nil")
 			} else if !tc.wantErr && err != nil {
 				t.Errorf("isValidPrereleaseVersion() should return nil but return err: %v", err)
+			}
+		})
+	}
+}
+
+func TestTagRelease(t *testing.T) {
+	ctx := context.Background()
+	testcases := []struct {
+		name    string
+		tags    []string
+		version string
+		wantErr bool
+	}{
+		{
+			name: "should add the release tag v0.1.0 to the commit with tag v0.1.0-pre.2",
+			tags: []string{
+				"gopls/v0.1.0-pre.1",
+				"gopls/v0.1.0-pre.2",
+			},
+			version: "v0.1.0-pre.2",
+			wantErr: false,
+		},
+		{
+			name: "should add the release tag v0.12.0 to the commit with tag v0.12.0-pre.1",
+			tags: []string{
+				"gopls/v0.12.0-pre.1",
+				"gopls/v0.12.0-pre.2",
+			},
+			version: "v0.12.0-pre.1",
+			wantErr: false,
+		},
+		{
+			name: "should error if the pre-release tag does not exist",
+			tags: []string{
+				"gopls/v0.12.0-pre.1",
+				"gopls/v0.12.0-pre.2",
+			},
+			version: "v0.12.0-pre.3",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tools := NewFakeRepo(t, "tools")
+			_ = tools.Commit(map[string]string{
+				"go.mod": "module golang.org/x/tools\n",
+				"go.sum": "\n",
+			})
+
+			for i, tag := range tc.tags {
+				commit := tools.Commit(map[string]string{
+					"README.md": fmt.Sprintf("THIS IS READ ME FOR %v.", i),
+				})
+				tools.Tag(tag, commit)
+			}
+
+			tasks := &ReleaseGoplsTasks{
+				Gerrit: NewFakeGerrit(t, tools),
+			}
+
+			semv, _ := parseSemver(tc.version)
+
+			err := tasks.tagRelease(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, semv)
+
+			if tc.wantErr && err == nil {
+				t.Errorf("tagRelease(%q) should return error but return nil", tc.version)
+			} else if !tc.wantErr && err != nil {
+				t.Errorf("tagRelease(%q) should return nil but return err: %v", tc.version, err)
+			}
+
+			if !tc.wantErr {
+				releaseTag := fmt.Sprintf("gopls/v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+				release, err := tasks.Gerrit.GetTag(ctx, "tools", releaseTag)
+				if err != nil {
+					t.Errorf("release tag %q should be added after tagRelease(%q): %v", releaseTag, tc.version, err)
+				}
+
+				prereleaseTag := fmt.Sprintf("gopls/%s", tc.version)
+				prerelease, err := tasks.Gerrit.GetTag(ctx, "tools", prereleaseTag)
+				if err != nil {
+					t.Fatalf("failed to get tag %q: %v", prereleaseTag, err)
+				}
+
+				// verify the release tag and the input pre-release tag point to the same
+				// commit.
+				if release.Revision != prerelease.Revision {
+					t.Errorf("tagRelease(%s) add the release tag to commit %s, but should add to commit %s", tc.version, prerelease.Revision, release.Revision)
+				}
 			}
 		})
 	}

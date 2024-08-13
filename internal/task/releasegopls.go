@@ -35,20 +35,20 @@ func (r *PrereleaseGoplsTasks) NewDefinition() *wf.Definition {
 	version := wf.Param(wd, wf.ParamDef[string]{Name: "version"})
 	reviewers := wf.Param(wd, reviewersParam)
 
-	semversion := wf.Task1(wd, "validating input version", r.isValidVersion, version)
-	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrerelease, semversion)
+	semv := wf.Task1(wd, "validating input version", r.isValidVersion, version)
+	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrerelease, semv)
 
-	issue := wf.Task1(wd, "create release git issue", r.createReleaseIssue, semversion)
-	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semversion, wf.After(issue))
+	issue := wf.Task1(wd, "create release git issue", r.createReleaseIssue, semv)
+	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semv, wf.After(issue))
 
-	configChangeID := wf.Task3(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semversion, reviewers, issue, wf.After(branchCreated))
+	configChangeID := wf.Task3(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semv, reviewers, issue, wf.After(branchCreated))
 	configCommit := wf.Task1(wd, "await config CL submission", r.AwaitSubmission, configChangeID)
 
-	dependencyChangeID := wf.Task4(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semversion, prerelease, reviewers, issue, wf.After(configCommit))
+	dependencyChangeID := wf.Task4(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semv, prerelease, reviewers, issue, wf.After(configCommit))
 	dependencyCommit := wf.Task1(wd, "await gopls' x/tools dependency CL submission", r.AwaitSubmission, dependencyChangeID)
 
 	verified := wf.Action1(wd, "verify installing latest gopls using release branch dependency commit", r.verifyGoplsInstallation, dependencyCommit)
-	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, semversion, prerelease, dependencyCommit, wf.After(verified))
+	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, semv, prerelease, dependencyCommit, wf.After(verified))
 	_ = wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
 	return wd
 }
@@ -373,13 +373,16 @@ func (r *PrereleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversio
 		return "", fmt.Errorf("the input pre-release version should not be empty")
 	}
 
+	// Defensively guard against re-creating tags.
+	ctx.DisableRetries()
+
 	version := fmt.Sprintf("v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
 	tag := fmt.Sprintf("gopls/%s", version)
 	if err := r.Gerrit.Tag(ctx, "tools", tag, commit); err != nil {
 		return "", err
 	}
-	ctx.Printf("tagged commit %s with tag %s", commit, tag)
 
+	ctx.Printf("tagged commit %s with tag %s", commit, tag)
 	return version, nil
 }
 
@@ -529,7 +532,9 @@ func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
 	wd := wf.New()
 
 	version := wf.Param(wd, wf.ParamDef[string]{Name: "pre-release version"})
-	_ = wf.Action1(wd, "validating input version", r.isValidPrereleaseVersion, version)
+
+	semv := wf.Task1(wd, "validating input version", r.isValidPrereleaseVersion, version)
+	_ = wf.Action1(wd, "tag the release", r.tagRelease, semv)
 
 	return wd
 }
@@ -540,34 +545,37 @@ func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
 // - A corresponding "gopls/vX.Y.Z-pre.V" tag exists in the x/tools repo,
 // pointing to the release branch's head commit.
 // - The corresponding release tag "gopls/vX.Y.Z" does not exist in the repo.
-func (r *ReleaseGoplsTasks) isValidPrereleaseVersion(ctx *wf.TaskContext, version string) error {
+//
+// Returns the parsed semantic pre-release version from the input pre-release
+// version string.
+func (r *ReleaseGoplsTasks) isValidPrereleaseVersion(ctx *wf.TaskContext, version string) (semversion, error) {
 	if !semver.IsValid(version) {
-		return fmt.Errorf("the input %q version does not follow semantic version schema", version)
+		return semversion{}, fmt.Errorf("the input %q version does not follow semantic version schema", version)
 	}
 
 	semv, ok := parseSemver(version)
 	if !ok {
-		return fmt.Errorf("invalid semantic version %q", version)
+		return semversion{}, fmt.Errorf("invalid semantic version %q", version)
 	}
 	if semv.Pre == "" {
-		return fmt.Errorf("the input %q version does not contain any pre-release version.", version)
+		return semversion{}, fmt.Errorf("the input %q version does not contain any pre-release version.", version)
 	}
 
 	pre, err := semv.prereleaseVersion()
 	if err != nil {
-		return err
+		return semversion{}, err
 	}
 
 	// Verify the release tag is absent.
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
-		return err
+		return semversion{}, err
 	}
 
 	releaseTag := fmt.Sprintf("gopls/v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
 	for _, tag := range tags {
 		if tag == releaseTag {
-			return fmt.Errorf("this version has been released, the release tag %s already exists.", releaseTag)
+			return semversion{}, fmt.Errorf("this version has been released, the release tag %s already exists.", releaseTag)
 		}
 	}
 
@@ -575,32 +583,52 @@ func (r *ReleaseGoplsTasks) isValidPrereleaseVersion(ctx *wf.TaskContext, versio
 	// pre-release versions.
 	current, err := currentGoplsPrerelease(ctx, r.Gerrit, semv)
 	if err != nil {
-		return fmt.Errorf("failed to figure out the current prerelease version for gopls %v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+		return semversion{}, fmt.Errorf("failed to figure out the current prerelease version for gopls v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
 	}
 
 	if current > pre {
-		return fmt.Errorf("there is a newer pre-release version available: %v.%v.%v-pre.%v", semv.Major, semv.Minor, semv.Patch, current)
+		return semversion{}, fmt.Errorf("there is a newer pre-release version available: %v.%v.%v-pre.%v", semv.Major, semv.Minor, semv.Patch, current)
 	}
 
 	if current < pre {
-		return fmt.Errorf("input pre-release version %s is not yet available. Latest available is %v.%v.%v-pre.%v", version, semv.Major, semv.Minor, semv.Patch, current)
+		return semversion{}, fmt.Errorf("input pre-release version %s is not yet available. Latest available is %v.%v.%v-pre.%v", version, semv.Major, semv.Minor, semv.Patch, current)
 	}
 
 	// Check if the provided pre-release is the head of the branch.
 	branchName := goplsReleaseBranchName(semv)
 	head, err := r.Gerrit.ReadBranchHead(ctx, "tools", branchName)
 	if err != nil {
-		return err
+		return semversion{}, err
 	}
 
 	tagInfo, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/%s", version))
 	if err != nil {
-		return err
+		return semversion{}, err
 	}
 
 	if tagInfo.Revision != head {
-		return fmt.Errorf("x/tools branch %s's head commit is %s, but tag %s points to revision %s", branchName, head, fmt.Sprintf("gopls/%s", version), tagInfo.Revision)
+		return semversion{}, fmt.Errorf("x/tools branch %s's head commit is %s, but tag %s points to revision %s", branchName, head, fmt.Sprintf("gopls/%s", version), tagInfo.Revision)
 	}
 
+	return semv, nil
+}
+
+// tagRelease locates the commit associated with the pre-release version and
+// applies the official release tag in form of "gopls/vX.Y.Z" to the same commit.
+func (r *ReleaseGoplsTasks) tagRelease(ctx *wf.TaskContext, semv semversion) error {
+	info, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, semv.Pre))
+	if err != nil {
+		return err
+	}
+
+	// Defensively guard against re-creating tags.
+	ctx.DisableRetries()
+
+	releaseTag := fmt.Sprintf("gopls/v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+	if err := r.Gerrit.Tag(ctx, "tools", releaseTag, info.Revision); err != nil {
+		return err
+	}
+
+	ctx.Printf("tagged commit %s with tag %s", info.Revision, releaseTag)
 	return nil
 }
