@@ -540,7 +540,6 @@ GO_BRANCHES = {
     "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.20.6"),
     "go1.23": struct(branch = "release-branch.go1.23", bootstrap = "1.20.6"),
     "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.20.6"),
-    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
 }
 
 # INTERNAL_GO_BRANCHES mirrors GO_BRANCHES, but defines the branches to build
@@ -554,13 +553,15 @@ INTERNAL_GO_BRANCHES = {
     # config each time we issue a point release.
     "go1.23": struct(branch_regexp = "private-release-branch.go1.23.\\d+", bootstrap = "1.20.6"),
     "go1.22": struct(branch_regexp = "private-release-branch.go1.22.\\d+", bootstrap = "1.20.6"),
-    "go1.21": struct(branch_regexp = "private-release-branch.go1.21.\\d+", bootstrap = "1.17.13"),
 }
 
-# EXTRA_GO_BRANCHES are Go branches that aren't used for project-wide testing
+# TOOLS_GO_BRANCHES are Go branches that aren't used for project-wide testing
 # because they're out of scope per https://go.dev/doc/devel/release#policy,
-# but are used by specific golang.org/x repositories.
-EXTRA_GO_BRANCHES = {
+# but are used by only by the golang.org/x/tools repository for a while longer.
+#
+# This is planned to be removed soon after Go 1.23.0 per go.dev/issue/65917.
+TOOLS_GO_BRANCHES = {
+    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
     "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
     "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13"),
 }
@@ -1322,7 +1323,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     Args:
         env: the environment the builder runs in.
         project: A go project defined in `PROJECTS`.
-        go_branch_short: A go repository branch name defined in `GO_BRANCHES` or `EXTRA_GO_BRANCHES`.
+        go_branch_short: A go repository branch name defined in `GO_BRANCHES` or `TOOLS_GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
 
     Returns:
@@ -1340,7 +1341,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Construct the basic properties that will apply to all builders for
     # this combination.
     known_go_branches = dict(GO_BRANCHES)
-    known_go_branches.update(EXTRA_GO_BRANCHES)
+    known_go_branches.update(TOOLS_GO_BRANCHES)
     base_props = {
         "project": project,
         # NOTE: LUCI will pass in the commit information. This is
@@ -1959,7 +1960,7 @@ def _define_go_ci():
 
             # For golang.org/x/tools, also include coverage for extra Go versions.
             if project == "tools" and go_branch_short == "gotip":
-                for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
+                for extra_go_release, _ in TOOLS_GO_BRANCHES.items():
                     builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
                     try_builder, _ = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
                     luci.cq_tryjob_verifier(
@@ -1997,7 +1998,7 @@ def _define_go_ci():
 
             # For golang.org/x/tools, also include coverage for extra Go versions.
             if project == "tools" and go_branch_short == "gotip":
-                for extra_go_release, _ in EXTRA_GO_BRANCHES.items():
+                for extra_go_release, _ in TOOLS_GO_BRANCHES.items():
                     builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
                     ci_builder, _ = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
                     postsubmit_builders[ci_builder] = builder_type
