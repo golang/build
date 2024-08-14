@@ -398,6 +398,8 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 	case "exp":
 		dirs = append(dirs, "slog/benchmarks/zap_benchmarks")     // A local replace directive as of 2023-09-05.
 		dirs = append(dirs, "slog/benchmarks/zerolog_benchmarks") // A local replace directive as of 2023-09-05.
+	case "oscar":
+		dirs = append(dirs, "internal/gaby", "internal/gcp", "internal/syncdb") // Using a checked-in go.work as of 2024-08-14.
 	case "telemetry":
 		dirs = append(dirs, "godev") // A local replace directive as of 2023-09-05.
 	case "tools":
