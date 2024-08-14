@@ -6,6 +6,7 @@ package task
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -389,7 +390,7 @@ func TestCreateReleaseIssue(t *testing.T) {
 			name:      "milestone does not exist",
 			version:   "v0.16.2",
 			wantErr:   true,
-			wantIssue: -1,
+			wantIssue: 0,
 		},
 		{
 			name:    "irrelevant milestone exist",
@@ -398,7 +399,7 @@ func TestCreateReleaseIssue(t *testing.T) {
 				Milestones: map[int]string{1: "gopls/v0.16.1"},
 			},
 			wantErr:   true,
-			wantIssue: -1,
+			wantIssue: 0,
 		},
 		{
 			name:    "milestone exist, issue is missing, workflow should create this issue",
@@ -441,6 +442,89 @@ func TestCreateReleaseIssue(t *testing.T) {
 
 			if tc.wantIssue != gotIssue {
 				t.Errorf("createReleaseIssue(%s) = %v, want %v", tc.version, gotIssue, tc.wantIssue)
+			}
+		})
+	}
+}
+
+func TestIsValidPrerelease(t *testing.T) {
+	testcases := []struct {
+		name string
+		// commitTags is a slice of string slice. For each inner slice, it creates a
+		// commit on the release branch and tags it with the strings in that slice.
+		// An empty inner slice results in a commit with no tags.
+		commitTags [][]string
+		version    string
+		wantErr    bool
+	}{
+		{
+			name:       "error if the gopls tag does not exist",
+			commitTags: [][]string{},
+			version:    "v0.16.2-pre.1",
+			wantErr:    true,
+		},
+		{
+			name:       "error if the tools only have older pre-release versions",
+			commitTags: [][]string{{"v0.16.2-pre.1"}, {"v0.16.2-pre.2"}, {}},
+			version:    "v0.16.2-pre.3",
+			wantErr:    true,
+		},
+		{
+			name:       "error if the tools have newer pre-release version",
+			commitTags: [][]string{{"gopls/v0.16.2-pre.1", "gopls/v0.16.2-pre.2"}},
+			version:    "v0.16.2-pre.1",
+			wantErr:    true,
+		},
+		{
+			name:       "error if the version is not pointing to head of the branch",
+			commitTags: [][]string{{"gopls/v0.16.2-pre.1", "gopls/v0.16.2-pre.2"}, {}},
+			version:    "v0.16.2-pre.2",
+			wantErr:    true,
+		},
+		{
+			name:       "error if the release tag already exist",
+			commitTags: [][]string{{"gopls/v0.16.2-pre.1", "gopls/v0.16.2-pre.2", "gopls/v0.16.2"}},
+			version:    "v0.16.2-pre.2",
+			wantErr:    true,
+		},
+		{
+			name:       "valid if the version is the latest and pointing to the head of branch",
+			commitTags: [][]string{{"gopls/v0.16.2-pre.1"}, {"gopls/v0.16.2-pre.2"}},
+			version:    "v0.16.2-pre.2",
+			wantErr:    false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			semv, _ := parseSemver(tc.version)
+
+			tools := NewFakeRepo(t, "tools")
+			masterHead := tools.Commit(map[string]string{
+				"go.mod": "module golang.org/x/tools\n",
+				"go.sum": "\n",
+			})
+
+			tools.Branch(goplsReleaseBranchName(semv), masterHead)
+
+			for i, tags := range tc.commitTags {
+				commit := tools.CommitOnBranch(goplsReleaseBranchName(semv), map[string]string{
+					"README.md": fmt.Sprintf("THIS IS READ ME FOR %v.", i),
+				})
+				for _, tag := range tags {
+					tools.Tag(tag, commit)
+				}
+			}
+
+			tasks := &ReleaseGoplsTasks{
+				Gerrit: NewFakeGerrit(t, tools),
+			}
+
+			err := tasks.isValidPrereleaseVersion(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, tc.version)
+			if tc.wantErr && err == nil {
+				t.Errorf("isValidPrereleaseVersion() should return error but return nil")
+			} else if !tc.wantErr && err != nil {
+				t.Errorf("isValidPrereleaseVersion() should return nil but return err: %v", err)
 			}
 		})
 	}

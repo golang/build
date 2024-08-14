@@ -63,19 +63,19 @@ func (r *PrereleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semv
 	// All milestones and issues resides under go repo.
 	milestoneID, err := r.Github.FetchMilestone(ctx, "golang", "go", milestoneName, false)
 	if err != nil {
-		return -1, err
+		return 0, err
 	}
 	ctx.Printf("found release milestone %v", milestoneID)
 	issues, err := r.Github.FetchMilestoneIssues(ctx, "golang", "go", milestoneID)
 	if err != nil {
-		return -1, err
+		return 0, err
 	}
 
 	title := fmt.Sprintf("x/tools/gopls: release version %s", versionString)
 	for id := range issues {
 		issue, _, err := r.Github.GetIssue(ctx, "golang", "go", id)
 		if err != nil {
-			return -1, err
+			return 0, err
 		}
 		if title == issue.GetTitle() {
 			ctx.Printf("found existing releasing issue %v", id)
@@ -104,7 +104,7 @@ func (r *PrereleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semv
 		Milestone: &milestoneID,
 	})
 	if err != nil {
-		return -1, fmt.Errorf("failed to create release tracking issue for %q: %w", versionString, err)
+		return 0, fmt.Errorf("failed to create release tracking issue for %q: %w", versionString, err)
 	}
 	ctx.Printf("created releasing issue %v", *issue.Number)
 	return int64(*issue.Number), nil
@@ -219,9 +219,19 @@ parent-branch: master
 // nextPrerelease inspects the tags in tools repo that match with the given
 // version and find the next prerelease version.
 func (r *PrereleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
-	tags, err := r.Gerrit.ListTags(ctx, "tools")
+	cur, err := currentGoplsPrerelease(ctx, r.Gerrit, semv)
 	if err != nil {
-		return "", fmt.Errorf("failed to list tags for tools repo: %w", err)
+		return "", err
+	}
+	return fmt.Sprintf("pre.%v", cur+1), nil
+}
+
+// currentGoplsPrerelease inspects the tags in tools repo that match with the
+// given version and find the latest pre-release version.
+func currentGoplsPrerelease(ctx *wf.TaskContext, client GerritClient, semv semversion) (int, error) {
+	tags, err := client.ListTags(ctx, "tools")
+	if err != nil {
+		return 0, fmt.Errorf("failed to list tags for tools repo: %w", err)
 	}
 
 	max := 0
@@ -247,7 +257,7 @@ func (r *PrereleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversi
 		}
 	}
 
-	return fmt.Sprintf("pre.%v", max+1), nil
+	return max, nil
 }
 
 // updateXToolsDependency ensures gopls sub module have the correct x/tools
@@ -415,16 +425,20 @@ func parseSemver(v string) (_ semversion, ok bool) {
 func (s *semversion) prereleaseVersion() (int, error) {
 	parts := strings.Split(s.Pre, ".")
 	if len(parts) == 1 {
-		return -1, fmt.Errorf(`pre-release version does not contain any "."`)
+		return 0, fmt.Errorf(`pre-release version does not contain any "."`)
 	}
 
 	if len(parts) > 2 {
-		return -1, fmt.Errorf(`pre-release version contains %v "."`, len(parts)-1)
+		return 0, fmt.Errorf(`pre-release version contains %v "."`, len(parts)-1)
 	}
 
 	pre, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return -1, fmt.Errorf("failed to convert pre-release version to int %q: %w", pre, err)
+		return 0, fmt.Errorf("failed to convert pre-release version to int %q: %w", pre, err)
+	}
+
+	if pre <= 0 {
+		return 0, fmt.Errorf("the pre-release version should be larger than 0: %v", pre)
 	}
 
 	return pre, nil
@@ -491,4 +505,91 @@ func (r *PrereleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]str
 
 	semver.Sort(possible)
 	return possible, nil
+}
+
+// ReleaseGoplsTasks implements a new workflow definition include all the tasks
+// to release gopls.
+type ReleaseGoplsTasks struct {
+	Gerrit GerritClient
+}
+
+// NewDefinition create a new workflow definition for gopls release.
+func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
+	wd := wf.New()
+
+	version := wf.Param(wd, wf.ParamDef[string]{Name: "pre-release version"})
+	_ = wf.Action1(wd, "validating input version", r.isValidPrereleaseVersion, version)
+
+	return wd
+}
+
+// isValidPrereleaseVersion verifies the input version satisfies the following
+// conditions:
+// - It is the latest pre-release version for its Major.Minor.Patch.
+// - A corresponding "gopls/vX.Y.Z-pre.V" tag exists in the x/tools repo,
+// pointing to the release branch's head commit.
+// - The corresponding release tag "gopls/vX.Y.Z" does not exist in the repo.
+func (r *ReleaseGoplsTasks) isValidPrereleaseVersion(ctx *wf.TaskContext, version string) error {
+	if !semver.IsValid(version) {
+		return fmt.Errorf("the input %q version does not follow semantic version schema", version)
+	}
+
+	semv, ok := parseSemver(version)
+	if !ok {
+		return fmt.Errorf("invalid semantic version %q", version)
+	}
+	if semv.Pre == "" {
+		return fmt.Errorf("the input %q version does not contain any pre-release version.", version)
+	}
+
+	pre, err := semv.prereleaseVersion()
+	if err != nil {
+		return err
+	}
+
+	// Verify the release tag is absent.
+	tags, err := r.Gerrit.ListTags(ctx, "tools")
+	if err != nil {
+		return err
+	}
+
+	releaseTag := fmt.Sprintf("gopls/v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+	for _, tag := range tags {
+		if tag == releaseTag {
+			return fmt.Errorf("this version has been released, the release tag %s already exists.", releaseTag)
+		}
+	}
+
+	// Check if the provided pre-release is the latest among all existing
+	// pre-release versions.
+	current, err := currentGoplsPrerelease(ctx, r.Gerrit, semv)
+	if err != nil {
+		return fmt.Errorf("failed to figure out the current prerelease version for gopls %v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+	}
+
+	if current > pre {
+		return fmt.Errorf("there is a newer pre-release version available: %v.%v.%v-pre.%v", semv.Major, semv.Minor, semv.Patch, current)
+	}
+
+	if current < pre {
+		return fmt.Errorf("input pre-release version %s is not yet available. Latest available is %v.%v.%v-pre.%v", version, semv.Major, semv.Minor, semv.Patch, current)
+	}
+
+	// Check if the provided pre-release is the head of the branch.
+	branchName := goplsReleaseBranchName(semv)
+	head, err := r.Gerrit.ReadBranchHead(ctx, "tools", branchName)
+	if err != nil {
+		return err
+	}
+
+	tagInfo, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/%s", version))
+	if err != nil {
+		return err
+	}
+
+	if tagInfo.Revision != head {
+		return fmt.Errorf("x/tools branch %s's head commit is %s, but tag %s points to revision %s", branchName, head, fmt.Sprintf("gopls/%s", version), tagInfo.Revision)
+	}
+
+	return nil
 }
