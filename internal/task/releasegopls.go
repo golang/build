@@ -48,8 +48,10 @@ func (r *PrereleaseGoplsTasks) NewDefinition() *wf.Definition {
 	dependencyCommit := wf.Task1(wd, "await gopls' x/tools dependency CL submission", r.AwaitSubmission, dependencyChangeID)
 
 	verified := wf.Action1(wd, "verify installing latest gopls using release branch dependency commit", r.verifyGoplsInstallation, dependencyCommit)
-	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, semv, prerelease, dependencyCommit, wf.After(verified))
+	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, semv, dependencyCommit, prerelease, wf.After(verified))
 	_ = wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
+	wf.Output(wd, "version", prereleaseVersion)
+
 	return wd
 }
 

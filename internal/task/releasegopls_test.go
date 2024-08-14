@@ -447,6 +447,259 @@ func TestCreateReleaseIssue(t *testing.T) {
 	}
 }
 
+func TestGoplsPrereleaseFlow(t *testing.T) {
+	mustHaveShell(t)
+
+	testcases := []struct {
+		name string
+		// The fields below are the prepared states before running the gopls
+		// pre-release flow.
+		// commitTags specifies a sequence of (possibly) tagged commits.
+		// For each entry, a new commit is created, and if the entry is
+		// non empty that commit is tagged with the entry value.
+		commitTags []string
+		config     string
+		semv       semversion
+		// fields below are the desired states.
+		wantVersion string
+		wantConfig  string
+		wantCommits int
+	}{
+		{
+			name: "update all three file through two commits",
+			// create release branch with one commit without any tag.
+			commitTags:  []string{""},
+			config:      " ",
+			semv:        semversion{Major: 0, Minor: 1, Patch: 0},
+			wantVersion: "v0.1.0-pre.1",
+			wantConfig: `issuerepo: golang/go
+branch: gopls-release-branch.0.1
+parent-branch: master
+`,
+			wantCommits: 2,
+		},
+		{
+			name: "codereview.cfg already have expected content, update go.mod and go.sum with one commit",
+			// create release branch with one commit without any tag.
+			commitTags: []string{""},
+			config: `issuerepo: golang/go
+branch: gopls-release-branch.0.1
+parent-branch: master
+`,
+			semv:        semversion{Major: 0, Minor: 1, Patch: 0},
+			wantVersion: "v0.1.0-pre.1",
+			wantConfig: `issuerepo: golang/go
+branch: gopls-release-branch.0.1
+parent-branch: master
+`,
+			wantCommits: 1,
+		},
+		{
+			name:        "create the branch for minor version",
+			commitTags:  nil, // no release branch
+			config:      ` `,
+			semv:        semversion{Major: 0, Minor: 12, Patch: 0},
+			wantVersion: "v0.12.0-pre.1",
+			wantConfig: `issuerepo: golang/go
+branch: gopls-release-branch.0.12
+parent-branch: master
+`,
+			wantCommits: 2,
+		},
+		{
+			name: "workflow should increment the pre-release number to 4",
+			// create release branch with three commits with tags.
+			commitTags:  []string{"gopls/v0.8.3-pre.1", "gopls/v0.8.3-pre.2", "gopls/v0.8.3-pre.3"},
+			config:      " ",
+			semv:        semversion{Major: 0, Minor: 8, Patch: 3},
+			wantVersion: "v0.8.3-pre.4",
+			wantConfig: `issuerepo: golang/go
+branch: gopls-release-branch.0.8
+parent-branch: master
+`,
+			wantCommits: 2,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			tools := NewFakeRepo(t, "tools")
+			beforeHead := tools.Commit(map[string]string{
+				"gopls/go.mod":   "module golang.org/x/tools\n",
+				"gopls/go.sum":   "\n",
+				"codereview.cfg": tc.config,
+			})
+			// These tags make sure the input version is the next version of some
+			// released version, in order to pass the version validation step.
+			tools.Tag(fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch-1), beforeHead)
+			tools.Tag(fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor-1, tc.semv.Patch), beforeHead)
+			tools.Tag(fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major-1, tc.semv.Minor, tc.semv.Patch), beforeHead)
+
+			// Create the release branch and make a few commits to the release branch.
+			// Var beforeHead is used to track the commit of release branch's head
+			// before trigger the gopls pre-release run. If we do not need to create a
+			// release branch, beforeHead will point to the initial commit in the
+			// master branch.
+			if len(tc.commitTags) != 0 {
+				tools.Branch(goplsReleaseBranchName(tc.semv), beforeHead)
+				for i, tag := range tc.commitTags {
+					commit := tools.CommitOnBranch(goplsReleaseBranchName(tc.semv), map[string]string{
+						"README.md": fmt.Sprintf("THIS IS READ ME FOR %v.", i),
+					})
+					beforeHead = commit
+					if tag != "" {
+						tools.Tag(tag, commit)
+					}
+				}
+			}
+
+			gerrit := NewFakeGerrit(t, tools)
+
+			// fakeGo handles multiple arguments in gopls pre-release flow.
+			// - go get will write fake go.sum and go.mod to simulate pining the
+			// x/tools dependency.
+			// - go install will write a fake script in bin/gopls and grant execute
+			// permission to it to simulate gopls installation.
+			// - go env will return the current dir so gopls will point to the fake
+			// script that is written by go install.
+			// - go mod will exit without any error.
+			var fakeGo = fmt.Sprintf(`#!/bin/bash -exu
+
+case "$1" in
+"get")
+	echo -n "test go sum" > go.sum
+	echo -n "test go mod" > go.mod
+	;;
+"install")
+	mkdir bin
+	# write following content to bin/gopls
+	# make sure the gopls version and gopls references have return code 0.
+	cat <<EOF > bin/gopls
+#!/bin/bash -exu
+
+case "\$1" in
+"version")
+	echo %q
+	;;
+"references")
+	exit 0
+	;;
+*)
+	echo unexpected command "\$@"
+	exit 1
+	;;
+esac
+EOF
+
+	# Make the bin/gopls script executable
+	chmod +x bin/gopls
+	;;
+"env")
+	echo "."
+	;;
+"mod")
+	exit 0
+	;;
+*)
+	echo unexpected command $@
+	exit 1
+	;;
+esac`, tc.wantVersion)
+			tasks := &PrereleaseGoplsTasks{
+				Gerrit:     gerrit,
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, fakeGo),
+				Github: &FakeGitHub{
+					Milestones: map[int]string{
+						1: fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),
+					},
+				},
+			}
+
+			wd := tasks.NewDefinition()
+			w, err := workflow.Start(wd, map[string]interface{}{
+				reviewersParam.Name: []string(nil),
+				"version":           fmt.Sprintf("v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			outputs, err := w.Run(ctx, &verboseListener{t: t})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Verify that workflow will create the release branch for minor releases.
+			// The release branch is created before the flow run for patch releases.
+			afterHead, err := gerrit.ReadBranchHead(ctx, "tools", goplsReleaseBranchName(tc.semv))
+			if err != nil {
+				t.Error(err)
+			}
+
+			// Verify that workflow return the expected pre-release version.
+			if got := outputs["version"]; got != tc.wantVersion {
+				t.Errorf("Output: got \"version\" %q, want %q", got, tc.wantVersion)
+			}
+
+			// Verify the content of following files are expected.
+			contentChecks := []struct {
+				path string
+				want string
+			}{
+				{
+					path: "codereview.cfg",
+					want: tc.wantConfig,
+				},
+				{
+					path: "gopls/go.sum",
+					want: "test go sum",
+				},
+				{
+					path: "gopls/go.mod",
+					want: "test go mod",
+				},
+			}
+			for _, check := range contentChecks {
+				got, err := gerrit.ReadFile(ctx, "tools", afterHead, check.path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(got) != check.want {
+					t.Errorf("Content of %q = %q, want %q", check.path, got, check.want)
+				}
+			}
+
+			// Verify the commits merged to release branch after the flow execution.
+			beforeIndex, afterIndex := 0, 0
+			for i, commit := range tools.History() {
+				if commit == afterHead {
+					afterIndex = i
+				}
+				if commit == beforeHead {
+					beforeIndex = i
+				}
+			}
+
+			if committed := beforeIndex - afterIndex; committed != tc.wantCommits {
+				t.Errorf("%v commits merged to release branch after the pre-release flow executed, but want %v commits", committed, tc.wantCommits)
+			}
+
+			// Verify the pre-release tag is created and it's pointing to the head of
+			// the release branch.
+			info, err := gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/%s", tc.wantVersion))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if info.Revision != afterHead {
+				t.Errorf("the pre-release tag points to commit %s, should point to the head commit of release branch %s", info.Revision, afterHead)
+			}
+		})
+	}
+}
+
 func TestIsValidPrerelease(t *testing.T) {
 	testcases := []struct {
 		name string
