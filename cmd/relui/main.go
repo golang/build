@@ -320,6 +320,12 @@ func main() {
 	}
 	dh.RegisterDefinition("Prepare a pre-release gopls candidate", prereleaseGoplsTasks.NewDefinition())
 
+	releaseGoplsTasks := task.ReleaseGoplsTasks{
+		Gerrit:     gerritClient,
+		CloudBuild: cloudBuildClient,
+	}
+	dh.RegisterDefinition("Release gopls", releaseGoplsTasks.NewDefinition())
+
 	privateSyncTask := &task.PrivateMasterSyncTask{
 		Git:              gitClient,
 		PrivateGerritURL: "https://go-internal.googlesource.com/golang/go-private",

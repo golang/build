@@ -7,6 +7,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -867,6 +868,88 @@ func TestTagRelease(t *testing.T) {
 				if release.Revision != prerelease.Revision {
 					t.Errorf("tagRelease(%s) add the release tag to commit %s, but should add to commit %s", tc.version, prerelease.Revision, release.Revision)
 				}
+			}
+		})
+	}
+}
+
+func TestExecuteAndMonitorChange(t *testing.T) {
+	mustHaveShell(t)
+
+	testcases := []struct {
+		name   string
+		branch string
+		script string
+		watch  []string
+		want   map[string]string
+	}{
+		{
+			name:   "write all three files with different content",
+			branch: "master",
+			script: `echo -n "foo" > file_a
+echo -n "foo" > file_b
+echo -n "foo" > file_c
+`,
+			watch: []string{"file_a", "file_b", "file_c"},
+			want:  map[string]string{"file_a": "foo", "file_b": "foo", "file_c": "foo"},
+		},
+		{
+			name:   "ignore file_c changes",
+			branch: "master",
+			script: `echo -n "foo" > file_a
+echo -n "foo" > file_b
+echo -n "foo" > file_c
+`,
+			watch: []string{"file_a", "file_b"},
+			want:  map[string]string{"file_a": "foo", "file_b": "foo"},
+		},
+		{
+			name:   "write two files with different content",
+			branch: "master",
+			script: `echo -n "foo" > file_a
+echo -n "foo" > file_b
+`,
+			watch: []string{"file_a", "file_b", "file_c"},
+			want:  map[string]string{"file_a": "foo", "file_b": "foo"},
+		},
+		{
+			name:   "write one file with different content in foo branch",
+			branch: "foo",
+			script: `echo -n "foo" > file_a`,
+			watch:  []string{"file_a", "file_b", "file_c"},
+			want:   map[string]string{"file_a": "foo"},
+		},
+		{
+			name:   "create a file in foo branch",
+			branch: "foo",
+			script: `echo -n "foo" > file_d`,
+			watch:  []string{"file_a", "file_b", "file_c", "file_d"},
+			want:   map[string]string{"file_d": "foo"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tools := NewFakeRepo(t, "tools")
+			initial := tools.Commit(map[string]string{
+				"gopls/go.mod": "module golang.org/x/tools\n",
+				"gopls/go.sum": "\n",
+				"file_a":       "file_a",
+				"file_b":       "file_b",
+				"file_c":       "file_c",
+			})
+			if tc.branch != "master" {
+				tools.Branch(tc.branch, initial)
+			}
+
+			cloudBuild := NewFakeCloudBuild(t, NewFakeGerrit(t, tools), "", nil, fakeGo)
+			got, err := executeAndMonitorChange(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, cloudBuild, tc.branch, tc.script, tc.watch)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("executeAndMonitorChange() = %v want = %v", got, tc.want)
 			}
 		})
 	}
