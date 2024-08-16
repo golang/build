@@ -415,7 +415,7 @@ func TestCreateReleaseIssue(t *testing.T) {
 			version: "v0.16.2",
 			fakeGithub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
-				Issues:     map[int]*github.Issue{2: {Number: pointTo(2), Title: pointTo("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: pointTo(int64(1))}}},
+				Issues:     map[int]*github.Issue{2: {Number: github.Int(2), Title: github.String("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			},
 			wantErr:   false,
 			wantIssue: 2,

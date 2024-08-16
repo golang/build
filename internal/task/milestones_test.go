@@ -29,37 +29,37 @@ func TestCheckBlockers(t *testing.T) {
 	}{
 		{
 			name:    "beta 1 with one hard blocker",
-			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: pointTo("release-blocker")}}, Milestone: &github.Milestone{ID: pointTo(int64(1))}}},
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			version: "go1.20beta1", kind: KindBeta,
 			want: errManualApproval,
 		},
 		{
 			name:    "beta 1 with one blocker marked okay-after-beta1",
-			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: pointTo("release-blocker")}, {Name: pointTo("okay-after-beta1")}}, Milestone: &github.Milestone{ID: pointTo(int64(1))}}},
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-beta1")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			version: "go1.20beta1", kind: KindBeta,
 			want: nil, // Want no error.
 		},
 		{
 			name:    "beta 2 with one hard blocker and meaningless okay-after-beta1 label",
-			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: pointTo("release-blocker")}, {Name: pointTo("okay-after-beta1")}}, Milestone: &github.Milestone{ID: pointTo(int64(1))}}},
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-beta1")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			version: "go1.20beta2", kind: KindBeta,
 			want: errManualApproval,
 		},
 		{
 			name:    "RC 1 with one hard blocker",
-			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: pointTo("release-blocker")}}, Milestone: &github.Milestone{ID: pointTo(int64(1))}}},
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			version: "go1.20rc1", kind: KindRC,
 			want: errManualApproval,
 		},
 		{
 			name:    "RC 1 with one blocker marked okay-after-rc1",
-			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: pointTo("release-blocker")}, {Name: pointTo("okay-after-rc1")}}, Milestone: &github.Milestone{ID: pointTo(int64(1))}}},
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-rc1")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			version: "go1.20rc1", kind: KindRC,
 			want: nil, // Want no error.
 		},
 		{
 			name:    "RC 2 with one hard blocker and meaningless okay-after-rc1 label",
-			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: pointTo("release-blocker")}, {Name: pointTo("okay-after-rc1")}}, Milestone: &github.Milestone{ID: pointTo(int64(1))}}},
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-rc1")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			version: "go1.20rc2", kind: KindRC,
 			want: errManualApproval,
 		},

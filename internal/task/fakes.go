@@ -963,7 +963,7 @@ func (f *FakeGitHub) CreateIssue(ctx context.Context, owner string, repo string,
 		if _, ok := f.Milestones[*request.Milestone]; !ok {
 			return nil, nil, fmt.Errorf("the milestone does not exist: %v", *request.Milestone)
 		}
-		f.Issues[issueNumber].Milestone = &github.Milestone{ID: pointTo(int64(*request.Milestone))}
+		f.Issues[issueNumber].Milestone = &github.Milestone{ID: github.Int64(int64(*request.Milestone))}
 	}
 	return f.GetIssue(ctx, owner, repo, issueNumber)
 }
@@ -985,9 +985,4 @@ func (f *FakeGitHub) PostComment(_ context.Context, _ githubv4.ID, _ string) err
 		return fmt.Errorf("pretend that PostComment failed")
 	}
 	return nil
-}
-
-func pointTo[T any](i T) *T {
-	a := i
-	return &a
 }
