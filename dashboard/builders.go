@@ -122,10 +122,12 @@ var Builders = map[string]*BuildConfig{}
 
 // GoBootstrap is the bootstrap Go version.
 //
-// For bootstrap versions prior to Go 1.21.0,
-// bootstrap Go builds with this name must be in the buildlet bucket,
-// usually uploaded by 'genbootstrap -upload all'.
-const GoBootstrap = "go1.20.6"
+// For bootstrap versions Go 1.21.0 and newer,
+// bootstrap Go builds for Windows (only) with this name must be in the buildlet bucket,
+// usually uploaded by 'genbootstrap -upload windows-*'.
+// However, as of 2024-08-16 all existing coordinator builders for Windows have migrated
+// to LUCI, so nothing needs to be done for Windows after all.
+const GoBootstrap = "go1.22.6"
 
 // Hosts contains the names and configs of all the types of
 // buildlets. They can be VMs, containers, or dedicated machines.
@@ -444,10 +446,6 @@ var Hosts = map[string]*HostConfig{
 		IsReverse: true,
 		ExpectNum: 2,
 		Owners:    []*gophers.Person{gh("mengzhuo")},
-
-		// Use go1.20.7 (slightly newer than the default go1.20.6 on 2023-08-18)
-		// for https://go.dev/issue/62104#issuecomment-1683207172.
-		GoBootstrap: "go1.20.7",
 	},
 	"host-linux-s390x": {
 		Notes:     "run by IBM",
@@ -664,9 +662,11 @@ type HostConfig struct {
 	// toolchain for each build, typically because it cannot download from
 	// storage.googleapis.com.
 	//
-	// For bootstrap versions prior to Go 1.21.0,
-	// a bootstrap toolchain built with that version must be in the buildlet bucket,
-	// usually uploaded by 'genbootstrap -upload all'.
+	// For bootstrap versions Go 1.21.0 and newer,
+	// bootstrap Go builds for Windows (only) with that version must be in the buildlet bucket,
+	// usually uploaded by 'genbootstrap -upload windows-*'.
+	// However, as of 2024-08-16 all existing coordinator builders for Windows have migrated
+	// to LUCI, so nothing needs to be done for Windows after all.
 	//
 	// (See the GoBootstrapURL method.)
 	GoBootstrap string
