@@ -284,7 +284,9 @@ func (r *PrereleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv 
 	}
 
 	outputFiles := []string{"gopls/go.mod.before", "gopls/go.mod", "gopls/go.sum.before", "gopls/go.sum"}
-	const scriptFmt = `cp gopls/go.mod gopls/go.mod.before
+	const scriptFmt = `git checkout %s
+git rev-parse --abbrev-ref HEAD
+cp gopls/go.mod gopls/go.mod.before
 cp gopls/go.sum gopls/go.sum.before
 cd gopls
 go mod edit -dropreplace=golang.org/x/tools
@@ -295,7 +297,7 @@ go mod tidy -compat=1.19
 	if err != nil {
 		return "", err
 	}
-	build, err := r.CloudBuild.RunScript(ctx, fmt.Sprintf(scriptFmt, head), "tools", outputFiles)
+	build, err := r.CloudBuild.RunScript(ctx, fmt.Sprintf(scriptFmt, branch, head), "tools", outputFiles)
 	if err != nil {
 		return "", err
 	}

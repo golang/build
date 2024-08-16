@@ -25,8 +25,8 @@ type CloudBuildClient interface {
 	// ScriptProject. Outputs are collected into the build's ResultURL,
 	// readable with ResultFS. The script will have the latest version of Go
 	// and some version of gsutil on $PATH.
-	// If gerritProject is specified, the script will run in the root of a
-	// checkout of the tip version of that repository.
+	// If gerritProject is provided, the script operates within a checkout of the
+	// latest commit on the default branch of that repository.
 	RunScript(ctx context.Context, script string, gerritProject string, outputs []string) (CloudBuild, error)
 	// Completed reports whether a build has finished, returning an error if
 	// it's failed. It's suitable for use with AwaitCondition.
