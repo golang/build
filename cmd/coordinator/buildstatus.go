@@ -599,19 +599,15 @@ func (st *buildStatus) SpanRecord(sp *schedule.Span, err error) *types.SpanRecor
 
 // goBuilder returns a GoBuilder for this buildStatus.
 func (st *buildStatus) goBuilder() buildgo.GoBuilder {
-	forceMake := true
-	if st.RevBranch == "release-branch.go1.20" {
-		// The concept of "broken ports" and -force flag didn't
-		// exist prior to Go 1.21. See go.dev/issue/56679.
-		// TODO: Remove this condition when Go 1.20 is no longer supported.
-		forceMake = false
-	}
+	goDevDLBootstrap := strings.HasPrefix(
+		st.conf.GoBootstrapURL(pool.NewGCEConfiguration().BuildEnv()), "https://go.dev/dl/")
 	return buildgo.GoBuilder{
-		Logger:     st,
-		BuilderRev: st.BuilderRev,
-		Conf:       st.conf,
-		Goroot:     "go",
-		Force:      forceMake,
+		Logger:           st,
+		BuilderRev:       st.BuilderRev,
+		Conf:             st.conf,
+		Goroot:           "go",
+		GoDevDLBootstrap: goDevDLBootstrap,
+		Force:            true,
 	}
 }
 
