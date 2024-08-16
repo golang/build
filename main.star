@@ -537,7 +537,7 @@ MAIN_BRANCH_NAME = "master"
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
-    "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.20.6"),
+    "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.22.6"),
     "go1.23": struct(branch = "release-branch.go1.23", bootstrap = "1.20.6"),
     "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.20.6"),
 }
@@ -545,7 +545,7 @@ GO_BRANCHES = {
 # INTERNAL_GO_BRANCHES mirrors GO_BRANCHES, but defines the branches to build
 # and test against for the go-internal/go repository.
 INTERNAL_GO_BRANCHES = {
-    "gotip": struct(branch_regexp = MAIN_BRANCH_NAME, bootstrap = "1.20.6"),
+    "gotip": struct(branch_regexp = MAIN_BRANCH_NAME, bootstrap = "1.22.6"),
     # The private-release-branches are per-point release, rather than
     # per-major version, since we create them specially for each point
     # release, and want to maintain that history. We use a regex to match
@@ -1411,14 +1411,17 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     # On less-supported platforms, we may not have bootstraps before 1.21
     # started cross-compiling everything.
-    if not is_fully_supported(base_dims) and (base_props["bootstrap_version"].startswith("1.20") or base_props["bootstrap_version"].startswith("1.1")):
-        base_props["bootstrap_version"] = "1.21.0"
+    if not is_fully_supported(base_dims):
+        if base_props["bootstrap_version"] < "1.21.0":
+            base_props["bootstrap_version"] = "1.21.0"
 
     # Handle bootstrap for new ports.
     if os == "openbsd" and arch == "ppc64":  # See go.dev/doc/go1.22#openbsd.
-        base_props["bootstrap_version"] = "1.22.0"
-    if os == "openbsd" and arch == "riscv64":  # See go.dev/issue/55999, https://tip.golang.org/doc/go1.23#openbsd.
-        base_props["bootstrap_version"] = "1.23-devel-20240524222355-377646589d5f"
+        if base_props["bootstrap_version"] < "1.22.0":
+            base_props["bootstrap_version"] = "1.22.0"
+    if os == "openbsd" and arch == "riscv64":  # See go.dev/issue/55999, https://go.dev/doc/go1.23#openbsd.
+        if base_props["bootstrap_version"] < "1.23.0":
+            base_props["bootstrap_version"] = "1.23-devel-20240524222355-377646589d5f"
 
     if os == "darwin":
         # See available versions with: cipd instances -limit 0 infra_internal/ios/xcode/mac | less
