@@ -22,9 +22,11 @@ import (
 // PrereleaseGoplsTasks implements a new workflow definition include all the tasks
 // to create a gopls pre-release candidate.
 type PrereleaseGoplsTasks struct {
-	Github     GitHubClientInterface
-	Gerrit     GerritClient
-	CloudBuild CloudBuildClient
+	Github             GitHubClientInterface
+	Gerrit             GerritClient
+	CloudBuild         CloudBuildClient
+	SendMail           func(MailHeader, MailContent) error
+	AnnounceMailHeader MailHeader
 }
 
 // NewDefinition create a new workflow definition for gopls pre-release.
@@ -50,7 +52,9 @@ func (r *PrereleaseGoplsTasks) NewDefinition() *wf.Definition {
 
 	verified := wf.Action1(wd, "verify installing latest gopls using release branch dependency commit", r.verifyGoplsInstallation, dependencyCommit)
 	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, semv, dependencyCommit, prerelease, wf.After(verified))
-	_ = wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
+	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
+	wf.Action4(wd, "mail announcement", r.mailAnnouncement, semv, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
+
 	wf.Output(wd, "version", prereleaseVersion)
 
 	return wd
@@ -374,6 +378,30 @@ func (r *PrereleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversio
 
 	ctx.Printf("tagged commit %s with tag %s", commit, tag)
 	return version, nil
+}
+
+type goplsPrereleaseAnnouncement struct {
+	Version string
+	Branch  string
+	Commit  string
+	Issue   int64
+}
+
+func (r *PrereleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversion, prerelease, commit string, issue int64) error {
+	announce := goplsPrereleaseAnnouncement{
+		Version: prerelease,
+		Branch:  goplsReleaseBranchName(semv),
+		Commit:  commit,
+		Issue:   issue,
+	}
+	content, err := announcementMail(announce)
+	if err != nil {
+		return err
+	}
+	ctx.Printf("pre-announcement subject: %s\n\n", content.Subject)
+	ctx.Printf("pre-announcement body HTML:\n%s\n", content.BodyHTML)
+	ctx.Printf("pre-announcement body text:\n%s", content.BodyText)
+	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
 func (r *PrereleaseGoplsTasks) isValidVersion(ctx *wf.TaskContext, ver string) (semversion, error) {

@@ -89,6 +89,9 @@ func main() {
 	addressVarFlag(&schedMail.From, "schedule-mail-from", "The From address to use for the scheduled workflow failure mail.")
 	addressVarFlag(&schedMail.To, "schedule-mail-to", "The To address to use for the scheduled workflow failure mail.")
 	addressListVarFlag(&schedMail.BCC, "schedule-mail-bcc", "The BCC address list to use for the scheduled workflow failure mail.")
+	var goplsAnnMail task.MailHeader
+	addressVarFlag(&goplsAnnMail.From, "gopls-announce-mail-from", "The From address to use for the gopls (pre-)announcement mail.")
+	addressVarFlag(&goplsAnnMail.To, "gopls-announce-mail-to", "The To address to use for the gopls (pre-)announcement mail.")
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
 	var mastodonAPI secret.MastodonCredentials
@@ -315,8 +318,10 @@ func main() {
 			V3: github.NewClient(githubHTTPClient),
 			V4: githubv4.NewClient(githubHTTPClient),
 		},
-		Gerrit:     gerritClient,
-		CloudBuild: cloudBuildClient,
+		Gerrit:             gerritClient,
+		CloudBuild:         cloudBuildClient,
+		SendMail:           mailFunc,
+		AnnounceMailHeader: goplsAnnMail,
 	}
 	dh.RegisterDefinition("Prepare a pre-release gopls candidate", prereleaseGoplsTasks.NewDefinition())
 

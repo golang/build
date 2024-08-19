@@ -332,6 +332,7 @@ type MailContent struct {
 // which must be one of these types:
 //   - releaseAnnouncement for a release announcement
 //   - releasePreAnnouncement for a release pre-announcement
+//   - goplsPrereleaseAnnouncement for a gopls pre-announcement
 func announcementMail(data any) (MailContent, error) {
 	// Select the appropriate template name.
 	var name string
@@ -362,6 +363,8 @@ func announcementMail(data any) (MailContent, error) {
 		}
 	case releasePreAnnouncement:
 		name = "pre-announce-minor.md"
+	case goplsPrereleaseAnnouncement:
+		name = "gopls-pre-announce.md"
 	default:
 		return MailContent{}, fmt.Errorf("unknown template data type %T", data)
 	}
@@ -455,7 +458,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 		return "", fmt.Errorf("internal error: unhandled pre-release Go version %q", v)
 	},
-}).ParseFS(tmplDir, "template/announce-*.md", "template/pre-announce-minor.md"))
+}).ParseFS(tmplDir, "template/announce-*.md", "template/pre-announce-minor.md", "template/gopls-pre-announce.md"))
 
 //go:embed template
 var tmplDir embed.FS

@@ -5,6 +5,7 @@
 package task
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -448,6 +449,47 @@ func TestCreateReleaseIssue(t *testing.T) {
 	}
 }
 
+func TestMailAnnouncement(t *testing.T) {
+	t.Run("test email announcement", func(t *testing.T) {
+		wantLog := `pre-announcement subject: Gopls v0.16.2-pre.3 is released
+
+pre-announcement body HTML:
+<p>Hello gophers,</p>
+<p>We have just released Gopls v0.16.2-pre.3, a release candidate for the upcoming Gopls release. It is picked from release branch gopls-release-branch.0.16 at the commit random-commit.</p>
+<p>If you have Go installed already, an easy way to try v0.16.2-pre.3 is by using the go command:</p>
+<pre><code>$ go install golang.org/x/tools/gopls@v0.16.2-pre.3
+</code></pre>
+<p>This Gopls release is being tracked at golang/go#0.</p>
+<p>Cheers.</p>
+
+pre-announcement body text:
+Hello gophers,
+
+We have just released Gopls v0.16.2-pre.3, a release candidate for the upcoming Gopls release. It is picked from release branch gopls-release-branch.0.16 at the commit random-commit.
+
+If you have Go installed already, an easy way to try v0.16.2-pre.3 is by using the go command:
+
+$ go install golang.org/x/tools/gopls@v0.16.2-pre.3
+
+This Gopls release is being tracked at golang/go#0.
+
+Cheers.
+`
+		tasks := PrereleaseGoplsTasks{
+			SendMail: func(h MailHeader, c MailContent) error { return nil },
+		}
+		var buf bytes.Buffer
+		ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
+		err := tasks.mailAnnouncement(ctx, semversion{Major: 0, Minor: 16, Patch: 2}, "v0.16.2-pre.3", "random-commit", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if diff := cmp.Diff(wantLog, buf.String()); diff != "" {
+			t.Errorf("log mismatch (-want +got):\n%s", diff)
+		}
+	})
+}
+
 func TestGoplsPrereleaseFlow(t *testing.T) {
 	mustHaveShell(t)
 
@@ -617,6 +659,7 @@ esac`, tc.wantVersion)
 						1: fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),
 					},
 				},
+				SendMail: func(h MailHeader, c MailContent) error { return nil },
 			}
 
 			wd := tasks.NewDefinition()
