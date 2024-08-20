@@ -307,6 +307,12 @@ func main() {
 	}
 	dh.RegisterDefinition("Update x/crypto NSS root bundle", bundleTasks.NewDefinition())
 
+	releaseVSCodeGoTasks := task.ReleaseVSCodeGoTasks{
+		Gerrit:        gerritClient,
+		ApproveAction: relui.ApproveActionDep(dbPool),
+	}
+	dh.RegisterDefinition("Create a vscode-go release candidate", releaseVSCodeGoTasks.NewPrereleaseDefinition())
+
 	tagTelemetryTasks := &task.TagTelemetryTasks{
 		Gerrit:     gerritClient,
 		CloudBuild: cloudBuildClient,
