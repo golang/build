@@ -632,9 +632,59 @@ def define_public_shadow_buckets(env):
         )
     return env
 
-# Create public shadow buckets, for mutating and testing out changes to public builds.
+def define_internal_shadow_buckets(env):
+    if env.swarming_host != "chrome-swarming.appspot.com":
+        fail("only the chrome-swarming instance is known to be intended for internal builds, but env.swarming_host is %s" % env.swarming_host)
+
+    all_pools = [env.coordinator_pool, env.worker_pool]
+    if env.shared_worker_pool:
+        all_pools.append(env.shared_worker_pool)
+
+    for bucket, shadow_bucket in [(env.bucket, env.shadow_bucket), (env.worker_bucket, env.worker_shadow_bucket)]:
+        luci.bucket(
+            shadows = bucket,
+            name = shadow_bucket,
+            dynamic = True,
+            # Explicitly set bucket constraints for shadow buckets. These are populated
+            # for each real bucket implicitly via luci.builder(...), but not populated at
+            # all for shadow buckets, unfortunately.
+            constraints = luci.bucket_constraints(
+                service_accounts = [env.coordinator_sa, env.worker_sa],
+                pools = all_pools,
+            ),
+            bindings = [
+                # Allow only the Go release and security teams to see builds in internal shadow buckets.
+                luci.binding(
+                    roles = "role/buildbucket.reader",
+                    groups = ["mdb/golang-security-policy", "mdb/golang-release-eng-policy"],
+                ),
+                # Require on-demand access for creating builds, the same access required to
+                # access the machines directly.
+                #
+                # Note: creating builds is more permissive than triggering them. It allows for
+                # arbitrary mutation of the builder definition, whereas triggered builds may
+                # only mutate explicitly mutable fields. These shadow buckets are used for testing
+                # of internal builder configurations and behaviors.
+                luci.binding(
+                    roles = "role/buildbucket.creator",
+                    groups = ["mdb/golang-luci-bot-access"],
+                ),
+
+                # Allow our service accounts to create ResultDB invocations in shadow buckets.
+                # This permission is necessary to set explicitly according to the shadow bucket
+                # documentation.
+                luci.binding(
+                    roles = "role/resultdb.invocationCreator",
+                    users = [env.coordinator_sa, env.worker_sa],
+                ),
+            ],
+        )
+    return env
+
+# Create shadow buckets, for mutating and testing out changes to builds.
 define_public_shadow_buckets(PUBLIC_TRY_ENV)
 define_public_shadow_buckets(PUBLIC_CI_ENV)
+define_internal_shadow_buckets(SECURITY_TRY_ENV)
 
 # PT is Project Type, a classification of a project.
 PT = struct(
