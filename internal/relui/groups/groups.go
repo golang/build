@@ -11,7 +11,7 @@ package groups
 // https://chrome-infra-auth.appspot.com/auth/groups/.
 
 const (
-	ReleaseTeam  = "mdb/golang-release-team"
+	ReleaseTeam  = "mdb/golang-release-eng-policy"
 	SecurityTeam = "mdb/golang-security-policy"
 	ToolsTeam    = "mdb/go-tools-team"
 	GolangTeam   = "mdb/golang-team"
