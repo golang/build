@@ -26,6 +26,7 @@ type ReleaseGoplsTasks struct {
 	CloudBuild         CloudBuildClient
 	SendMail           func(MailHeader, MailContent) error
 	AnnounceMailHeader MailHeader
+	ApproveAction      func(*wf.TaskContext) error
 }
 
 // NewPrereleaseDefinition create a new workflow definition for gopls pre-release.
@@ -39,8 +40,9 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	semv := wf.Task1(wd, "validating input version", r.isValidReleaseVersion, version)
 	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrerelease, semv)
+	approved := wf.Action2(wd, "wait for release coordinator approval", r.approveVersion, semv, prerelease)
 
-	issue := wf.Task1(wd, "create release git issue", r.createReleaseIssue, semv)
+	issue := wf.Task1(wd, "create release git issue", r.createReleaseIssue, semv, wf.After(approved))
 	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semv, wf.After(issue))
 
 	configChangeID := wf.Task3(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semv, reviewers, issue, wf.After(branchCreated))
@@ -57,6 +59,11 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	wf.Output(wd, "version", prereleaseVersion)
 
 	return wd
+}
+
+func (r *ReleaseGoplsTasks) approveVersion(ctx *wf.TaskContext, semv semversion, pre string) error {
+	ctx.Printf("The next release candidate will be v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
+	return r.ApproveAction(ctx)
 }
 
 // createReleaseIssue attempts to locate the release issue associated with the

@@ -322,6 +322,7 @@ func main() {
 		CloudBuild:         cloudBuildClient,
 		SendMail:           mailFunc,
 		AnnounceMailHeader: goplsAnnMail,
+		ApproveAction:      relui.ApproveActionDep(dbPool),
 	}
 	dh.RegisterDefinition("Prepare a pre-release gopls candidate", goplsTasks.NewPrereleaseDefinition())
 	dh.RegisterDefinition("Release gopls", goplsTasks.NewReleaseDefinition())

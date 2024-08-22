@@ -659,7 +659,8 @@ esac`, tc.wantVersion)
 						1: fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),
 					},
 				},
-				SendMail: func(h MailHeader, c MailContent) error { return nil },
+				SendMail:      func(h MailHeader, c MailContent) error { return nil },
+				ApproveAction: func(tc *workflow.TaskContext) error { return nil },
 			}
 
 			wd := tasks.NewPrereleaseDefinition()
