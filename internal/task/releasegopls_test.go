@@ -74,7 +74,7 @@ func TestPossibleGoplsVersions(t *testing.T) {
 
 			gerrit := NewFakeGerrit(t, tools)
 
-			tasks := &PrereleaseGoplsTasks{
+			tasks := &ReleaseGoplsTasks{
 				Gerrit: gerrit,
 			}
 
@@ -149,7 +149,7 @@ func TestCreateBranchIfMinor(t *testing.T) {
 				}
 			}
 
-			tasks := &PrereleaseGoplsTasks{
+			tasks := &ReleaseGoplsTasks{
 				Gerrit: gerritClient,
 			}
 
@@ -266,7 +266,7 @@ parent-branch: master
 				t.Fatalf("ReadBranchHead should be able to get revision of release branch's head: %v", err)
 			}
 
-			tasks := &PrereleaseGoplsTasks{
+			tasks := &ReleaseGoplsTasks{
 				Gerrit:     gerritClient,
 				CloudBuild: NewFakeCloudBuild(t, gerritClient, "", nil, fakeGo),
 			}
@@ -359,7 +359,7 @@ func TestNextPrerelease(t *testing.T) {
 
 			gerrit := NewFakeGerrit(t, tools)
 
-			tasks := &PrereleaseGoplsTasks{
+			tasks := &ReleaseGoplsTasks{
 				Gerrit: gerrit,
 			}
 
@@ -426,7 +426,7 @@ func TestCreateReleaseIssue(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			tasks := &PrereleaseGoplsTasks{
+			tasks := &ReleaseGoplsTasks{
 				Github: &tc.fakeGithub,
 			}
 
@@ -475,7 +475,7 @@ This Gopls release is being tracked at golang/go#0.
 
 Cheers.
 `
-		tasks := PrereleaseGoplsTasks{
+		tasks := ReleaseGoplsTasks{
 			SendMail: func(h MailHeader, c MailContent) error { return nil },
 		}
 		var buf bytes.Buffer
@@ -651,7 +651,7 @@ EOF
 	exit 1
 	;;
 esac`, tc.wantVersion)
-			tasks := &PrereleaseGoplsTasks{
+			tasks := &ReleaseGoplsTasks{
 				Gerrit:     gerrit,
 				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, fakeGo),
 				Github: &FakeGitHub{
@@ -662,7 +662,7 @@ esac`, tc.wantVersion)
 				SendMail: func(h MailHeader, c MailContent) error { return nil },
 			}
 
-			wd := tasks.NewDefinition()
+			wd := tasks.NewPrereleaseDefinition()
 			w, err := workflow.Start(wd, map[string]interface{}{
 				reviewersParam.Name: []string(nil),
 				"version":           fmt.Sprintf("v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),

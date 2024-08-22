@@ -19,9 +19,8 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-// PrereleaseGoplsTasks implements a new workflow definition include all the tasks
-// to create a gopls pre-release candidate.
-type PrereleaseGoplsTasks struct {
+// ReleaseGoplsTasks provides workflow definitions and tasks for releasing gopls.
+type ReleaseGoplsTasks struct {
 	Github             GitHubClientInterface
 	Gerrit             GerritClient
 	CloudBuild         CloudBuildClient
@@ -29,8 +28,8 @@ type PrereleaseGoplsTasks struct {
 	AnnounceMailHeader MailHeader
 }
 
-// NewDefinition create a new workflow definition for gopls pre-release.
-func (r *PrereleaseGoplsTasks) NewDefinition() *wf.Definition {
+// NewPrereleaseDefinition create a new workflow definition for gopls pre-release.
+func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	// TODO(hxjiang): provide potential release versions in the relui where the
@@ -38,7 +37,7 @@ func (r *PrereleaseGoplsTasks) NewDefinition() *wf.Definition {
 	version := wf.Param(wd, wf.ParamDef[string]{Name: "version"})
 	reviewers := wf.Param(wd, reviewersParam)
 
-	semv := wf.Task1(wd, "validating input version", r.isValidVersion, version)
+	semv := wf.Task1(wd, "validating input version", r.isValidReleaseVersion, version)
 	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrerelease, semv)
 
 	issue := wf.Task1(wd, "create release git issue", r.createReleaseIssue, semv)
@@ -65,7 +64,7 @@ func (r *PrereleaseGoplsTasks) NewDefinition() *wf.Definition {
 //
 // Returns the ID of the release issue (either newly created or pre-existing).
 // Returns error if the release milestone does not exist or is closed.
-func (r *PrereleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semversion) (int64, error) {
+func (r *ReleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semversion) (int64, error) {
 	versionString := fmt.Sprintf("v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
 	milestoneName := fmt.Sprintf("gopls/%s", versionString)
 	// All milestones and issues resides under go repo.
@@ -126,7 +125,7 @@ func goplsReleaseBranchName(semv semversion) string {
 // createBranchIfMinor create the release branch if the input version is a minor
 // release.
 // All patch releases under the same minor version share the same release branch.
-func (r *PrereleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semversion) error {
+func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semversion) error {
 	branch := goplsReleaseBranchName(semv)
 
 	// Require gopls release branch existence if this is a non-minor release.
@@ -176,7 +175,7 @@ func openCL(ctx *wf.TaskContext, gerrit GerritClient, branch, title string) (str
 //
 // It returns the change ID required to update the config if changes are needed,
 // otherwise it returns an empty string indicating no update is necessary.
-func (r *PrereleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string, issue int64) (string, error) {
+func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string, issue int64) (string, error) {
 	const configFile = "codereview.cfg"
 
 	branch := goplsReleaseBranchName(semv)
@@ -226,7 +225,7 @@ parent-branch: master
 
 // nextPrerelease inspects the tags in tools repo that match with the given
 // version and find the next prerelease version.
-func (r *PrereleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
+func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
 	cur, err := currentGoplsPrerelease(ctx, r.Gerrit, semv)
 	if err != nil {
 		return "", err
@@ -272,7 +271,7 @@ func currentGoplsPrerelease(ctx *wf.TaskContext, client GerritClient, semv semve
 // version as dependency.
 //
 // It returns the change ID, or "" if the CL was not created.
-func (r *PrereleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, pre string, reviewers []string, issue int64) (string, error) {
+func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, pre string, reviewers []string, issue int64) (string, error) {
 	if pre == "" {
 		return "", fmt.Errorf("the input pre-release version should not be empty")
 	}
@@ -324,7 +323,7 @@ go mod tidy -compat=1.19
 // smoke test.
 // The input version can be a commit, a branch name, a semantic version, see
 // more detail https://go.dev/ref/mod#version-queries
-func (r *PrereleaseGoplsTasks) verifyGoplsInstallation(ctx *wf.TaskContext, version string) error {
+func (r *ReleaseGoplsTasks) verifyGoplsInstallation(ctx *wf.TaskContext, version string) error {
 	if version == "" {
 		return fmt.Errorf("the input version should not be empty")
 	}
@@ -359,7 +358,7 @@ $(go env GOPATH)/bin/gopls references -d main.go:4:8 &> smoke.log
 // The input semversion provides Major, Minor, and Patch info.
 // The input pre-release, generated by previous steps of the workflow, provides
 // Pre-release info.
-func (r *PrereleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversion, commit, pre string) (string, error) {
+func (r *ReleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversion, commit, pre string) (string, error) {
 	if commit == "" {
 		return "", fmt.Errorf("the input commit should not be empty")
 	}
@@ -387,7 +386,7 @@ type goplsPrereleaseAnnouncement struct {
 	Issue   int64
 }
 
-func (r *PrereleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversion, prerelease, commit string, issue int64) error {
+func (r *ReleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversion, prerelease, commit string, issue int64) error {
 	announce := goplsPrereleaseAnnouncement{
 		Version: prerelease,
 		Branch:  goplsReleaseBranchName(semv),
@@ -404,7 +403,7 @@ func (r *PrereleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semver
 	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
-func (r *PrereleaseGoplsTasks) isValidVersion(ctx *wf.TaskContext, ver string) (semversion, error) {
+func (r *ReleaseGoplsTasks) isValidReleaseVersion(ctx *wf.TaskContext, ver string) (semversion, error) {
 	if !semver.IsValid(ver) {
 		return semversion{}, fmt.Errorf("the input %q version does not follow semantic version schema", ver)
 	}
@@ -463,7 +462,7 @@ func (s *semversion) prereleaseVersion() (int, error) {
 
 // possibleGoplsVersions identifies suitable versions for the upcoming release
 // based on the current tags in the repo.
-func (r *PrereleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]string, error) {
+func (r *ReleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
 		return nil, err
@@ -524,15 +523,8 @@ func (r *PrereleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]str
 	return possible, nil
 }
 
-// ReleaseGoplsTasks implements a new workflow definition include all the tasks
-// to release gopls.
-type ReleaseGoplsTasks struct {
-	Gerrit     GerritClient
-	CloudBuild CloudBuildClient
-}
-
-// NewDefinition create a new workflow definition for gopls release.
-func (r *ReleaseGoplsTasks) NewDefinition() *wf.Definition {
+// NewReleaseDefinition create a new workflow definition for gopls release.
+func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	version := wf.Param(wd, wf.ParamDef[string]{Name: "pre-release version"})

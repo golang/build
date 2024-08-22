@@ -313,7 +313,7 @@ func main() {
 	}
 	dh.RegisterDefinition("Tag a new version of x/telemetry/config (if necessary)", tagTelemetryTasks.NewDefinition())
 
-	prereleaseGoplsTasks := task.PrereleaseGoplsTasks{
+	goplsTasks := task.ReleaseGoplsTasks{
 		Github: &task.GitHubClient{
 			V3: github.NewClient(githubHTTPClient),
 			V4: githubv4.NewClient(githubHTTPClient),
@@ -323,13 +323,8 @@ func main() {
 		SendMail:           mailFunc,
 		AnnounceMailHeader: goplsAnnMail,
 	}
-	dh.RegisterDefinition("Prepare a pre-release gopls candidate", prereleaseGoplsTasks.NewDefinition())
-
-	releaseGoplsTasks := task.ReleaseGoplsTasks{
-		Gerrit:     gerritClient,
-		CloudBuild: cloudBuildClient,
-	}
-	dh.RegisterDefinition("Release gopls", releaseGoplsTasks.NewDefinition())
+	dh.RegisterDefinition("Prepare a pre-release gopls candidate", goplsTasks.NewPrereleaseDefinition())
+	dh.RegisterDefinition("Release gopls", goplsTasks.NewReleaseDefinition())
 
 	privateSyncTask := &task.PrivateMasterSyncTask{
 		Git:              gitClient,
