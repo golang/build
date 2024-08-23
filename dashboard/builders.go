@@ -1009,7 +1009,8 @@ func (c *BuildConfig) GoBootstrapURL(e *buildenv.Environment) string {
 		return "https://storage.googleapis.com/" + e.BuildletBucket +
 			"/gobootstrap-" + hc.HostArch + "-" + hc.GoBootstrap + ".tar.gz"
 	}
-	return "https://go.dev/dl/" + hc.GoBootstrap + "." + hc.HostArch + ".tar.gz"
+	hostOSArch := strings.TrimSuffix(hc.HostArch, "-7") // Issue 69038.
+	return "https://go.dev/dl/" + hc.GoBootstrap + "." + hostOSArch + ".tar.gz"
 }
 
 // BuildletBinaryURL returns the public URL of this builder's buildlet.
