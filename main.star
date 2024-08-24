@@ -504,9 +504,7 @@ def known_issue(issue_number, skip_x_repos = False):
     )
 
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "plan9-386": known_issue(issue_number = 63599),
     "plan9-amd64": known_issue(issue_number = 63600),
-    "plan9-arm": known_issue(issue_number = 63601),
 
     # The known issue for these builder types tracks the work of starting to add them.
     # Skip the builder definitions for x/ repos to reduce noise.
