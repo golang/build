@@ -84,6 +84,9 @@ var BuildersPortedToLUCI = map[string]bool{
 
 	"solaris-amd64-oraclerel": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-solaris-amd64.
 
+	"plan9-386": true, "plan9-386-0intro": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-plan9-386.
+	"plan9-arm": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-plan9-arm.
+
 	// WebAssembly builders.
 	"js-wasm-node18":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-js-wasm.
 	"wasip1-wasm-wasmedge": true, // Would be 'wasip1-wasm_wasmedge' but put off until go.dev/issue/60097 picks up activity.
