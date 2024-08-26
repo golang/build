@@ -703,6 +703,7 @@ PROJECTS = {
     "crypto": PT.CORE,
     "debug": PT.LIBRARY,
     "dl": PT.CORE,
+    "example": PT.TOOL,
     "exp": PT.SPECIAL,
     "image": PT.LIBRARY,
     "mobile": PT.SPECIAL,
@@ -716,6 +717,7 @@ PROJECTS = {
     "playground": PT.TOOL,
     "protobuf": PT.SPECIAL,
     "review": PT.TOOL,
+    "scratch": PT.TOOL,
     "sync": PT.CORE,
     "sys": PT.CORE,
     "telemetry": PT.CORE,
@@ -726,6 +728,7 @@ PROJECTS = {
     "vuln": PT.TOOL,
     "vulndb": PT.TOOL,
     "website": PT.TOOL,
+    "xerrors": PT.TOOL,
 }
 
 # projects_of_type returns projects of the given types.
