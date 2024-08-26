@@ -56,6 +56,7 @@ var nextVersionParam = wf.ParamDef[string]{
 		HTMLSelectOptions: []string{
 			"next minor",
 			"next patch",
+			"use explicit version",
 		},
 	},
 }
@@ -128,7 +129,7 @@ func (r *ReleaseVSCodeGoTasks) nextPrereleaseVersion(ctx *wf.TaskContext, versio
 		return semversion{}, err
 	}
 
-	semv := lastReleasedVersion(tags, true)
+	semv := latestVersion(tags, isReleaseVersion, vsCodeGoStableVersion)
 	switch versionBumpStrategy {
 	case "next minor":
 		semv.Minor += 2
@@ -168,7 +169,30 @@ func (r *ReleaseVSCodeGoTasks) nextPrereleaseVersion(ctx *wf.TaskContext, versio
 	return semv, err
 }
 
-func lastReleasedVersion(versions []string, onlyStable bool) semversion {
+func vsCodeGoStableVersion(semv semversion) bool {
+	return semv.Minor%2 == 0
+}
+
+func vsCodeGoInsiderVersion(semv semversion) bool {
+	return semv.Minor%2 == 1
+}
+
+// isReleaseVersion reports whether semv is a release version.
+// (in other words, not a prerelease).
+func isReleaseVersion(semv semversion) bool {
+	return semv.Pre == ""
+}
+
+// isPrereleaseVersion reports whether semv is a pre-release version.
+// (in other words, not a release).
+func isPrereleaseVersion(semv semversion) bool {
+	return semv.Pre != ""
+}
+
+// latestVersion returns the latest version in the provided version list,
+// considering only versions that match all the specified filters.
+// Strings not following semantic versioning are ignored.
+func latestVersion(versions []string, filters ...func(semversion) bool) semversion {
 	latest := semversion{}
 	for _, v := range versions {
 		semv, ok := parseSemver(v)
@@ -176,28 +200,24 @@ func lastReleasedVersion(versions []string, onlyStable bool) semversion {
 			continue
 		}
 
-		if semv.Pre != "" {
+		match := true
+		for _, filter := range filters {
+			if !filter(semv) {
+				match = false
+				break
+			}
+		}
+
+		if !match {
 			continue
 		}
 
-		if semv.Minor%2 == 0 && onlyStable {
-			if semv.Minor > latest.Minor {
-				latest = semv
-			}
-
-			if semv.Minor == latest.Minor && semv.Patch > latest.Patch {
-				latest = semv
-			}
+		if semv.Minor > latest.Minor {
+			latest = semv
 		}
 
-		if semv.Minor%2 == 1 && !onlyStable {
-			if semv.Minor > latest.Minor {
-				latest = semv
-			}
-
-			if semv.Minor == latest.Minor && semv.Patch > latest.Patch {
-				latest = semv
-			}
+		if semv.Minor == latest.Minor && semv.Patch > latest.Patch {
+			latest = semv
 		}
 	}
 

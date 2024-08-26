@@ -17,6 +17,62 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
+func TestInterpretNextRelease(t *testing.T) {
+	tests := []struct {
+		name string
+		tags []string
+		bump string
+		want semversion
+	}{
+		{
+			name: "next minor version of v0.0.0 is v0.1.0",
+			tags: []string{"gopls/v0.0.0"},
+			bump: "next minor",
+			want: semversion{Major: 0, Minor: 1, Patch: 0},
+		},
+		{
+			name: "pre-release versions should be ignored",
+			tags: []string{"gopls/v0.0.0", "gopls/v0.1.0-pre.1", "gopls/v0.1.0-pre.2"},
+			bump: "next minor",
+			want: semversion{Major: 0, Minor: 1, Patch: 0},
+		},
+		{
+			name: "next patch version of v0.2.2 is v0.2.3",
+			tags: []string{"gopls/0.1.1", "gopls/0.2.0", "gopls/0.2.1", "gopls/v0.2.2"},
+			bump: "next patch",
+			want: semversion{Major: 0, Minor: 2, Patch: 3},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tools := NewFakeRepo(t, "tools")
+			commit := tools.Commit(map[string]string{
+				"go.mod": "module golang.org/x/tools\n",
+				"go.sum": "\n",
+			})
+
+			for _, tag := range tc.tags {
+				tools.Tag(tag, commit)
+			}
+
+			gerrit := NewFakeGerrit(t, tools)
+
+			tasks := &ReleaseGoplsTasks{
+				Gerrit: gerrit,
+			}
+
+			got, err := tasks.interpretNextRelease(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, tc.bump)
+			if err != nil {
+				t.Fatalf("interpretNextRelease(%q) should not return error, but return %v", tc.bump, err)
+			}
+			if tc.want != got {
+				t.Errorf("interpretNextRelease(%q) = %v, want %v", tc.bump, tc.want, got)
+			}
+		})
+	}
+}
+
 func TestPossibleGoplsVersions(t *testing.T) {
 	tests := []struct {
 		name string
@@ -367,7 +423,7 @@ func TestNextPrerelease(t *testing.T) {
 			if !ok {
 				t.Fatalf("parseSemver(%q) should success", tc.version)
 			}
-			got, err := tasks.nextPrerelease(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv)
+			got, err := tasks.nextPrereleaseVersion(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv)
 			if err != nil {
 				t.Fatalf("nextPrerelease(%q) should not return error: %v", tc.version, err)
 			}
@@ -501,20 +557,22 @@ func TestGoplsPrereleaseFlow(t *testing.T) {
 		// For each entry, a new commit is created, and if the entry is
 		// non empty that commit is tagged with the entry value.
 		commitTags []string
-		config     string
-		semv       semversion
+		// If set, create the release branch before starting the workflow.
+		createBranch bool
+		config       string
+		semv         semversion
 		// fields below are the desired states.
 		wantVersion string
 		wantConfig  string
 		wantCommits int
 	}{
 		{
-			name: "update all three file through two commits",
-			// create release branch with one commit without any tag.
-			commitTags:  []string{""},
-			config:      " ",
-			semv:        semversion{Major: 0, Minor: 1, Patch: 0},
-			wantVersion: "v0.1.0-pre.1",
+			name:         "update all three file through two commits",
+			commitTags:   []string{"gopls/v0.0.0"},
+			createBranch: true,
+			config:       " ",
+			semv:         semversion{Major: 0, Minor: 1, Patch: 0},
+			wantVersion:  "v0.1.0-pre.1",
 			wantConfig: `issuerepo: golang/go
 branch: gopls-release-branch.0.1
 parent-branch: master
@@ -522,9 +580,9 @@ parent-branch: master
 			wantCommits: 2,
 		},
 		{
-			name: "codereview.cfg already have expected content, update go.mod and go.sum with one commit",
-			// create release branch with one commit without any tag.
-			commitTags: []string{""},
+			name:         "codereview.cfg already have expected content, update go.mod and go.sum with one commit",
+			commitTags:   []string{"gopls/v0.0.0"},
+			createBranch: true,
 			config: `issuerepo: golang/go
 branch: gopls-release-branch.0.1
 parent-branch: master
@@ -538,11 +596,12 @@ parent-branch: master
 			wantCommits: 1,
 		},
 		{
-			name:        "create the branch for minor version",
-			commitTags:  nil, // no release branch
-			config:      ` `,
-			semv:        semversion{Major: 0, Minor: 12, Patch: 0},
-			wantVersion: "v0.12.0-pre.1",
+			name:         "create the branch for minor version",
+			commitTags:   []string{"gopls/v0.11.0"},
+			createBranch: false,
+			config:       ` `,
+			semv:         semversion{Major: 0, Minor: 12, Patch: 0},
+			wantVersion:  "v0.12.0-pre.1",
 			wantConfig: `issuerepo: golang/go
 branch: gopls-release-branch.0.12
 parent-branch: master
@@ -550,12 +609,12 @@ parent-branch: master
 			wantCommits: 2,
 		},
 		{
-			name: "workflow should increment the pre-release number to 4",
-			// create release branch with three commits with tags.
-			commitTags:  []string{"gopls/v0.8.3-pre.1", "gopls/v0.8.3-pre.2", "gopls/v0.8.3-pre.3"},
-			config:      " ",
-			semv:        semversion{Major: 0, Minor: 8, Patch: 3},
-			wantVersion: "v0.8.3-pre.4",
+			name:         "workflow should increment the pre-release number to 4",
+			commitTags:   []string{"gopls/v0.8.2", "gopls/v0.8.3-pre.1", "gopls/v0.8.3-pre.2", "gopls/v0.8.3-pre.3"},
+			createBranch: true,
+			config:       " ",
+			semv:         semversion{Major: 0, Minor: 8, Patch: 3},
+			wantVersion:  "v0.8.3-pre.4",
 			wantConfig: `issuerepo: golang/go
 branch: gopls-release-branch.0.8
 parent-branch: master
@@ -565,7 +624,7 @@ parent-branch: master
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		runTestWithInput := func(input map[string]any) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -575,21 +634,14 @@ parent-branch: master
 				"gopls/go.sum":   "\n",
 				"codereview.cfg": tc.config,
 			})
-			// These tags make sure the input version is the next version of some
-			// released version, in order to pass the version validation step.
-			tools.Tag(fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch-1), beforeHead)
-			tools.Tag(fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor-1, tc.semv.Patch), beforeHead)
-			tools.Tag(fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major-1, tc.semv.Minor, tc.semv.Patch), beforeHead)
-
-			// Create the release branch and make a few commits to the release branch.
+			// Create the release branch and make a few commits to the master branch.
 			// Var beforeHead is used to track the commit of release branch's head
 			// before trigger the gopls pre-release run. If we do not need to create a
 			// release branch, beforeHead will point to the initial commit in the
 			// master branch.
 			if len(tc.commitTags) != 0 {
-				tools.Branch(goplsReleaseBranchName(tc.semv), beforeHead)
 				for i, tag := range tc.commitTags {
-					commit := tools.CommitOnBranch(goplsReleaseBranchName(tc.semv), map[string]string{
+					commit := tools.CommitOnBranch("master", map[string]string{
 						"README.md": fmt.Sprintf("THIS IS READ ME FOR %v.", i),
 					})
 					beforeHead = commit
@@ -597,6 +649,10 @@ parent-branch: master
 						tools.Tag(tag, commit)
 					}
 				}
+			}
+
+			if tc.createBranch {
+				tools.Branch(goplsReleaseBranchName(tc.semv), beforeHead)
 			}
 
 			gerrit := NewFakeGerrit(t, tools)
@@ -664,10 +720,7 @@ esac`, tc.wantVersion)
 			}
 
 			wd := tasks.NewPrereleaseDefinition()
-			w, err := workflow.Start(wd, map[string]interface{}{
-				reviewersParam.Name: []string(nil),
-				"version":           fmt.Sprintf("v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),
-			})
+			w, err := workflow.Start(wd, input)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -741,6 +794,24 @@ esac`, tc.wantVersion)
 			if info.Revision != afterHead {
 				t.Errorf("the pre-release tag points to commit %s, should point to the head commit of release branch %s", info.Revision, afterHead)
 			}
+		}
+		t.Run("manual input version: "+tc.name, func(t *testing.T) {
+			runTestWithInput(map[string]any{
+				reviewersParam.Name:           []string(nil),
+				"explicit version (optional)": fmt.Sprintf("v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),
+				"next version":                "use explicit version",
+			})
+		})
+		versionBump := "next patch"
+		if tc.semv.Patch == 0 {
+			versionBump = "next minor"
+		}
+		t.Run("interpret version "+versionBump+" : "+tc.name, func(t *testing.T) {
+			runTestWithInput(map[string]any{
+				reviewersParam.Name:           []string(nil),
+				"explicit version (optional)": "",
+				"next version":                versionBump,
+			})
 		})
 	}
 }

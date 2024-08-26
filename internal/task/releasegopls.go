@@ -33,22 +33,27 @@ type ReleaseGoplsTasks struct {
 func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
-	// TODO(hxjiang): provide potential release versions in the relui where the
-	// coordinator can choose which version to release instead of manual input.
-	version := wf.Param(wd, wf.ParamDef[string]{Name: "version"})
+	// versionBumpStrategy specifies the desired release type: next minor or next
+	// patch.
+	// This should be the default choice for most releases.
+	versionBumpStrategy := wf.Param(wd, nextVersionParam)
+	// inputVersion allows manual override of the version, bypassing the version
+	// bump strategy.
+	// Use with caution.
+	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit version (optional)"})
 	reviewers := wf.Param(wd, reviewersParam)
 
-	semv := wf.Task1(wd, "validating input version", r.isValidReleaseVersion, version)
-	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrerelease, semv)
+	semv := wf.Task2(wd, "determine the version", r.determineVersion, inputVersion, versionBumpStrategy)
+	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrereleaseVersion, semv)
 	approved := wf.Action2(wd, "wait for release coordinator approval", r.approveVersion, semv, prerelease)
 
 	issue := wf.Task1(wd, "create release git issue", r.createReleaseIssue, semv, wf.After(approved))
-	branchCreated := wf.Action1(wd, "creating new branch if minor release", r.createBranchIfMinor, semv, wf.After(issue))
+	branchCreated := wf.Action1(wd, "create new branch if minor release", r.createBranchIfMinor, semv, wf.After(issue))
 
-	configChangeID := wf.Task3(wd, "updating branch's codereview.cfg", r.updateCodeReviewConfig, semv, reviewers, issue, wf.After(branchCreated))
+	configChangeID := wf.Task3(wd, "update branch's codereview.cfg", r.updateCodeReviewConfig, semv, reviewers, issue, wf.After(branchCreated))
 	configCommit := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, configChangeID)
 
-	dependencyChangeID := wf.Task4(wd, "updating gopls' x/tools dependency", r.updateXToolsDependency, semv, prerelease, reviewers, issue, wf.After(configCommit))
+	dependencyChangeID := wf.Task4(wd, "update gopls' x/tools dependency", r.updateXToolsDependency, semv, prerelease, reviewers, issue, wf.After(configCommit))
 	dependencyCommit := wf.Task1(wd, "await gopls' x/tools dependency CL submission", clAwaiter{r.Gerrit}.awaitSubmission, dependencyChangeID)
 
 	verified := wf.Action1(wd, "verify installing latest gopls using release branch dependency commit", r.verifyGoplsInstallation, dependencyCommit)
@@ -59,6 +64,58 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	wf.Output(wd, "version", prereleaseVersion)
 
 	return wd
+}
+
+// determineVersion returns the release version based on coordinator inputs.
+//
+// Returns the specified input version if provided; otherwise, interpret a new
+// version based on the version bumping strategy.
+func (r *ReleaseGoplsTasks) determineVersion(ctx *wf.TaskContext, inputVersion, versionBumpStrategy string) (semversion, error) {
+	switch versionBumpStrategy {
+	case "use explicit version":
+		if inputVersion == "" {
+			return semversion{}, fmt.Errorf("the input version should not be empty when choosing explicit version release")
+		}
+		if err := r.isValidReleaseVersion(ctx, inputVersion); err != nil {
+			return semversion{}, err
+		}
+		semv, ok := parseSemver(inputVersion)
+		if !ok {
+			return semversion{}, fmt.Errorf("input version %q can not be parsed as semantic version", inputVersion)
+		}
+		return semv, nil
+	case "next minor", "next patch":
+		return r.interpretNextRelease(ctx, versionBumpStrategy)
+	default:
+		return semversion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
+	}
+}
+
+func (r *ReleaseGoplsTasks) interpretNextRelease(ctx *wf.TaskContext, versionBumpStrategy string) (semversion, error) {
+	tags, err := r.Gerrit.ListTags(ctx, "tools")
+	if err != nil {
+		return semversion{}, err
+	}
+
+	var versions []string
+	for _, tag := range tags {
+		if v, ok := strings.CutPrefix(tag, "gopls/"); ok {
+			versions = append(versions, v)
+		}
+	}
+
+	version := latestVersion(versions, isReleaseVersion)
+	switch versionBumpStrategy {
+	case "next minor":
+		version.Minor += 1
+		version.Patch = 0
+	case "next patch":
+		version.Patch += 1
+	default:
+		return semversion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
+	}
+
+	return version, nil
 }
 
 func (r *ReleaseGoplsTasks) approveVersion(ctx *wf.TaskContext, semv semversion, pre string) error {
@@ -230,9 +287,9 @@ parent-branch: master
 	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
 }
 
-// nextPrerelease inspects the tags in tools repo that match with the given
-// version and find the next prerelease version.
-func (r *ReleaseGoplsTasks) nextPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
+// nextPrereleaseVersion inspects the tags in tools repo that match with the given
+// version and finds the next prerelease version.
+func (r *ReleaseGoplsTasks) nextPrereleaseVersion(ctx *wf.TaskContext, semv semversion) (string, error) {
 	cur, err := currentGoplsPrerelease(ctx, r.Gerrit, semv)
 	if err != nil {
 		return "", err
@@ -410,22 +467,21 @@ func (r *ReleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversio
 	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
-func (r *ReleaseGoplsTasks) isValidReleaseVersion(ctx *wf.TaskContext, ver string) (semversion, error) {
+func (r *ReleaseGoplsTasks) isValidReleaseVersion(ctx *wf.TaskContext, ver string) error {
 	if !semver.IsValid(ver) {
-		return semversion{}, fmt.Errorf("the input %q version does not follow semantic version schema", ver)
+		return fmt.Errorf("the input %q version does not follow semantic version schema", ver)
 	}
 
 	versions, err := r.possibleGoplsVersions(ctx)
 	if err != nil {
-		return semversion{}, fmt.Errorf("failed to get latest Gopls version tags from x/tool: %w", err)
+		return fmt.Errorf("failed to get latest Gopls version tags from x/tool: %w", err)
 	}
 
 	if !slices.Contains(versions, ver) {
-		return semversion{}, fmt.Errorf("the input %q is not next version of any existing versions", ver)
+		return fmt.Errorf("the input %q is not next version of any existing versions", ver)
 	}
 
-	semver, _ := parseSemver(ver)
-	return semver, nil
+	return nil
 }
 
 // semversion is a parsed semantic version.
