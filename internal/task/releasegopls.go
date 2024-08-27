@@ -551,6 +551,8 @@ func parseSemver(v string) (_ semversion, ok bool) {
 	return parsed, ok
 }
 
+// prereleaseVersion extracts the integer component from a pre-release version
+// string in the format "${STRING}.${INT}".
 func (s *semversion) prereleaseVersion() (int, error) {
 	parts := strings.Split(s.Pre, ".")
 	if len(parts) == 1 {

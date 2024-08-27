@@ -220,9 +220,14 @@ func (g *FakeGerrit) ReadBranchHead(ctx context.Context, project, branch string)
 	if err != nil {
 		return "", err
 	}
-	// TODO: If the branch doesn't exist, return an error matching gerrit.ErrResourceNotExist.
 	out, err := repo.dir.RunCommand(ctx, "rev-parse", "refs/heads/"+branch)
 	if err != nil {
+		// TODO(hxjiang): switch to git show-ref --exists refs/heads/branch after
+		// upgrade git to 2.43.0.
+		// https://git-scm.com/docs/git-show-ref/2.43.0#Documentation/git-show-ref.txt---exists
+		if strings.Contains(err.Error(), "unknown revision or path not in the working tree") {
+			return "", gerrit.ErrResourceNotExist
+		}
 		// Returns empty string if the error is nil to align the same behavior with
 		// the real Gerrit client.
 		return "", err

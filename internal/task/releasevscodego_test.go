@@ -6,6 +6,7 @@ package task
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/go-github/v48/github"
@@ -74,6 +75,83 @@ func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 
 			if int(*issue.Milestone.ID) != tc.wantMilestone {
 				t.Errorf("release issue is created under milestone %v should under milestone %v", *issue.Milestone.ID, tc.wantMilestone)
+			}
+		})
+	}
+}
+
+func TestCreateReleaseBranch(t *testing.T) {
+	ctx := context.Background()
+	testcases := []struct {
+		name           string
+		version        string
+		existingBranch bool
+		wantErr        bool
+	}{
+		{
+			name:           "nil if the release branch does not exist for first rc in a minor release",
+			version:        "v0.44.0-rc.1",
+			existingBranch: false,
+			wantErr:        false,
+		},
+		{
+			name:           "nil if the release branch already exist for non-initial rc in a minor release",
+			version:        "v0.44.0-rc.4",
+			existingBranch: true,
+			wantErr:        false,
+		},
+		{
+			name:           "fail if the release branch does not exist for non-initial rc in a minor release",
+			version:        "v0.44.0-rc.4",
+			existingBranch: false,
+			wantErr:        true,
+		},
+		{
+			name:           "nil if the release branch already exist for a patch version",
+			version:        "v0.44.3-rc.3",
+			existingBranch: true,
+			wantErr:        false,
+		},
+		{
+			name:           "fail if the release branch does not exist for a patch version",
+			version:        "v0.44.3-rc.3",
+			existingBranch: false,
+			wantErr:        true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			semv, ok := parseSemver(tc.version)
+			if !ok {
+				t.Fatalf("failed to parse the want version: %q", tc.version)
+			}
+
+			vscodego := NewFakeRepo(t, "vscode-go")
+			commit := vscodego.Commit(map[string]string{
+				"go.mod": "module github.com/golang/vscode-go\n",
+				"go.sum": "\n",
+			})
+			if tc.existingBranch {
+				vscodego.Branch(fmt.Sprintf("release-v%v.%v", semv.Major, semv.Minor), commit)
+			}
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			tasks := &ReleaseVSCodeGoTasks{
+				Gerrit: gerrit,
+			}
+
+			err := tasks.createReleaseBranch(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv)
+			if tc.wantErr && err == nil {
+				t.Errorf("createReleaseBranch(%q) should return error but return nil", tc.version)
+			} else if !tc.wantErr && err != nil {
+				t.Errorf("createReleaseBranch(%q) should return nil but return err: %v", tc.version, err)
+			}
+
+			if !tc.wantErr {
+				if _, err := gerrit.ReadBranchHead(ctx, "vscode-go", fmt.Sprintf("release-v%v.%v", semv.Major, semv.Minor)); err != nil {
+					t.Errorf("createReleaseBranch(%q) should ensure the release branch creation: %v", tc.version, err)
+				}
 			}
 		})
 	}

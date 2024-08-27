@@ -6,11 +6,13 @@ package task
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/google/go-github/v48/github"
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
 	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
@@ -130,6 +132,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	approved := wf.Action1(wd, "await release coordinator's approval", r.approveVersion, semv)
 
 	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, semv, wf.After(approved))
+	_ = wf.Action1(wd, "create release branch", r.createReleaseBranch, semv, wf.After(approved))
 
 	return wd
 }
@@ -171,6 +174,52 @@ func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContex
 	}
 	ctx.Printf("created releasing issue %v", *issue.Number)
 	return *issue.Number, nil
+}
+
+// createReleaseBranch creates corresponding release branch only for the initial
+// release candidate of a minor version.
+func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, semv semversion) error {
+	branch := fmt.Sprintf("release-v%v.%v", semv.Major, semv.Minor)
+	releaseHead, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", branch)
+
+	if err == nil {
+		ctx.Printf("Found the release branch %q with head pointing to %s\n", branch, releaseHead)
+		return nil
+	}
+
+	if !errors.Is(err, gerrit.ErrResourceNotExist) {
+		return fmt.Errorf("failed to read the release branch: %w", err)
+	}
+
+	// Require vscode release branch existence if this is a non-minor release.
+	if semv.Patch != 0 {
+		return fmt.Errorf("release branch is required for patch releases: %w", err)
+	}
+
+	rc, err := semv.prereleaseVersion()
+	if err != nil {
+		return err
+	}
+
+	// Require vscode release branch existence if this is not the first rc in
+	// a minor release.
+	if rc != 1 {
+		return fmt.Errorf("release branch is required for non-initial release candidates: %w", err)
+	}
+
+	// Create the release branch using the revision from the head of master branch.
+	head, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", "master")
+	if err != nil {
+		return err
+	}
+
+	ctx.DisableRetries() // Beyond this point we want retries to be done manually, not automatically.
+	_, err = r.Gerrit.CreateBranch(ctx, "vscode-go", branch, gerrit.BranchInput{Revision: head})
+	if err != nil {
+		return err
+	}
+	ctx.Printf("Created branch %q at revision %s.\n", branch, head)
+	return nil
 }
 
 // nextPrereleaseVersion determines the next pre-release version for the
