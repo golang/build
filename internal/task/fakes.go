@@ -915,6 +915,9 @@ func (f *FakeGitHub) FetchMilestone(_ context.Context, owner, repo, name string,
 
 	if create {
 		newID := f.nextMilestoneID()
+		if f.Milestones == nil {
+			f.Milestones = map[int]string{}
+		}
 		f.Milestones[newID] = name
 		return newID, nil
 	}

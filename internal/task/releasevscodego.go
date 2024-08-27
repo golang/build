@@ -5,8 +5,10 @@
 package task
 
 import (
+	_ "embed"
 	"fmt"
 
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/internal/relui/groups"
 	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
@@ -43,6 +45,7 @@ import (
 // insider versions.
 type ReleaseVSCodeGoTasks struct {
 	Gerrit        GerritClient
+	GitHub        GitHubClientInterface
 	ApproveAction func(*wf.TaskContext) error
 }
 
@@ -57,16 +60,60 @@ var nextVersionParam = wf.ParamDef[string]{
 	},
 }
 
+//go:embed template/vscode-go-release-issue.md
+var vscodeGOReleaseIssueTmplStr string
+
 // NewPrereleaseDefinition create a new workflow definition for vscode-go pre-release.
 func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	versionBumpStrategy := wf.Param(wd, nextVersionParam)
 
-	version := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, versionBumpStrategy)
-	_ = wf.Action1(wd, "await release coordinator's approval", r.approveVersion, version)
+	semv := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, versionBumpStrategy)
+	approved := wf.Action1(wd, "await release coordinator's approval", r.approveVersion, semv)
+
+	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, semv, wf.After(approved))
 
 	return wd
+}
+
+func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContext, semv semversion) (int, error) {
+	version := fmt.Sprintf("v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+
+	// The vscode-go release milestone name matches the release version.
+	milestoneID, err := r.GitHub.FetchMilestone(ctx, "golang", "vscode-go", version, true)
+	if err != nil {
+		return 0, err
+	}
+
+	title := fmt.Sprintf("Release %s", version)
+	issues, err := r.GitHub.FetchMilestoneIssues(ctx, "golang", "vscode-go", milestoneID)
+	if err != nil {
+		return 0, err
+	}
+	for id := range issues {
+		issue, _, err := r.GitHub.GetIssue(ctx, "golang", "vscode-go", id)
+		if err != nil {
+			return 0, err
+		}
+		if title == issue.GetTitle() {
+			ctx.Printf("found existing releasing issue %v", id)
+			return id, nil
+		}
+	}
+
+	content := fmt.Sprintf(vscodeGOReleaseIssueTmplStr, version)
+	issue, _, err := r.GitHub.CreateIssue(ctx, "golang", "vscode-go", &github.IssueRequest{
+		Title:     &title,
+		Body:      &content,
+		Assignee:  github.String("h9jiang"),
+		Milestone: &milestoneID,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to create release tracking issue for %q: %w", version, err)
+	}
+	ctx.Printf("created releasing issue %v", *issue.Number)
+	return *issue.Number, nil
 }
 
 // nextPrereleaseVersion determines the next pre-release version for the

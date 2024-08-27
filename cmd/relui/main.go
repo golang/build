@@ -308,6 +308,10 @@ func main() {
 	dh.RegisterDefinition("Update x/crypto NSS root bundle", bundleTasks.NewDefinition())
 
 	releaseVSCodeGoTasks := task.ReleaseVSCodeGoTasks{
+		GitHub: &task.GitHubClient{
+			V3: github.NewClient(githubHTTPClient),
+			V4: githubv4.NewClient(githubHTTPClient),
+		},
 		Gerrit:        gerritClient,
 		ApproveAction: relui.ApproveActionDep(dbPool),
 	}

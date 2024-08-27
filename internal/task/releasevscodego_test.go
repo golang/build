@@ -8,8 +8,76 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/internal/workflow"
 )
+
+func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
+	testcases := []struct {
+		name          string
+		version       string
+		fakeGithub    FakeGitHub
+		wantIssue     int
+		wantMilestone int
+	}{
+		{
+			name:          "flow should create a milestone and create an issue under the milestone",
+			version:       "v0.45.0-rc.1",
+			fakeGithub:    FakeGitHub{}, // no issues and no milestones.
+			wantIssue:     1,
+			wantMilestone: 1,
+		},
+		{
+			name:    "flow should create an issue under the existing milestone",
+			version: "v0.48.0-rc.1",
+			fakeGithub: FakeGitHub{
+				Milestones: map[int]string{999: "v0.48.0", 998: "v0.46.0"},
+			},
+			wantIssue:     1,
+			wantMilestone: 999,
+		},
+		{
+			name:    "flow should reuse the existing release issue",
+			version: "v0.48.0-rc.1",
+			fakeGithub: FakeGitHub{
+				Milestones: map[int]string{999: "v0.48.0", 998: "Release v0.46.0"},
+				Issues:     map[int]*github.Issue{1000: {Number: github.Int(1000), Title: github.String("Release v0.48.0"), Milestone: &github.Milestone{ID: github.Int64(999)}}},
+			},
+			wantIssue:     1000,
+			wantMilestone: 999,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := &ReleaseVSCodeGoTasks{
+				GitHub: &tc.fakeGithub,
+			}
+
+			semv, ok := parseSemver(tc.version)
+			if !ok {
+				t.Fatalf("parseSemver(%q) should success", tc.version)
+			}
+			issueNumber, err := tasks.createReleaseMilestoneAndIssue(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, semv)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			issue, ok := tc.fakeGithub.Issues[issueNumber]
+			if !ok {
+				t.Errorf("release issue with number %v does not exist", issueNumber)
+			}
+
+			if *issue.Number != tc.wantIssue {
+				t.Errorf("createReleaseMilestoneAndIssue() create an issue with number %v, but should create issue with number %v", issue.Number, tc.wantIssue)
+			}
+
+			if int(*issue.Milestone.ID) != tc.wantMilestone {
+				t.Errorf("release issue is created under milestone %v should under milestone %v", *issue.Milestone.ID, tc.wantMilestone)
+			}
+		})
+	}
+}
 
 func TestNextPrereleaseVersion(t *testing.T) {
 	tests := []struct {
