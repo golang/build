@@ -61,6 +61,9 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, semv, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
 
+	vsCodeGoChanges := wf.Task3(wd, "update gopls version in vscode-go project", r.updateGoplsVersionInVSCodeGo, reviewers, issue, prereleaseVersion, wf.After(prereleaseVerified))
+	_ = wf.Task1(wd, "await gopls version update CL submission in vscode-go project", clAwaiter{r.Gerrit}.awaitSubmissions, vsCodeGoChanges)
+
 	wf.Output(wd, "version", prereleaseVersion)
 
 	return wd
@@ -221,9 +224,9 @@ func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semver
 //
 // It returns an empty string if no such CL is found, otherwise it returns the
 // CL's change ID.
-func openCL(ctx *wf.TaskContext, gerrit GerritClient, branch, title string) (string, error) {
+func openCL(ctx *wf.TaskContext, gerrit GerritClient, repo, branch, title string) (string, error) {
 	// Query for an existing pending config CL, to avoid duplication.
-	query := fmt.Sprintf(`message:%q status:open owner:gobot@golang.org repo:tools branch:%q -age:7d`, title, branch)
+	query := fmt.Sprintf(`message:%q status:open owner:gobot@golang.org repo:%s branch:%q -age:7d`, title, repo, branch)
 	changes, err := gerrit.QueryChanges(ctx, query)
 	if err != nil {
 		return "", err
@@ -245,7 +248,7 @@ func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv sem
 	branch := goplsReleaseBranchName(semv)
 	clTitle := fmt.Sprintf("all: update %s for %s", configFile, branch)
 
-	openCL, err := openCL(ctx, r.Gerrit, branch, clTitle)
+	openCL, err := openCL(ctx, r.Gerrit, "tools", branch, clTitle)
 	if err != nil {
 		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
 	}
@@ -342,7 +345,7 @@ func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv sem
 
 	branch := goplsReleaseBranchName(semv)
 	clTitle := fmt.Sprintf("gopls: update go.mod for v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
-	openCL, err := openCL(ctx, r.Gerrit, branch, clTitle)
+	openCL, err := openCL(ctx, r.Gerrit, "tools", branch, clTitle)
 	if err != nil {
 		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
 	}
@@ -363,7 +366,7 @@ go get golang.org/x/tools@%s
 go mod tidy -compat=1.19
 `, head)
 
-	changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, branch, script, []string{"gopls/go.mod", "gopls/go.sum"})
+	changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, "tools", branch, script, []string{"gopls/go.mod", "gopls/go.sum"})
 	if err != nil {
 		return "", err
 	}
@@ -465,6 +468,53 @@ func (r *ReleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversio
 	ctx.Printf("pre-announcement body HTML:\n%s\n", content.BodyHTML)
 	ctx.Printf("pre-announcement body text:\n%s", content.BodyText)
 	return r.SendMail(r.AnnounceMailHeader, content)
+}
+
+func (r *ReleaseGoplsTasks) updateGoplsVersionInVSCodeGo(ctx *wf.TaskContext, reviewers []string, issue int64, version string) ([]string, error) {
+	releaseBranch, err := vsCodeGoActiveReleaseBranch(ctx, r.Gerrit)
+	if err != nil {
+		return nil, err
+	}
+	var changes []string
+	for _, branch := range []string{"master", releaseBranch} {
+		clTitle := fmt.Sprintf(`extension/src/goToolsInformation: update gopls version %s`, version)
+		if branch != "master" {
+			clTitle = "[" + branch + "] " + clTitle
+		}
+		openCL, err := openCL(ctx, r.Gerrit, "vscode-go", branch, clTitle)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
+		}
+		if openCL != "" {
+			ctx.Printf("not creating CL: found existing CL %s", openCL)
+			changes = append(changes, openCL)
+			continue
+		}
+		const script = `go run -C extension tools/generate.go -tools`
+		changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, "vscode-go", branch, script, []string{"extension/src/goToolsInformation.ts"})
+		if err != nil {
+			return nil, err
+		}
+
+		// Skip CL creation as nothing changed.
+		if len(changedFiles) == 0 {
+			return nil, nil
+		}
+
+		changeInput := gerrit.ChangeInput{
+			Project: "vscode-go",
+			Branch:  branch,
+			Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the gopls version.\n\nFor golang/go#%v", clTitle, issue),
+		}
+
+		ctx.Printf("creating auto-submit change under branch %q in vscode-go repo.", branch)
+		changeID, err := r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changedFiles)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, changeID)
+	}
+	return changes, nil
 }
 
 func (r *ReleaseGoplsTasks) isValidReleaseVersion(ctx *wf.TaskContext, ver string) error {
@@ -706,7 +756,7 @@ func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewe
 	}
 
 	clTitle := fmt.Sprintf("gopls/go.mod: update dependencies following the v%v.%v.%v release", semv.Major, semv.Minor, semv.Patch)
-	openCL, err := openCL(ctx, r.Gerrit, "master", clTitle)
+	openCL, err := openCL(ctx, r.Gerrit, "tools", "master", clTitle)
 	if err != nil {
 		return "", fmt.Errorf("failed to find the open CL of title %q in master branch: %w", clTitle, err)
 	}
@@ -722,7 +772,7 @@ pwd
 go get -u all
 go mod tidy -compat=1.19
 `
-	changed, err := executeAndMonitorChange(ctx, r.CloudBuild, "master", script, []string{"gopls/go.mod", "gopls/go.sum"})
+	changed, err := executeAndMonitorChange(ctx, r.CloudBuild, "tools", "master", script, []string{"gopls/go.mod", "gopls/go.sum"})
 	if err != nil {
 		return "", err
 	}
@@ -747,7 +797,7 @@ go mod tidy -compat=1.19
 //
 // Returns a map where keys are the filenames of modified files and values are
 // their corresponding content after script execution.
-func executeAndMonitorChange(ctx *wf.TaskContext, cloudBuild CloudBuildClient, branch, script string, watchFiles []string) (map[string]string, error) {
+func executeAndMonitorChange(ctx *wf.TaskContext, cloudBuild CloudBuildClient, project, branch, script string, watchFiles []string) (map[string]string, error) {
 	// Checkout to the provided branch.
 	fullScript := fmt.Sprintf(`git checkout %s
 git rev-parse --abbrev-ref HEAD
@@ -775,7 +825,7 @@ fi
 		outputFiles = append(outputFiles, file+".before")
 		outputFiles = append(outputFiles, file)
 	}
-	build, err := cloudBuild.RunScript(ctx, fullScript, "tools", outputFiles)
+	build, err := cloudBuild.RunScript(ctx, fullScript, project, outputFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -801,6 +851,8 @@ type clAwaiter struct {
 	GerritClient
 }
 
+// awaitSubmission waits for the specified change to be submitted, then returns
+// the corresponding commit hash.
 func (c clAwaiter) awaitSubmission(ctx *wf.TaskContext, changeID string) (string, error) {
 	if changeID == "" {
 		ctx.Printf("not awaiting: no CL was created")
@@ -811,4 +863,25 @@ func (c clAwaiter) awaitSubmission(ctx *wf.TaskContext, changeID string) (string
 	return AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
 		return c.Submitted(ctx, changeID, "")
 	})
+}
+
+// awaitSubmissions waits for the specified changes to be submitted, then
+// returns a slice of commit hashes corresponding to the input change IDs,
+// maintaining the original input order.
+func (c clAwaiter) awaitSubmissions(ctx *wf.TaskContext, changeIDs []string) ([]string, error) {
+	if len(changeIDs) == 0 {
+		ctx.Printf("not awaiting: no CL was created")
+		return nil, nil
+	}
+
+	var commits []string
+	for _, changeID := range changeIDs {
+		commit, err := c.awaitSubmission(ctx, changeID)
+		if err != nil {
+			return nil, err
+		}
+		commits = append(commits, commit)
+	}
+
+	return commits, nil
 }

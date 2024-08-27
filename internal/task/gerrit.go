@@ -38,6 +38,8 @@ type GerritClient interface {
 	// ReadBranchHead returns the head of a branch in project.
 	// If the branch doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
 	ReadBranchHead(ctx context.Context, project, branch string) (string, error)
+	// ListBranches returns the branch info for all the branch in a project.
+	ListBranches(ctx context.Context, project string) ([]gerrit.BranchInfo, error)
 	// CreateBranch create the given branch and returns the created branch's revision.
 	CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error)
 	// ListProjects lists all the projects on the server.
@@ -194,6 +196,10 @@ func (c *RealGerritClient) ReadBranchHead(ctx context.Context, project, branch s
 		return "", err
 	}
 	return branchInfo.Revision, nil
+}
+
+func (c *RealGerritClient) ListBranches(ctx context.Context, project string) ([]gerrit.BranchInfo, error) {
+	return c.Client.ListBranches(ctx, project)
 }
 
 func (c *RealGerritClient) CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error) {

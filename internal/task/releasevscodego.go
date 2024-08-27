@@ -7,6 +7,8 @@ package task
 import (
 	_ "embed"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/internal/relui/groups"
@@ -63,6 +65,60 @@ var nextVersionParam = wf.ParamDef[string]{
 
 //go:embed template/vscode-go-release-issue.md
 var vscodeGOReleaseIssueTmplStr string
+
+// vsCodeGoActiveReleaseBranch returns the current active release branch in
+// vscode-go project.
+func vsCodeGoActiveReleaseBranch(ctx *wf.TaskContext, gerrit GerritClient) (string, error) {
+	branches, err := gerrit.ListBranches(ctx, "vscode-go")
+	if err != nil {
+		return "", err
+	}
+
+	var latestMajor, latestMinor int
+	active := ""
+	for _, branch := range branches {
+		branchName, found := strings.CutPrefix(branch.Ref, "refs/heads/")
+		if !found {
+			continue
+		}
+		majorMinor, found := strings.CutPrefix(branchName, "release-v")
+		if !found {
+			continue
+		}
+		versions := strings.Split(majorMinor, ".")
+		if len(versions) != 2 {
+			continue
+		}
+
+		major, err := strconv.Atoi(versions[0])
+		if err != nil {
+			continue
+		}
+		minor, err := strconv.Atoi(versions[1])
+		if err != nil {
+			continue
+		}
+
+		// Only consider release branch for stable versions.
+		if minor%2 == 1 {
+			continue
+		}
+
+		if major > latestMajor || (major == latestMajor && minor > latestMinor) {
+			latestMajor = major
+			latestMinor = minor
+			active = branchName
+		}
+	}
+
+	// "release" is the release branch before vscode-go switch multi release
+	// branch model.
+	if active == "" {
+		active = "release"
+	}
+
+	return active, nil
+}
 
 // NewPrereleaseDefinition create a new workflow definition for vscode-go pre-release.
 func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {

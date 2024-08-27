@@ -146,3 +146,61 @@ func TestNextPrereleaseVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestVSCodeGoActiveReleaseBranch(t *testing.T) {
+	testcases := []struct {
+		name             string
+		existingBranches []string
+		want             string
+	}{
+		{
+			name:             "choose the largest release branch",
+			existingBranches: []string{"release-v0.42", "release-v0.44", "release-v0.46"},
+			want:             "release-v0.46",
+		},
+		{
+			name:             "ignore any insider version release branch (should never exist)",
+			existingBranches: []string{"release-v0.42", "release-v0.44", "release-v0.46", "release-v0.47"},
+			want:             "release-v0.46",
+		},
+		{
+			name:             "ignore any branch with wrong formatting",
+			existingBranches: []string{"release-v0.42", "release-v0.44", "release-v0.46", "v0.48", "release-0.48"},
+			want:             "release-v0.46",
+		},
+		{
+			name:             "fall back to branch release",
+			existingBranches: []string{"foo", "bar"},
+			want:             "release",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			commit := vscodego.Commit(map[string]string{
+				"go.mod": "module github.com/golang/vscode-go\n",
+				"go.sum": "\n",
+			})
+
+			for _, branch := range tc.existingBranches {
+				vscodego.Branch(branch, commit)
+			}
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+			got, err := vsCodeGoActiveReleaseBranch(ctx, gerrit)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if tc.want != got {
+				t.Errorf("vsCodeGoActiveReleaseBranch() = %q, want %q", got, tc.want)
+			}
+
+		})
+	}
+}

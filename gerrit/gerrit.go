@@ -867,6 +867,15 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 	return m, nil
 }
 
+// ListBranches lists all branches in the project.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-branches.
+func (c *Client) ListBranches(ctx context.Context, project string) ([]BranchInfo, error) {
+	var res []BranchInfo
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches", url.PathEscape(project)))
+	return res, err
+}
+
 // GetBranch gets a particular branch in project.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-branch.

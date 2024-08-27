@@ -230,6 +230,23 @@ func (g *FakeGerrit) ReadBranchHead(ctx context.Context, project, branch string)
 	return strings.TrimSpace(string(out)), nil
 }
 
+func (g *FakeGerrit) ListBranches(ctx context.Context, project string) ([]gerrit.BranchInfo, error) {
+	repo, err := g.repo(project)
+	if err != nil {
+		return nil, err
+	}
+	out, err := repo.dir.RunCommand(ctx, "for-each-ref", "--format=%(refname) %(objectname:short)", "refs/heads/")
+	if err != nil {
+		return nil, err
+	}
+	var infos []gerrit.BranchInfo
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		branchCommit := strings.Fields(line)
+		infos = append(infos, gerrit.BranchInfo{Ref: branchCommit[0], Revision: branchCommit[1]})
+	}
+	return infos, nil
+}
+
 func (g *FakeGerrit) CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error) {
 	repo, err := g.repo(project)
 	if err != nil {
