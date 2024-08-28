@@ -421,6 +421,7 @@ BUILDER_TYPES = [
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-longtest-swissmap",
+    "linux-amd64-longtest-aliastypeparams",
     "linux-amd64-misccompile",
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
@@ -430,6 +431,7 @@ BUILDER_TYPES = [
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
     "linux-amd64-typesalias",
+    "linux-amd64-aliastypeparams",
     "linux-amd64_c2s16-perf_vs_gopls_0_11",
     "linux-amd64_c2s16-perf_vs_parent",
     "linux-amd64_c2s16-perf_vs_release",
@@ -869,6 +871,18 @@ def define_for_issue68798():
 
     return f
 
+# define_for_issue69121 is a custom policy for go.dev/issue/69121.
+# It shouldn't be needed beyond Go 1.25.
+def define_for_issue69121():
+    def f(port, project, go_branch_short):
+        # TODO(69121): switch presubmit and postsubmit to True
+        exists, presubmit, postsubmit = False, False, False
+        if project in ["go", "tools"]:
+            exists = go_branch_short == "gotip" or go_branch_short >= "go1.24"
+        return (exists, presubmit, postsubmit, [])
+
+    return f
+
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
@@ -1035,6 +1049,13 @@ RUN_MODS = dict(
     typesalias = make_run_mod(
         add_env = {"GODEBUG": "gotypesalias=1"},
         enabled = define_for_issue68798(),
+    ),
+
+    # Build and test with the aliastypeparams GOEXPERIMENT, which enables
+    # aliases with type parameters and the V2 unified IR exportdata format.
+    aliastypeparams = make_run_mod(
+        add_env = {"GODEBUG": "gotypesalias=1", "GOEXPERIMENT": "aliastypeparams"},
+        enabled = define_for_issue69121(),
     ),
 )
 
