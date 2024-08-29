@@ -875,8 +875,7 @@ def define_for_issue68798():
 # It shouldn't be needed beyond Go 1.25.
 def define_for_issue69121():
     def f(port, project, go_branch_short):
-        # TODO(69121): switch presubmit and postsubmit to True
-        exists, presubmit, postsubmit = False, False, False
+        exists, presubmit, postsubmit = False, True, True
         if project in ["go", "tools"]:
             exists = go_branch_short == "gotip" or go_branch_short >= "go1.24"
         return (exists, presubmit, postsubmit, [])
