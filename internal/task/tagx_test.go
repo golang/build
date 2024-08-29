@@ -230,8 +230,12 @@ case "$1" in
 "get")
   ls go.mod go.sum >/dev/null
   for i in "${@:2}"; do
-    echo -e "// pretend we've upgraded to $i" >> go.mod
-    echo "$i h1:asdasd" | tr '@' ' ' >> go.sum
+    if [ "$i" = "toolchain@none" ]; then
+      echo "// pretend we've dropped toolchain directive" >> go.mod
+    else
+      echo "// pretend we've upgraded to $i" >> go.mod
+      echo "$i h1:asdasd" | tr '@' ' ' >> go.sum
+    fi
   done
   ;;
 "mod")
@@ -365,7 +369,7 @@ func TestTagXRepos(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "1.16") || strings.Contains(string(goplsMod), "upgraded") {
-		t.Error("gopls go.mod should be tidied with -compat 1.16, but not upgraded")
+		t.Errorf("gopls go.mod should be tidied with -compat 1.16, but not upgraded:\n%s", goplsMod)
 	}
 
 	tags, err = deps.gerrit.ListTags(ctx, "build")

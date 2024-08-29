@@ -70,6 +70,7 @@ type TagRepo struct {
 	ModPath      string    // Module path, e.g., "golang.org/x/tools".
 	Deps         []*TagDep // Dependency modules.
 	Compat       string    // The Go version to pass to go mod tidy -compat for this repository.
+	HasToolchain bool      // Whether the go.mod file has a toolchain directive when the workflow started.
 	StartVersion string    // The version of the module when the workflow started. Empty string means repo hasn't begun release version tagging yet.
 	NewerVersion string    // The version of the module that will be tagged, or the empty string when the repo is being updated only and not tagged.
 }
@@ -190,6 +191,7 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 	result := &TagRepo{
 		Name:         project,
 		ModPath:      mf.Module.Mod.Path,
+		HasToolchain: mf.Toolchain != nil,
 		StartVersion: currentTag,
 	}
 
@@ -223,6 +225,7 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 			Wait:    wait,
 		})
 	}
+
 	return result, nil
 }
 
@@ -389,10 +392,15 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 	for _, dep := range deps {
 		script.WriteString(" " + dep.ModPath + "@" + dep.NewerVersion)
 	}
+	if !repo.HasToolchain {
+		// Don't introduce a toolchain directive if it wasn't already there.
+		script.WriteString(" toolchain@none")
+	}
 	script.WriteString("\n")
 
 	// Tidy the root module.
 	// Also tidy nested modules with a replace directive.
+	// TODO(go.dev/issue/68873): Dynamically detect and handle nested modules, instead of the fixed list below.
 	dirs := []string{"."}
 	switch repo.Name {
 	case "exp":
@@ -411,7 +419,13 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 		if repo.Compat != "" {
 			compat = "-compat " + repo.Compat
 		}
-		script.WriteString(fmt.Sprintf("(cd %v && touch go.sum && go mod tidy %v)\n", dir, compat))
+		dropToolchain := ""
+		if !repo.HasToolchain {
+			// Don't introduce a toolchain directive if it wasn't already there.
+			// TODO(go.dev/issue/68873): Read the nested module's go.mod. For now, re-use decision from the top-level module.
+			dropToolchain = " && go get toolchain@none"
+		}
+		script.WriteString(fmt.Sprintf("(cd %v && touch go.sum && go mod tidy %s%s)\n", dir, compat, dropToolchain))
 		outputs = append(outputs, dir+"/go.mod", dir+"/go.sum")
 	}
 	build, err := x.CloudBuild.RunScript(ctx, script.String(), repo.Name, outputs)
