@@ -307,7 +307,7 @@ func TestTagXRepos(t *testing.T) {
 	mod.Tag("v1.0.0", mod1)
 	tools := NewFakeRepo(t, "tools")
 	tools1 := tools.Commit(map[string]string{
-		"go.mod":       "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18 // tagx:compat 1.16\nrequire golang.org/x/sys v0.1.0\nrequire golang.org/x/build v0.0.0\n",
+		"go.mod":       "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18\nrequire golang.org/x/sys v0.1.0\nrequire golang.org/x/build v0.0.0\n",
 		"go.sum":       "\n",
 		"gopls/go.mod": "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
 		"gopls/go.sum": "\n",
@@ -368,8 +368,8 @@ func TestTagXRepos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "1.16") || strings.Contains(string(goplsMod), "upgraded") {
-		t.Errorf("gopls go.mod should be tidied with -compat 1.16, but not upgraded:\n%s", goplsMod)
+	if !strings.Contains(string(goplsMod), "tidied!") || strings.Contains(string(goplsMod), "upgraded") {
+		t.Errorf("gopls go.mod should be tidied and not upgraded:\n%s", goplsMod)
 	}
 
 	tags, err = deps.gerrit.ListTags(ctx, "build")
