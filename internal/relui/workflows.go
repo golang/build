@@ -455,7 +455,21 @@ func addSingleReleaseWorkflow(
 	milestones := wf.Task2(wd, "Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checked := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
 
-	securityRef := wf.Param(wd, wf.ParamDef[string]{Name: "Ref from the private repository to build from (optional)"})
+	securityRef := wf.Param(wd, wf.ParamDef[string]{
+		Name: "Ref from the private repository to build from (optional)",
+		Doc: `This optional parameter controls where to build from.
+
+The default workflow behavior, if this value is the empty string,
+is to build from the head of the corresponding release branch
+in the public Go repository (go.googlesource.com/go).
+This is intended for releases with no PRIVATE-track security fixes.
+
+If a non-empty string is entered, it must correspond to a ref
+in the private repository (go-internal.googlesource.com/go).
+The ref can be a branch name (e.g., "private-release-branch.go1.23.4")
+or a commit hash (e.g., "8890e8372e12d3b595e0e8fec29f8d7783ab2daf").
+This is intended for releases with 1+ PRIVATE-track security fixes.`,
+	})
 	securityCommit := wf.Task1(wd, "Read security ref", build.readSecurityRef, securityRef)
 	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, startingHead, securityCommit, versionFile, wf.After(checked))
 
