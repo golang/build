@@ -787,7 +787,7 @@ esac`, tc.wantVersion)
 					repo:   "vscode-go",
 					branch: "release-v0.44",
 					path:   "extension/src/goToolsInformation.ts",
-					want:   "bar",
+					want:   "foo",
 				},
 			}
 			for _, check := range contentChecks {

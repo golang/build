@@ -61,8 +61,8 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, semv, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
 
-	vsCodeGoChanges := wf.Task3(wd, "update gopls version in vscode-go project", r.updateGoplsVersionInVSCodeGo, reviewers, issue, prereleaseVersion, wf.After(prereleaseVerified))
-	_ = wf.Task1(wd, "await gopls version update CL submission in vscode-go project", clAwaiter{r.Gerrit}.awaitSubmissions, vsCodeGoChanges)
+	vscodeGoChange := wf.Task4(wd, "update gopls version in vscode-go project", r.updateGoplsVersionInVSCodeGo, reviewers, issue, prereleaseVersion, wf.Const("master"), wf.After(prereleaseVerified))
+	_ = wf.Task1(wd, "await gopls version update CL submission in vscode-go project", clAwaiter{r.Gerrit}.awaitSubmission, vscodeGoChange)
 
 	wf.Output(wd, "version", prereleaseVersion)
 
@@ -470,51 +470,38 @@ func (r *ReleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversio
 	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
-func (r *ReleaseGoplsTasks) updateGoplsVersionInVSCodeGo(ctx *wf.TaskContext, reviewers []string, issue int64, version string) ([]string, error) {
-	releaseBranch, err := vsCodeGoActiveReleaseBranch(ctx, r.Gerrit)
+func (r *ReleaseGoplsTasks) updateGoplsVersionInVSCodeGo(ctx *wf.TaskContext, reviewers []string, issue int64, version, branch string) (string, error) {
+	clTitle := fmt.Sprintf(`extension/src/goToolsInformation: update gopls version %s`, version)
+	if branch != "master" {
+		clTitle = "[" + branch + "] " + clTitle
+	}
+	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", branch, clTitle)
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
 	}
-	var changes []string
-	for _, branch := range []string{"master", releaseBranch} {
-		clTitle := fmt.Sprintf(`extension/src/goToolsInformation: update gopls version %s`, version)
-		if branch != "master" {
-			clTitle = "[" + branch + "] " + clTitle
-		}
-		openCL, err := openCL(ctx, r.Gerrit, "vscode-go", branch, clTitle)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
-		}
-		if openCL != "" {
-			ctx.Printf("not creating CL: found existing CL %s", openCL)
-			changes = append(changes, openCL)
-			continue
-		}
-		const script = `go run -C extension tools/generate.go -tools`
-		changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, "vscode-go", branch, script, []string{"extension/src/goToolsInformation.ts"})
-		if err != nil {
-			return nil, err
-		}
-
-		// Skip CL creation as nothing changed.
-		if len(changedFiles) == 0 {
-			return nil, nil
-		}
-
-		changeInput := gerrit.ChangeInput{
-			Project: "vscode-go",
-			Branch:  branch,
-			Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the gopls version.\n\nFor golang/go#%v", clTitle, issue),
-		}
-
-		ctx.Printf("creating auto-submit change under branch %q in vscode-go repo.", branch)
-		changeID, err := r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changedFiles)
-		if err != nil {
-			return nil, err
-		}
-		changes = append(changes, changeID)
+	if openCL != "" {
+		ctx.Printf("not creating CL: found existing CL %s", openCL)
+		return openCL, nil
 	}
-	return changes, nil
+	const script = `go run -C extension tools/generate.go -tools`
+	changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, "vscode-go", branch, script, []string{"extension/src/goToolsInformation.ts"})
+	if err != nil {
+		return "", err
+	}
+
+	// Skip CL creation as nothing changed.
+	if len(changedFiles) == 0 {
+		return "", nil
+	}
+
+	changeInput := gerrit.ChangeInput{
+		Project: "vscode-go",
+		Branch:  branch,
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the gopls version.\n\nFor golang/go#%v", clTitle, issue),
+	}
+
+	ctx.Printf("creating auto-submit change under branch %q in vscode-go repo.", branch)
+	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changedFiles)
 }
 
 func (r *ReleaseGoplsTasks) isValidReleaseVersion(ctx *wf.TaskContext, ver string) error {
