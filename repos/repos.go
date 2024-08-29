@@ -84,7 +84,7 @@ func init() {
 	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
 	x("pkgsite", desc("home of the pkg.go.dev website"), enableCSR("go-discovery"))
 	x("pkgsite-metrics", desc("code for serving pkg.go.dev/metrics"), enableCSR("go-ecosystem"))
-	x("playground", noDash, enableCSR("golang-org"))
+	x("playground", enableCSR("golang-org"))
 	x("review", desc("a tool for working with Gerrit code reviews"))
 	x("scratch", noDash)
 	x("sync", desc("additional concurrency primitives"))
