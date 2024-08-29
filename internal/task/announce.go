@@ -432,6 +432,14 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 	},
 
+	// shortcommit is used to shorten git commit hashes.
+	"shortcommit": func(v string) string {
+		if len(v) > 7 {
+			return v[:7]
+		}
+		return v
+	},
+
 	// short and helpers below manipulate valid Go version strings
 	// for the current needs of the announcement templates.
 	"short": func(v string) string { return strings.TrimPrefix(v, "go") },

@@ -140,6 +140,16 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 			},
 			wantSubject: "[security] Go 1.18.4 pre-announcement",
 		},
+		{
+			name: "gopls-pre-announce",
+			in: goplsPrereleaseAnnouncement{
+				Version: "v0.16.2-pre.1",
+				Branch:  "gopls-release-branch.0.16",
+				Commit:  "abc123def456ghi789",
+				Issue:   12345,
+			},
+			wantSubject: "Gopls v0.16.2-pre.1 is released",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
