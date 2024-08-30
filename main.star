@@ -561,11 +561,10 @@ INTERNAL_GO_BRANCHES = {
 # because they're out of scope per https://go.dev/doc/devel/release#policy,
 # but are used by only by the golang.org/x/tools repository for a while longer.
 #
-# This is planned to be removed soon after Go 1.23.0 per go.dev/issue/65917.
+# TODO(go.dev/issue/65917): Come back to this after followup discussion;
+# this special case for the go1.21 branch covers gopls v0.17.0 needs.
 TOOLS_GO_BRANCHES = {
-    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13", optional_only = False),
-    "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13", optional_only = True),
-    "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13", optional_only = True),
+    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
 }
 
 # We set build priorities by environment. These should always be lower than the
@@ -2045,7 +2044,6 @@ def _define_go_ci():
                     luci.cq_tryjob_verifier(
                         builder = try_builder,
                         cq_group = cq_group.name,
-                        includable_only = TOOLS_GO_BRANCHES[extra_go_release].optional_only,
                         disable_reuse = True,
                     )
 
