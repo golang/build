@@ -1452,8 +1452,6 @@ def define_builder(env, project, go_branch_short, builder_type):
             if suffix == "wasmtime":
                 base_props["env"]["GOWASIRUNTIME"] = "wasmtime"
                 base_props["wasmtime_version"] = "2@14.0.4"
-                if go_branch_short == "go1.21":
-                    base_props["wasmtime_version"] = "13.0.1"  # See go.dev/issue/63718.
             elif suffix == "wazero":
                 base_props["env"]["GOWASIRUNTIME"] = "wazero"
                 base_props["wazero_version"] = "2@1.7.0"
@@ -1509,12 +1507,6 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Turn on the no-network check.
     if builder_type in NO_NETWORK_BUILDERS:
         base_props["no_network"] = True
-
-        # Leave release branches out of scope, they can't work until some
-        # test fixes are backported, but doing that might not be worth it.
-        # TODO(dmitshur): Delete this after Go 1.21 drops off.
-        if project == "go" and go_branch_short == "go1.21":
-            base_props.pop("no_network")
 
     for mod in run_mods:
         if not mod in RUN_MODS:
@@ -1853,20 +1845,17 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         return False, False, False, []
 
     # Filter out old OS versions from new branches.
-    if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22", "go1.21"]:
+    if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22"]:
         # Go 1.22 is last to support macOS 10.15. See go.dev/doc/go1.22#darwin.
         return False, False, False, []
 
     # Filter out new ports on old release branches.
-    if os == "openbsd" and arch == "ppc64" and go_branch_short in ["go1.21"]:
-        # The openbsd/ppc64 port is new to Go 1.22. See go.dev/doc/go1.22#openbsd.
-        return False, False, False, []
-    if os == "openbsd" and arch == "riscv64" and go_branch_short in ["go1.22", "go1.21"]:
+    if os == "openbsd" and arch == "riscv64" and go_branch_short in ["go1.22"]:
         # The openbsd/riscv64 port is new to Go 1.23.
         return False, False, False, []
 
     # Filter out new projects on old release branches.
-    if project == "oscar" and go_branch_short in ["go1.21", "go1.22"]:
+    if project == "oscar" and go_branch_short in ["go1.22"]:
         return False, False, False, []
     if project == "pkgsite" and go_branch_short in ["go1.22"]:
         # See CL 609142.
