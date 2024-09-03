@@ -1870,6 +1870,9 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     # Filter out new projects on old release branches.
     if project == "oscar" and go_branch_short in ["go1.21", "go1.22"]:
         return False, False, False, []
+    if project == "pkgsite" and go_branch_short in ["go1.22"]:
+        # See CL 609142.
+        return False, False, False, []
 
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
