@@ -563,9 +563,9 @@ INTERNAL_GO_BRANCHES = {
 #
 # This is planned to be removed soon after Go 1.23.0 per go.dev/issue/65917.
 TOOLS_GO_BRANCHES = {
-    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13"),
-    "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13"),
-    "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13"),
+    "go1.21": struct(branch = "release-branch.go1.21", bootstrap = "1.17.13", optional_only = False),
+    "go1.20": struct(branch = "release-branch.go1.20", bootstrap = "1.17.13", optional_only = True),
+    "go1.19": struct(branch = "release-branch.go1.19", bootstrap = "1.17.13", optional_only = True),
 }
 
 # We set build priorities by environment. These should always be lower than the
@@ -2046,6 +2046,7 @@ def _define_go_ci():
                     luci.cq_tryjob_verifier(
                         builder = try_builder,
                         cq_group = cq_group.name,
+                        includable_only = TOOLS_GO_BRANCHES[extra_go_release].optional_only,
                         disable_reuse = True,
                     )
 
