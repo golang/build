@@ -346,13 +346,80 @@ func TestVSCodeGoActiveReleaseBranch(t *testing.T) {
 				Context: context.Background(),
 				Logger:  &testLogger{t, ""},
 			}
-			got, err := vsCodeGoActiveReleaseBranch(ctx, gerrit)
+			got, err := vscodeGoActiveReleaseBranch(ctx, gerrit)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			if tc.want != got {
-				t.Errorf("vsCodeGoActiveReleaseBranch() = %q, want %q", got, tc.want)
+				t.Errorf("vscodeGoActiveReleaseBranch() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestVerifyTestResults(t *testing.T) {
+	mustHaveShell(t)
+	fakeScriptFmt := `#!/bin/bash -exu
+
+case "$1" in
+"testlocal")
+	echo "the testlocal return %v"
+	exit %v
+	;;
+*)
+	echo unexpected command $@
+	exit 1
+	;;
+esac
+`
+	testcases := []struct {
+		name    string
+		rc      int
+		wantErr bool
+	}{
+		{
+			name:    "test failed, return error",
+			rc:      1,
+			wantErr: true,
+		},
+		{
+			name:    "test passed, return nil",
+			rc:      0,
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			commit := vscodego.Commit(map[string]string{
+				"go.mod":         "module github.com/golang/vscode-go\n",
+				"go.sum":         "\n",
+				"build/all.bash": fmt.Sprintf(fakeScriptFmt, tc.rc, tc.rc),
+			})
+			// Overwrite the script to empty to make sure vscode-go flow will checkout
+			// the specific commit.
+			_ = vscodego.Commit(map[string]string{
+				"build/all.bash": "",
+			})
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+
+			tasks := &ReleaseVSCodeGoTasks{
+				Gerrit:     gerrit,
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "vscode-go", nil, ""),
+			}
+
+			err := tasks.verifyTestResults(ctx, commit)
+			if tc.wantErr && err == nil {
+				t.Errorf("verifyTestResult() should return error but return nil")
+			} else if !tc.wantErr && err != nil {
+				t.Errorf("verifyTestResult() should return nil but return err: %v", err)
 			}
 		})
 	}

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"cloud.google.com/go/cloudbuild/apiv1/v2/cloudbuildpb"
 	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
@@ -52,6 +53,7 @@ import (
 type ReleaseVSCodeGoTasks struct {
 	Gerrit        GerritClient
 	GitHub        GitHubClientInterface
+	CloudBuild    CloudBuildClient
 	ApproveAction func(*wf.TaskContext) error
 }
 
@@ -68,11 +70,11 @@ var nextVersionParam = wf.ParamDef[string]{
 }
 
 //go:embed template/vscode-go-release-issue.md
-var vscodeGOReleaseIssueTmplStr string
+var vscodeGoReleaseIssueTmplStr string
 
-// vsCodeGoActiveReleaseBranch returns the current active release branch in
+// vscodeGoActiveReleaseBranch returns the current active release branch in
 // vscode-go project.
-func vsCodeGoActiveReleaseBranch(ctx *wf.TaskContext, gerrit GerritClient) (string, error) {
+func vscodeGoActiveReleaseBranch(ctx *wf.TaskContext, gerrit GerritClient) (string, error) {
 	branches, err := gerrit.ListBranches(ctx, "vscode-go")
 	if err != nil {
 		return "", err
@@ -132,15 +134,76 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
+	revision := wf.Task2(wd, "find the revision for the pre-release version", r.findRevision, release, prerelease)
 	approved := wf.Action2(wd, "await release coordinator's approval", r.approvePrereleaseVersion, release, prerelease)
 
-	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(approved))
+	verified := wf.Action1(wd, "verify the release candidate", r.verifyTestResults, revision, wf.After(approved))
 
-	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(approved))
-	// TODO(hxjiang): replace empty commit with the branch's head once verified.
-	_ = wf.Action3(wd, "tag release candidate", r.tag, wf.Const(""), release, prerelease, wf.After(branched))
+	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(verified))
+	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(verified))
+	_ = wf.Action3(wd, "tag release candidate", r.tag, revision, release, prerelease, wf.After(branched))
 
 	return wd
+}
+
+// findRevision determines the appropriate revision for the current release.
+// Returns the head of the master branch if this is the first release candidate
+// for a stable minor version (as no release branch exists yet).
+// Returns the head of the corresponding release branch otherwise.
+func (r *ReleaseVSCodeGoTasks) findRevision(ctx *wf.TaskContext, release releaseVersion, prerelease string) (string, error) {
+	branch := fmt.Sprintf("release-v%v.%v", release.Major, release.Minor)
+	if release.Patch == 0 && prerelease == "rc.1" {
+		branch = "master"
+	}
+
+	return r.Gerrit.ReadBranchHead(ctx, "vscode-go", branch)
+}
+
+func (r *ReleaseVSCodeGoTasks) verifyTestResults(ctx *wf.TaskContext, revision string) error {
+	// We are running all tests in a docker as a user 'node' (uid: 1000)
+	// Let the user own the directory.
+	testScript := `#!/usr/bin/env bash
+set -eux
+set -o pipefail
+
+chown -R 1000:1000 .
+./build/all.bash testlocal &> output.log
+`
+
+	build, err := r.CloudBuild.RunCustomSteps(ctx, func(resultURL string) []*cloudbuildpb.BuildStep {
+		return []*cloudbuildpb.BuildStep{
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"clone", "https://go.googlesource.com/vscode-go", "vscode-go"},
+			},
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"checkout", revision},
+				Dir:  "vscode-go",
+			},
+			{
+				Name:   "gcr.io/cloud-builders/docker",
+				Script: testScript,
+				Dir:    "vscode-go",
+			},
+			{
+				Name: "gcr.io/cloud-builders/gsutil",
+				Args: []string{"cp", "output.log", fmt.Sprintf("%s/output.log", resultURL)},
+				Dir:  "vscode-go",
+			},
+		}
+	})
+	if err != nil {
+		return err
+	}
+
+	outputs, err := buildToOutputs(ctx, r.CloudBuild, build)
+	if err != nil {
+		return err
+	}
+
+	ctx.Printf("the output from test run:\n%s\n", outputs["output.log"])
+	return nil
 }
 
 func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContext, semv releaseVersion) (int, error) {
@@ -168,7 +231,7 @@ func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContex
 		}
 	}
 
-	content := fmt.Sprintf(vscodeGOReleaseIssueTmplStr, version)
+	content := fmt.Sprintf(vscodeGoReleaseIssueTmplStr, version)
 	issue, _, err := r.GitHub.CreateIssue(ctx, "golang", "vscode-go", &github.IssueRequest{
 		Title:     &title,
 		Body:      &content,

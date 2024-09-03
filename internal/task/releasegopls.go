@@ -593,9 +593,9 @@ func (r *ReleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]string
 	var possible []string
 	for _, v := range releaseVersions {
 		for _, next := range []releaseVersion{
-			{v.Major+1, 0, 0},             // next major
-			{v.Major, v.Minor+1, 0},       // next minor
-			{v.Major, v.Minor, v.Patch+1}, // next patch
+			{v.Major + 1, 0, 0},             // next major
+			{v.Major, v.Minor + 1, 0},       // next minor
+			{v.Major, v.Minor, v.Patch + 1}, // next patch
 		} {
 			if _, ok := seen[next]; !ok {
 				possible = append(possible, next.String())
@@ -673,7 +673,7 @@ func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsVersion(ctx *wf.TaskContext, revi
 	}
 	branches := []string{"master"}
 	if prerelease == "" {
-		releaseBranch, err := vsCodeGoActiveReleaseBranch(ctx, r.Gerrit)
+		releaseBranch, err := vscodeGoActiveReleaseBranch(ctx, r.Gerrit)
 		if err != nil {
 			return nil, err
 		}

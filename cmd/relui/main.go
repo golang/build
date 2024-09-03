@@ -313,6 +313,7 @@ func main() {
 			V4: githubv4.NewClient(githubHTTPClient),
 		},
 		Gerrit:        gerritClient,
+		CloudBuild:    cloudBuildClient,
 		ApproveAction: relui.ApproveActionDep(dbPool),
 	}
 	dh.RegisterDefinition("Create a vscode-go release candidate", releaseVSCodeGoTasks.NewPrereleaseDefinition())
