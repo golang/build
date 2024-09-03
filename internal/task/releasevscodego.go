@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"golang.org/x/build/internal/relui/groups"
 	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/mod/semver"
 )
 
 // VSCode extensions and semantic versioning have different understandings of
@@ -294,11 +296,33 @@ func isPrereleaseVersion(semv semversion) bool {
 	return semv.Pre != ""
 }
 
+// isPrereleaseMatchRegex reports whether the pre-release string of the input
+// version matches the regex expression.
+func isPrereleaseMatchRegex(regex string) func(semversion) bool {
+	return func(semv semversion) bool {
+		if semv.Pre == "" {
+			return false
+		}
+		matched, err := regexp.MatchString(regex, semv.Pre)
+		if err != nil {
+			return false
+		}
+		return matched
+	}
+}
+
+func isSameMajorMinorPatch(want semversion) func(semversion) bool {
+	return func(got semversion) bool {
+		return got.Major == want.Major && got.Minor == want.Minor && got.Patch == want.Patch
+	}
+}
+
 // latestVersion returns the latest version in the provided version list,
 // considering only versions that match all the specified filters.
 // Strings not following semantic versioning are ignored.
 func latestVersion(versions []string, filters ...func(semversion) bool) semversion {
-	latest := semversion{}
+	latest := ""
+	latestSemv := semversion{}
 	for _, v := range versions {
 		semv, ok := parseSemver(v)
 		if !ok {
@@ -317,16 +341,13 @@ func latestVersion(versions []string, filters ...func(semversion) bool) semversi
 			continue
 		}
 
-		if semv.Minor > latest.Minor {
-			latest = semv
-		}
-
-		if semv.Minor == latest.Minor && semv.Patch > latest.Patch {
-			latest = semv
+		if semver.Compare(v, latest) == 1 {
+			latest = v
+			latestSemv = semv
 		}
 	}
 
-	return latest
+	return latestSemv
 }
 
 func (r *ReleaseVSCodeGoTasks) approveVersion(ctx *wf.TaskContext, semv semversion) error {

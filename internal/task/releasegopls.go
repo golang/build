@@ -33,8 +33,8 @@ type ReleaseGoplsTasks struct {
 func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
-	// versionBumpStrategy specifies the desired release type: next minor or next
-	// patch.
+	// versionBumpStrategy specifies the desired release type: next minor, next
+	// patch or use explicit version.
 	// This should be the default choice for most releases.
 	versionBumpStrategy := wf.Param(wd, nextVersionParam)
 	// inputVersion allows manual override of the version, bypassing the version
@@ -43,23 +43,23 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit version (optional)"})
 	reviewers := wf.Param(wd, reviewersParam)
 
-	semv := wf.Task2(wd, "determine the version", r.determineVersion, inputVersion, versionBumpStrategy)
-	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrereleaseVersion, semv)
-	approved := wf.Action2(wd, "wait for release coordinator approval", r.approveVersion, semv, prerelease)
+	release := wf.Task2(wd, "determine the version", r.determineReleaseVersion, inputVersion, versionBumpStrategy)
+	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
+	approved := wf.Action2(wd, "wait for release coordinator approval", r.approveVersion, release, prerelease)
 
-	issue := wf.Task2(wd, "create release git issue", r.findOrCreateGitHubIssue, semv, wf.Const(true), wf.After(approved))
-	branchCreated := wf.Action1(wd, "create new branch if minor release", r.createBranchIfMinor, semv, wf.After(issue))
+	issue := wf.Task2(wd, "create release git issue", r.findOrCreateGitHubIssue, release, wf.Const(true), wf.After(approved))
+	branchCreated := wf.Action1(wd, "create new branch if minor release", r.createBranchIfMinor, release, wf.After(issue))
 
-	configChangeID := wf.Task3(wd, "update branch's codereview.cfg", r.updateCodeReviewConfig, semv, reviewers, issue, wf.After(branchCreated))
+	configChangeID := wf.Task3(wd, "update branch's codereview.cfg", r.updateCodeReviewConfig, release, reviewers, issue, wf.After(branchCreated))
 	configCommit := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, configChangeID)
 
-	dependencyChangeID := wf.Task4(wd, "update gopls' x/tools dependency", r.updateXToolsDependency, semv, prerelease, reviewers, issue, wf.After(configCommit))
+	dependencyChangeID := wf.Task4(wd, "update gopls' x/tools dependency", r.updateXToolsDependency, release, prerelease, reviewers, issue, wf.After(configCommit))
 	dependencyCommit := wf.Task1(wd, "await gopls' x/tools dependency CL submission", clAwaiter{r.Gerrit}.awaitSubmission, dependencyChangeID)
 
 	verified := wf.Action1(wd, "verify installing latest gopls using release branch dependency commit", r.verifyGoplsInstallation, dependencyCommit)
-	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, semv, dependencyCommit, prerelease, wf.After(verified))
+	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, release, dependencyCommit, prerelease, wf.After(verified))
 	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
-	wf.Action4(wd, "mail announcement", r.mailAnnouncement, semv, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
+	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
 
 	vscodeGoChange := wf.Task4(wd, "update gopls version in vscode-go project", r.updateGoplsVersionInVSCodeGo, reviewers, issue, prereleaseVersion, wf.Const("master"), wf.After(prereleaseVerified))
 	_ = wf.Task1(wd, "await gopls version update CL submission in vscode-go project", clAwaiter{r.Gerrit}.awaitSubmission, vscodeGoChange)
@@ -69,11 +69,11 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	return wd
 }
 
-// determineVersion returns the release version based on coordinator inputs.
+// determineReleaseVersion returns the release version based on coordinator inputs.
 //
 // Returns the specified input version if provided; otherwise, interpret a new
 // version based on the version bumping strategy.
-func (r *ReleaseGoplsTasks) determineVersion(ctx *wf.TaskContext, inputVersion, versionBumpStrategy string) (semversion, error) {
+func (r *ReleaseGoplsTasks) determineReleaseVersion(ctx *wf.TaskContext, inputVersion, versionBumpStrategy string) (semversion, error) {
 	switch versionBumpStrategy {
 	case "use explicit version":
 		if inputVersion == "" {
@@ -299,11 +299,27 @@ parent-branch: master
 // nextPrereleaseVersion inspects the tags in tools repo that match with the given
 // version and finds the next prerelease version.
 func (r *ReleaseGoplsTasks) nextPrereleaseVersion(ctx *wf.TaskContext, semv semversion) (string, error) {
-	cur, err := currentGoplsPrerelease(ctx, r.Gerrit, semv)
+	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("pre.%v", cur+1), nil
+
+	var versions []string
+	for _, tag := range tags {
+		if v, ok := strings.CutPrefix(tag, "gopls/"); ok {
+			versions = append(versions, v)
+		}
+	}
+
+	rc := latestVersion(versions, isSameMajorMinorPatch(semv), isPrereleaseMatchRegex(`^pre\.\d+$`))
+	if rc == (semversion{}) {
+		return "pre.1", nil
+	}
+	pre, err := rc.prereleaseVersion()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("pre.%v", pre+1), nil
 }
 
 // currentGoplsPrerelease inspects the tags in tools repo that match with the
@@ -635,97 +651,52 @@ func (r *ReleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]string
 func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
-	version := wf.Param(wd, wf.ParamDef[string]{Name: "pre-release version"})
+	// versionBumpStrategy specifies the desired release type: next minor, next
+	// patch or use explicit version.
+	// This should be the default choice for most releases.
+	versionBumpStrategy := wf.Param(wd, nextVersionParam)
+	// inputVersion allows manual override of the version, bypassing the version
+	// bump strategy.
+	// Use with caution.
+	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit pre-release version (optional)"})
 	reviewers := wf.Param(wd, reviewersParam)
 
-	semv := wf.Task1(wd, "validating input version", r.isValidPrereleaseVersion, version)
-	tagged := wf.Action1(wd, "tag the release", r.tagRelease, semv)
+	release := wf.Task2(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy, inputVersion)
+	prerelease := wf.Task1(wd, "find the latest pre-release version", r.latestPrerelease, release)
+	tagged := wf.Action2(wd, "tag the release", r.tagRelease, release, prerelease)
 
-	issue := wf.Task2(wd, "find release git issue", r.findOrCreateGitHubIssue, semv, wf.Const(false))
-	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, reviewers, semv, issue, wf.After(tagged))
+	issue := wf.Task2(wd, "find release git issue", r.findOrCreateGitHubIssue, release, wf.Const(false))
+	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, reviewers, release, issue, wf.After(tagged))
 	_ = wf.Task1(wd, "await x/tools gopls dependency CL submission in gopls sub dir", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 
 	return wd
 }
 
-// isValidPrereleaseVersion verifies the input version satisfies the following
-// conditions:
-// - It is the latest pre-release version for its Major.Minor.Patch.
-// - A corresponding "gopls/vX.Y.Z-pre.V" tag exists in the x/tools repo,
-// pointing to the release branch's head commit.
-// - The corresponding release tag "gopls/vX.Y.Z" does not exist in the repo.
-//
-// Returns the parsed semantic pre-release version from the input pre-release
-// version string.
-func (r *ReleaseGoplsTasks) isValidPrereleaseVersion(ctx *wf.TaskContext, version string) (semversion, error) {
-	if !semver.IsValid(version) {
-		return semversion{}, fmt.Errorf("the input %q version does not follow semantic version schema", version)
-	}
-
-	semv, ok := parseSemver(version)
-	if !ok {
-		return semversion{}, fmt.Errorf("invalid semantic version %q", version)
-	}
-	if semv.Pre == "" {
-		return semversion{}, fmt.Errorf("the input %q version does not contain any pre-release version.", version)
-	}
-
-	pre, err := semv.prereleaseVersion()
-	if err != nil {
-		return semversion{}, err
-	}
-
-	// Verify the release tag is absent.
+func (r *ReleaseGoplsTasks) latestPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
-		return semversion{}, err
+		return "", err
 	}
 
-	releaseTag := fmt.Sprintf("gopls/v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+	var versions []string
 	for _, tag := range tags {
-		if tag == releaseTag {
-			return semversion{}, fmt.Errorf("this version has been released, the release tag %s already exists.", releaseTag)
+		if v, ok := strings.CutPrefix(tag, "gopls/"); ok {
+			versions = append(versions, v)
 		}
 	}
 
-	// Check if the provided pre-release is the latest among all existing
-	// pre-release versions.
-	current, err := currentGoplsPrerelease(ctx, r.Gerrit, semv)
-	if err != nil {
-		return semversion{}, fmt.Errorf("failed to figure out the current prerelease version for gopls v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+	rc := latestVersion(versions, isSameMajorMinorPatch(semv), isPrereleaseMatchRegex(`^pre\.\d+$`))
+	if rc == (semversion{}) {
+		return "", fmt.Errorf("could not find any release candidate for v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
 	}
 
-	if current > pre {
-		return semversion{}, fmt.Errorf("there is a newer pre-release version available: %v.%v.%v-pre.%v", semv.Major, semv.Minor, semv.Patch, current)
-	}
-
-	if current < pre {
-		return semversion{}, fmt.Errorf("input pre-release version %s is not yet available. Latest available is %v.%v.%v-pre.%v", version, semv.Major, semv.Minor, semv.Patch, current)
-	}
-
-	// Check if the provided pre-release is the head of the branch.
-	branchName := goplsReleaseBranchName(semv)
-	head, err := r.Gerrit.ReadBranchHead(ctx, "tools", branchName)
-	if err != nil {
-		return semversion{}, err
-	}
-
-	tagInfo, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/%s", version))
-	if err != nil {
-		return semversion{}, err
-	}
-
-	if tagInfo.Revision != head {
-		return semversion{}, fmt.Errorf("x/tools branch %s's head commit is %s, but tag %s points to revision %s", branchName, head, fmt.Sprintf("gopls/%s", version), tagInfo.Revision)
-	}
-
-	return semv, nil
+	return rc.Pre, nil
 }
 
 // tagRelease locates the commit associated with the pre-release version and
 // applies the official release tag in form of "gopls/vX.Y.Z" to the same commit.
-func (r *ReleaseGoplsTasks) tagRelease(ctx *wf.TaskContext, semv semversion) error {
-	info, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, semv.Pre))
+func (r *ReleaseGoplsTasks) tagRelease(ctx *wf.TaskContext, semv semversion, prerelease string) error {
+	info, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, prerelease))
 	if err != nil {
 		return err
 	}

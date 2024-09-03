@@ -13,6 +13,65 @@ import (
 	"golang.org/x/build/internal/workflow"
 )
 
+func TestLatestVersion(t *testing.T) {
+	testcases := []struct {
+		name    string
+		input   []string
+		filters []func(semversion) bool
+		want    semversion
+	}{
+		{
+			name:  "choose the latest version v2.1.0",
+			input: []string{"v1.0.0", "v2.0.0", "v2.1.0"},
+			want:  semversion{Major: 2, Minor: 1, Patch: 0},
+		},
+		{
+			name:  "choose the latest version v2.2.0-pre.1",
+			input: []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1"},
+			want:  semversion{Major: 2, Minor: 2, Patch: 0, Pre: "pre.1"},
+		},
+		{
+			name:    "choose the latest pre-release version v2.2.0-pre.1",
+			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1", "v2.3.0"},
+			filters: []func(semversion) bool{isPrereleaseVersion},
+			want:    semversion{Major: 2, Minor: 2, Patch: 0, Pre: "pre.1"},
+		},
+		{
+			name:    "choose the latest release version v2.1.0",
+			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1"},
+			filters: []func(semversion) bool{isReleaseVersion},
+			want:    semversion{Major: 2, Minor: 1, Patch: 0},
+		},
+		{
+			name:    "choose the latest version among v2.2.0",
+			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.3", "v2.2.0-pre.2", "v2.2.0-pre.1", "v2.3.0"},
+			filters: []func(semversion) bool{isSameMajorMinorPatch(semversion{Major: 2, Minor: 2, Patch: 0})},
+			want:    semversion{Major: 2, Minor: 2, Patch: 0, Pre: "pre.3"},
+		},
+		{
+			name:    "release version is consider newer than prerelease version",
+			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0", "v2.2.0-pre.2", "v2.2.0-pre.3", "v2.2.0-pre.1", "v2.3.0"},
+			filters: []func(semversion) bool{isSameMajorMinorPatch(semversion{Major: 2, Minor: 2, Patch: 0})},
+			want:    semversion{Major: 2, Minor: 2, Patch: 0},
+		},
+		{
+			name:    "choose the latest pre-release version among v2.2.0",
+			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0", "v2.2.0-pre.2", "v2.2.0-pre.3", "v2.2.0-pre.1", "v2.3.0"},
+			filters: []func(semversion) bool{isPrereleaseVersion, isSameMajorMinorPatch(semversion{Major: 2, Minor: 2, Patch: 0})},
+			want:    semversion{Major: 2, Minor: 2, Patch: 0, Pre: "pre.3"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := latestVersion(tc.input, tc.filters...)
+			if got != tc.want {
+				t.Errorf("latestVersion() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 	testcases := []struct {
 		name          string
