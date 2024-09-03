@@ -434,11 +434,12 @@ func TestNextPrerelease(t *testing.T) {
 	}
 }
 
-func TestCreateReleaseIssue(t *testing.T) {
+func TestFindOrCreateReleaseIssue(t *testing.T) {
 	ctx := context.Background()
 	testcases := []struct {
 		name       string
 		version    string
+		create     bool
 		fakeGithub FakeGitHub
 		wantErr    bool
 		wantIssue  int64
@@ -446,12 +447,14 @@ func TestCreateReleaseIssue(t *testing.T) {
 		{
 			name:      "milestone does not exist",
 			version:   "v0.16.2",
+			create:    true,
 			wantErr:   true,
 			wantIssue: 0,
 		},
 		{
 			name:    "irrelevant milestone exist",
 			version: "v0.16.2",
+			create:  true,
 			fakeGithub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.1"},
 			},
@@ -459,8 +462,9 @@ func TestCreateReleaseIssue(t *testing.T) {
 			wantIssue: 0,
 		},
 		{
-			name:    "milestone exist, issue is missing, workflow should create this issue",
+			name:    "milestone exist, issue is missing, create true, workflow should create this issue",
 			version: "v0.16.2",
+			create:  true,
 			fakeGithub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
 			},
@@ -468,8 +472,30 @@ func TestCreateReleaseIssue(t *testing.T) {
 			wantIssue: 1,
 		},
 		{
-			name:    "milestone exist, issue exist, workflow should reuse the issue",
+			name:    "milestone exist, issue is missing, create false, workflow error out",
 			version: "v0.16.2",
+			create:  false,
+			fakeGithub: FakeGitHub{
+				Milestones: map[int]string{1: "gopls/v0.16.2"},
+			},
+			wantErr:   true,
+			wantIssue: 0,
+		},
+		{
+			name:    "milestone exist, issue exist, create true, workflow should reuse the issue",
+			version: "v0.16.2",
+			create:  true,
+			fakeGithub: FakeGitHub{
+				Milestones: map[int]string{1: "gopls/v0.16.2"},
+				Issues:     map[int]*github.Issue{2: {Number: github.Int(2), Title: github.String("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			},
+			wantErr:   false,
+			wantIssue: 2,
+		},
+		{
+			name:    "milestone exist, issue exist, create false, workflow should reuse the issue",
+			version: "v0.16.2",
+			create:  false,
 			fakeGithub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
 				Issues:     map[int]*github.Issue{2: {Number: github.Int(2), Title: github.String("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
@@ -489,7 +515,7 @@ func TestCreateReleaseIssue(t *testing.T) {
 			if !ok {
 				t.Fatalf("parseSemver(%q) should success", tc.version)
 			}
-			gotIssue, err := tasks.createReleaseIssue(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv)
+			gotIssue, err := tasks.findOrCreateGitHubIssue(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv, tc.create)
 
 			if tc.wantErr && err == nil {
 				t.Errorf("createReleaseIssue(%s) should return error but return nil", tc.version)

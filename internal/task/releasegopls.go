@@ -47,7 +47,7 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	prerelease := wf.Task1(wd, "find the pre-release version", r.nextPrereleaseVersion, semv)
 	approved := wf.Action2(wd, "wait for release coordinator approval", r.approveVersion, semv, prerelease)
 
-	issue := wf.Task1(wd, "create release git issue", r.createReleaseIssue, semv, wf.After(approved))
+	issue := wf.Task2(wd, "create release git issue", r.findOrCreateGitHubIssue, semv, wf.Const(true), wf.After(approved))
 	branchCreated := wf.Action1(wd, "create new branch if minor release", r.createBranchIfMinor, semv, wf.After(issue))
 
 	configChangeID := wf.Task3(wd, "update branch's codereview.cfg", r.updateCodeReviewConfig, semv, reviewers, issue, wf.After(branchCreated))
@@ -126,12 +126,13 @@ func (r *ReleaseGoplsTasks) approveVersion(ctx *wf.TaskContext, semv semversion,
 	return r.ApproveAction(ctx)
 }
 
-// createReleaseIssue attempts to locate the release issue associated with the
-// given milestone. If no such issue exists, a new one is created.
+// findOrCreateGitHubIssue locates or creates the release issue for the given
+// release milestone.
 //
-// Returns the ID of the release issue (either newly created or pre-existing).
-// Returns error if the release milestone does not exist or is closed.
-func (r *ReleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semversion) (int64, error) {
+// If the release issue exists, return the issue ID.
+// If 'create' is true and no issue exists, a new one is created.
+// If 'create' is false and no issue exists, an error is returned.
+func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, semv semversion, create bool) (int64, error) {
 	versionString := fmt.Sprintf("v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
 	milestoneName := fmt.Sprintf("gopls/%s", versionString)
 	// All milestones and issues resides under go repo.
@@ -157,6 +158,11 @@ func (r *ReleaseGoplsTasks) createReleaseIssue(ctx *wf.TaskContext, semv semvers
 		}
 	}
 
+	if !create {
+		return 0, fmt.Errorf("could not find any release issue for %s", versionString)
+	}
+
+	ctx.DisableRetries()
 	content := fmt.Sprintf(`This issue tracks progress toward releasing gopls@%s
 
 - [ ] create or update %s
@@ -635,7 +641,8 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	semv := wf.Task1(wd, "validating input version", r.isValidPrereleaseVersion, version)
 	tagged := wf.Action1(wd, "tag the release", r.tagRelease, semv)
 
-	changeID := wf.Task2(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, reviewers, semv, wf.After(tagged))
+	issue := wf.Task2(wd, "find release git issue", r.findOrCreateGitHubIssue, semv, wf.Const(false))
+	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, reviewers, semv, issue, wf.After(tagged))
 	_ = wf.Task1(wd, "await x/tools gopls dependency CL submission in gopls sub dir", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 
 	return wd
@@ -739,7 +746,7 @@ func (r *ReleaseGoplsTasks) tagRelease(ctx *wf.TaskContext, semv semversion) err
 // branch.
 //
 // Returns the change ID.
-func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewers []string, semv semversion) (string, error) {
+func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewers []string, semv semversion, issue int64) (string, error) {
 	if semv.Patch != 0 {
 		return "", nil
 	}
@@ -774,7 +781,7 @@ go mod tidy -compat=1.19
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",
 		Branch:  "master",
-		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the go.mod and go.sum.", clTitle),
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the go.mod and go.sum.\n\nFor golang/go#%v", clTitle, issue),
 	}
 
 	ctx.Printf("creating auto-submit change under master branch in x/tools repo.")
