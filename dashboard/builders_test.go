@@ -601,6 +601,8 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "vulndb"), both},
 		{b("linux-amd64-longtest", "vulndb"), onlyPost},
 
+		{b("linux-amd64-sid@go1.22", "pkgsite"), none},
+		{b("freebsd-amd64-13_0@go1.22", "pkgsite"), none},
 		{b("linux-amd64@go1.20", "pkgsite-metrics"), both},
 
 		{b("js-wasm-node18", "build"), none},

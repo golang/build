@@ -1237,6 +1237,10 @@ func (c *BuildConfig) buildsRepoAtAll(repo, branch, goBranch string) bool {
 				// Don't test exp against release branches; it's experimental.
 				return false
 			}
+			if repo == "pkgsite" && bmm.Less(types.MajorMinor{Major: 1, Minor: 23}) {
+				// x/pkgsite started requiring Go 1.23 sooner. See CL 609142.
+				return false
+			}
 		}
 	}
 
