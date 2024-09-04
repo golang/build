@@ -61,8 +61,8 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
 
-	vscodeGoChange := wf.Task4(wd, "update gopls version in vscode-go project", r.updateGoplsVersionInVSCodeGo, reviewers, issue, prereleaseVersion, wf.Const("master"), wf.After(prereleaseVerified))
-	_ = wf.Task1(wd, "await gopls version update CL submission in vscode-go project", clAwaiter{r.Gerrit}.awaitSubmission, vscodeGoChange)
+	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, reviewers, issue, release, prerelease, wf.After(prereleaseVerified))
+	_ = wf.Task1(wd, "await gopls version update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmissions, vscodeGoChanges)
 
 	wf.Output(wd, "version", prereleaseVersion)
 
@@ -501,40 +501,6 @@ func (r *ReleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversio
 	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
-func (r *ReleaseGoplsTasks) updateGoplsVersionInVSCodeGo(ctx *wf.TaskContext, reviewers []string, issue int64, version, branch string) (string, error) {
-	clTitle := fmt.Sprintf(`extension/src/goToolsInformation: update gopls version %s`, version)
-	if branch != "master" {
-		clTitle = "[" + branch + "] " + clTitle
-	}
-	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", branch, clTitle)
-	if err != nil {
-		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
-	}
-	if openCL != "" {
-		ctx.Printf("not creating CL: found existing CL %s", openCL)
-		return openCL, nil
-	}
-	const script = `go run -C extension tools/generate.go -tools`
-	changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, "vscode-go", branch, script, []string{"extension/src/goToolsInformation.ts"})
-	if err != nil {
-		return "", err
-	}
-
-	// Skip CL creation as nothing changed.
-	if len(changedFiles) == 0 {
-		return "", nil
-	}
-
-	changeInput := gerrit.ChangeInput{
-		Project: "vscode-go",
-		Branch:  branch,
-		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the gopls version.\n\nFor golang/go#%v", clTitle, issue),
-	}
-
-	ctx.Printf("creating auto-submit change under branch %q in vscode-go repo.", branch)
-	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changedFiles)
-}
-
 func (r *ReleaseGoplsTasks) isValidReleaseVersion(ctx *wf.TaskContext, ver string) error {
 	if !semver.IsValid(ver) {
 		return fmt.Errorf("the input %q version does not follow semantic version schema", ver)
@@ -680,6 +646,9 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, reviewers, release, issue, wf.After(tagged))
 	_ = wf.Task1(wd, "await x/tools gopls dependency CL submission in gopls sub dir", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 
+	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, reviewers, issue, release, wf.Const(""), wf.After(tagged))
+	_ = wf.Task1(wd, "await gopls version update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmissions, vscodeGoChanges)
+
 	return wd
 }
 
@@ -702,6 +671,67 @@ func (r *ReleaseGoplsTasks) latestPrerelease(ctx *wf.TaskContext, semv semversio
 	}
 
 	return rc.Pre, nil
+}
+
+// updateVSCodeGoGoplsVersion updates the gopls version in the vscode-go project.
+// For releases (input param prerelease is empty), it updates both the master
+// and release branches.
+// For pre-releases (input param prerelease is not empty), it updates only the
+// master branch.
+func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsVersion(ctx *wf.TaskContext, reviewers []string, issue int64, release semversion, prerelease string) ([]string, error) {
+	version := fmt.Sprintf("v%v.%v.%v", release.Major, release.Minor, release.Patch)
+	if prerelease != "" {
+		version = version + "-" + prerelease
+	}
+	branches := []string{"master"}
+	if prerelease == "" {
+		releaseBranch, err := vsCodeGoActiveReleaseBranch(ctx, r.Gerrit)
+		if err != nil {
+			return nil, err
+		}
+		branches = append(branches, releaseBranch)
+	}
+
+	var cls []string
+	for _, branch := range branches {
+		clTitle := fmt.Sprintf(`extension/src/goToolsInformation: update gopls version %s`, version)
+		if branch != "master" {
+			clTitle = "[" + branch + "] " + clTitle
+		}
+		openCL, err := openCL(ctx, r.Gerrit, "vscode-go", branch, clTitle)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
+		}
+		if openCL != "" {
+			ctx.Printf("not creating CL: found existing CL %s", openCL)
+			cls = append(cls, openCL)
+			continue
+		}
+		const script = `go run -C extension tools/generate.go -tools`
+		changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, "vscode-go", branch, script, []string{"extension/src/goToolsInformation.ts"})
+		if err != nil {
+			return nil, err
+		}
+
+		// Skip CL creation as nothing changed.
+		if len(changedFiles) == 0 {
+			continue
+		}
+
+		changeInput := gerrit.ChangeInput{
+			Project: "vscode-go",
+			Branch:  branch,
+			Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the gopls version.\n\nFor golang/go#%v", clTitle, issue),
+		}
+
+		cl, err := r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changedFiles)
+		if err != nil {
+			return nil, err
+		}
+		ctx.Printf("created auto-submit change %s under branch %q in vscode-go.", cl, branch)
+		cls = append(cls, cl)
+	}
+	return cls, nil
 }
 
 // tagRelease locates the commit associated with the pre-release version and
