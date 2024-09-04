@@ -1084,7 +1084,7 @@ func TestHostConfigIsVM(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf(tc.desc), func(t *testing.T) {
+		t.Run(tc.desc, func(t *testing.T) {
 			if got := tc.config.IsVM(); got != tc.want {
 				t.Errorf("HostConfig.IsVM() = %t; want %t", got, tc.want)
 			}

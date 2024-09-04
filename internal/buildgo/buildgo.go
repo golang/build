@@ -224,7 +224,7 @@ func VersionTgz(rev string) io.Reader {
 		}
 	}
 
-	contents := fmt.Sprintf("devel " + rev)
+	contents := "devel " + rev
 	check(tw.WriteHeader(&tar.Header{
 		Name: "VERSION",
 		Mode: 0644,

@@ -325,17 +325,17 @@ func fakeClientWithInstances(t *testing.T, count int, opts ...option) (*AWSClien
 
 func randomVMConfig() *EC2VMConfiguration {
 	return &EC2VMConfiguration{
-		Description:    fmt.Sprintf("description-" + randHex(4)),
-		ImageID:        fmt.Sprintf("image-" + randHex(4)),
-		Name:           fmt.Sprintf("name-" + randHex(4)),
-		SSHKeyID:       fmt.Sprintf("ssh-key-id-" + randHex(4)),
-		SecurityGroups: []string{fmt.Sprintf("sg-" + randHex(4))},
+		Description:    "description-" + randHex(4),
+		ImageID:        "image-" + randHex(4),
+		Name:           "name-" + randHex(4),
+		SSHKeyID:       "ssh-key-id-" + randHex(4),
+		SecurityGroups: []string{"sg-" + randHex(4)},
 		Tags: map[string]string{
-			fmt.Sprintf("tag-key-" + randHex(4)): fmt.Sprintf("tag-value-" + randHex(4)),
+			"tag-key-" + randHex(4): "tag-value-" + randHex(4),
 		},
-		Type:     fmt.Sprintf("type-" + randHex(4)),
-		UserData: fmt.Sprintf("user-data-" + randHex(4)),
-		Zone:     fmt.Sprintf("zone-" + randHex(4)),
+		Type:     "type-" + randHex(4),
+		UserData: "user-data-" + randHex(4),
+		Zone:     "zone-" + randHex(4),
 	}
 }
 

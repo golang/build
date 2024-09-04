@@ -1552,7 +1552,7 @@ func (tasks *BuildReleaseTasks) uploadModules(ctx *wf.TaskContext, version strin
 	want := map[string]bool{} // URLs we're waiting on becoming available.
 	for _, mod := range modules {
 		base := task.ToolchainModuleVersion(mod.Target, version)
-		if err := tasks.uploadFile(ctx, servingFS, mod.ZipScratch, fmt.Sprintf(base+".zip")); err != nil {
+		if err := tasks.uploadFile(ctx, servingFS, mod.ZipScratch, base+".zip"); err != nil {
 			return err
 		}
 		if err := gcsfs.WriteFile(servingFS, base+".info", []byte(mod.Info)); err != nil {
