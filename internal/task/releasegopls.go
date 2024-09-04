@@ -43,9 +43,9 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit version (optional)"})
 	reviewers := wf.Param(wd, reviewersParam)
 
-	release := wf.Task2(wd, "determine the version", r.determineReleaseVersion, inputVersion, versionBumpStrategy)
+	release := wf.Task2(wd, "determine the release version", r.determineReleaseVersion, inputVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
-	approved := wf.Action2(wd, "wait for release coordinator approval", r.approveVersion, release, prerelease)
+	approved := wf.Action2(wd, "wait for release coordinator approval", r.approvePrerelease, release, prerelease)
 
 	issue := wf.Task2(wd, "create release git issue", r.findOrCreateGitHubIssue, release, wf.Const(true), wf.After(approved))
 	branchCreated := wf.Action1(wd, "create new branch if minor release", r.createBranchIfMinor, release, wf.After(issue))
@@ -121,8 +121,17 @@ func (r *ReleaseGoplsTasks) interpretNextRelease(ctx *wf.TaskContext, versionBum
 	return version, nil
 }
 
-func (r *ReleaseGoplsTasks) approveVersion(ctx *wf.TaskContext, semv semversion, pre string) error {
+// approvePrerelease prompts the approval for creating a pre-release version.
+func (r *ReleaseGoplsTasks) approvePrerelease(ctx *wf.TaskContext, semv semversion, pre string) error {
 	ctx.Printf("The next release candidate will be v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
+
+	return r.ApproveAction(ctx)
+}
+
+// approveRelease prompts the approval for releasing a pre-release version.
+func (r *ReleaseGoplsTasks) approveRelease(ctx *wf.TaskContext, semv semversion, pre string) error {
+	ctx.Printf("The release candidate v%v.%v.%v-%s will be released", semv.Major, semv.Minor, semv.Patch, pre)
+
 	return r.ApproveAction(ctx)
 }
 
@@ -661,9 +670,11 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit pre-release version (optional)"})
 	reviewers := wf.Param(wd, reviewersParam)
 
-	release := wf.Task2(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy, inputVersion)
+	release := wf.Task2(wd, "determine the release version", r.determineReleaseVersion, inputVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the latest pre-release version", r.latestPrerelease, release)
-	tagged := wf.Action2(wd, "tag the release", r.tagRelease, release, prerelease)
+	approved := wf.Action2(wd, "wait for release coordinator approval", r.approveRelease, release, prerelease)
+
+	tagged := wf.Action2(wd, "tag the release", r.tagRelease, release, prerelease, wf.After(approved))
 
 	issue := wf.Task2(wd, "find release git issue", r.findOrCreateGitHubIssue, release, wf.Const(false))
 	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, reviewers, release, issue, wf.After(tagged))
