@@ -531,6 +531,9 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 }
 
 func TestGoplsPrereleaseFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping an end-to-end workflow test in short mode")
+	}
 	mustHaveShell(t)
 
 	testcases := []struct {
@@ -1016,6 +1019,310 @@ echo -n "foo" > file_b
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("executeAndMonitorChange() = %v want = %v", got, tc.want)
 			}
+		})
+	}
+}
+
+func TestGoplsReleaseFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping an end-to-end workflow test in short mode")
+	}
+	mustHaveShell(t)
+
+	testcases := []struct {
+		name string
+		// The fields below are the prepared states before running the gopls
+		// release flow.
+		// commitTags specifies a sequence of (possibly) tagged commits.
+		// For each entry, a new commit is created, and if the entry is
+		// non empty that commit is tagged with the entry value.
+		commitTags []string
+		// goplsGoMod specifies the content of gopls/go.mod in x/tools' master
+		// branch before the flow execution.
+		goplsGoMod string
+		semv       semversion
+
+		// The fields below are the desired states.
+		// wantPrereleaseTag is the expected prerelease tag in x/tools repo
+		// associated with the final release tag.
+		wantPrereleaseTag string
+		// wantCommit controls whether a commit should be made to a particular
+		// branch in a specified repository.
+		wantCommit map[string]map[string]bool
+		// wantGoplsGoMod specifies the desired content of gopls/go.mod in x/tools'
+		// master branch after the flow execution.
+		wantGoplsGoMod string
+	}{
+		{
+			name:              "release patch v0.16.3-pre.3, update vscode-go release and master branch",
+			commitTags:        []string{"gopls/v0.16.2", "gopls/v0.16.3-pre.1", "gopls/v0.16.3-pre.2", "gopls/v0.16.3-pre.3"},
+			goplsGoMod:        "foo",
+			semv:              semversion{Major: 0, Minor: 16, Patch: 3},
+			wantPrereleaseTag: "gopls/v0.16.3-pre.3",
+			wantCommit: map[string]map[string]bool{
+				"tools": {
+					"master": false, "gopls-release-branch.0.16": false,
+				},
+				"vscode-go": {
+					"master": true, "release-v0.44": true,
+				},
+			},
+			wantGoplsGoMod: "foo",
+		},
+		{
+			name:              "release minor v0.17.0-pre.2, update vscode-go release and master branch, update tools gopls go.mod",
+			commitTags:        []string{"gopls/v0.16.0", "gopls/v0.17.0-pre.1", "gopls/v0.17.0-pre.2"},
+			goplsGoMod:        "foo",
+			semv:              semversion{Major: 0, Minor: 17, Patch: 0},
+			wantPrereleaseTag: "gopls/v0.17.0-pre.2",
+			wantCommit: map[string]map[string]bool{
+				"tools": {
+					"master": true, "gopls-release-branch.0.17": false,
+				},
+				"vscode-go": {
+					"master": true, "release-v0.44": true,
+				},
+			},
+			wantGoplsGoMod: "bar",
+		},
+		{
+			name:              "release minor v0.17.0-pre.2, update vscode-go release and master branch, skip update tools gopls go.mod",
+			commitTags:        []string{"gopls/v0.16.0", "gopls/v0.17.0-pre.1", "gopls/v0.17.0-pre.2"},
+			goplsGoMod:        "bar",
+			semv:              semversion{Major: 0, Minor: 17, Patch: 0},
+			wantPrereleaseTag: "gopls/v0.17.0-pre.2",
+			wantCommit: map[string]map[string]bool{
+				"tools": {
+					"master": false, "gopls-release-branch.0.17": false,
+				},
+				"vscode-go": {
+					"master": true, "release-v0.44": true,
+				},
+			},
+			wantGoplsGoMod: "bar",
+		},
+	}
+
+	for _, tc := range testcases {
+		runTestWithInput := func(input map[string]any) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			releaseBranch := goplsReleaseBranchName(tc.semv)
+
+			vscodego := NewFakeRepo(t, "vscode-go")
+			initial := vscodego.Commit(map[string]string{
+				"extension/src/goToolsInformation.ts": "foo", // arbitrary initial contents, to be mutated by the fakeGo script below
+			})
+			vscodego.Branch("release-v0.44", initial)
+
+			tools := NewFakeRepo(t, "tools")
+			initial = tools.Commit(map[string]string{
+				"gopls/go.mod": tc.goplsGoMod,
+				"gopls/go.sum": "\n",
+			})
+			tools.Branch(releaseBranch, initial)
+			for i, tag := range tc.commitTags {
+				commit := tools.CommitOnBranch(releaseBranch, map[string]string{
+					"README.md": fmt.Sprintf("THIS IS READ ME FOR %v.", i),
+				})
+				if tag != "" {
+					tools.Tag(tag, commit)
+				}
+			}
+
+			gerrit := NewFakeGerrit(t, tools, vscodego)
+
+			// Var before records the initial state of the branch head prior to
+			// executing the release flow.
+			before := map[string]map[string]string{}
+			for repo := range tc.wantCommit {
+				if _, ok := before[repo]; !ok {
+					before[repo] = map[string]string{}
+				}
+				for branch := range tc.wantCommit[repo] {
+					commit, err := gerrit.ReadBranchHead(ctx, repo, branch)
+					if err != nil {
+						t.Fatal(err)
+					}
+					before[repo][branch] = commit
+				}
+			}
+
+			// fakeGo handles multiple arguments in gopls release flow:
+			// - go get will write "bar" content to gopls/go.mod in x/tools master
+			// branch to simulate the dependency upgrade.
+			// - go mod will exit without error.
+			// - go run will write "bar" content to file in vscode-go project
+			// containing gopls versions.
+			var fakeGo = fmt.Sprintf(`#!/bin/bash -exu
+
+case "$1" in
+"get")
+	echo -n "bar" > go.mod
+	exit 0
+	;;
+"mod")
+	exit 0
+	;;
+"run")
+	# Only update the goToolsInformation.ts if runs generate.go.
+	for param in "$@:2"; do
+			if [[ $param == *"generate.go"* ]]; then
+				echo -n "bar" > extension/src/goToolsInformation.ts
+			fi
+	done
+	exit 0
+	;;
+*)
+	echo unexpected command $@
+	exit 1
+	;;
+esac
+`)
+
+			tasks := &ReleaseGoplsTasks{
+				Gerrit:     gerrit,
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, fakeGo),
+				Github: &FakeGitHub{
+					Milestones: map[int]string{
+						1: fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),
+					},
+					Issues: map[int]*github.Issue{
+						1: {
+							Number:    github.Int(1),
+							Title:     github.String(fmt.Sprintf("x/tools/gopls: release version v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch)),
+							Milestone: &github.Milestone{ID: github.Int64(1)},
+						},
+					},
+				},
+				ApproveAction: func(tc *workflow.TaskContext) error { return nil },
+			}
+
+			wd := tasks.NewReleaseDefinition()
+			w, err := workflow.Start(wd, input)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = w.Run(ctx, &verboseListener{t: t})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Verify that the expected commits were made to each repository's branches.
+			// Ensure no unexpected commits were merged.
+			for repo := range tc.wantCommit {
+				for branch, wantCommit := range tc.wantCommit[repo] {
+					afterHead, err := gerrit.ReadBranchHead(ctx, repo, branch)
+					if err != nil {
+						t.Fatal(err)
+					}
+					beforeHead := before[repo][branch]
+
+					// The branch head commit should not change after the process runs.
+					if !wantCommit {
+						if afterHead != beforeHead {
+							t.Errorf("repo %s branch %s should not have any commit, before head %s, after head %s", repo, branch, beforeHead, afterHead)
+						}
+						continue
+					}
+
+					// The branch head should advance to the next commit.
+					var gitHistory []string
+					switch repo {
+					case "tools":
+						gitHistory = tools.History()
+					case "vscode-go":
+						gitHistory = vscodego.History()
+					default:
+						t.Fatal(fmt.Errorf("unexpected repo name %q", repo))
+					}
+					var beforeIndex, afterIndex int
+					for i, commit := range gitHistory {
+						if commit == beforeHead {
+							beforeIndex = i
+						}
+						if commit == afterHead {
+							afterIndex = i
+						}
+					}
+
+					if beforeIndex-afterIndex != 1 {
+						t.Errorf("the repo %s branch %s should have exactly one commit merged, before head %s, after head %s, history %v", repo, branch, beforeHead, afterHead, gitHistory)
+					}
+				}
+			}
+
+			// Verify the release tag exists and matches the expected prerelease tag.
+			wantCommit, err := gerrit.GetTag(ctx, "tools", tc.wantPrereleaseTag)
+			if err != nil {
+				t.Fatalf("can not get the commit for tag %s", tc.wantPrereleaseTag)
+			}
+			gotCommit, err := gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch))
+			if err != nil {
+				t.Errorf("can not get the commit for tag %s", fmt.Sprintf("gopls/v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch))
+			}
+			if wantCommit.Revision != gotCommit.Revision {
+				t.Errorf("the flow create release tag upon commit %s, but should tag on commit %s which have tag %s", gotCommit.Revision, wantCommit.Revision, tc.wantPrereleaseTag)
+			}
+
+			// Verify the content of following files are expected.
+			contentChecks := []struct {
+				repo   string
+				branch string
+				path   string
+				want   string
+			}{
+				{
+					repo:   "tools",
+					branch: "master",
+					path:   "gopls/go.mod",
+					want:   tc.wantGoplsGoMod,
+				},
+				{
+					repo:   "vscode-go",
+					branch: "master",
+					path:   "extension/src/goToolsInformation.ts",
+					want:   "bar",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "release-v0.44",
+					path:   "extension/src/goToolsInformation.ts",
+					want:   "bar",
+				},
+			}
+			for _, check := range contentChecks {
+				commit, err := gerrit.ReadBranchHead(ctx, check.repo, check.branch)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got, err := gerrit.ReadFile(ctx, check.repo, commit, check.path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(got) != check.want {
+					t.Errorf("Content of %q = %q, want %q", check.path, got, check.want)
+				}
+			}
+		}
+		t.Run("manual input version: "+tc.name, func(t *testing.T) {
+			runTestWithInput(map[string]any{
+				reviewersParam.Name:           []string(nil),
+				"explicit version (optional)": fmt.Sprintf("v%v.%v.%v", tc.semv.Major, tc.semv.Minor, tc.semv.Patch),
+				"next version":                "use explicit version",
+			})
+		})
+		versionBump := "next patch"
+		if tc.semv.Patch == 0 {
+			versionBump = "next minor"
+		}
+		t.Run("interpret version "+versionBump+": "+tc.name, func(t *testing.T) {
+			runTestWithInput(map[string]any{
+				reviewersParam.Name:           []string(nil),
+				"explicit version (optional)": "",
+				"next version":                versionBump,
+			})
 		})
 	}
 }

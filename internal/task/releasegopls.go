@@ -633,7 +633,7 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	// inputVersion allows manual override of the version, bypassing the version
 	// bump strategy.
 	// Use with caution.
-	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit pre-release version (optional)"})
+	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit version (optional)"})
 	reviewers := wf.Param(wd, reviewersParam)
 
 	release := wf.Task2(wd, "determine the release version", r.determineReleaseVersion, inputVersion, versionBumpStrategy)
