@@ -59,7 +59,7 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	verified := wf.Action1(wd, "verify installing latest gopls using release branch dependency commit", r.verifyGoplsInstallation, dependencyCommit)
 	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, release, dependencyCommit, prerelease, wf.After(verified))
 	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
-	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
+	wf.Action4(wd, "mail announcement", r.mailPrereleaseAnnouncement, release, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
 
 	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, reviewers, issue, release, prerelease, wf.After(prereleaseVerified))
 	_ = wf.Task1(wd, "await gopls version update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmissions, vscodeGoChanges)
@@ -484,10 +484,10 @@ type goplsPrereleaseAnnouncement struct {
 	Issue   int64
 }
 
-func (r *ReleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversion, prerelease, commit string, issue int64) error {
+func (r *ReleaseGoplsTasks) mailPrereleaseAnnouncement(ctx *wf.TaskContext, release semversion, rc, commit string, issue int64) error {
 	announce := goplsPrereleaseAnnouncement{
-		Version: prerelease,
-		Branch:  goplsReleaseBranchName(semv),
+		Version: rc,
+		Branch:  goplsReleaseBranchName(release),
 		Commit:  commit,
 		Issue:   issue,
 	}
@@ -498,6 +498,35 @@ func (r *ReleaseGoplsTasks) mailAnnouncement(ctx *wf.TaskContext, semv semversio
 	ctx.Printf("pre-announcement subject: %s\n\n", content.Subject)
 	ctx.Printf("pre-announcement body HTML:\n%s\n", content.BodyHTML)
 	ctx.Printf("pre-announcement body text:\n%s", content.BodyText)
+	return r.SendMail(r.AnnounceMailHeader, content)
+}
+
+type goplsReleaseAnnouncement struct {
+	Version string
+	Branch  string
+	Commit  string
+}
+
+func (r *ReleaseGoplsTasks) mailReleaseAnnouncement(ctx *wf.TaskContext, release semversion) error {
+	version := fmt.Sprintf("v%v.%v.%v", release.Major, release.Minor, release.Patch)
+
+	info, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/%s", version))
+	if err != nil {
+		return err
+	}
+
+	announce := goplsReleaseAnnouncement{
+		Version: version,
+		Branch:  goplsReleaseBranchName(release),
+		Commit:  info.Revision,
+	}
+	content, err := announcementMail(announce)
+	if err != nil {
+		return err
+	}
+	ctx.Printf("announcement subject: %s\n\n", content.Subject)
+	ctx.Printf("announcement body HTML:\n%s\n", content.BodyHTML)
+	ctx.Printf("announcement body text:\n%s", content.BodyText)
 	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
@@ -643,6 +672,8 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	tagged := wf.Action2(wd, "tag the release", r.tagRelease, release, prerelease, wf.After(approved))
 
 	issue := wf.Task2(wd, "find release git issue", r.findOrCreateGitHubIssue, release, wf.Const(false))
+	_ = wf.Action1(wd, "mail announcement", r.mailReleaseAnnouncement, release, wf.After(tagged))
+
 	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, reviewers, release, issue, wf.After(tagged))
 	_ = wf.Task1(wd, "await x/tools gopls dependency CL submission in gopls sub dir", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 

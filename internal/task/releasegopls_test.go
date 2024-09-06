@@ -1180,6 +1180,8 @@ case "$1" in
 esac
 `)
 
+			var gotSubject string // subject of the announcement email that was sent
+
 			tasks := &ReleaseGoplsTasks{
 				Gerrit:     gerrit,
 				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, fakeGo),
@@ -1194,6 +1196,10 @@ esac
 							Milestone: &github.Milestone{ID: github.Int64(1)},
 						},
 					},
+				},
+				SendMail: func(h MailHeader, c MailContent) error {
+					gotSubject = c.Subject
+					return nil
 				},
 				ApproveAction: func(tc *workflow.TaskContext) error { return nil },
 			}
@@ -1304,6 +1310,11 @@ esac
 				if string(got) != check.want {
 					t.Errorf("Content of %q = %q, want %q", check.path, got, check.want)
 				}
+			}
+
+			if wantSubject := fmt.Sprintf("Gopls v%v.%v.%v is released", tc.semv.Major, tc.semv.Minor, tc.semv.Patch); gotSubject != wantSubject {
+				// The full email content is checked by TestAnnouncementMail.
+				t.Errorf("NewReleaseDefinition().Run(): got email subject %q, want %q", gotSubject, wantSubject)
 			}
 		}
 		t.Run("manual input version: "+tc.name, func(t *testing.T) {
