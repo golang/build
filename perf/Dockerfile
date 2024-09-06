@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.21-bookworm AS builder
+FROM golang:1.23-bookworm AS build
 
 COPY go.mod /app/go.mod
 COPY go.sum /app/go.sum
@@ -23,5 +23,5 @@ RUN apt-get update && apt-get install -y \
 	ca-certificates \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/perf /
+COPY --from=build /app/perf /
 ENTRYPOINT ["/perf"]
