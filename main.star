@@ -1014,7 +1014,7 @@ RUN_MODS = dict(
     # will have no effect.
     perf_vs_gopls_0_11 = make_run_mod(
         add_props = {"perf_mode": {"baseline": "refs/heads/gopls-release-branch.0.11"}},
-        enabled = define_for_postsubmit(["tools"], go_branches = [branch for branch in GO_BRANCHES.keys() if branch != "gotip"]),
+        enabled = define_for_postsubmit(["tools"], go_branches = [LATEST_GO]),
     ),
 
     # Build and test with race mode enabled.
