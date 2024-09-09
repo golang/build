@@ -132,7 +132,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
-	approved := wf.Action2(wd, "await release coordinator's approval", r.approveVersion, release, prerelease)
+	approved := wf.Action2(wd, "await release coordinator's approval", r.approvePrereleaseVersion, release, prerelease)
 
 	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(approved))
 
@@ -286,7 +286,10 @@ func (r *ReleaseVSCodeGoTasks) tag(ctx *wf.TaskContext, commit string, release r
 func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
-	_ = wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
+	release := wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
+	commit := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"))
+
+	_ = wf.Action2(wd, "await release coordinator's approval", r.approveInsiderVersion, release, commit)
 
 	return wd
 }
@@ -399,7 +402,15 @@ func latestVersion(versions []string, filters ...func(releaseVersion, string) bo
 	return latestRelease, latestPre
 }
 
-func (r *ReleaseVSCodeGoTasks) approveVersion(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
+func (r *ReleaseVSCodeGoTasks) approvePrereleaseVersion(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
 	ctx.Printf("The next release candidate will be %s-%s", release, prerelease)
+	return r.ApproveAction(ctx)
+}
+
+func (r *ReleaseVSCodeGoTasks) approveInsiderVersion(ctx *wf.TaskContext, release releaseVersion, commit string) error {
+	// The insider version is picked from the actively developed master branch.
+	// The commit information is essential for the release coordinator.
+	ctx.Printf("The insider version v%v.%v.%v will released based on commit %s", release.Major, release.Minor, release.Patch, commit)
+	ctx.Printf("See commit detail: https://go.googlesource.com/vscode-go/+/%s", commit)
 	return r.ApproveAction(ctx)
 }
