@@ -281,6 +281,40 @@ func (r *ReleaseVSCodeGoTasks) tag(ctx *wf.TaskContext, commit string, release r
 	return nil
 }
 
+// NewInsiderDefinition create a new workflow definition for vscode-go insider
+// version release.
+func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
+	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
+
+	_ = wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
+
+	return wd
+}
+
+// determineInsiderVersion determines the release version for the upcoming
+// insider release of vscode-go by examining all existing tags in the repository.
+func (r *ReleaseVSCodeGoTasks) determineInsiderVersion(ctx *wf.TaskContext) (releaseVersion, error) {
+	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
+	if err != nil {
+		return releaseVersion{}, err
+	}
+
+	// The insider version must be higher than the latest stable version to be
+	// recognized by the marketplace.
+	// VSCode automatically updates extensions to the highest available version.
+	// https://code.visualstudio.com/api/working-with-extensions/publishing-extension#prerelease-extensions
+	release, _ := latestVersion(tags, isReleaseVersion, isVSCodeGoStableVersion)
+	major := release.Major
+	minor := release.Minor + 1
+
+	insider, _ := latestVersion(tags, isReleaseVersion, isSameMajorMinor(major, minor))
+	if insider == (releaseVersion{}) {
+		return releaseVersion{Major: major, Minor: minor, Patch: 0}, nil
+	}
+	insider.Patch += 1
+	return insider, nil
+}
+
 func isVSCodeGoStableVersion(release releaseVersion, _ string) bool {
 	return release.Minor%2 == 0
 }
@@ -303,7 +337,7 @@ func isPrereleaseVersion(_ releaseVersion, prerelease string) bool {
 
 // isPrereleaseMatchRegex reports whether the pre-release string of the input
 // version matches the regex expression.
-func isPrereleaseMatchRegex(regex string) func(releaseVersion, string)bool {
+func isPrereleaseMatchRegex(regex string) func(releaseVersion, string) bool {
 	return func(_ releaseVersion, prerelease string) bool {
 		if prerelease == "" {
 			return false
@@ -321,6 +355,12 @@ func isPrereleaseMatchRegex(regex string) func(releaseVersion, string)bool {
 func isSameReleaseVersion(want releaseVersion) func(releaseVersion, string) bool {
 	return func(got releaseVersion, _ string) bool {
 		return got == want
+	}
+}
+
+func isSameMajorMinor(major, minor int) func(releaseVersion, string) bool {
+	return func(got releaseVersion, _ string) bool {
+		return got.Major == major && got.Minor == minor
 	}
 }
 

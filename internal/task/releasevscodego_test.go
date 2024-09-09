@@ -357,3 +357,55 @@ func TestVSCodeGoActiveReleaseBranch(t *testing.T) {
 		})
 	}
 }
+
+func TestDetermineInsiderVersion(t *testing.T) {
+	testcases := []struct {
+		name         string
+		existingTags []string
+		want         releaseVersion
+	}{
+		{
+			name:         "pick v0.45.0 because there is no other v0.45.X",
+			existingTags: []string{"v0.44.0", "v0.44.1", "v0.44.2"},
+			want:         releaseVersion{Major: 0, Minor: 45, Patch: 0},
+		},
+		{
+			name:         "pick v0.45.3 because there is v0.45.2",
+			existingTags: []string{"v0.44.0", "v0.44.1", "v0.44.2", "v0.45.2"},
+			want:         releaseVersion{Major: 0, Minor: 45, Patch: 3},
+		},
+		{
+			name:         "pick v0.47.4 because there is v0.47.3",
+			existingTags: []string{"v0.44.0", "v0.45.2", "v0.46.0", "v0.47.3"},
+			want:         releaseVersion{Major: 0, Minor: 47, Patch: 4},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			commit := vscodego.Commit(map[string]string{
+				"go.mod": "module github.com/golang/vscode-go\n",
+				"go.sum": "\n",
+			})
+			for _, tag := range tc.existingTags {
+				vscodego.Tag(tag, commit)
+			}
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+
+			tasks := &ReleaseVSCodeGoTasks{
+				Gerrit: gerrit,
+			}
+
+			got, err := tasks.determineInsiderVersion(ctx)
+			if err != nil || got != tc.want {
+				t.Errorf("determineInsiderVersion() = (%v, %v), want (%v, nil)", got, err, tc.want)
+			}
+		})
+	}
+}

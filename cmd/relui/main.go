@@ -316,6 +316,7 @@ func main() {
 		ApproveAction: relui.ApproveActionDep(dbPool),
 	}
 	dh.RegisterDefinition("Create a vscode-go release candidate", releaseVSCodeGoTasks.NewPrereleaseDefinition())
+	dh.RegisterDefinition("Release a vscode-go insider version", releaseVSCodeGoTasks.NewInsiderDefinition())
 
 	tagTelemetryTasks := &task.TagTelemetryTasks{
 		Gerrit:     gerritClient,
