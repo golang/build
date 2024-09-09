@@ -136,7 +136,9 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(approved))
 
-	_ = wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(approved))
+	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(approved))
+	// TODO(hxjiang): replace empty commit with the branch's head once verified.
+	_ = wf.Action3(wd, "tag release candidate", r.tag, wf.Const(""), release, prerelease, wf.After(branched))
 
 	return wd
 }
@@ -270,6 +272,15 @@ func (r *ReleaseVSCodeGoTasks) nextPrereleaseVersion(ctx *wf.TaskContext, releas
 	return fmt.Sprintf("rc.%v", pre+1), nil
 }
 
+func (r *ReleaseVSCodeGoTasks) tag(ctx *wf.TaskContext, commit string, release releaseVersion, prerelease string) error {
+	tag := fmt.Sprintf("%s-%s", release, prerelease)
+	if err := r.Gerrit.Tag(ctx, "vscode-go", tag, commit); err != nil {
+		return err
+	}
+	ctx.Printf("tagged commit %s with tag %s", commit, tag)
+	return nil
+}
+
 func isVSCodeGoStableVersion(release releaseVersion, _ string) bool {
 	return release.Minor%2 == 0
 }
@@ -321,7 +332,7 @@ func latestVersion(versions []string, filters ...func(releaseVersion, string) bo
 	latestRelease := releaseVersion{}
 	latestPre := ""
 	for _, v := range versions {
-		release, prerelease, ok := parseVersion(v);
+		release, prerelease, ok := parseVersion(v)
 		if !ok {
 			continue
 		}
