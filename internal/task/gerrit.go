@@ -64,6 +64,22 @@ type GerritClient interface {
 	SetHashtags(ctx context.Context, changeID string, hashtags gerrit.HashtagsInput) error
 	// GetChange gets information about a specific change.
 	GetChange(ctx context.Context, changeID string, opts ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error)
+	// SubmitChange submits a specific change.
+	SubmitChange(ctx context.Context, changeID string) (gerrit.ChangeInfo, error)
+	// CreateCherryPick creates a cherry-pick change. If there are no merge
+	// conflicts, it starts trybots. If commitMessage is provided, the commit
+	// message is updated, otherwise it is taken from the original change.
+	// Reviewers are taken from the original change.
+	CreateCherryPick(ctx context.Context, changeID string, branch string, commitMessage string) (_ gerrit.ChangeInfo, conflicts bool, _ error)
+	// RebaseChange rebases a change onto a base revision. If revision is empty,
+	// the change is rebased directly on top of the target branch.
+	RebaseChange(ctx context.Context, changeID string, revision string) (gerrit.ChangeInfo, error)
+	// MoveChange moves a change onto a new branch.
+	MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error)
+	// GetRevisionActions retrieves revision actions.
+	GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error)
+	// GetCommitMessage retrieves the commit message for a change.
+	GetCommitMessage(ctx context.Context, changeID string) (string, error)
 }
 
 type RealGerritClient struct {
@@ -310,4 +326,47 @@ func (c *RealGerritClient) GetChange(ctx context.Context, changeID string, opts 
 func (c *RealGerritClient) SetHashtags(ctx context.Context, changeID string, hashtags gerrit.HashtagsInput) error {
 	_, err := c.Client.SetHashtags(ctx, changeID, hashtags)
 	return err
+}
+
+func (c *RealGerritClient) SubmitChange(ctx context.Context, changeID string) (gerrit.ChangeInfo, error) {
+	return c.Client.SubmitChange(ctx, changeID)
+}
+
+func (c *RealGerritClient) CreateCherryPick(ctx context.Context, changeID string, branch string, commitMessage string) (gerrit.ChangeInfo, bool, error) {
+	cpi := gerrit.CherryPickInput{Destination: branch, KeepReviewers: true, AllowConflicts: true, Message: commitMessage}
+	ci, err := c.Client.CherryPickRevision(ctx, changeID, "current", cpi)
+	if err != nil {
+		return gerrit.ChangeInfo{}, false, err
+	}
+	if ci.ContainsGitConflicts {
+		return ci, true, nil
+	}
+	if err := c.Client.SetReview(ctx, ci.ID, "current", gerrit.ReviewInput{
+		Labels: map[string]int{
+			"Commit-Queue": 1,
+		},
+	}); err != nil {
+		return gerrit.ChangeInfo{}, false, err
+	}
+	return ci, false, nil
+}
+
+func (c *RealGerritClient) MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error) {
+	return c.Client.MoveChange(ctx, changeID, gerrit.MoveInput{DestinationBranch: branch, KeepAllVotes: keepAllVotes})
+}
+
+func (c *RealGerritClient) RebaseChange(ctx context.Context, changeID string, base string) (gerrit.ChangeInfo, error) {
+	return c.Client.RebaseChange(ctx, changeID, gerrit.RebaseInput{Base: base, AllowConflicts: true})
+}
+
+func (c *RealGerritClient) GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error) {
+	return c.Client.GetRevisionActions(ctx, changeID, revision)
+}
+
+func (c *RealGerritClient) GetCommitMessage(ctx context.Context, changeID string) (string, error) {
+	cmi, err := c.Client.GetCommitMessage(ctx, changeID)
+	if err != nil {
+		return "", err
+	}
+	return cmi.FullMessage, nil
 }

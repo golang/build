@@ -365,6 +365,12 @@ func main() {
 	}
 	dh.RegisterDefinition("Publish a private patch to a x/ repo", privateXPatchTask.NewDefinition(tagTasks))
 
+	securityReleaseCoalesceTask := &task.SecurityReleaseCoalesceTask{
+		PrivateGerrit: privateGerritClient,
+		Version:       versionTasks,
+	}
+	dh.RegisterDefinition("Prepare internal security release branches", securityReleaseCoalesceTask.NewDefinition())
+
 	var base *url.URL
 	if *baseURL != "" {
 		base, err = url.Parse(*baseURL)

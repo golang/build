@@ -520,6 +520,30 @@ func (*FakeGerrit) GetChange(_ context.Context, _ string, _ ...gerrit.QueryChang
 	return nil, nil
 }
 
+func (*FakeGerrit) SubmitChange(ctx context.Context, changeID string) (gerrit.ChangeInfo, error) {
+	return gerrit.ChangeInfo{}, nil
+}
+
+func (*FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, branch string, message string) (gerrit.ChangeInfo, bool, error) {
+	return gerrit.ChangeInfo{}, false, nil
+}
+
+func (*FakeGerrit) MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error) {
+	return gerrit.ChangeInfo{}, nil
+}
+
+func (*FakeGerrit) RebaseChange(ctx context.Context, changeID string, baseRev string) (gerrit.ChangeInfo, error) {
+	return gerrit.ChangeInfo{}, nil
+}
+
+func (*FakeGerrit) GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error) {
+	return map[string]*gerrit.ActionInfo{}, nil
+}
+
+func (*FakeGerrit) GetCommitMessage(ctx context.Context, changeID string) (string, error) {
+	return "", nil
+}
+
 // NewFakeSignService returns a fake signing service that can sign PKGs, MSIs,
 // and generate GPG signatures. MSIs are "signed" by adding a suffix to them.
 // PKGs must actually be tarballs with a prefix of "I'm a PKG!\n". Any files

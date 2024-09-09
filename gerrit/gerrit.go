@@ -326,6 +326,9 @@ type ChangeInfo struct {
 	// MoreChanges is set on the last change from QueryChanges if
 	// the result set is truncated by an 'n' parameter.
 	MoreChanges bool `json:"_more_changes"`
+
+	// ContainsGitConflicts indicates if the change has merge conflicts.
+	ContainsGitConflicts bool `json:"contains_git_conflicts"`
 }
 
 // ReviewerUpdateInfo is a Gerrit data structure.
@@ -1203,4 +1206,76 @@ func (c *Client) GetCommitsInRefs(ctx context.Context, project string, commits, 
 	vals["ref"] = refs
 	err := c.do(ctx, &result, "GET", "/projects/"+url.PathEscape(project)+"/commits:in", urlValues(vals))
 	return result, err
+}
+
+// CherryPickRevision cherry picks a change revision to a destination branch.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#cherry-pick.
+func (c *Client) CherryPickRevision(ctx context.Context, changeID, revisionID string, cpi CherryPickInput) (ChangeInfo, error) {
+	var change ChangeInfo
+	err := c.do(ctx, &change, "POST", "/changes/"+changeID+"/revisions/"+revisionID+"/cherrypick", reqBodyJSON{&cpi}, wantResStatus(http.StatusOK))
+	return change, err
+}
+
+// CherryPickInput contains the options for creating a new cherry-pick.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#cherrypick-input.
+type CherryPickInput struct {
+	Destination    string `json:"destination"`
+	KeepReviewers  bool   `json:"keep_reviewers"`
+	AllowConflicts bool   `json:"allow_conflicts"`
+	Message        string `json:"message,omitempty"`
+}
+
+// MoveChange moves a change onto a destination branch.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#move-change.
+func (c *Client) MoveChange(ctx context.Context, changeID string, mi MoveInput) (ChangeInfo, error) {
+	var change ChangeInfo
+	err := c.do(ctx, &change, "POST", "/changes/"+changeID+"/move", reqBodyJSON{&mi}, wantResStatus(http.StatusOK))
+	return change, err
+}
+
+// MoveInput contains the options for moving a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#move-input.
+type MoveInput struct {
+	DestinationBranch string `json:"destination_branch"`
+	KeepAllVotes      bool   `json:"keep_all_votes"`
+}
+
+// RebaseChange rebases a change onto a new base revision, or directly on top of
+// the target branch.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#rebase-change.
+func (c *Client) RebaseChange(ctx context.Context, changeID string, ri RebaseInput) (ChangeInfo, error) {
+	var change ChangeInfo
+	err := c.do(ctx, &change, "POST", "/changes/"+changeID+"/rebase", reqBodyJSON{&ri}, wantResStatus(http.StatusOK))
+	return change, err
+}
+
+// RebaseInput contains the options for rebasing a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#rebase-input.
+type RebaseInput struct {
+	Base           string `json:"base,omitempty"`
+	AllowConflicts bool   `json:"allow_conflicts"`
+}
+
+// GetCommitMessage retrieves the commit message for a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-message.
+func (c *Client) GetCommitMessage(ctx context.Context, changeID string) (CommitMessageInfo, error) {
+	var cmi CommitMessageInfo
+	err := c.do(ctx, &cmi, "GET", "/changes/"+changeID+"/message")
+	return cmi, err
+}
+
+// CommitMessageInfo contains information about a commit message.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#commit-message-info.
+type CommitMessageInfo struct {
+	Subject     string            `json:"subject"`
+	FullMessage string            `json:"full_message"`
+	Footers     map[string]string `json:"footers"`
 }
