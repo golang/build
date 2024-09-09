@@ -130,16 +130,18 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	versionBumpStrategy := wf.Param(wd, nextVersionParam)
 
-	semv := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, versionBumpStrategy)
-	approved := wf.Action1(wd, "await release coordinator's approval", r.approveVersion, semv)
+	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
+	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
+	approved := wf.Action2(wd, "await release coordinator's approval", r.approveVersion, release, prerelease)
 
-	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, semv, wf.After(approved))
-	_ = wf.Action1(wd, "create release branch", r.createReleaseBranch, semv, wf.After(approved))
+	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(approved))
+
+	_ = wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(approved))
 
 	return wd
 }
 
-func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContext, semv semversion) (int, error) {
+func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContext, semv releaseVersion) (int, error) {
 	version := fmt.Sprintf("v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
 
 	// The vscode-go release milestone name matches the release version.
@@ -180,8 +182,8 @@ func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContex
 
 // createReleaseBranch creates corresponding release branch only for the initial
 // release candidate of a minor version.
-func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, semv semversion) error {
-	branch := fmt.Sprintf("release-v%v.%v", semv.Major, semv.Minor)
+func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
+	branch := fmt.Sprintf("release-v%v.%v", release.Major, release.Minor)
 	releaseHead, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", branch)
 
 	if err == nil {
@@ -194,11 +196,11 @@ func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, semv sem
 	}
 
 	// Require vscode release branch existence if this is a non-minor release.
-	if semv.Patch != 0 {
+	if release.Patch != 0 {
 		return fmt.Errorf("release branch is required for patch releases: %w", err)
 	}
 
-	rc, err := semv.prereleaseVersion()
+	rc, err := prereleaseNumber(prerelease)
 	if err != nil {
 		return err
 	}
@@ -224,86 +226,78 @@ func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, semv sem
 	return nil
 }
 
-// nextPrereleaseVersion determines the next pre-release version for the
-// upcoming stable release of vscode-go by examining all existing tags in the
-// repository.
+// determineReleaseVersion determines the release version for the upcoming
+// stable release of vscode-go by examining all existing tags in the repository.
 //
 // The versionBumpStrategy input indicates whether the pre-release should target
 // the next minor or next patch version.
-func (r *ReleaseVSCodeGoTasks) nextPrereleaseVersion(ctx *wf.TaskContext, versionBumpStrategy string) (semversion, error) {
+func (r *ReleaseVSCodeGoTasks) determineReleaseVersion(ctx *wf.TaskContext, versionBumpStrategy string) (releaseVersion, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
 	if err != nil {
-		return semversion{}, err
+		return releaseVersion{}, err
 	}
 
-	semv := latestVersion(tags, isReleaseVersion, vsCodeGoStableVersion)
+	release, _ := latestVersion(tags, isReleaseVersion, isVSCodeGoStableVersion)
 	switch versionBumpStrategy {
 	case "next minor":
-		semv.Minor += 2
-		semv.Patch = 0
+		release.Minor += 2
+		release.Patch = 0
 	case "next patch":
-		semv.Patch += 1
+		release.Patch += 1
 	default:
-		return semversion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
+		return releaseVersion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
+	}
+	return release, err
+}
+
+// nextPrereleaseVersion inspects the tags in vscode-go repo that match with the
+// given version and finds the next pre-release version.
+func (r *ReleaseVSCodeGoTasks) nextPrereleaseVersion(ctx *wf.TaskContext, release releaseVersion) (string, error) {
+	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
+	if err != nil {
+		return "", err
 	}
 
-	// latest to track the latest pre-release for the given semantic version.
-	latest := 0
-	for _, v := range tags {
-		cur, ok := parseSemver(v)
-		if !ok {
-			continue
-		}
-
-		if cur.Pre == "" {
-			continue
-		}
-
-		if cur.Major != semv.Major || cur.Minor != semv.Minor || cur.Patch != semv.Patch {
-			continue
-		}
-
-		pre, err := cur.prereleaseVersion()
-		if err != nil {
-			continue
-		}
-		if pre > latest {
-			latest = pre
-		}
+	_, prerelease := latestVersion(tags, isSameReleaseVersion(release), isPrereleaseMatchRegex(`^rc\.\d+$`))
+	if prerelease == "" {
+		return "rc.1", nil
 	}
 
-	semv.Pre = fmt.Sprintf("rc.%v", latest+1)
-	return semv, err
+	pre, err := prereleaseNumber(prerelease)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("rc.%v", pre+1), nil
 }
 
-func vsCodeGoStableVersion(semv semversion) bool {
-	return semv.Minor%2 == 0
+func isVSCodeGoStableVersion(release releaseVersion, _ string) bool {
+	return release.Minor%2 == 0
 }
 
-func vsCodeGoInsiderVersion(semv semversion) bool {
-	return semv.Minor%2 == 1
+func isVSCodeGoInsiderVersion(release releaseVersion, _ string) bool {
+	return release.Minor%2 == 1
 }
 
-// isReleaseVersion reports whether semv is a release version.
+// isReleaseVersion reports whether input version is a release version.
 // (in other words, not a prerelease).
-func isReleaseVersion(semv semversion) bool {
-	return semv.Pre == ""
+func isReleaseVersion(_ releaseVersion, prerelease string) bool {
+	return prerelease == ""
 }
 
-// isPrereleaseVersion reports whether semv is a pre-release version.
+// isPrereleaseVersion reports whether input version is a pre-release version.
 // (in other words, not a release).
-func isPrereleaseVersion(semv semversion) bool {
-	return semv.Pre != ""
+func isPrereleaseVersion(_ releaseVersion, prerelease string) bool {
+	return prerelease != ""
 }
 
 // isPrereleaseMatchRegex reports whether the pre-release string of the input
 // version matches the regex expression.
-func isPrereleaseMatchRegex(regex string) func(semversion) bool {
-	return func(semv semversion) bool {
-		if semv.Pre == "" {
+func isPrereleaseMatchRegex(regex string) func(releaseVersion, string)bool {
+	return func(_ releaseVersion, prerelease string) bool {
+		if prerelease == "" {
 			return false
 		}
-		matched, err := regexp.MatchString(regex, semv.Pre)
+		matched, err := regexp.MatchString(regex, prerelease)
 		if err != nil {
 			return false
 		}
@@ -311,27 +305,30 @@ func isPrereleaseMatchRegex(regex string) func(semversion) bool {
 	}
 }
 
-func isSameMajorMinorPatch(want semversion) func(semversion) bool {
-	return func(got semversion) bool {
-		return got.Major == want.Major && got.Minor == want.Minor && got.Patch == want.Patch
+// isSameReleaseVersion reports whether the version string have the same release
+// version(same major minor and patch) as input.
+func isSameReleaseVersion(want releaseVersion) func(releaseVersion, string) bool {
+	return func(got releaseVersion, _ string) bool {
+		return got == want
 	}
 }
 
-// latestVersion returns the latest version in the provided version list,
-// considering only versions that match all the specified filters.
-// Strings not following semantic versioning are ignored.
-func latestVersion(versions []string, filters ...func(semversion) bool) semversion {
+// latestVersion returns the releaseVersion and the prerelease tag of the latest
+// version from the provided version strings.
+// It considers only versions that are valid and match all the filters.
+func latestVersion(versions []string, filters ...func(releaseVersion, string) bool) (releaseVersion, string) {
 	latest := ""
-	latestSemv := semversion{}
+	latestRelease := releaseVersion{}
+	latestPre := ""
 	for _, v := range versions {
-		semv, ok := parseSemver(v)
+		release, prerelease, ok := parseVersion(v);
 		if !ok {
 			continue
 		}
 
 		match := true
 		for _, filter := range filters {
-			if !filter(semv) {
+			if !filter(release, prerelease) {
 				match = false
 				break
 			}
@@ -343,14 +340,15 @@ func latestVersion(versions []string, filters ...func(semversion) bool) semversi
 
 		if semver.Compare(v, latest) == 1 {
 			latest = v
-			latestSemv = semv
+			latestRelease = release
+			latestPre = prerelease
 		}
 	}
 
-	return latestSemv
+	return latestRelease, latestPre
 }
 
-func (r *ReleaseVSCodeGoTasks) approveVersion(ctx *wf.TaskContext, semv semversion) error {
-	ctx.Printf("The next release candidate will be v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, semv.Pre)
+func (r *ReleaseVSCodeGoTasks) approveVersion(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
+	ctx.Printf("The next release candidate will be %s-%s", release, prerelease)
 	return r.ApproveAction(ctx)
 }

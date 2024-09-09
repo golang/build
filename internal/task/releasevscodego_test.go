@@ -15,58 +15,74 @@ import (
 
 func TestLatestVersion(t *testing.T) {
 	testcases := []struct {
-		name    string
-		input   []string
-		filters []func(semversion) bool
-		want    semversion
+		name           string
+		input          []string
+		filters        []func(releaseVersion, string) bool
+		wantRelease    releaseVersion
+		wantPrerelease string
 	}{
 		{
-			name:  "choose the latest version v2.1.0",
-			input: []string{"v1.0.0", "v2.0.0", "v2.1.0"},
-			want:  semversion{Major: 2, Minor: 1, Patch: 0},
+			name:           "choose the latest version v2.1.0",
+			input:          []string{"v1.0.0", "v2.0.0", "v2.1.0"},
+			wantRelease:    releaseVersion{Major: 2, Minor: 1, Patch: 0},
+			wantPrerelease: "",
 		},
 		{
-			name:  "choose the latest version v2.2.0-pre.1",
-			input: []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1"},
-			want:  semversion{Major: 2, Minor: 2, Patch: 0, Pre: "pre.1"},
+			name:           "choose the latest version v2.2.0-pre.1",
+			input:          []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1"},
+			wantRelease:    releaseVersion{Major: 2, Minor: 2, Patch: 0},
+			wantPrerelease: "pre.1",
 		},
 		{
-			name:    "choose the latest pre-release version v2.2.0-pre.1",
-			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1", "v2.3.0"},
-			filters: []func(semversion) bool{isPrereleaseVersion},
-			want:    semversion{Major: 2, Minor: 2, Patch: 0, Pre: "pre.1"},
+			name:           "choose the latest pre-release version v2.2.0-pre.1",
+			input:          []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1", "v2.3.0"},
+			filters:        []func(releaseVersion, string) bool{isPrereleaseVersion},
+			wantRelease:    releaseVersion{Major: 2, Minor: 2, Patch: 0},
+			wantPrerelease: "pre.1",
 		},
 		{
-			name:    "choose the latest release version v2.1.0",
-			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1"},
-			filters: []func(semversion) bool{isReleaseVersion},
-			want:    semversion{Major: 2, Minor: 1, Patch: 0},
+			name:        "choose the latest release version v2.1.0",
+			input:       []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.1"},
+			filters:     []func(releaseVersion, string) bool{isReleaseVersion},
+			wantRelease: releaseVersion{Major: 2, Minor: 1, Patch: 0},
 		},
 		{
-			name:    "choose the latest version among v2.2.0",
-			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.3", "v2.2.0-pre.2", "v2.2.0-pre.1", "v2.3.0"},
-			filters: []func(semversion) bool{isSameMajorMinorPatch(semversion{Major: 2, Minor: 2, Patch: 0})},
-			want:    semversion{Major: 2, Minor: 2, Patch: 0, Pre: "pre.3"},
+			name:           "choose the latest version among v2.2.0",
+			input:          []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0-pre.3", "v2.2.0-pre.2", "v2.2.0-pre.1", "v2.3.0"},
+			filters:        []func(releaseVersion, string) bool{isSameReleaseVersion(releaseVersion{Major: 2, Minor: 2, Patch: 0})},
+			wantRelease:    releaseVersion{Major: 2, Minor: 2, Patch: 0},
+			wantPrerelease: "pre.3",
 		},
 		{
-			name:    "release version is consider newer than prerelease version",
-			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0", "v2.2.0-pre.2", "v2.2.0-pre.3", "v2.2.0-pre.1", "v2.3.0"},
-			filters: []func(semversion) bool{isSameMajorMinorPatch(semversion{Major: 2, Minor: 2, Patch: 0})},
-			want:    semversion{Major: 2, Minor: 2, Patch: 0},
+			name:        "release version is consider newer than prerelease version",
+			input:       []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0", "v2.2.0-pre.2", "v2.2.0-pre.3", "v2.2.0-pre.1", "v2.3.0"},
+			filters:     []func(releaseVersion, string) bool{isSameReleaseVersion(releaseVersion{Major: 2, Minor: 2, Patch: 0})},
+			wantRelease: releaseVersion{Major: 2, Minor: 2, Patch: 0},
 		},
 		{
-			name:    "choose the latest pre-release version among v2.2.0",
-			input:   []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0", "v2.2.0-pre.2", "v2.2.0-pre.3", "v2.2.0-pre.1", "v2.3.0"},
-			filters: []func(semversion) bool{isPrereleaseVersion, isSameMajorMinorPatch(semversion{Major: 2, Minor: 2, Patch: 0})},
-			want:    semversion{Major: 2, Minor: 2, Patch: 0, Pre: "pre.3"},
+			name:           "choose the latest pre-release version among v2.2.0",
+			input:          []string{"v1.0.0", "v2.0.0", "v2.1.0", "v2.2.0", "v2.2.0-pre.2", "v2.2.0-pre.3", "v2.2.0-pre.1", "v2.3.0"},
+			filters:        []func(releaseVersion, string) bool{isPrereleaseVersion, isSameReleaseVersion(releaseVersion{Major: 2, Minor: 2, Patch: 0})},
+			wantRelease:    releaseVersion{Major: 2, Minor: 2, Patch: 0},
+			wantPrerelease: "pre.3",
+		},
+		{
+			name:           "choose the latest pre-release version matching pattern among v2.2.0",
+			input:          []string{"v2.2.0-pre.2", "v2.2.0-pre.3"},
+			filters:        []func(releaseVersion, string) bool{isPrereleaseMatchRegex(`^pre\.\d+$`), isSameReleaseVersion(releaseVersion{Major: 2, Minor: 2, Patch: 0})},
+			wantRelease:    releaseVersion{Major: 2, Minor: 2, Patch: 0},
+			wantPrerelease: "pre.3",
 		},
 	}
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := latestVersion(tc.input, tc.filters...)
-			if got != tc.want {
-				t.Errorf("latestVersion() = %v, want %v", got, tc.want)
+			gotRelease, gotPrerelease := latestVersion(tc.input, tc.filters...)
+			if gotRelease != tc.wantRelease {
+				t.Errorf("latestVersion() = %v, want %v", gotRelease, tc.wantRelease)
+			}
+			if gotPrerelease != tc.wantPrerelease {
+				t.Errorf("latestVersion() = %v, want %v", gotPrerelease, tc.wantPrerelease)
 			}
 		})
 	}
@@ -114,11 +130,11 @@ func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 				GitHub: &tc.fakeGithub,
 			}
 
-			semv, ok := parseSemver(tc.version)
+			release, _, ok := parseVersion(tc.version)
 			if !ok {
-				t.Fatalf("parseSemver(%q) should success", tc.version)
+				t.Fatalf("parseVersion(%q) failed", tc.version)
 			}
-			issueNumber, err := tasks.createReleaseMilestoneAndIssue(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, semv)
+			issueNumber, err := tasks.createReleaseMilestoneAndIssue(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, release)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -181,7 +197,7 @@ func TestCreateReleaseBranch(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			semv, ok := parseSemver(tc.version)
+			release, prerelease, ok := parseVersion(tc.version)
 			if !ok {
 				t.Fatalf("failed to parse the want version: %q", tc.version)
 			}
@@ -192,7 +208,7 @@ func TestCreateReleaseBranch(t *testing.T) {
 				"go.sum": "\n",
 			})
 			if tc.existingBranch {
-				vscodego.Branch(fmt.Sprintf("release-v%v.%v", semv.Major, semv.Minor), commit)
+				vscodego.Branch(fmt.Sprintf("release-v%v.%v", release.Major, release.Minor), commit)
 			}
 
 			gerrit := NewFakeGerrit(t, vscodego)
@@ -200,7 +216,7 @@ func TestCreateReleaseBranch(t *testing.T) {
 				Gerrit: gerrit,
 			}
 
-			err := tasks.createReleaseBranch(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, semv)
+			err := tasks.createReleaseBranch(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, prerelease)
 			if tc.wantErr && err == nil {
 				t.Errorf("createReleaseBranch(%q) should return error but return nil", tc.version)
 			} else if !tc.wantErr && err != nil {
@@ -208,7 +224,7 @@ func TestCreateReleaseBranch(t *testing.T) {
 			}
 
 			if !tc.wantErr {
-				if _, err := gerrit.ReadBranchHead(ctx, "vscode-go", fmt.Sprintf("release-v%v.%v", semv.Major, semv.Minor)); err != nil {
+				if _, err := gerrit.ReadBranchHead(ctx, "vscode-go", fmt.Sprintf("release-v%v.%v", release.Major, release.Minor)); err != nil {
 					t.Errorf("createReleaseBranch(%q) should ensure the release branch creation: %v", tc.version, err)
 				}
 			}
@@ -216,36 +232,42 @@ func TestCreateReleaseBranch(t *testing.T) {
 	}
 }
 
-func TestNextPrereleaseVersion(t *testing.T) {
+func TestDetermineReleaseAndNextPrereleaseVersion(t *testing.T) {
+	ctx := workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
 	tests := []struct {
-		name         string
-		existingTags []string
-		versionRule  string
-		wantVersion  string
+		name           string
+		existingTags   []string
+		versionRule    string
+		wantRelease    releaseVersion
+		wantPrerelease string
 	}{
 		{
-			name:         "v0.44.0 have not released, have no release candidate",
-			existingTags: []string{"v0.44.0", "v0.43.0", "v0.42.0"},
-			versionRule:  "next minor",
-			wantVersion:  "v0.46.0-rc.1",
+			name:           "v0.44.0 have not released, have no release candidate",
+			existingTags:   []string{"v0.44.0", "v0.43.0", "v0.42.0"},
+			versionRule:    "next minor",
+			wantRelease:    releaseVersion{Major: 0, Minor: 46, Patch: 0},
+			wantPrerelease: "rc.1",
 		},
 		{
-			name:         "v0.44.0 have not released but already have two release candidate",
-			existingTags: []string{"v0.44.0-rc.1", "v0.44.0-rc.2", "v0.43.0", "v0.42.0"},
-			versionRule:  "next minor",
-			wantVersion:  "v0.44.0-rc.3",
+			name:           "v0.44.0 have not released but already have two release candidate",
+			existingTags:   []string{"v0.44.0-rc.1", "v0.44.0-rc.2", "v0.43.0", "v0.42.0"},
+			versionRule:    "next minor",
+			wantRelease:    releaseVersion{Major: 0, Minor: 44, Patch: 0},
+			wantPrerelease: "rc.3",
 		},
 		{
-			name:         "v0.44.3 have not released, have no release candidate",
-			existingTags: []string{"v0.44.2-rc.1", "v0.44.2", "v0.44.1", "v0.44.1-rc.1"},
-			versionRule:  "next patch",
-			wantVersion:  "v0.44.3-rc.1",
+			name:           "v0.44.3 have not released, have no release candidate",
+			existingTags:   []string{"v0.44.2-rc.1", "v0.44.2", "v0.44.1", "v0.44.1-rc.1"},
+			versionRule:    "next patch",
+			wantRelease:    releaseVersion{Major: 0, Minor: 44, Patch: 3},
+			wantPrerelease: "rc.1",
 		},
 		{
-			name:         "v0.44.3 have not released but already have one release candidate",
-			existingTags: []string{"v0.44.3-rc.1", "v0.44.2", "v0.44.2-rc.1", "v0.44.1", "v0.44.1-rc.1"},
-			versionRule:  "next patch",
-			wantVersion:  "v0.44.3-rc.2",
+			name:           "v0.44.3 have not released but already have one release candidate",
+			existingTags:   []string{"v0.44.3-rc.1", "v0.44.2", "v0.44.2-rc.1", "v0.44.1", "v0.44.1-rc.1"},
+			versionRule:    "next patch",
+			wantRelease:    releaseVersion{Major: 0, Minor: 44, Patch: 3},
+			wantPrerelease: "rc.2",
 		},
 	}
 
@@ -267,23 +289,18 @@ func TestNextPrereleaseVersion(t *testing.T) {
 				Gerrit: gerrit,
 			}
 
-			got, err := tasks.nextPrereleaseVersion(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, tc.versionRule)
-			if err != nil {
-				t.Fatal(err)
+			gotRelease, err := tasks.determineReleaseVersion(&ctx, tc.versionRule)
+			if err != nil || gotRelease != tc.wantRelease {
+				t.Errorf("determineReleaseVersion(%q) = (%v, %v), want (%v, nil)", tc.versionRule, gotRelease, err, tc.wantRelease)
 			}
 
-			want, ok := parseSemver(tc.wantVersion)
-			if !ok {
-				t.Fatalf("failed to parse the want version: %q", tc.wantVersion)
-			}
-
-			if want != got {
-				t.Errorf("nextPrereleaseVersion(%q) = %v but want %v", tc.versionRule, got, want)
+			gotPrerelease, err := tasks.nextPrereleaseVersion(&ctx, gotRelease)
+			if err != nil || tc.wantPrerelease != gotPrerelease {
+				t.Errorf("nextPrerelease(%v) = (%s, %v) but want (%s, nil)", gotRelease, gotPrerelease, err, tc.wantPrerelease)
 			}
 		})
 	}
 }
-
 func TestVSCodeGoActiveReleaseBranch(t *testing.T) {
 	testcases := []struct {
 		name             string
@@ -337,7 +354,6 @@ func TestVSCodeGoActiveReleaseBranch(t *testing.T) {
 			if tc.want != got {
 				t.Errorf("vsCodeGoActiveReleaseBranch() = %q, want %q", got, tc.want)
 			}
-
 		})
 	}
 }

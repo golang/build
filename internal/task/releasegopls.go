@@ -73,31 +73,34 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 //
 // Returns the specified input version if provided; otherwise, interpret a new
 // version based on the version bumping strategy.
-func (r *ReleaseGoplsTasks) determineReleaseVersion(ctx *wf.TaskContext, inputVersion, versionBumpStrategy string) (semversion, error) {
+func (r *ReleaseGoplsTasks) determineReleaseVersion(ctx *wf.TaskContext, inputVersion, versionBumpStrategy string) (releaseVersion, error) {
 	switch versionBumpStrategy {
 	case "use explicit version":
 		if inputVersion == "" {
-			return semversion{}, fmt.Errorf("the input version should not be empty when choosing explicit version release")
+			return releaseVersion{}, fmt.Errorf("the input version should not be empty when choosing explicit version release")
 		}
 		if err := r.isValidReleaseVersion(ctx, inputVersion); err != nil {
-			return semversion{}, err
+			return releaseVersion{}, err
 		}
-		semv, ok := parseSemver(inputVersion)
+		release, prerelease, ok := parseVersion(inputVersion)
 		if !ok {
-			return semversion{}, fmt.Errorf("input version %q can not be parsed as semantic version", inputVersion)
+			return releaseVersion{}, fmt.Errorf("input version %q can not be parsed as semantic version", inputVersion)
 		}
-		return semv, nil
+		if prerelease != "" {
+			return releaseVersion{}, fmt.Errorf("input version %q can not be a prerelease version", inputVersion)
+		}
+		return release, nil
 	case "next minor", "next patch":
 		return r.interpretNextRelease(ctx, versionBumpStrategy)
 	default:
-		return semversion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
+		return releaseVersion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
 	}
 }
 
-func (r *ReleaseGoplsTasks) interpretNextRelease(ctx *wf.TaskContext, versionBumpStrategy string) (semversion, error) {
+func (r *ReleaseGoplsTasks) interpretNextRelease(ctx *wf.TaskContext, versionBumpStrategy string) (releaseVersion, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
-		return semversion{}, err
+		return releaseVersion{}, err
 	}
 
 	var versions []string
@@ -107,30 +110,30 @@ func (r *ReleaseGoplsTasks) interpretNextRelease(ctx *wf.TaskContext, versionBum
 		}
 	}
 
-	version := latestVersion(versions, isReleaseVersion)
+	release, _ := latestVersion(versions, isReleaseVersion)
 	switch versionBumpStrategy {
 	case "next minor":
-		version.Minor += 1
-		version.Patch = 0
+		release.Minor += 1
+		release.Patch = 0
 	case "next patch":
-		version.Patch += 1
+		release.Patch += 1
 	default:
-		return semversion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
+		return releaseVersion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
 	}
 
-	return version, nil
+	return release, nil
 }
 
 // approvePrerelease prompts the approval for creating a pre-release version.
-func (r *ReleaseGoplsTasks) approvePrerelease(ctx *wf.TaskContext, semv semversion, pre string) error {
-	ctx.Printf("The next release candidate will be v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
+func (r *ReleaseGoplsTasks) approvePrerelease(ctx *wf.TaskContext, release releaseVersion, pre string) error {
+	ctx.Printf("The next release candidate will be %s-%s", release, pre)
 
 	return r.ApproveAction(ctx)
 }
 
 // approveRelease prompts the approval for releasing a pre-release version.
-func (r *ReleaseGoplsTasks) approveRelease(ctx *wf.TaskContext, semv semversion, pre string) error {
-	ctx.Printf("The release candidate v%v.%v.%v-%s will be released", semv.Major, semv.Minor, semv.Patch, pre)
+func (r *ReleaseGoplsTasks) approveRelease(ctx *wf.TaskContext, release releaseVersion, pre string) error {
+	ctx.Printf("The release candidate %s-%s will be released as %s", release, pre, release)
 
 	return r.ApproveAction(ctx)
 }
@@ -141,8 +144,8 @@ func (r *ReleaseGoplsTasks) approveRelease(ctx *wf.TaskContext, semv semversion,
 // If the release issue exists, return the issue ID.
 // If 'create' is true and no issue exists, a new one is created.
 // If 'create' is false and no issue exists, an error is returned.
-func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, semv semversion, create bool) (int64, error) {
-	versionString := fmt.Sprintf("v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, release releaseVersion, create bool) (int64, error) {
+	versionString := release.String()
 	milestoneName := fmt.Sprintf("gopls/%s", versionString)
 	// All milestones and issues resides under go repo.
 	milestoneID, err := r.Github.FetchMilestone(ctx, "golang", "go", milestoneName, false)
@@ -182,7 +185,7 @@ func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, semv se
 - [ ] smoke test features
 - [ ] tag gopls/%s
 - [ ] (if vX.Y.0 release): update dependencies in master for the next release
-`, versionString, goplsReleaseBranchName(semv), versionString, versionString)
+`, versionString, goplsReleaseBranchName(release), versionString, versionString)
 	// TODO(hxjiang): accept a new parameter release coordinator.
 	assignee := "h9jiang"
 	issue, _, err := r.Github.CreateIssue(ctx, "golang", "go", &github.IssueRequest{
@@ -200,18 +203,18 @@ func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, semv se
 }
 
 // goplsReleaseBranchName returns the branch name for given input release version.
-func goplsReleaseBranchName(semv semversion) string {
-	return fmt.Sprintf("gopls-release-branch.%v.%v", semv.Major, semv.Minor)
+func goplsReleaseBranchName(release releaseVersion) string {
+	return fmt.Sprintf("gopls-release-branch.%v.%v", release.Major, release.Minor)
 }
 
 // createBranchIfMinor create the release branch if the input version is a minor
 // release.
 // All patch releases under the same minor version share the same release branch.
-func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, semv semversion) error {
-	branch := goplsReleaseBranchName(semv)
+func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, release releaseVersion) error {
+	branch := goplsReleaseBranchName(release)
 
 	// Require gopls release branch existence if this is a non-minor release.
-	if semv.Patch != 0 {
+	if release.Patch != 0 {
 		_, err := r.Gerrit.ReadBranchHead(ctx, "tools", branch)
 		return err
 	}
@@ -257,10 +260,10 @@ func openCL(ctx *wf.TaskContext, gerrit GerritClient, repo, branch, title string
 //
 // It returns the change ID required to update the config if changes are needed,
 // otherwise it returns an empty string indicating no update is necessary.
-func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, semv semversion, reviewers []string, issue int64) (string, error) {
+func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, release releaseVersion, reviewers []string, issue int64) (string, error) {
 	const configFile = "codereview.cfg"
 
-	branch := goplsReleaseBranchName(semv)
+	branch := goplsReleaseBranchName(release)
 	clTitle := fmt.Sprintf("all: update %s for %s", configFile, branch)
 
 	openCL, err := openCL(ctx, r.Gerrit, "tools", branch, clTitle)
@@ -307,7 +310,7 @@ parent-branch: master
 
 // nextPrereleaseVersion inspects the tags in tools repo that match with the given
 // version and finds the next prerelease version.
-func (r *ReleaseGoplsTasks) nextPrereleaseVersion(ctx *wf.TaskContext, semv semversion) (string, error) {
+func (r *ReleaseGoplsTasks) nextPrereleaseVersion(ctx *wf.TaskContext, release releaseVersion) (string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
 		return "", err
@@ -320,62 +323,28 @@ func (r *ReleaseGoplsTasks) nextPrereleaseVersion(ctx *wf.TaskContext, semv semv
 		}
 	}
 
-	rc := latestVersion(versions, isSameMajorMinorPatch(semv), isPrereleaseMatchRegex(`^pre\.\d+$`))
-	if rc == (semversion{}) {
+	_, prerelease := latestVersion(versions, isSameReleaseVersion(release), isPrereleaseMatchRegex(`^pre\.\d+$`))
+	if prerelease == "" {
 		return "pre.1", nil
 	}
-	pre, err := rc.prereleaseVersion()
+	pre, err := prereleaseNumber(prerelease)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("pre.%v", pre+1), nil
 }
 
-// currentGoplsPrerelease inspects the tags in tools repo that match with the
-// given version and find the latest pre-release version.
-func currentGoplsPrerelease(ctx *wf.TaskContext, client GerritClient, semv semversion) (int, error) {
-	tags, err := client.ListTags(ctx, "tools")
-	if err != nil {
-		return 0, fmt.Errorf("failed to list tags for tools repo: %w", err)
-	}
-
-	max := 0
-	for _, tag := range tags {
-		v, ok := strings.CutPrefix(tag, "gopls/")
-		if !ok {
-			continue
-		}
-		cur, ok := parseSemver(v)
-		if !ok {
-			continue
-		}
-		if cur.Major != semv.Major || cur.Minor != semv.Minor || cur.Patch != semv.Patch {
-			continue
-		}
-		pre, err := cur.prereleaseVersion()
-		if err != nil {
-			continue
-		}
-
-		if pre > max {
-			max = pre
-		}
-	}
-
-	return max, nil
-}
-
 // updateXToolsDependency ensures gopls sub module have the correct x/tools
 // version as dependency.
 //
 // It returns the change ID, or "" if the CL was not created.
-func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, semv semversion, pre string, reviewers []string, issue int64) (string, error) {
+func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, release releaseVersion, pre string, reviewers []string, issue int64) (string, error) {
 	if pre == "" {
 		return "", fmt.Errorf("the input pre-release version should not be empty")
 	}
 
-	branch := goplsReleaseBranchName(semv)
-	clTitle := fmt.Sprintf("gopls: update go.mod for v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
+	branch := goplsReleaseBranchName(release)
+	clTitle := fmt.Sprintf("gopls: update go.mod for %s-%s", release, pre)
 	openCL, err := openCL(ctx, r.Gerrit, "tools", branch, clTitle)
 	if err != nil {
 		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
@@ -456,7 +425,7 @@ $(go env GOPATH)/bin/gopls references -d main.go:4:8 &> smoke.log
 // The input semversion provides Major, Minor, and Patch info.
 // The input pre-release, generated by previous steps of the workflow, provides
 // Pre-release info.
-func (r *ReleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversion, commit, pre string) (string, error) {
+func (r *ReleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, release releaseVersion, commit, pre string) (string, error) {
 	if commit == "" {
 		return "", fmt.Errorf("the input commit should not be empty")
 	}
@@ -467,7 +436,7 @@ func (r *ReleaseGoplsTasks) tagPrerelease(ctx *wf.TaskContext, semv semversion, 
 	// Defensively guard against re-creating tags.
 	ctx.DisableRetries()
 
-	version := fmt.Sprintf("v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, pre)
+	version := fmt.Sprintf("%s-%s", release, pre)
 	tag := fmt.Sprintf("gopls/%s", version)
 	if err := r.Gerrit.Tag(ctx, "tools", tag, commit); err != nil {
 		return "", err
@@ -484,7 +453,7 @@ type goplsPrereleaseAnnouncement struct {
 	Issue   int64
 }
 
-func (r *ReleaseGoplsTasks) mailPrereleaseAnnouncement(ctx *wf.TaskContext, release semversion, rc, commit string, issue int64) error {
+func (r *ReleaseGoplsTasks) mailPrereleaseAnnouncement(ctx *wf.TaskContext, release releaseVersion, rc, commit string, issue int64) error {
 	announce := goplsPrereleaseAnnouncement{
 		Version: rc,
 		Branch:  goplsReleaseBranchName(release),
@@ -507,7 +476,7 @@ type goplsReleaseAnnouncement struct {
 	Commit  string
 }
 
-func (r *ReleaseGoplsTasks) mailReleaseAnnouncement(ctx *wf.TaskContext, release semversion) error {
+func (r *ReleaseGoplsTasks) mailReleaseAnnouncement(ctx *wf.TaskContext, release releaseVersion) error {
 	version := fmt.Sprintf("v%v.%v.%v", release.Major, release.Minor, release.Patch)
 
 	info, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/%s", version))
@@ -547,27 +516,36 @@ func (r *ReleaseGoplsTasks) isValidReleaseVersion(ctx *wf.TaskContext, ver strin
 	return nil
 }
 
-// semversion is a parsed semantic version.
-type semversion struct {
+// releaseVersion is a parsed semantic release version containing only major,
+// minor and patch version.
+type releaseVersion struct {
 	Major, Minor, Patch int
-	Pre                 string
 }
 
-// parseSemver attempts to parse semver components out of the provided semver
-// v. If v is not valid semver in canonical form, parseSemver returns false.
-func parseSemver(v string) (_ semversion, ok bool) {
-	var parsed semversion
-	v, parsed.Pre, _ = strings.Cut(v, "-")
-	if _, err := fmt.Sscanf(v, "v%d.%d.%d", &parsed.Major, &parsed.Minor, &parsed.Patch); err == nil {
-		ok = true
+// String returns the version string representation of the release version.
+func (s releaseVersion) String() string {
+	return fmt.Sprintf("v%v.%v.%v", s.Major, s.Minor, s.Patch)
+}
+
+// parseVersion parses the input version string into a release version and a
+// prerelease string.
+// It returns false if the input is not a valid semantic version in canonical form.
+func parseVersion(v string) (_ releaseVersion, prerelease string, ok bool) {
+	var parsed releaseVersion
+	if !semver.IsValid(v) {
+		return releaseVersion{}, "", false
 	}
-	return parsed, ok
+	v, pre, _ := strings.Cut(v, "-")
+	if _, err := fmt.Sscanf(v, "v%d.%d.%d", &parsed.Major, &parsed.Minor, &parsed.Patch); err != nil {
+		return releaseVersion{}, "", false
+	}
+	return parsed, pre, true
 }
 
-// prereleaseVersion extracts the integer component from a pre-release version
+// prereleaseNumber extracts the integer component from a pre-release version
 // string in the format "${STRING}.${INT}".
-func (s *semversion) prereleaseVersion() (int, error) {
-	parts := strings.Split(s.Pre, ".")
+func prereleaseNumber(prerelease string) (int, error) {
+	parts := strings.Split(prerelease, ".")
 	if len(parts) == 1 {
 		return 0, fmt.Errorf(`pre-release version does not contain any "."`)
 	}
@@ -596,54 +574,33 @@ func (r *ReleaseGoplsTasks) possibleGoplsVersions(ctx *wf.TaskContext) ([]string
 		return nil, err
 	}
 
-	var semVersions []semversion
-	majorMinorPatch := map[int]map[int]map[int]bool{}
+	var releaseVersions []releaseVersion
+	seen := make(map[releaseVersion]bool)
 	for _, tag := range tags {
 		v, ok := strings.CutPrefix(tag, "gopls/")
 		if !ok {
 			continue
 		}
 
-		if !semver.IsValid(v) {
+		release, prerelease, ok := parseVersion(v)
+		if !ok || prerelease != "" {
 			continue
 		}
-
-		// Skip for pre-release versions.
-		if semver.Prerelease(v) != "" {
-			continue
-		}
-
-		semv, ok := parseSemver(v)
-		semVersions = append(semVersions, semv)
-
-		if majorMinorPatch[semv.Major] == nil {
-			majorMinorPatch[semv.Major] = map[int]map[int]bool{}
-		}
-		if majorMinorPatch[semv.Major][semv.Minor] == nil {
-			majorMinorPatch[semv.Major][semv.Minor] = map[int]bool{}
-		}
-		majorMinorPatch[semv.Major][semv.Minor][semv.Patch] = true
+		releaseVersions = append(releaseVersions, release)
+		seen[release] = true
 	}
 
 	var possible []string
-	seen := map[string]bool{}
-	for _, v := range semVersions {
-		nextMajor := fmt.Sprintf("v%d.%d.%d", v.Major+1, 0, 0)
-		if _, ok := majorMinorPatch[v.Major+1]; !ok && !seen[nextMajor] {
-			seen[nextMajor] = true
-			possible = append(possible, nextMajor)
-		}
-
-		nextMinor := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor+1, 0)
-		if _, ok := majorMinorPatch[v.Major][v.Minor+1]; !ok && !seen[nextMinor] {
-			seen[nextMinor] = true
-			possible = append(possible, nextMinor)
-		}
-
-		nextPatch := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch+1)
-		if _, ok := majorMinorPatch[v.Major][v.Minor][v.Patch+1]; !ok && !seen[nextPatch] {
-			seen[nextPatch] = true
-			possible = append(possible, nextPatch)
+	for _, v := range releaseVersions {
+		for _, next := range []releaseVersion{
+			{v.Major+1, 0, 0},             // next major
+			{v.Major, v.Minor+1, 0},       // next minor
+			{v.Major, v.Minor, v.Patch+1}, // next patch
+		} {
+			if _, ok := seen[next]; !ok {
+				possible = append(possible, next.String())
+				seen[next] = true
+			}
 		}
 	}
 
@@ -683,7 +640,7 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	return wd
 }
 
-func (r *ReleaseGoplsTasks) latestPrerelease(ctx *wf.TaskContext, semv semversion) (string, error) {
+func (r *ReleaseGoplsTasks) latestPrerelease(ctx *wf.TaskContext, release releaseVersion) (string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "tools")
 	if err != nil {
 		return "", err
@@ -696,12 +653,12 @@ func (r *ReleaseGoplsTasks) latestPrerelease(ctx *wf.TaskContext, semv semversio
 		}
 	}
 
-	rc := latestVersion(versions, isSameMajorMinorPatch(semv), isPrereleaseMatchRegex(`^pre\.\d+$`))
-	if rc == (semversion{}) {
-		return "", fmt.Errorf("could not find any release candidate for v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+	_, prerelease := latestVersion(versions, isSameReleaseVersion(release), isPrereleaseMatchRegex(`^pre\.\d+$`))
+	if prerelease == "" {
+		return "", fmt.Errorf("could not find any release candidate for %s", release)
 	}
 
-	return rc.Pre, nil
+	return prerelease, nil
 }
 
 // updateVSCodeGoGoplsVersion updates the gopls version in the vscode-go project.
@@ -709,8 +666,8 @@ func (r *ReleaseGoplsTasks) latestPrerelease(ctx *wf.TaskContext, semv semversio
 // and release branches.
 // For pre-releases (input param prerelease is not empty), it updates only the
 // master branch.
-func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsVersion(ctx *wf.TaskContext, reviewers []string, issue int64, release semversion, prerelease string) ([]string, error) {
-	version := fmt.Sprintf("v%v.%v.%v", release.Major, release.Minor, release.Patch)
+func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsVersion(ctx *wf.TaskContext, reviewers []string, issue int64, release releaseVersion, prerelease string) ([]string, error) {
+	version := release.String()
 	if prerelease != "" {
 		version = version + "-" + prerelease
 	}
@@ -767,8 +724,8 @@ func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsVersion(ctx *wf.TaskContext, revi
 
 // tagRelease locates the commit associated with the pre-release version and
 // applies the official release tag in form of "gopls/vX.Y.Z" to the same commit.
-func (r *ReleaseGoplsTasks) tagRelease(ctx *wf.TaskContext, semv semversion, prerelease string) error {
-	info, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/v%v.%v.%v-%s", semv.Major, semv.Minor, semv.Patch, prerelease))
+func (r *ReleaseGoplsTasks) tagRelease(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
+	info, err := r.Gerrit.GetTag(ctx, "tools", fmt.Sprintf("gopls/%s-%s", release, prerelease))
 	if err != nil {
 		return err
 	}
@@ -776,7 +733,7 @@ func (r *ReleaseGoplsTasks) tagRelease(ctx *wf.TaskContext, semv semversion, pre
 	// Defensively guard against re-creating tags.
 	ctx.DisableRetries()
 
-	releaseTag := fmt.Sprintf("gopls/v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
+	releaseTag := fmt.Sprintf("gopls/%s", release)
 	if err := r.Gerrit.Tag(ctx, "tools", releaseTag, info.Revision); err != nil {
 		return err
 	}
@@ -789,12 +746,12 @@ func (r *ReleaseGoplsTasks) tagRelease(ctx *wf.TaskContext, semv semversion, pre
 // branch.
 //
 // Returns the change ID.
-func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewers []string, semv semversion, issue int64) (string, error) {
-	if semv.Patch != 0 {
+func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewers []string, release releaseVersion, issue int64) (string, error) {
+	if release.Patch != 0 {
 		return "", nil
 	}
 
-	clTitle := fmt.Sprintf("gopls/go.mod: update dependencies following the v%v.%v.%v release", semv.Major, semv.Minor, semv.Patch)
+	clTitle := fmt.Sprintf("gopls/go.mod: update dependencies following the %s release", release)
 	openCL, err := openCL(ctx, r.Gerrit, "tools", "master", clTitle)
 	if err != nil {
 		return "", fmt.Errorf("failed to find the open CL of title %q in master branch: %w", clTitle, err)
