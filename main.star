@@ -536,25 +536,34 @@ NO_NETWORK_BUILDERS = [
 # the existing one everywhere.
 MAIN_BRANCH_NAME = "master"
 
+# LATEST_GO and SECOND_GO are moving targets that correspond to the latest
+# supported major Go release, and second latest supported major Go release.
+# See the Go Release Policy at go.dev/doc/devel/release#policy.
+#
+# These need to be updated every 6 months after a major Go release is made.
+# Keep bootstrap versions tracked inside GO_BRANCHES in mind when updating.
+LATEST_GO = "go1.23"
+SECOND_GO = "go1.22"
+
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
     "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.22.6"),
-    "go1.23": struct(branch = "release-branch.go1.23", bootstrap = "1.20.6"),
-    "go1.22": struct(branch = "release-branch.go1.22", bootstrap = "1.20.6"),
+    LATEST_GO: struct(branch = "release-branch." + LATEST_GO, bootstrap = "1.20.6"),
+    SECOND_GO: struct(branch = "release-branch." + SECOND_GO, bootstrap = "1.20.6"),
 }
 
 # INTERNAL_GO_BRANCHES mirrors GO_BRANCHES, but defines the branches to build
 # and test against for the go-internal/go repository.
 INTERNAL_GO_BRANCHES = {
-    "gotip": struct(branch_regexp = MAIN_BRANCH_NAME, bootstrap = "1.22.6"),
+    "gotip": struct(branch_regexp = MAIN_BRANCH_NAME),
     # The private-release-branches are per-point release, rather than
     # per-major version, since we create them specially for each point
-    # release, and want to maintain that history. We use a regex to match
-    # all the point branches so that we don't need to manually update the
-    # config each time we issue a point release.
-    "go1.23": struct(branch_regexp = "private-release-branch.go1.23.\\d+", bootstrap = "1.20.6"),
-    "go1.22": struct(branch_regexp = "private-release-branch.go1.22.\\d+", bootstrap = "1.20.6"),
+    # release, and want to maintain that history. We use a regex like
+    # "private-release-branch.go1.23.\\d+" to match all the point branches
+    # so that we don't need to manually update the config each time we issue a point release.
+    LATEST_GO: struct(branch_regexp = "private-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+"),
+    SECOND_GO: struct(branch_regexp = "private-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+"),
 }
 
 # TOOLS_GO_BRANCHES are Go branches that aren't used for project-wide testing
