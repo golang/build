@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	goversion "go/version"
 	"image"
 	"image/color"
 	"image/draw"
@@ -352,7 +353,7 @@ func tweetImage(published Published, rnd *rand.Rand) (imagePNG []byte, imageText
 		return nil, "", err
 	}
 	goarch := a.GOARCH()
-	if CompareGoVersions(a.Version, "go1.23") == -1 && a.OS != "linux" { // TODO: Delete this after Go 1.24.0 is out and this becomes dead code.
+	if goversion.Compare(a.Version, "go1.23") == -1 && a.OS != "linux" { // TODO: Delete this after Go 1.24.0 is out and this becomes dead code.
 		goarch = strings.TrimSuffix(goarch, "v6l")
 	}
 	var buf bytes.Buffer

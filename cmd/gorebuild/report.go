@@ -7,6 +7,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	goversion "go/version"
 	"log"
 	"os"
 	"path/filepath"
@@ -243,7 +244,7 @@ func Run(args []string) *Report {
 	if r.Log.Status != FAIL {
 		r.Log.Status = PASS
 	}
-	sort.Slice(r.Releases, func(i, j int) bool { return Compare(r.Releases[i].Version, r.Releases[j].Version) > 0 })
+	sort.Slice(r.Releases, func(i, j int) bool { return goversion.Compare(r.Releases[i].Version, r.Releases[j].Version) > 0 })
 	for _, rel := range r.Releases {
 		if rel.Log.Status != FAIL {
 			rel.Log.Status = PASS

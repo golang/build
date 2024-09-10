@@ -6,6 +6,7 @@ package main
 
 import (
 	"fmt"
+	goversion "go/version"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,24 +18,27 @@ import (
 // for the named version of Go. If the version needs no bootstrap
 // (that is, if it's before Go 1.5), BootstrapVersion returns an empty version.
 func BootstrapVersion(version string) (string, error) {
-	if Compare(version, Go(1, 5)) < 0 {
+	// go1 returns the version string for Go 1.N ("go1.N").
+	go1 := func(N int) string { return fmt.Sprintf("go1.%d", N) }
+
+	if goversion.Compare(version, go1(5)) < 0 {
 		return "", nil
 	}
-	if Compare(version, Go(1, 20)) < 0 {
-		return Go(1, 4), nil
+	if goversion.Compare(version, go1(20)) < 0 {
+		return go1(4), nil
 	}
-	if Compare(version, Go(1, 22)) < 0 {
-		return Go(1, 17), nil
+	if goversion.Compare(version, go1(22)) < 0 {
+		return go1(17), nil
 	}
-	if Compare(version, Go(1, 1000)) > 0 {
+	if goversion.Compare(version, go1(1000)) > 0 {
 		return "", fmt.Errorf("invalid version %q", version)
 	}
 	for i := 24; ; i += 2 {
-		if Compare(version, Go(1, i)) < 0 {
+		if goversion.Compare(version, go1(i)) < 0 {
 			// 1.24 will switch to 1.22; before that we used 1.20
 			// 1.26 will switch to 1.24; before that we used 1.22
 			// ...
-			return Go(1, i-4), nil
+			return go1(i - 4), nil
 		}
 	}
 }

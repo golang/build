@@ -6,6 +6,7 @@ package task
 
 import (
 	"fmt"
+	goversion "go/version"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +39,7 @@ func (t *UpdateProxyTestRepoTasks) UpdateProxyTestRepo(ctx *wf.TaskContext, publ
 	}
 	// If the published version is lower than the current go.mod version, don't update.
 	// If we could parse the go.mod file, assume we should update.
-	if f.Go != nil && CompareGoVersions(published.Version, "go"+f.Go.Version) < 0 {
+	if f.Go != nil && goversion.Compare(published.Version, "go"+f.Go.Version) < 0 {
 		return "no update", nil
 	}
 
