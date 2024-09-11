@@ -57,8 +57,13 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 // later release, set it to nil explicitly.
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
+//
+// TODO(dmitshur): Rename allReleases at some point. It currently tracks only
+// first class ports, everything else is generated from 'go tool dist list' output
+// via allPorts. The allReleases name was its original name, back when it really
+// was all releases.
 var allReleases = map[int]ReleaseTargets{
-	21: {
+	22: {
 		"darwin-amd64": &Target{
 			MinMacOSVersion: "10.15", // go.dev/issue/57125
 		},
@@ -85,6 +90,10 @@ var allReleases = map[int]ReleaseTargets{
 		"darwin-amd64": &Target{
 			MinMacOSVersion: "11", // go.dev/issue/64207
 		},
+	},
+	24: {
+		"windows-arm":   nil, // not first-class, leave it to allPorts
+		"windows-arm64": nil, // not first-class, leave it to allPorts
 	},
 }
 

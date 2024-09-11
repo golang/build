@@ -1,94 +1,3 @@
-Targets for release 1.21
-================================================================================
-aix-ppc64       aix        ppc64      (cross-compiled via distpack)
-
-darwin-amd64    darwin     amd64      (cross-compiled via distpack)
-	First class port, Minimum macOS version is 10.15
-
-darwin-arm64    darwin     arm64      (cross-compiled via distpack)
-	First class port, Minimum macOS version is 11
-
-dragonfly-amd64 dragonfly  amd64      (cross-compiled via distpack)
-
-freebsd-386     freebsd    386        (cross-compiled via distpack)
-
-freebsd-amd64   freebsd    amd64      (cross-compiled via distpack)
-
-freebsd-arm     freebsd    arm        (cross-compiled via distpack)
-
-freebsd-arm64   freebsd    arm64      (cross-compiled via distpack)
-
-freebsd-riscv64 freebsd    riscv64    (cross-compiled via distpack)
-
-illumos-amd64   illumos    amd64      (cross-compiled via distpack)
-
-linux-386       linux      386        (cross-compiled via distpack)
-	First class port
-
-linux-amd64     linux      amd64      (cross-compiled via distpack)
-	First class port
-
-linux-arm64     linux      arm64      (cross-compiled via distpack)
-	First class port
-
-linux-armv6l    linux      arm        (cross-compiled via distpack)
-	First class port
-	Extra env: ["GOARM=6"]
-
-linux-loong64   linux      loong64    (cross-compiled via distpack)
-
-linux-mips      linux      mips       (cross-compiled via distpack)
-
-linux-mips64    linux      mips64     (cross-compiled via distpack)
-
-linux-mips64le  linux      mips64le   (cross-compiled via distpack)
-
-linux-mipsle    linux      mipsle     (cross-compiled via distpack)
-
-linux-ppc64     linux      ppc64      (cross-compiled via distpack)
-
-linux-ppc64le   linux      ppc64le    (cross-compiled via distpack)
-
-linux-riscv64   linux      riscv64    (cross-compiled via distpack)
-
-linux-s390x     linux      s390x      (cross-compiled via distpack)
-
-netbsd-386      netbsd     386        (cross-compiled via distpack)
-
-netbsd-amd64    netbsd     amd64      (cross-compiled via distpack)
-
-netbsd-arm      netbsd     arm        (cross-compiled via distpack)
-
-netbsd-arm64    netbsd     arm64      (cross-compiled via distpack)
-
-openbsd-386     openbsd    386        (cross-compiled via distpack)
-
-openbsd-amd64   openbsd    amd64      (cross-compiled via distpack)
-
-openbsd-arm     openbsd    arm        (cross-compiled via distpack)
-
-openbsd-arm64   openbsd    arm64      (cross-compiled via distpack)
-
-plan9-386       plan9      386        (cross-compiled via distpack)
-
-plan9-amd64     plan9      amd64      (cross-compiled via distpack)
-
-plan9-arm       plan9      arm        (cross-compiled via distpack)
-
-solaris-amd64   solaris    amd64      (cross-compiled via distpack)
-
-windows-386     windows    386        (cross-compiled via distpack)
-	First class port
-
-windows-amd64   windows    amd64      (cross-compiled via distpack)
-	First class port
-
-windows-arm     windows    arm        (cross-compiled via distpack)
-
-windows-arm64   windows    arm64      (cross-compiled via distpack)
-
-
-
 Targets for release 1.22
 ================================================================================
 aix-ppc64       aix        ppc64      (cross-compiled via distpack)
@@ -272,6 +181,99 @@ windows-amd64   windows    amd64      (cross-compiled via distpack)
 	First class port
 
 windows-arm     windows    arm        (cross-compiled via distpack)
+
+windows-arm64   windows    arm64      (cross-compiled via distpack)
+
+
+
+Targets for release 1.24
+================================================================================
+aix-ppc64       aix        ppc64      (cross-compiled via distpack)
+
+darwin-amd64    darwin     amd64      (cross-compiled via distpack)
+	First class port, Minimum macOS version is 11
+
+darwin-arm64    darwin     arm64      (cross-compiled via distpack)
+	First class port, Minimum macOS version is 11
+
+dragonfly-amd64 dragonfly  amd64      (cross-compiled via distpack)
+
+freebsd-386     freebsd    386        (cross-compiled via distpack)
+
+freebsd-amd64   freebsd    amd64      (cross-compiled via distpack)
+
+freebsd-arm     freebsd    arm        (cross-compiled via distpack)
+
+freebsd-arm64   freebsd    arm64      (cross-compiled via distpack)
+
+freebsd-riscv64 freebsd    riscv64    (cross-compiled via distpack)
+
+illumos-amd64   illumos    amd64      (cross-compiled via distpack)
+
+linux-386       linux      386        (cross-compiled via distpack)
+	First class port
+
+linux-amd64     linux      amd64      (cross-compiled via distpack)
+	First class port
+
+linux-arm64     linux      arm64      (cross-compiled via distpack)
+	First class port
+
+linux-armv6l    linux      arm        (cross-compiled via distpack)
+	First class port
+	Extra env: ["GOARM=6"]
+
+linux-loong64   linux      loong64    (cross-compiled via distpack)
+
+linux-mips      linux      mips       (cross-compiled via distpack)
+
+linux-mips64    linux      mips64     (cross-compiled via distpack)
+
+linux-mips64le  linux      mips64le   (cross-compiled via distpack)
+
+linux-mipsle    linux      mipsle     (cross-compiled via distpack)
+
+linux-ppc64     linux      ppc64      (cross-compiled via distpack)
+
+linux-ppc64le   linux      ppc64le    (cross-compiled via distpack)
+
+linux-riscv64   linux      riscv64    (cross-compiled via distpack)
+
+linux-s390x     linux      s390x      (cross-compiled via distpack)
+
+netbsd-386      netbsd     386        (cross-compiled via distpack)
+
+netbsd-amd64    netbsd     amd64      (cross-compiled via distpack)
+
+netbsd-arm      netbsd     arm        (cross-compiled via distpack)
+
+netbsd-arm64    netbsd     arm64      (cross-compiled via distpack)
+
+openbsd-386     openbsd    386        (cross-compiled via distpack)
+
+openbsd-amd64   openbsd    amd64      (cross-compiled via distpack)
+
+openbsd-arm     openbsd    arm        (cross-compiled via distpack)
+
+openbsd-arm64   openbsd    arm64      (cross-compiled via distpack)
+
+openbsd-ppc64   openbsd    ppc64      (cross-compiled via distpack)
+
+openbsd-riscv64 openbsd    riscv64    (cross-compiled via distpack)
+
+plan9-386       plan9      386        (cross-compiled via distpack)
+
+plan9-amd64     plan9      amd64      (cross-compiled via distpack)
+
+plan9-arm       plan9      arm        (cross-compiled via distpack)
+
+solaris-amd64   solaris    amd64      (cross-compiled via distpack)
+
+windows-386     windows    386        (cross-compiled via distpack)
+	First class port
+
+windows-amd64   windows    amd64      (cross-compiled via distpack)
+	First class port
 
 windows-arm64   windows    arm64      (cross-compiled via distpack)
 
