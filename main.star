@@ -2078,6 +2078,7 @@ def _define_go_ci():
                     builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
                     ci_builder, _ = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
                     postsubmit_builders[ci_builder] = builder_type
+                    postsubmit_builders_with_go_repo_trigger[ci_builder] = True
 
             # Collect all the postsubmit builders by port and project.
             for name, builder_type in postsubmit_builders.items() + postsubmit_builders_known_issue.items():
