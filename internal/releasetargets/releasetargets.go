@@ -51,18 +51,13 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 	return result
 }
 
-// allReleases contains all the targets for all releases we're currently
+// allFirstClass lists first-class port targets for all releases we're currently
 // supporting. To reduce duplication, targets from earlier versions are
 // propagated forward unless overridden. To stop configuring a target in a
 // later release, set it to nil explicitly.
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
-//
-// TODO(dmitshur): Rename allReleases at some point. It currently tracks only
-// first class ports, everything else is generated from 'go tool dist list' output
-// via allPorts. The allReleases name was its original name, back when it really
-// was all releases.
-var allReleases = map[int]ReleaseTargets{
+var allFirstClass = map[int]ReleaseTargets{
 	22: {
 		"darwin-amd64": &Target{
 			MinMacOSVersion: "10.15", // go.dev/issue/57125
@@ -79,12 +74,6 @@ var allReleases = map[int]ReleaseTargets{
 		"linux-arm64":   &Target{},
 		"windows-386":   &Target{},
 		"windows-amd64": &Target{},
-		"windows-arm": &Target{
-			SecondClass: true,
-		},
-		"windows-arm64": &Target{
-			SecondClass: true,
-		},
 	},
 	23: {
 		"darwin-amd64": &Target{
@@ -92,8 +81,7 @@ var allReleases = map[int]ReleaseTargets{
 		},
 	},
 	24: {
-		"windows-arm":   nil, // not first-class, leave it to allPorts
-		"windows-arm64": nil, // not first-class, leave it to allPorts
+		// There aren't any release target changes specific to Go 1.24 at this time.
 	},
 }
 
@@ -103,7 +91,7 @@ var allPortsFS embed.FS
 var allPorts = map[int][]OSArch{}
 
 func init() {
-	for _, targets := range allReleases {
+	for _, targets := range allFirstClass {
 		for name, target := range targets {
 			if target == nil {
 				continue
@@ -147,7 +135,7 @@ func init() {
 
 func sortedReleases() []int {
 	var releases []int
-	for rel := range allReleases {
+	for rel := range allFirstClass {
 		releases = append(releases, rel)
 	}
 	for rel := range allPorts {
@@ -173,28 +161,28 @@ func TargetsForGo1Point(x int) ReleaseTargets {
 		if release > x {
 			break
 		}
-		for osarch, target := range allReleases[release] {
+		for osArch, target := range allFirstClass[release] {
 			if target == nil {
-				delete(targets, osarch)
+				delete(targets, osArch)
 			} else {
 				copy := *target
-				targets[osarch] = &copy
+				targets[osArch] = &copy
 			}
 		}
 		if p, ok := allPorts[release]; ok {
 			ports = p
 		}
 	}
-	for _, osarch := range ports {
-		_, unbuildable := unbuildableOSs[osarch.OS]
-		_, exists := targets[osarch.String()]
+	for _, osArch := range ports {
+		_, unbuildable := unbuildableOSs[osArch.OS]
+		_, exists := targets[osArch.String()]
 		if unbuildable || exists {
 			continue
 		}
-		targets[osarch.String()] = &Target{
-			Name:        osarch.String(),
-			GOOS:        osarch.OS,
-			GOARCH:      osarch.Arch,
+		targets[osArch.String()] = &Target{
+			Name:        osArch.String(),
+			GOOS:        osArch.OS,
+			GOARCH:      osArch.Arch,
 			SecondClass: true,
 		}
 	}

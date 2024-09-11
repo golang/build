@@ -20,7 +20,7 @@ var update = flag.Bool("update", false, "controls whether to update releases.txt
 func TestReleaseTargets(t *testing.T) {
 	releases := sortedReleases()
 	if len(releases) < 3 {
-		t.Errorf("sortedReleases returned %v (len %d); allReleases map and allports/go1.n.txt files are expected to cover a minimum of 3 releases (prev + curr + tip)", releases, len(releases))
+		t.Errorf("sortedReleases returned %v (len %d); allFirstClass map and allports/go1.n.txt files are expected to cover a minimum of 3 releases (prev + curr + tip)", releases, len(releases))
 	}
 	var out bytes.Buffer
 	for _, rel := range releases {
