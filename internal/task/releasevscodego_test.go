@@ -7,6 +7,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/google/go-github/v48/github"
@@ -420,6 +421,107 @@ esac
 				t.Errorf("verifyTestResult() should return error but return nil")
 			} else if !tc.wantErr && err != nil {
 				t.Errorf("verifyTestResult() should return nil but return err: %v", err)
+			}
+		})
+	}
+}
+
+func TestGeneratePackageExtension(t *testing.T) {
+	mustHaveShell(t)
+	testcases := []struct {
+		name       string
+		release    releaseVersion
+		prerelease string
+		rc         int
+		wantErr    bool
+	}{
+		{
+			name:       "test failed, return error",
+			release:    releaseVersion{0, 1, 0},
+			prerelease: "rc-1",
+			rc:         1,
+			wantErr:    true,
+		},
+		{
+			name:       "test passed, return nil",
+			release:    releaseVersion{0, 2, 3},
+			prerelease: "",
+			rc:         0,
+			wantErr:    false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			commit := vscodego.Commit(map[string]string{
+				"go.mod":                             "module github.com/golang/vscode-go\n",
+				"go.sum":                             "\n",
+				"extension/tools/release/release.go": "foo",
+			})
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+
+			version := tc.release.String()[1:]
+			if tc.prerelease != "" {
+				version += tc.prerelease
+			}
+			// fakeGo write "bar" content to go-${version}.vsix file and "foo" content
+			// to README.md when executed go run tools/release/release.go.
+			var fakeGo = fmt.Sprintf(`#!/bin/bash -exu
+
+case "$1" in
+"run")
+	echo "writing content to vsix and README.md"
+	echo -n "bar" > go-%s.vsix
+	echo -n "foo" > README.md
+	exit %v
+	;;
+*)
+	echo unexpected command $@
+	exit 1
+	;;
+esac
+`, version, tc.rc)
+
+			cloudbuild := NewFakeCloudBuild(t, gerrit, "vscode-go", nil, fakeGo)
+			tasks := &ReleaseVSCodeGoTasks{
+				Gerrit:     gerrit,
+				CloudBuild: cloudbuild,
+			}
+
+			cb, err := tasks.generatePackageExtension(ctx, tc.release, tc.prerelease, commit)
+			if tc.wantErr && err == nil {
+				t.Errorf("generateArtifacts(%s, %s, %s) should return error but return nil", tc.release, tc.prerelease, commit)
+			} else if !tc.wantErr && err != nil {
+				t.Errorf("generateArtifacts(%s, %s, %s) should return nil but return err: %v", tc.release, tc.prerelease, commit, err)
+			}
+
+			if !tc.wantErr {
+				path := fmt.Sprintf("go-%s.vsix", version)
+				resultFS, err := cloudbuild.ResultFS(ctx, cb)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				f, err := resultFS.Open(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer f.Close()
+
+				got, err := io.ReadAll(f)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				if string(got) != "bar" {
+					t.Errorf("generateArtifacts(%s, %s, %s) write content %q to %s, want %q", tc.release, tc.prerelease, commit, got, path, "bar")
+				}
 			}
 		})
 	}

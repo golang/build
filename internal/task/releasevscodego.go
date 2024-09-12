@@ -141,6 +141,8 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(verified))
 	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(verified))
+	_ = wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
+
 	_ = wf.Action3(wd, "tag release candidate", r.tag, revision, release, prerelease, wf.After(branched))
 
 	return wd
@@ -289,6 +291,71 @@ func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, release 
 	}
 	ctx.Printf("Created branch %q at revision %s.\n", branch, head)
 	return nil
+}
+
+func (r *ReleaseVSCodeGoTasks) generatePackageExtension(ctx *wf.TaskContext, release releaseVersion, prerelease, revision string) (CloudBuild, error) {
+	steps := func(resultURL string) []*cloudbuildpb.BuildStep {
+		const packageScriptFmt = cloudBuildClientScriptPrefix + `
+export TAG_NAME=%s
+
+npm ci &> npm-output.log
+go run tools/release/release.go package &> go-output.log
+cat npm-output.log
+cat go-output.log
+`
+
+		versionString := release.String()
+		if prerelease != "" {
+			versionString += "-" + prerelease
+		}
+		// The version inside of vsix does not have prefix "v".
+		vsix := fmt.Sprintf("go-%s.vsix", versionString[1:])
+
+		saveScript := cloudBuildClientScriptPrefix
+		for _, file := range []string{"npm-output.log", "go-output.log", vsix} {
+			saveScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
+		}
+		return []*cloudbuildpb.BuildStep{
+			{
+				Name:   "bash",
+				Script: cloudBuildClientDownloadGoScript,
+			},
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"clone", "https://go.googlesource.com/vscode-go", "vscode-go"},
+			},
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"checkout", revision},
+				Dir:  "vscode-go",
+			},
+			{
+				Name:   "gcr.io/cloud-builders/npm",
+				Script: fmt.Sprintf(packageScriptFmt, versionString),
+				Dir:    "vscode-go/extension",
+			},
+			{
+				Name:   "gcr.io/cloud-builders/gsutil",
+				Script: saveScript,
+				Dir:    "vscode-go/extension",
+			},
+		}
+	}
+
+	build, err := r.CloudBuild.RunCustomSteps(ctx, steps)
+	if err != nil {
+		return CloudBuild{}, err
+	}
+
+	outputs, err := buildToOutputs(ctx, r.CloudBuild, build)
+	if err != nil {
+		return CloudBuild{}, err
+	}
+
+	ctx.Printf("the output from npm ci:\n%s\n", outputs["npm-output.log"])
+	ctx.Printf("the output from package generation:\n%s\n", outputs["go-output.log"])
+
+	return build, nil
 }
 
 // determineReleaseVersion determines the release version for the upcoming

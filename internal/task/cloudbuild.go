@@ -78,25 +78,26 @@ func (c *RealCloudBuildClient) RunBuildTrigger(ctx context.Context, project, tri
 	return CloudBuild{Project: project, ID: meta.Build.Id}, nil
 }
 
-func (c *RealCloudBuildClient) RunScript(ctx context.Context, script string, gerritProject string, outputs []string) (CloudBuild, error) {
-	const downloadGoScript = `#!/usr/bin/env bash
-set -eux
-archive=$(wget -qO - 'https://go.dev/dl/?mode=json' | grep -Eo 'go.*linux-amd64.tar.gz' | head -n 1)
-wget -qO - https://go.dev/dl/${archive} | tar -xz
-mv go /workspace/released_go
-`
-	const scriptPrefix = `#!/usr/bin/env bash
+const cloudBuildClientScriptPrefix = `#!/usr/bin/env bash
 set -eux
 set -o pipefail
 export PATH=/workspace/released_go/bin:$PATH
 `
 
+const cloudBuildClientDownloadGoScript = `#!/usr/bin/env bash
+set -eux
+archive=$(wget -qO - 'https://go.dev/dl/?mode=json' | grep -Eo 'go.*linux-amd64.tar.gz' | head -n 1)
+wget -qO - https://go.dev/dl/${archive} | tar -xz
+mv go /workspace/released_go
+`
+
+func (c *RealCloudBuildClient) RunScript(ctx context.Context, script string, gerritProject string, outputs []string) (CloudBuild, error) {
 	steps := func(resultURL string) []*cloudbuildpb.BuildStep {
 		// Cloud build loses directory structure when it saves artifacts, which is
 		// a problem since (e.g.) we have multiple files named go.mod in the
 		// tagging tasks. It's not very complicated, so reimplement it ourselves.
 		var saveOutputsScript strings.Builder
-		saveOutputsScript.WriteString(scriptPrefix)
+		saveOutputsScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, out := range outputs {
 			saveOutputsScript.WriteString(fmt.Sprintf("gsutil cp %q %q\n", out, resultURL+"/"+strings.TrimPrefix(out, "./")))
 		}
@@ -113,11 +114,11 @@ export PATH=/workspace/released_go/bin:$PATH
 		steps = append(steps,
 			&cloudbuildpb.BuildStep{
 				Name:   "bash",
-				Script: downloadGoScript,
+				Script: cloudBuildClientDownloadGoScript,
 			},
 			&cloudbuildpb.BuildStep{
 				Name:   "gcr.io/cloud-builders/gsutil",
-				Script: scriptPrefix + script,
+				Script: cloudBuildClientScriptPrefix + script,
 				Dir:    dir,
 			},
 			&cloudbuildpb.BuildStep{

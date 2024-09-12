@@ -632,9 +632,9 @@ case "$1" in
 esac
 `
 
-const fakeChown = `
+const fakeBinary = `
 #!/bin/bash -eux
-echo "chown change owner successful"
+echo "this binary will always exit without any error"
 exit 0
 `
 
@@ -646,7 +646,10 @@ func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowed
 	if err := os.WriteFile(filepath.Join(toolDir, "gsutil"), []byte(fakeGsutil), 0777); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(toolDir, "chown"), []byte(fakeChown), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(toolDir, "chown"), []byte(fakeBinary), 0777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(toolDir, "npm"), []byte(fakeBinary), 0777); err != nil {
 		t.Fatal(err)
 	}
 	return &FakeCloudBuild{
@@ -756,6 +759,14 @@ func (cb *FakeCloudBuild) RunCustomSteps(ctx context.Context, steps func(resultU
 	var gerritProject, fullScript string
 	resultURL := "file://" + cb.t.TempDir()
 	for _, step := range steps(resultURL) {
+		// Cloud Build support docker hub images like "bash". See more details:
+		// https://cloud.google.com/build/docs/interacting-with-dockerhub-images
+		// Currently, the Bash script is solely for downloading the Go binary.
+		// The RunScripts mock implementation provides the Go binary, allowing us
+		// to bypass the Bash script for now.
+		if step.Name == "bash" && step.Script == cloudBuildClientDownloadGoScript {
+			continue
+		}
 		tool, found := strings.CutPrefix(step.Name, "gcr.io/cloud-builders/")
 		if !found {
 			return CloudBuild{}, fmt.Errorf("does not support custom image: %s", step.Name)
