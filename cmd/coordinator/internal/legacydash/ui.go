@@ -16,7 +16,6 @@ import (
 	"html/template"
 	"log"
 	"net/http"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -1176,7 +1175,6 @@ func shortUser(user string) string {
 }
 
 func httpStatusOfErr(err error) int {
-	fmt.Fprintf(os.Stderr, "Got error: %#v, code %v\n", err, grpc.Code(err))
 	switch grpc.Code(err) {
 	case codes.NotFound:
 		return http.StatusNotFound

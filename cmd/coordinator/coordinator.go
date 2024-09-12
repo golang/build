@@ -61,6 +61,7 @@ import (
 	gomoteprotos "golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/metrics"
+	"golang.org/x/build/internal/migration"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/kubernetes/gke"
 	"golang.org/x/build/maintner/maintnerd/apipb"
@@ -285,8 +286,8 @@ func main() {
 	if *mode == "prod" || (*mode == "dev" && *devEnableEC2) {
 		// TODO(golang.org/issues/38337) the coordinator will use a package scoped pool
 		// until the coordinator is refactored to not require them.
-		ec2Pool := mustCreateEC2BuildletPool(sc, sp.IsSession)
-		defer ec2Pool.Close()
+		ec2PoolClose := mustCreateEC2BuildletPool(sc, sp.IsSession)
+		defer ec2PoolClose()
 	}
 
 	if *mode == "dev" {
@@ -2248,7 +2249,12 @@ func mustCreateSecretClientOnGCE() *secret.Client {
 	return secret.MustNewClient()
 }
 
-func mustCreateEC2BuildletPool(sc *secret.Client, isRemoteBuildlet func(instName string) bool) *pool.EC2Buildlet {
+func mustCreateEC2BuildletPool(sc *secret.Client, isRemoteBuildlet func(instName string) bool) (close func()) {
+	if migration.StopEC2BuildletPool {
+		log.Println("not creating EC2 buildlet pool")
+		return func() {}
+	}
+
 	awsKeyID, err := sc.Retrieve(context.Background(), secret.NameAWSKeyID)
 	if err != nil {
 		log.Fatalf("unable to retrieve secret %q: %s", secret.NameAWSKeyID, err)
@@ -2268,7 +2274,7 @@ func mustCreateEC2BuildletPool(sc *secret.Client, isRemoteBuildlet func(instName
 	if err != nil {
 		log.Fatalf("unable to create EC2 buildlet pool: %s", err)
 	}
-	return ec2Pool
+	return ec2Pool.Close
 }
 
 func mustRetrieveSSHCertificateAuthority() (privateKey []byte) {

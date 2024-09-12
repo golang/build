@@ -9,6 +9,7 @@ package migration
 const (
 	StopLegacyMiscCompileTryBots = true
 	StopInternalModuleProxy      = true
+	StopEC2BuildletPool          = true
 
 	// StopPortedBuilder controls whether ported builders should be stopped,
 	// instead of just made invisible in the web UI.
