@@ -315,6 +315,9 @@ type GitHubClientInterface interface {
 	// PostComment creates a comment on a GitHub issue or pull request
 	// identified by the given GitHub Node ID.
 	PostComment(_ context.Context, id githubv4.ID, body string) error
+
+	// See github.Client.Repositories.CreateRelease.
+	CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error)
 }
 
 type GitHubClient struct {
@@ -339,6 +342,11 @@ func (c *GitHubClient) FetchMilestone(ctx context.Context, owner, repo, name str
 		return 0, fmt.Errorf("could not find an open milestone named %q and creating it failed: %v", name, createErr)
 	}
 	return *m.Number, nil
+}
+
+func (c *GitHubClient) CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
+	release, _, err := c.V3.Repositories.CreateRelease(ctx, owner, repo, release)
+	return release, err
 }
 
 func findMilestone(ctx context.Context, client *githubv4.Client, owner, repo, name string) (int, bool, error) {

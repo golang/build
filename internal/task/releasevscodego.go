@@ -72,6 +72,9 @@ var nextVersionParam = wf.ParamDef[string]{
 //go:embed template/vscode-go-release-issue.md
 var vscodeGoReleaseIssueTmplStr string
 
+//go:embed template/vscode-go-pre-release-note.md
+var vscodeGoPreReleaseNoteTmplStr string
+
 // vscodeGoActiveReleaseBranch returns the current active release branch in
 // vscode-go project.
 func vscodeGoActiveReleaseBranch(ctx *wf.TaskContext, gerrit GerritClient) (string, error) {
@@ -141,9 +144,10 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(verified))
 	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(verified))
-	_ = wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
+	build := wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
 
-	_ = wf.Action3(wd, "tag release candidate", r.tag, revision, release, prerelease, wf.After(branched))
+	tagged := wf.Action3(wd, "tag release candidate", r.tag, revision, release, prerelease, wf.After(branched))
+	_ = wf.Action3(wd, "create release note", r.createGitHubReleaseAsDraft, release, prerelease, build, wf.After(tagged))
 
 	return wd
 }
@@ -400,6 +404,42 @@ func (r *ReleaseVSCodeGoTasks) nextPrereleaseVersion(ctx *wf.TaskContext, releas
 		return "", err
 	}
 	return fmt.Sprintf("rc.%v", pre+1), nil
+}
+
+func (r *ReleaseVSCodeGoTasks) createGitHubReleaseAsDraft(ctx *wf.TaskContext, release releaseVersion, prerelease string, build CloudBuild) error {
+	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
+	if err != nil {
+		return err
+	}
+
+	// The release notes will display the differences between the current release
+	// and the appropriate previous release.
+	// - For minor versions (vX.Y.0), the diff is shown against the latest patch
+	//   of the previous minor version (vX.Y-1.Z).
+	// - For patch versions (vX.Y.Z), the diff is shown against the previous
+	//   patch version (vX.Y.Z-1).
+	var previous releaseVersion
+	if release.Patch == 0 {
+		previous, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor-1), isReleaseVersion)
+	} else {
+		previous, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor), isReleaseVersion)
+	}
+
+	current := fmt.Sprintf("%s-%s", release, prerelease)
+
+	ctx.DisableRetries() // Beyond this point we want retries to be done manually, not automatically.
+	draft, err := r.GitHub.CreateRelease(ctx, "golang", "vscode-go", &github.RepositoryRelease{
+		TagName:    github.String(current),
+		Name:       github.String("Release " + current),
+		Body:       github.String(fmt.Sprintf(vscodeGoPreReleaseNoteTmplStr, previous, current, release.String())),
+		Prerelease: github.Bool(true),
+		Draft:      github.Bool(true),
+	})
+	if err != nil {
+		return err
+	}
+	ctx.Printf("Find the draft release note in %s", draft.GetHTMLURL())
+	return nil
 }
 
 func (r *ReleaseVSCodeGoTasks) tag(ctx *wf.TaskContext, commit string, release releaseVersion, prerelease string) error {
