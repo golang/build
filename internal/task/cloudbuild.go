@@ -135,8 +135,9 @@ func (c *RealCloudBuildClient) RunScript(ctx context.Context, script string, ger
 }
 
 func (c *RealCloudBuildClient) RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep) (CloudBuild, error) {
+	resultURL := fmt.Sprintf("%v/script-build-%v", c.ScratchURL, rand.Int63())
 	build := &cloudbuildpb.Build{
-		Steps: steps(fmt.Sprintf("%v/script-build-%v", c.ScratchURL, rand.Int63())),
+		Steps: steps(resultURL),
 		Options: &cloudbuildpb.BuildOptions{
 			MachineType: cloudbuildpb.BuildOptions_E2_HIGHCPU_8,
 			Logging:     cloudbuildpb.BuildOptions_CLOUD_LOGGING_ONLY,
@@ -157,7 +158,7 @@ func (c *RealCloudBuildClient) RunCustomSteps(ctx context.Context, steps func(re
 	if err != nil {
 		return CloudBuild{}, fmt.Errorf("reading metadata: %w", err)
 	}
-	return CloudBuild{Project: c.ScriptProject, ID: meta.Build.Id}, nil
+	return CloudBuild{Project: c.ScriptProject, ID: meta.Build.Id, ResultURL: resultURL}, nil
 }
 
 func (c *RealCloudBuildClient) Completed(ctx context.Context, build CloudBuild) (string, bool, error) {
