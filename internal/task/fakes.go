@@ -1027,6 +1027,10 @@ func (f *FakeGitHub) FetchMilestoneIssues(_ context.Context, owner, repo string,
 	return issueLabels, nil
 }
 
+func (*FakeGitHub) UploadReleaseAsset(ctx context.Context, owner, repo string, releaseID int64, fileName string, file fs.File) (*github.ReleaseAsset, error) {
+	return nil, nil
+}
+
 func (*FakeGitHub) CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
 	return nil, nil
 }

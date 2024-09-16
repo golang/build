@@ -6,7 +6,10 @@ package task
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -318,6 +321,18 @@ type GitHubClientInterface interface {
 
 	// See github.Client.Repositories.CreateRelease.
 	CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error)
+
+	// UploadReleaseAsset uploads an fs.File to a GitHub release as a release
+	// asset.
+	// It uses NewUploadRequest as github.Client.Repositories.UploadReleaseAsset
+	// only supports uploading from an os.File.
+	// Parameters:
+	//   - owner:     The account owner of the repository.
+	//   - repo:      The name of the repository.
+	//   - releaseID: The ID of the github release.
+	//   - fileName:  The name of the asset as it will appear in the release.
+	//   - file:      The content of the file to upload.
+	UploadReleaseAsset(ctx context.Context, owner, repo string, releaseID int64, fileName string, file fs.File) (*github.ReleaseAsset, error)
 }
 
 type GitHubClient struct {
@@ -342,6 +357,31 @@ func (c *GitHubClient) FetchMilestone(ctx context.Context, owner, repo, name str
 		return 0, fmt.Errorf("could not find an open milestone named %q and creating it failed: %v", name, createErr)
 	}
 	return *m.Number, nil
+}
+
+func (c *GitHubClient) UploadReleaseAsset(ctx context.Context, owner, repo string, releaseID int64, fileName string, file fs.File) (*github.ReleaseAsset, error) {
+	// Query parameter "name" is used to determine the asset name.
+	// See details https://docs.github.com/en/rest/releases/assets?apiVersion=2022-11-28#upload-a-release-asset
+	u := fmt.Sprintf("repos/%s/%s/releases/%d/assets?name=%s", owner, repo, releaseID, url.QueryEscape(fileName))
+
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if stat.IsDir() {
+		return nil, errors.New("the asset to upload can't be a directory")
+	}
+
+	req, err := c.V3.NewUploadRequest(u, file, stat.Size(), "")
+	if err != nil {
+		return nil, err
+	}
+
+	asset := new(github.ReleaseAsset)
+	if _, err = c.V3.Do(ctx, req, asset); err != nil {
+		return nil, err
+	}
+	return asset, nil
 }
 
 func (c *GitHubClient) CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {

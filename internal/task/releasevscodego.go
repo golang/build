@@ -307,16 +307,12 @@ go run tools/release/release.go package &> go-output.log
 cat npm-output.log
 cat go-output.log
 `
-
 		versionString := release.String()
 		if prerelease != "" {
 			versionString += "-" + prerelease
 		}
-		// The version inside of vsix does not have prefix "v".
-		vsix := fmt.Sprintf("go-%s.vsix", versionString[1:])
-
 		saveScript := cloudBuildClientScriptPrefix
-		for _, file := range []string{"npm-output.log", "go-output.log", vsix} {
+		for _, file := range []string{"npm-output.log", "go-output.log", vsixFileName(release, prerelease)} {
 			saveScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
 		}
 		return []*cloudbuildpb.BuildStep{
@@ -406,6 +402,15 @@ func (r *ReleaseVSCodeGoTasks) nextPrereleaseVersion(ctx *wf.TaskContext, releas
 	return fmt.Sprintf("rc.%v", pre+1), nil
 }
 
+func vsixFileName(release releaseVersion, prerelease string) string {
+	versionString := release.String()
+	if prerelease != "" {
+		versionString += "-" + prerelease
+	}
+	// The version inside of vsix does not have prefix "v".
+	return fmt.Sprintf("go-%s.vsix", versionString[1:])
+}
+
 func (r *ReleaseVSCodeGoTasks) createGitHubReleaseAsDraft(ctx *wf.TaskContext, release releaseVersion, prerelease string, build CloudBuild) error {
 	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
 	if err != nil {
@@ -438,7 +443,24 @@ func (r *ReleaseVSCodeGoTasks) createGitHubReleaseAsDraft(ctx *wf.TaskContext, r
 	if err != nil {
 		return err
 	}
-	ctx.Printf("Find the draft release note in %s", draft.GetHTMLURL())
+	ctx.Printf("Created the draft release note in %s", draft.GetHTMLURL())
+
+	outFS, err := r.CloudBuild.ResultFS(ctx, build)
+	if err != nil {
+		return err
+	}
+
+	file, err := outFS.Open(vsixFileName(release, prerelease))
+	if err != nil {
+		return err
+	}
+
+	asset, err := r.GitHub.UploadReleaseAsset(ctx, "golang", "vscode-go", draft.GetID(), vsixFileName(release, prerelease), file)
+	if err != nil {
+		return err
+	}
+
+	ctx.Printf("Uploaded asset %s to release %v as asset ID %v", asset.GetName(), draft.GetID(), asset.GetID())
 	return nil
 }
 
