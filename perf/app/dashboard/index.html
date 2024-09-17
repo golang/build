@@ -480,6 +480,10 @@ fetch('./formfields.json')
 			opt.innerText = formFields.Branches[i];
 			select.appendChild(opt);
 		}
+		var opt = document.createElement('option');
+		opt.value = "latest-release";
+		opt.innerText = "Latest release branch";
+		select.appendChild(opt);
 		prefillSearch(formFields);
 	});
 
