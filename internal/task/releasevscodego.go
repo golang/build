@@ -51,10 +51,12 @@ import (
 // * insider workflow: creates a insider version. There are no pre-releases for
 // insider versions.
 type ReleaseVSCodeGoTasks struct {
-	Gerrit        GerritClient
-	GitHub        GitHubClientInterface
-	CloudBuild    CloudBuildClient
-	ApproveAction func(*wf.TaskContext) error
+	Gerrit             GerritClient
+	GitHub             GitHubClientInterface
+	CloudBuild         CloudBuildClient
+	ApproveAction      func(*wf.TaskContext) error
+	SendMail           func(MailHeader, MailContent) error
+	AnnounceMailHeader MailHeader
 }
 
 var nextVersionParam = wf.ParamDef[string]{
@@ -129,6 +131,10 @@ func vscodeGoActiveReleaseBranch(ctx *wf.TaskContext, gerrit GerritClient) (stri
 	return active, nil
 }
 
+func vscodeGoReleaseBranch(release releaseVersion) string {
+	return fmt.Sprintf("release-v%v.%v", release.Major, release.Minor)
+}
+
 // NewPrereleaseDefinition create a new workflow definition for vscode-go pre-release.
 func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
@@ -142,13 +148,14 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	verified := wf.Action1(wd, "verify the release candidate", r.verifyTestResults, revision, wf.After(approved))
 
-	_ = wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(verified))
+	issue := wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(verified))
 	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(verified))
 	build := wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
 
 	tagged := wf.Action3(wd, "tag release candidate", r.tag, revision, release, prerelease, wf.After(branched))
-	_ = wf.Action3(wd, "create release note", r.createGitHubReleaseAsDraft, release, prerelease, build, wf.After(tagged))
+	released := wf.Action3(wd, "create release note", r.createGitHubReleaseAsDraft, release, prerelease, build, wf.After(tagged))
 
+	wf.Action4(wd, "mail announcement", r.mailPrereleaseAnnouncement, release, prerelease, revision, issue, wf.After(released))
 	return wd
 }
 
@@ -157,7 +164,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 // for a stable minor version (as no release branch exists yet).
 // Returns the head of the corresponding release branch otherwise.
 func (r *ReleaseVSCodeGoTasks) findRevision(ctx *wf.TaskContext, release releaseVersion, prerelease string) (string, error) {
-	branch := fmt.Sprintf("release-v%v.%v", release.Major, release.Minor)
+	branch := vscodeGoReleaseBranch(release)
 	if release.Patch == 0 && prerelease == "rc.1" {
 		branch = "master"
 	}
@@ -462,6 +469,30 @@ func (r *ReleaseVSCodeGoTasks) createGitHubReleaseAsDraft(ctx *wf.TaskContext, r
 
 	ctx.Printf("Uploaded asset %s to release %v as asset ID %v", asset.GetName(), draft.GetID(), asset.GetID())
 	return nil
+}
+
+type vscodeGoPrereleaseAnnouncement struct {
+	Commit  string
+	Issue   int
+	Branch  string
+	Version string
+}
+
+func (r *ReleaseVSCodeGoTasks) mailPrereleaseAnnouncement(ctx *wf.TaskContext, release releaseVersion, prerelease, revision string, issue int) error {
+	announce := vscodeGoPrereleaseAnnouncement{
+		Version: release.String() + "-" + prerelease,
+		Branch:  vscodeGoReleaseBranch(release),
+		Commit:  revision,
+		Issue:   issue,
+	}
+	content, err := announcementMail(announce)
+	if err != nil {
+		return err
+	}
+	ctx.Printf("pre-announcement subject: %s\n\n", content.Subject)
+	ctx.Printf("pre-announcement body HTML:\n%s\n", content.BodyHTML)
+	ctx.Printf("pre-announcement body text:\n%s", content.BodyText)
+	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
 func (r *ReleaseVSCodeGoTasks) tag(ctx *wf.TaskContext, commit string, release releaseVersion, prerelease string) error {

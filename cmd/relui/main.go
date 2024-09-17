@@ -92,6 +92,9 @@ func main() {
 	var goplsAnnMail task.MailHeader
 	addressVarFlag(&goplsAnnMail.From, "gopls-announce-mail-from", "The From address to use for the gopls (pre-)announcement mail.")
 	addressVarFlag(&goplsAnnMail.To, "gopls-announce-mail-to", "The To address to use for the gopls (pre-)announcement mail.")
+	var vscodeGoAnnMail task.MailHeader
+	addressVarFlag(&vscodeGoAnnMail.From, "vscode-go-announce-mail-from", "The From address to use for the vscode-go (pre-)announcement mail.")
+	addressVarFlag(&vscodeGoAnnMail.To, "vscode-go-announce-mail-to", "The To address to use for the vscode-go (pre-)announcement mail.")
 	var twitterAPI secret.TwitterCredentials
 	secret.JSONVarFlag(&twitterAPI, "twitter-api-secret", "Twitter API secret to use for workflows involving tweeting.")
 	var mastodonAPI secret.MastodonCredentials
@@ -312,9 +315,11 @@ func main() {
 			V3: github.NewClient(githubHTTPClient),
 			V4: githubv4.NewClient(githubHTTPClient),
 		},
-		Gerrit:        gerritClient,
-		CloudBuild:    cloudBuildClient,
-		ApproveAction: relui.ApproveActionDep(dbPool),
+		Gerrit:             gerritClient,
+		CloudBuild:         cloudBuildClient,
+		ApproveAction:      relui.ApproveActionDep(dbPool),
+		SendMail:           mailFunc,
+		AnnounceMailHeader: vscodeGoAnnMail,
 	}
 	dh.RegisterDefinition("Create a vscode-go release candidate", releaseVSCodeGoTasks.NewPrereleaseDefinition())
 	dh.RegisterDefinition("Release a vscode-go insider version", releaseVSCodeGoTasks.NewInsiderDefinition())

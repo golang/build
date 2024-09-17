@@ -368,6 +368,8 @@ func announcementMail(data any) (MailContent, error) {
 		name = "gopls-announce.md"
 	case goplsPrereleaseAnnouncement:
 		name = "gopls-pre-announce.md"
+	case vscodeGoPrereleaseAnnouncement:
+		name = "vscode-go-pre-announce.md"
 	default:
 		return MailContent{}, fmt.Errorf("unknown template data type %T", data)
 	}
@@ -469,7 +471,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 		return "", fmt.Errorf("internal error: unhandled pre-release Go version %q", v)
 	},
-}).ParseFS(tmplDir, "template/announce-*.md", "template/pre-announce-minor.md", "template/gopls-announce.md", "template/gopls-pre-announce.md"))
+}).ParseFS(tmplDir, "template/announce-*.md", "template/pre-announce-minor.md", "template/gopls-announce.md", "template/gopls-pre-announce.md", "template/vscode-go-pre-announce.md"))
 
 //go:embed template
 var tmplDir embed.FS

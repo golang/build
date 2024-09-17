@@ -1,0 +1,10 @@
+Hello gophers,
+
+We have just released vscode-go v0.44.2-rc.1, a release candidate for the upcoming vscode-go release. It is picked from release branch release-v0.44 at commit abc123d.
+
+Find installation and testing instructions for the release candidate at https://github.com/golang/vscode-go/releases/tag/v0.44.2-rc.1.
+
+This vscode-go release is being tracked at https://go.dev/issue/12345.
+
+Cheers,
+The Go Tools Team

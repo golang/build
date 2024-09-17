@@ -159,6 +159,16 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 			},
 			wantSubject: "Gopls v0.16.2 is released",
 		},
+		{
+			name: "vscode-go-pre-announce",
+			in: vscodeGoPrereleaseAnnouncement{
+				Version: "v0.44.2-rc.1",
+				Branch:  "release-v0.44",
+				Commit:  "abc123def456ghi789",
+				Issue:   12345,
+			},
+			wantSubject: "VSCode-Go v0.44.2-rc.1 is released",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
