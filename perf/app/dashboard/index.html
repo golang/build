@@ -474,8 +474,10 @@ fetch('./formfields.json')
 	});
 
 // Grab the repository so we can plumb it into UI elements.
-// prefillSearch set this up for us just now.
-const repository = document.getElementById('repository-select').value;
+let repository = (new URLSearchParams(window.location.search)).get('repository');
+if (!repository) {
+	repository = "go";
+}
 
 // Fetch content.
 let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
