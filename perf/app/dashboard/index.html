@@ -58,6 +58,10 @@ license that can be found in the LICENSE file.
 				</select>
 				Go branch:
 				<select id="branch-select" name="branch"></select>
+				Platform:
+				<select id="platform-select" name="platform">
+					<option>linux/amd64</option>
+				</select>
 				Duration (days):
 				<div class="Dashboard-duration">
 					<input id="days-input" type="number" name="days" value="30" />
@@ -424,6 +428,12 @@ function prefillSearch(formFields) {
 	if (repository) {
 		let select = document.getElementById('repository-select');
 		select.value = repository;
+	}
+
+	let platform = params.get('platform');
+	if (platform) {
+		let select = document.getElementById('platform-select');
+		select.value = platform;
 	}
 
 	let branch = params.get('branch');
