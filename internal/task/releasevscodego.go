@@ -420,12 +420,12 @@ func (r *ReleaseVSCodeGoTasks) createGitHubReleaseAsDraft(ctx *wf.TaskContext, r
 	// The release notes will display the differences between the current release
 	// and the appropriate previous release.
 	// - For minor versions (vX.Y.0), the diff is shown against the latest patch
-	//   of the previous minor version (vX.Y-1.Z).
+	//   of the previous stable minor version (vX.Y-2.Z).
 	// - For patch versions (vX.Y.Z), the diff is shown against the previous
 	//   patch version (vX.Y.Z-1).
 	var previous releaseVersion
 	if release.Patch == 0 {
-		previous, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor-1), isReleaseVersion)
+		previous, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor-2), isReleaseVersion)
 	} else {
 		previous, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor), isReleaseVersion)
 	}
