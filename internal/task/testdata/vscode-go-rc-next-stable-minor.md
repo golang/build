@@ -1,5 +1,5 @@
-**Full Changelog**: https://github.com/golang/vscode-go/compare/%s...%s
-**Milestone**: https://github.com/golang/vscode-go/issues?q=milestone%%3A%s
+**Full Changelog**: https://github.com/golang/vscode-go/compare/v0.42.1...v0.44.0-rc.4
+**Milestone**: https://github.com/golang/vscode-go/issues?q=milestone%3Av0.44.0
 
 * How to test prerelease
    * Download the `.vsix` file from this Releases page.

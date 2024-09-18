@@ -10,6 +10,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/internal/workflow"
 )
@@ -574,6 +575,118 @@ func TestDetermineInsiderVersion(t *testing.T) {
 			got, err := tasks.determineInsiderVersion(ctx)
 			if err != nil || got != tc.want {
 				t.Errorf("determineInsiderVersion() = (%v, %v), want (%v, nil)", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestVSCodeGoGitHubReleaseBody(t *testing.T) {
+	// changelog is the content of the CHANGELOG.md in vscode-go repo master
+	// branch. For testing purpose, this file contains the following versions.
+	// v0.42.0 - a stable minor version.
+	// v0.42.1 - a stable patch version.
+	// Unreleased - for next stable version.
+	changelog := `# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](http://keepachangelog.com/).
+
+## Unreleased
+
+CHANGE FOR v0.44.0 LINE 1
+
+#### Level 3 heading 1
+
+CHANGE FOR v0.44.0 LINE 2
+
+#### Level 3 heading 2
+
+CHANGE FOR v0.44.0 LINE 3
+
+## v0.42.1
+
+CHANGE FOR v0.42.1 LINE 1
+
+CHANGE FOR v0.42.1 LINE 2
+
+## v0.42.0
+
+CHANGE FOR v0.42.0 LINE 1
+
+CHANGE FOR v0.42.0 LINE 2
+`
+	testcases := []struct {
+		name        string
+		release     releaseVersion
+		prerelease  string
+		wantContent string
+	}{
+		{
+			name:        "next stable patch version",
+			release:     releaseVersion{Major: 0, Minor: 42, Patch: 2},
+			prerelease:  "",
+			wantContent: "vscode-go-next-stable-patch.md",
+		},
+		{
+			name:        "rc of the next patch version",
+			release:     releaseVersion{Major: 0, Minor: 42, Patch: 2},
+			prerelease:  "rc.3",
+			wantContent: "vscode-go-rc-next-stable-patch.md",
+		},
+		{
+			name:        "next stable minor version",
+			release:     releaseVersion{Major: 0, Minor: 44, Patch: 0},
+			prerelease:  "",
+			wantContent: "vscode-go-next-stable-minor.md",
+		},
+		{
+			name:        "rc of next stable minor version",
+			release:     releaseVersion{Major: 0, Minor: 44, Patch: 0},
+			prerelease:  "rc.4",
+			wantContent: "vscode-go-rc-next-stable-minor.md",
+		},
+		{
+			name:        "next insider minor version",
+			release:     releaseVersion{Major: 0, Minor: 43, Patch: 0},
+			prerelease:  "",
+			wantContent: "vscode-go-next-insider-minor.md",
+		},
+		{
+			name:        "next insider patch version",
+			release:     releaseVersion{Major: 0, Minor: 43, Patch: 4},
+			prerelease:  "",
+			wantContent: "vscode-go-next-insider-patch.md",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			commit := vscodego.Commit(map[string]string{
+				"go.mod":       "module github.com/golang/vscode-go\n",
+				"go.sum":       "\n",
+				"CHANGELOG.md": changelog,
+			})
+			for _, tag := range []string{"v0.42.1", "v0.42.0", "v0.41.1", "v0.41.0"} {
+				vscodego.Tag(tag, commit)
+			}
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+
+			tasks := &ReleaseVSCodeGoTasks{
+				Gerrit: gerrit,
+			}
+
+			got, err := tasks.vscodeGoGitHubReleaseBody(ctx, tc.release, tc.prerelease)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if diff := cmp.Diff(testdataFile(t, tc.wantContent), got); diff != "" {
+				t.Errorf("body text mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

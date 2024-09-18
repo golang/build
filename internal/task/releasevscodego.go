@@ -5,12 +5,16 @@
 package task
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"cloud.google.com/go/cloudbuild/apiv1/v2/cloudbuildpb"
 	"github.com/google/go-github/v48/github"
@@ -73,9 +77,6 @@ var nextVersionParam = wf.ParamDef[string]{
 
 //go:embed template/vscode-go-release-issue.md
 var vscodeGoReleaseIssueTmplStr string
-
-//go:embed template/vscode-go-pre-release-note.md
-var vscodeGoPreReleaseNoteTmplStr string
 
 // vscodeGoActiveReleaseBranch returns the current active release branch in
 // vscode-go project.
@@ -153,7 +154,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	build := wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
 
 	tagged := wf.Action3(wd, "tag release candidate", r.tag, revision, release, prerelease, wf.After(branched))
-	released := wf.Action3(wd, "create release note", r.createGitHubReleaseAsDraft, release, prerelease, build, wf.After(tagged))
+	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, prerelease, build, wf.After(tagged))
 
 	wf.Action4(wd, "mail announcement", r.mailPrereleaseAnnouncement, release, prerelease, revision, issue, wf.After(released))
 	return wd
@@ -314,10 +315,6 @@ go run tools/release/release.go package &> go-output.log
 cat npm-output.log
 cat go-output.log
 `
-		versionString := release.String()
-		if prerelease != "" {
-			versionString += "-" + prerelease
-		}
 		saveScript := cloudBuildClientScriptPrefix
 		for _, file := range []string{"npm-output.log", "go-output.log", vsixFileName(release, prerelease)} {
 			saveScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
@@ -338,7 +335,7 @@ cat go-output.log
 			},
 			{
 				Name:   "gcr.io/cloud-builders/npm",
-				Script: fmt.Sprintf(packageScriptFmt, versionString),
+				Script: fmt.Sprintf(packageScriptFmt, versionString(release, prerelease)),
 				Dir:    "vscode-go/extension",
 			},
 			{
@@ -410,40 +407,171 @@ func (r *ReleaseVSCodeGoTasks) nextPrereleaseVersion(ctx *wf.TaskContext, releas
 }
 
 func vsixFileName(release releaseVersion, prerelease string) string {
-	versionString := release.String()
-	if prerelease != "" {
-		versionString += "-" + prerelease
-	}
 	// The version inside of vsix does not have prefix "v".
-	return fmt.Sprintf("go-%s.vsix", versionString[1:])
+	return fmt.Sprintf("go-%s.vsix", versionString(release, prerelease)[1:])
 }
 
-func (r *ReleaseVSCodeGoTasks) createGitHubReleaseAsDraft(ctx *wf.TaskContext, release releaseVersion, prerelease string, build CloudBuild) error {
+// vscodeGoReleaseData holds data for the "vscode-go" extension release notes
+// template.
+type vscodeGoReleaseData struct {
+  // PreviousTag and CurrentTag are tags used to show the differences between
+  // the current release and the previous one.
+  PreviousTag string
+  CurrentTag  string
+
+  // Milestone is the tag containing issues for the current release.
+  Milestone string
+
+  // Body is the main content of the GitHub release notes after
+  // the Git diff and milestone sections.
+  Body string
+}
+
+//go:embed template/vscode-go-release-note.md
+var vscodeGoReleaseNoteTmpl string
+
+//go:embed template/vscode-go-prerelease-instructions.md
+var vscodeGoPrereleaseInstallationInstructions string
+
+// readChangeLogHeading function reads the CHANGELOG.md in vscode-go repo's
+// master branch and finds the corresponding content under the heading.
+func (r *ReleaseVSCodeGoTasks)readChangeLogHeading(ctx context.Context, heading string) (string, error) {
+	head, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", "master")
+	if err != nil {
+		return "", err
+	}
+	source, err := r.Gerrit.ReadFile(ctx, "vscode-go", head, "CHANGELOG.md")
+	if err != nil {
+		return "", err
+	}
+
+	var output bytes.Buffer
+	found := false
+
+	reader := bufio.NewReader(bytes.NewReader(source))
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+
+		// Reach to the next level 2 heading.
+		if bytes.HasPrefix(line, []byte("## ")) && found {
+			break
+		}
+
+		if !found && bytes.HasPrefix(line, []byte("## " + heading)) {
+			found = true
+			continue
+		}
+
+		if found {
+			output.Write(line)
+		}
+	}
+
+	return strings.TrimSpace(output.String()), nil
+}
+
+func (r *ReleaseVSCodeGoTasks) vscodeGoGitHubReleaseBody(ctx context.Context, release releaseVersion, prerelease string) (string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
+	if err != nil {
+		return "", err
+	}
+
+	// Release notes display the diff between the current release and:
+	// - Stable minor version(vX.EVEN.0): Latest patch of the last stable minor
+	//   (vX.EVEN-2.LATEST)
+	// - Stable patch version(vX.Y.Z): Previous patch version (vX.Y.Z-1)
+	// - Insider version(vX.ODD.Z): Last stable minor (vX.ODD-1.0-rc.1) - branch
+	// 	 cut.
+	var previousRelease releaseVersion
+	var previousPrerelease string
+	if isVSCodeGoInsiderVersion(release, prerelease) {
+		previousRelease = releaseVersion{Major: release.Major, Minor: release.Minor - 1, Patch: 0}
+		previousPrerelease = "rc.1"
+	} else {
+		if release.Patch == 0 {
+			previousRelease, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor-2), isReleaseVersion)
+		} else {
+			previousRelease, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor), isReleaseVersion)
+		}
+	}
+
+	current, previous := versionString(release, prerelease), versionString(previousRelease, previousPrerelease)
+	data := vscodeGoReleaseData {
+		CurrentTag: current,
+		PreviousTag: previous,
+	}
+	// Insider version.
+	if isVSCodeGoInsiderVersion(release, prerelease) {
+		// For insider version, the milestone will point to the next stable minor.
+		// If the insider version is vX.ODD.Z, the milestone will be vX.ODD+1.0.
+		data.Milestone = releaseVersion{Major: release.Major, Minor: release.Minor + 1, Patch: 0}.String()
+
+		if release.Patch == 0 {
+			// An insider minor version release (vX.ODD.0) is normally a dummy release
+			// immediately after a stable minor version release (vX.ODD-1.0).
+			// The body of the insider release will point to the corresponding stable
+			// release for reference.
+			const vscodeGoMinorInsiderFmt = `%s is a pre-release version identical to the official release %s, incorporating all the same bug fixes and improvements. This may include additional, experimental features that are not yet ready for general release. These features are still under development and may be subject to change or removal.
+
+See release https://github.com/golang/vscode-go/releases/tag/%s for details.`
+			data.Body = fmt.Sprintf(vscodeGoMinorInsiderFmt, current, previousRelease, previousRelease)
+		} else {
+			// An insider patch version release (vX.ODD.Z Z > 0) is built from master
+			// branch. The GitHub release body will be copied from the CHANGELOG.md
+			// in master branch under heading ## Unreleased.
+			data.Body, err = r.readChangeLogHeading(ctx, "Unreleased")
+			if err != nil {
+				return "", err
+			}
+		}
+	} else {
+		data.Milestone = release.String()
+		// Stable version prerelease.
+		if prerelease != "" {
+			// For prerelease, the main body of the release will contain the
+			// instructions of installation.
+			data.Body = vscodeGoPrereleaseInstallationInstructions
+		} else if release.Patch == 0 {
+			// The main body of the release will be copied from the CHANGELOG.md in
+			// master branch under heading ## Unreleased.
+			data.Body, err = r.readChangeLogHeading(ctx, "Unreleased")
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+
+	// Remove any trailing spaces.
+	data.Body = strings.TrimSpace(data.Body)
+
+	tmpl, err := template.New("vscode release").Parse(vscodeGoReleaseNoteTmpl)
+	if err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
+func (r *ReleaseVSCodeGoTasks) createGitHubReleaseDraft(ctx *wf.TaskContext, release releaseVersion, prerelease string, build CloudBuild) error {
+	body, err := r.vscodeGoGitHubReleaseBody(ctx, release, prerelease)
 	if err != nil {
 		return err
 	}
 
-	// The release notes will display the differences between the current release
-	// and the appropriate previous release.
-	// - For minor versions (vX.Y.0), the diff is shown against the latest patch
-	//   of the previous stable minor version (vX.Y-2.Z).
-	// - For patch versions (vX.Y.Z), the diff is shown against the previous
-	//   patch version (vX.Y.Z-1).
-	var previous releaseVersion
-	if release.Patch == 0 {
-		previous, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor-2), isReleaseVersion)
-	} else {
-		previous, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor), isReleaseVersion)
-	}
-
-	current := fmt.Sprintf("%s-%s", release, prerelease)
-
+	versionString := versionString(release, prerelease)
 	ctx.DisableRetries() // Beyond this point we want retries to be done manually, not automatically.
 	draft, err := r.GitHub.CreateRelease(ctx, "golang", "vscode-go", &github.RepositoryRelease{
-		TagName:    github.String(current),
-		Name:       github.String("Release " + current),
-		Body:       github.String(fmt.Sprintf(vscodeGoPreReleaseNoteTmplStr, previous, current, release.String())),
+		TagName:    github.String(versionString),
+		Name:       github.String("Release " + versionString),
+		Body:       github.String(body),
 		Prerelease: github.Bool(true),
 		Draft:      github.Bool(true),
 	})
@@ -495,8 +623,16 @@ func (r *ReleaseVSCodeGoTasks) mailPrereleaseAnnouncement(ctx *wf.TaskContext, r
 	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
+func versionString(release releaseVersion, prerelease string) string {
+	version := release.String()
+	if prerelease != "" {
+		version += "-" + prerelease
+	}
+	return version
+}
+
 func (r *ReleaseVSCodeGoTasks) tag(ctx *wf.TaskContext, commit string, release releaseVersion, prerelease string) error {
-	tag := fmt.Sprintf("%s-%s", release, prerelease)
+	tag := versionString(release, prerelease)
 	if err := r.Gerrit.Tag(ctx, "vscode-go", tag, commit); err != nil {
 		return err
 	}
@@ -510,9 +646,14 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	release := wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
-	commit := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"))
+	revision := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"))
+	approved := wf.Action2(wd, "await release coordinator's approval", r.approveInsiderVersion, release, revision)
 
-	_ = wf.Action2(wd, "await release coordinator's approval", r.approveInsiderVersion, release, commit)
+	verified := wf.Action1(wd, "verify the determined commit", r.verifyTestResults, revision, wf.After(approved))
+	build := wf.Task3(wd, "generate package extension (.vsix) from the commit", r.generatePackageExtension, release, wf.Const(""), revision, wf.After(verified))
+
+	tagged := wf.Action3(wd, "tag the commit", r.tag, revision, release, wf.Const(""), wf.After(build))
+	_ = wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
 
 	return wd
 }
