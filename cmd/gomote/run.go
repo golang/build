@@ -43,7 +43,7 @@ func (ss *stringSlice) Set(v string) error {
 func run(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.Usage = func() {
-		log.Print("run usage: gomote run [run-opts] <instance> <cmd> [args...]")
+		usageLogger.Print("run usage: gomote run [run-opts] <instance> <cmd> [args...]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

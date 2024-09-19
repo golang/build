@@ -32,12 +32,12 @@ func group(args []string) error {
 			cmds = append(cmds, cmd)
 		}
 		sort.Strings(cmds)
-		log.Printf("Usage of gomote group: gomote [global-flags] group <cmd> [cmd-flags]\n\n")
-		log.Printf("Commands:\n\n")
+		usageLogger.Printf("Usage of gomote group: gomote [global-flags] group <cmd> [cmd-flags]\n")
+		usageLogger.Printf("Commands:\n")
 		for _, name := range cmds {
-			log.Printf("  %-8s %s\n", name, cm[name].desc)
+			usageLogger.Printf("  %-8s %s\n", name, cm[name].desc)
 		}
-		fmt.Fprintln(os.Stderr)
+		usageLogger.Print()
 		os.Exit(1)
 	}
 	subCmd := args[0]

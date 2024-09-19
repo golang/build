@@ -20,8 +20,9 @@ import (
 func login(args []string) error {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "login usage: gomote login")
-		fmt.Fprintln(os.Stderr)
+		log := usageLogger
+		log.Print("login usage: gomote login")
+		log.Print()
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

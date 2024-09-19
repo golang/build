@@ -168,6 +168,7 @@ import (
 var (
 	buildEnv    *buildenv.Environment
 	activeGroup *groupData
+	usageLogger *log.Logger = log.New(os.Stderr, "", 0)
 )
 
 type command struct {
@@ -188,14 +189,14 @@ func sortedCommands() []string {
 }
 
 func usage() {
-	log.Printf(`Usage of gomote: gomote [global-flags] <cmd> [cmd-flags]
+	usageLogger.Printf(`Usage of gomote: gomote [global-flags] <cmd> [cmd-flags]
 
 Global flags:
 `)
 	flag.PrintDefaults()
-	log.Printf("Commands:\n\n")
+	usageLogger.Printf("Commands:\n\n")
 	for _, name := range sortedCommands() {
-		log.Printf("  %-13s %s\n", name, commands[name].des)
+		usageLogger.Printf("  %-13s %s\n", name, commands[name].des)
 	}
 	os.Exit(1)
 }

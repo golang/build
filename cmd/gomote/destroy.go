@@ -17,6 +17,7 @@ import (
 func destroy(args []string) error {
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	fs.Usage = func() {
+		log := usageLogger
 		log.Print("destroy usage: gomote destroy [instance]")
 		fmt.Fprintln(os.Stderr)
 		log.Print("Destroys a single instance, or all instances in a group.")

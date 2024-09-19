@@ -17,6 +17,7 @@ import (
 func ping(args []string) error {
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.Usage = func() {
+		log := usageLogger
 		log.Print("ping usage: gomote ping [instance]")
 		log.Print("")
 		log.Print("Instance name is optional if a group is specified.")

@@ -31,14 +31,15 @@ import (
 func putTar(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
+		log := usageLogger
 		log.Print("puttar usage: gomote puttar [put-opts] [instance] <source>")
-		fmt.Fprintln(os.Stderr)
+		log.Print()
 		log.Print("<source> may be one of:")
 		log.Print("- A path to a local .tar.gz file.")
 		log.Print("- A URL that points at a .tar.gz file.")
 		log.Print("- The '-' character to indicate a .tar.gz file passed via stdin.")
 		log.Print("- Git hash (min 7 characters) for the Go repository (extract a .tar.gz of the repository at that commit w/o history)")
-		fmt.Fprintln(os.Stderr)
+		log.Print()
 		log.Print("Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)

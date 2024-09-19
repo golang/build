@@ -18,6 +18,7 @@ import (
 func ls(args []string) error {
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
 	fs.Usage = func() {
+		log := usageLogger
 		log.Print("ls usage: gomote ls [ls-opts] [instance] [dir]")
 		log.Print("")
 		log.Print("Instance name is optional if a group is specified.")

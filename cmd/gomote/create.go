@@ -94,6 +94,7 @@ func swarmingBuilders() ([]string, error) {
 func create(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
 	fs.Usage = func() {
+		log := usageLogger
 		log.Print("create usage: gomote create [create-opts] <type>")
 		fmt.Fprintln(os.Stderr)
 		log.Print("If there's a valid group specified, new instances are")

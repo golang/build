@@ -18,9 +18,10 @@ import (
 func rm(args []string) error {
 	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
 	fs.Usage = func() {
+		log := usageLogger
 		log.Print("rm usage: gomote rm [instance] <file-or-dir>+")
 		log.Print("          gomote rm [instance] .  (to delete everything)")
-		fmt.Fprintln(os.Stderr)
+		log.Print()
 		log.Print("Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)

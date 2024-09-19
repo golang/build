@@ -25,7 +25,7 @@ func ssh(args []string) error {
 
 	fs := flag.NewFlagSet("ssh", flag.ContinueOnError)
 	fs.Usage = func() {
-		log.Print("ssh usage: gomote ssh <instance>")
+		usageLogger.Print("ssh usage: gomote ssh <instance>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

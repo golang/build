@@ -22,6 +22,7 @@ import (
 func getTar(args []string) error {
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.Usage = func() {
+		log := usageLogger
 		log.Print("gettar usage: gomote gettar [get-opts] [buildlet-name]")
 		log.Print("")
 		log.Print("Writes tarball into the current working directory.")
