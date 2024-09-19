@@ -101,6 +101,10 @@ const (
 
 	// NameMacServiceAPIKey is the secret name for the MacService API key.
 	NameMacServiceAPIKey = "macservice-api-key"
+
+	// NameVSCodeMarketplacePublishToken is the secret name for VS Code
+	// Marketplace publisher key.
+	NameVSCodeMarketplacePublishToken = "vscode-marketplace-token"
 )
 
 // TwitterCredentials holds Twitter API credentials.

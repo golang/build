@@ -755,7 +755,7 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 	return CloudBuild{Project: cb.project, ID: id, ResultURL: "file://" + resultDir}, nil
 }
 
-func (cb *FakeCloudBuild) RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep) (CloudBuild, error) {
+func (cb *FakeCloudBuild) RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep, _ *CloudBuildOptions) (CloudBuild, error) {
 	var gerritProject, fullScript string
 	resultURL := "file://" + cb.t.TempDir()
 	for _, step := range steps(resultURL) {

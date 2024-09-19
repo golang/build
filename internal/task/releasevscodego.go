@@ -20,6 +20,7 @@ import (
 	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/mod/semver"
@@ -206,7 +207,7 @@ chown -R 1000:1000 .
 				Dir:  "vscode-go",
 			},
 		}
-	})
+	}, nil)
 	if err != nil {
 		return err
 	}
@@ -311,12 +312,12 @@ func (r *ReleaseVSCodeGoTasks) generatePackageExtension(ctx *wf.TaskContext, rel
 export TAG_NAME=%s
 
 npm ci &> npm-output.log
-go run tools/release/release.go package &> go-output.log
+go run tools/release/release.go package &> go-package-output.log
 cat npm-output.log
-cat go-output.log
+cat go-package-output.log
 `
 		saveScript := cloudBuildClientScriptPrefix
-		for _, file := range []string{"npm-output.log", "go-output.log", vsixFileName(release, prerelease)} {
+		for _, file := range []string{"npm-output.log", "go-package-output.log", vsixFileName(release, prerelease)} {
 			saveScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
 		}
 		return []*cloudbuildpb.BuildStep{
@@ -346,7 +347,7 @@ cat go-output.log
 		}
 	}
 
-	build, err := r.CloudBuild.RunCustomSteps(ctx, steps)
+	build, err := r.CloudBuild.RunCustomSteps(ctx, steps, nil)
 	if err != nil {
 		return CloudBuild{}, err
 	}
@@ -357,9 +358,88 @@ cat go-output.log
 	}
 
 	ctx.Printf("the output from npm ci:\n%s\n", outputs["npm-output.log"])
-	ctx.Printf("the output from package generation:\n%s\n", outputs["go-output.log"])
+	ctx.Printf("the output from package generation:\n%s\n", outputs["go-package-output.log"])
 
 	return build, nil
+}
+
+// publishPackageExtension generate the package extension and publish to vscode
+// marketplace.
+func (r *ReleaseVSCodeGoTasks) publishPackageExtension(ctx *wf.TaskContext, release releaseVersion, build CloudBuild) error {
+	// Publishing to the VSCode Marketplace requires manual retries instead of
+	// automatic ones.
+	ctx.DisableRetries()
+	steps := func(resultURL string) []*cloudbuildpb.BuildStep {
+		const publishScriptFmt = cloudBuildClientScriptPrefix + `
+export TAG_NAME=%s
+
+npm ci &> npm-output.log
+go run tools/release/release.go publish &> go-publish-output.log
+cat npm-output.log
+cat go-publish-output.log
+`
+		versionString := release.String()
+		saveScript := cloudBuildClientScriptPrefix
+		for _, file := range []string{"npm-output.log", "go-publish-output.log", vsixFileName(release, "")} {
+			saveScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
+		}
+		return []*cloudbuildpb.BuildStep{
+			{
+				Name:   "bash",
+				Script: cloudBuildClientDownloadGoScript,
+			},
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"clone", "https://go.googlesource.com/vscode-go", "vscode-go"},
+			},
+			{
+				// Copy the vsix files to the vscode-go/extension directory that is the
+				// default directory "go run tools/release/release.go" expects vsix
+				// files to publish.
+				// TODO(hxjiang): write the vsix file to a separate gcs bucket and read
+				// it from there.
+				Name: "gcr.io/cloud-builders/gsutil",
+				Args: []string{"cp", build.ResultURL + "/" + vsixFileName(release, ""), "."},
+				Dir:  "vscode-go/extension",
+			},
+			{
+				Name:      "gcr.io/cloud-builders/npm",
+				Script:    fmt.Sprintf(publishScriptFmt, versionString),
+				Dir:       "vscode-go/extension",
+				SecretEnv: []string{"VSCE_PAT"},
+			},
+			{
+				Name:   "gcr.io/cloud-builders/gsutil",
+				Script: saveScript,
+				Dir:    "vscode-go/extension",
+			},
+		}
+	}
+
+	build, err := r.CloudBuild.RunCustomSteps(ctx, steps, &CloudBuildOptions{
+		AvailableSecrets: &cloudbuildpb.Secrets{
+			SecretManager: []*cloudbuildpb.SecretManagerSecret{
+				{
+					VersionName: "projects/$PROJECT_ID/secrets/" + secret.NameVSCodeMarketplacePublishToken + "/versions/latest",
+					Env:         "VSCE_PAT",
+				},
+			},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	outputs, err := buildToOutputs(ctx, r.CloudBuild, build)
+	if err != nil {
+		return err
+	}
+
+	ctx.Printf("the output from npm ci:\n%s\n", outputs["npm-output.log"])
+	ctx.Printf("the output from package generation:\n%s\n", outputs["go-package-output.log"])
+	ctx.Printf("the output from package publication:\n%s\n", outputs["go-publish-output.log"])
+
+	return nil
 }
 
 // determineReleaseVersion determines the release version for the upcoming
@@ -414,17 +494,17 @@ func vsixFileName(release releaseVersion, prerelease string) string {
 // vscodeGoReleaseData holds data for the "vscode-go" extension release notes
 // template.
 type vscodeGoReleaseData struct {
-  // PreviousTag and CurrentTag are tags used to show the differences between
-  // the current release and the previous one.
-  PreviousTag string
-  CurrentTag  string
+	// PreviousTag and CurrentTag are tags used to show the differences between
+	// the current release and the previous one.
+	PreviousTag string
+	CurrentTag  string
 
-  // Milestone is the tag containing issues for the current release.
-  Milestone string
+	// Milestone is the tag containing issues for the current release.
+	Milestone string
 
-  // Body is the main content of the GitHub release notes after
-  // the Git diff and milestone sections.
-  Body string
+	// Body is the main content of the GitHub release notes after
+	// the Git diff and milestone sections.
+	Body string
 }
 
 //go:embed template/vscode-go-release-note.md
@@ -435,7 +515,7 @@ var vscodeGoPrereleaseInstallationInstructions string
 
 // readChangeLogHeading function reads the CHANGELOG.md in vscode-go repo's
 // master branch and finds the corresponding content under the heading.
-func (r *ReleaseVSCodeGoTasks)readChangeLogHeading(ctx context.Context, heading string) (string, error) {
+func (r *ReleaseVSCodeGoTasks) readChangeLogHeading(ctx context.Context, heading string) (string, error) {
 	head, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", "master")
 	if err != nil {
 		return "", err
@@ -460,7 +540,7 @@ func (r *ReleaseVSCodeGoTasks)readChangeLogHeading(ctx context.Context, heading 
 			break
 		}
 
-		if !found && bytes.HasPrefix(line, []byte("## " + heading)) {
+		if !found && bytes.HasPrefix(line, []byte("## "+heading)) {
 			found = true
 			continue
 		}
@@ -499,8 +579,8 @@ func (r *ReleaseVSCodeGoTasks) vscodeGoGitHubReleaseBody(ctx context.Context, re
 	}
 
 	current, previous := versionString(release, prerelease), versionString(previousRelease, previousPrerelease)
-	data := vscodeGoReleaseData {
-		CurrentTag: current,
+	data := vscodeGoReleaseData{
+		CurrentTag:  current,
 		PreviousTag: previous,
 	}
 	// Insider version.
@@ -653,7 +733,9 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 	build := wf.Task3(wd, "generate package extension (.vsix) from the commit", r.generatePackageExtension, release, wf.Const(""), revision, wf.After(verified))
 
 	tagged := wf.Action3(wd, "tag the commit", r.tag, revision, release, wf.Const(""), wf.After(build))
+
 	_ = wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
+	_ = wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(tagged))
 
 	return wd
 }

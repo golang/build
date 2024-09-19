@@ -34,12 +34,17 @@ type CloudBuildClient interface {
 	// may write output to it with 'gsutil cp' for accessing via ResultFS.
 	// Prefer RunScript for simpler scenarios.
 	// Reference: https://cloud.google.com/build/docs/build-config-file-schema
-	RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep) (CloudBuild, error)
+	RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep, opts *CloudBuildOptions) (CloudBuild, error)
 	// Completed reports whether a build has finished, returning an error if
 	// it's failed. It's suitable for use with AwaitCondition.
 	Completed(ctx context.Context, build CloudBuild) (detail string, completed bool, _ error)
 	// ResultFS returns an FS that contains the results of the given build.
 	ResultFS(ctx context.Context, build CloudBuild) (fs.FS, error)
+}
+
+// CloudBuildOptions allows to customize CloudBuild configurations.
+type CloudBuildOptions struct {
+	AvailableSecrets *cloudbuildpb.Secrets
 }
 
 type RealCloudBuildClient struct {
@@ -131,10 +136,10 @@ func (c *RealCloudBuildClient) RunScript(ctx context.Context, script string, ger
 		return steps
 	}
 
-	return c.RunCustomSteps(ctx, steps)
+	return c.RunCustomSteps(ctx, steps, nil)
 }
 
-func (c *RealCloudBuildClient) RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep) (CloudBuild, error) {
+func (c *RealCloudBuildClient) RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep, options *CloudBuildOptions) (CloudBuild, error) {
 	resultURL := fmt.Sprintf("%v/script-build-%v", c.ScratchURL, rand.Int63())
 	build := &cloudbuildpb.Build{
 		Steps: steps(resultURL),
@@ -143,6 +148,9 @@ func (c *RealCloudBuildClient) RunCustomSteps(ctx context.Context, steps func(re
 			Logging:     cloudbuildpb.BuildOptions_CLOUD_LOGGING_ONLY,
 		},
 		ServiceAccount: c.ScriptAccount,
+	}
+	if options != nil {
+		build.AvailableSecrets = options.AvailableSecrets
 	}
 	op, err := c.BuildClient.CreateBuild(ctx, &cloudbuildpb.CreateBuildRequest{
 		ProjectId: c.ScriptProject,
