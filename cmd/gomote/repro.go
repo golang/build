@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -48,7 +49,6 @@ func repro(args []string) error {
 	fs.IntVar(&cfg.count, "count", 1, "number of instances to create")
 	fs.StringVar(&cfg.newGroup, "new-group", "", "also create a new group and add the new instances to it")
 	cfg.useGolangbuild = true
-	login := flag.Bool("login", false, "include interactive login to LUCI")
 
 	fs.Parse(args)
 	if fs.NArg() != 1 {
@@ -60,13 +60,16 @@ func repro(args []string) error {
 		return fmt.Errorf("parsing build ID: %v", err)
 	}
 	ctx := context.Background()
-	auth := createLUCIAuthenticator(ctx)
-	if *login {
-		if err := auth.Login(); err != nil {
+	au := createLUCIAuthenticator(ctx)
+	if err := au.CheckLoginRequired(); errors.Is(err, auth.ErrLoginRequired) {
+		log.Println("LUCI login required... initiating interactive login process")
+		if err := au.Login(); err != nil {
 			return err
 		}
+	} else if err != nil {
+		return fmt.Errorf("checking whether LUCI login is required: %w", err)
 	}
-	hc, err := auth.Client()
+	hc, err := au.Client()
 	if err != nil {
 		return fmt.Errorf("creating HTTP client: %w", err)
 	}
