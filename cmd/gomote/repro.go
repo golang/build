@@ -144,7 +144,7 @@ func repro(args []string) error {
 	log.Printf("Selected build %d to initialize the gomote.", gomoteReproID)
 
 	log.Printf("Creating %d instance(s) of type %s...", cfg.count, gomoteBuilderType)
-	instances, err := createInstances(ctx, gomoteBuilderType, &cfg)
+	instances, group, err := createInstances(ctx, gomoteBuilderType, &cfg)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func repro(args []string) error {
 	if err := initReproInstances(ctx, instances, gomoteReproID); err != nil {
 		return err
 	}
-	return printTestCommands(ctx, hc, build)
+	return printTestCommands(ctx, hc, build, instances, group)
 }
 
 func initReproInstances(ctx context.Context, instances []string, reproBuildID int64) error {
@@ -205,7 +205,7 @@ func initReproInstances(ctx context.Context, instances []string, reproBuildID in
 	return eg.Wait()
 }
 
-func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) error {
+func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build, instances []string, group *groupData) error {
 	// Figure out what project this build is for.
 	props := build.Input.Properties.AsMap()
 	projValue, ok := props["project"]
@@ -279,9 +279,12 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) 
 			if strings.HasPrefix(rest, project) {
 				t.path = "./x_" + rest
 			} else {
-				// We are almsot definitely unable to run this test -- something went very wrong.
+				// We are almost definitely unable to run this test -- something went very wrong.
 				unknownTests = append(unknownTests, result.TestId)
 			}
+		} else {
+			// Assume it's a std test.
+			t.path = "goroot/src/" + t.pkg
 		}
 		if bench {
 			benchmarks = append(benchmarks, t)
@@ -289,14 +292,20 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build) 
 			tests = append(tests, t)
 		}
 	}
+	prefix := ""
+	instName := " " + instances[0]
+	if group != nil {
+		prefix = "GOMOTE_GROUP=" + group.Name + " "
+		instName = ""
+	}
 	for _, t := range tests {
-		log.Printf("$ gomote run -dir %s goroot/bin/go test -run='%s' .", t.pkgPath(), t.regexp())
+		log.Printf("$ %sgomote run%s -dir %s goroot/bin/go test -run='%s' .", prefix, instName, t.pkgPath(), t.regexp())
 	}
 	for _, t := range benchmarks {
-		log.Printf("$ gomote run -dir %s goroot/bin/go test -run='^$' -bench='%s' .", t.pkgPath(), t.regexp())
+		log.Printf("$ %sgomote run%s -dir %s goroot/bin/go test -run='^$' -bench='%s' .", prefix, instName, t.pkgPath(), t.regexp())
 	}
 	for _, pkg := range specialPackages {
-		log.Printf("$ gomote run -dir ./goroot goroot/bin/go tool dist test %s", pkg)
+		log.Printf("$ %sgomote run%s -dir ./goroot goroot/bin/go tool dist test %s", prefix, instName, pkg)
 	}
 	for _, pkg := range packageFailures {
 		log.Printf("Note: Found package-level test failure for %s.", pkg)

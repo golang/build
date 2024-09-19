@@ -147,7 +147,7 @@ func create(args []string) error {
 		fs.Usage()
 	}
 	builderType := fs.Arg(0)
-	_, err := createInstances(context.Background(), builderType, &cfg)
+	_, _, err := createInstances(context.Background(), builderType, &cfg)
 	return err
 }
 
@@ -159,20 +159,20 @@ type createConfig struct {
 	useGolangbuild bool
 }
 
-func createInstances(ctx context.Context, builderType string, cfg *createConfig) ([]string, error) {
+func createInstances(ctx context.Context, builderType string, cfg *createConfig) ([]string, *groupData, error) {
 	var groupMu sync.Mutex
 	group := activeGroup
 	var err error
 	if cfg.newGroup != "" {
 		group, err = doCreateGroup(cfg.newGroup)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	if group == nil && os.Getenv("GOMOTE_GROUP") != "" {
 		group, err = doCreateGroup(os.Getenv("GOMOTE_GROUP"))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -275,12 +275,12 @@ func createInstances(ctx context.Context, builderType string, cfg *createConfig)
 		})
 	}
 	if err := eg.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if group != nil {
 		if err := storeGroup(group); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return instances, nil
+	return instances, group, nil
 }
