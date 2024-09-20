@@ -1,4 +1,4 @@
-Subject: VSCode-Go {{.Version}} is released
+Subject: VSCode-Go extension {{.Version}} is released
 
 Hello gophers,
 

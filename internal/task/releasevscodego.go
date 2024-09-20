@@ -157,7 +157,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	tagged := wf.Action3(wd, "tag release candidate", r.tag, revision, release, prerelease, wf.After(branched))
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, prerelease, build, wf.After(tagged))
 
-	wf.Action4(wd, "mail announcement", r.mailPrereleaseAnnouncement, release, prerelease, revision, issue, wf.After(released))
+	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, prerelease, revision, issue, wf.After(released))
 	return wd
 }
 
@@ -686,20 +686,48 @@ type vscodeGoPrereleaseAnnouncement struct {
 	Version string
 }
 
-func (r *ReleaseVSCodeGoTasks) mailPrereleaseAnnouncement(ctx *wf.TaskContext, release releaseVersion, prerelease, revision string, issue int) error {
-	announce := vscodeGoPrereleaseAnnouncement{
-		Version: release.String() + "-" + prerelease,
-		Branch:  vscodeGoReleaseBranch(release),
-		Commit:  revision,
-		Issue:   issue,
+type vscodeGoReleaseAnnouncement struct {
+	Commit  string
+	Version string
+	Branch  string
+}
+
+type vscodeGoInsiderAnnouncement struct {
+	Commit        string
+	Version       string
+	StableVersion string
+}
+
+func (r *ReleaseVSCodeGoTasks) mailAnnouncement(ctx *wf.TaskContext, release releaseVersion, prerelease, revision string, issue int) error {
+	var announce any
+	if prerelease != "" {
+		announce = vscodeGoPrereleaseAnnouncement{
+			Version: versionString(release, prerelease),
+			Branch:  vscodeGoReleaseBranch(release),
+			Commit:  revision,
+			Issue:   issue,
+		}
+	} else if isVSCodeGoInsiderVersion(release, prerelease) {
+		announce = vscodeGoInsiderAnnouncement{
+			Version:       release.String(),
+			Commit:        revision,
+			StableVersion: releaseVersion{Major: release.Major, Minor: release.Minor + 1, Patch: 0}.String(),
+		}
+	} else {
+		announce = vscodeGoReleaseAnnouncement{
+			Version: release.String(),
+			Commit:  revision,
+			Branch:  vscodeGoReleaseBranch(release),
+		}
 	}
+
 	content, err := announcementMail(announce)
 	if err != nil {
 		return err
 	}
-	ctx.Printf("pre-announcement subject: %s\n\n", content.Subject)
-	ctx.Printf("pre-announcement body HTML:\n%s\n", content.BodyHTML)
-	ctx.Printf("pre-announcement body text:\n%s", content.BodyText)
+	ctx.Printf("announcement subject: %s\n\n", content.Subject)
+	ctx.Printf("announcement body HTML:\n%s\n", content.BodyHTML)
+	ctx.Printf("announcement body text:\n%s", content.BodyText)
 	return r.SendMail(r.AnnounceMailHeader, content)
 }
 
@@ -734,9 +762,10 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 
 	tagged := wf.Action3(wd, "tag the commit", r.tag, revision, release, wf.Const(""), wf.After(build))
 
-	_ = wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
-	_ = wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(tagged))
+	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
+	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(tagged))
 
+	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, wf.Const(""), revision, wf.Const(0), wf.After(released), wf.After(published))
 	return wd
 }
 
@@ -849,7 +878,7 @@ func latestVersion(versions []string, filters ...func(releaseVersion, string) bo
 }
 
 func (r *ReleaseVSCodeGoTasks) approvePrereleaseVersion(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
-	ctx.Printf("The next release candidate will be %s-%s", release, prerelease)
+	ctx.Printf("The next release candidate will be %s", versionString(release, prerelease))
 	return r.ApproveAction(ctx)
 }
 
