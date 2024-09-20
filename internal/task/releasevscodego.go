@@ -146,7 +146,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
 	revision := wf.Task2(wd, "find the revision for the pre-release version", r.findRevision, release, prerelease)
-	approved := wf.Action2(wd, "await release coordinator's approval", r.approvePrereleaseVersion, release, prerelease)
+	approved := wf.Action2(wd, "await release coordinator's approval", r.approveStablePrerelease, release, prerelease)
 
 	verified := wf.Action1(wd, "verify the release candidate", r.verifyTestResults, revision, wf.After(approved))
 
@@ -755,7 +755,7 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 
 	release := wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
 	revision := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"))
-	approved := wf.Action2(wd, "await release coordinator's approval", r.approveInsiderVersion, release, revision)
+	approved := wf.Action2(wd, "await release coordinator's approval", r.approveInsiderRelease, release, revision)
 
 	verified := wf.Action1(wd, "verify the determined commit", r.verifyTestResults, revision, wf.After(approved))
 	build := wf.Task3(wd, "generate package extension (.vsix) from the commit", r.generatePackageExtension, release, wf.Const(""), revision, wf.After(verified))
@@ -877,15 +877,51 @@ func latestVersion(versions []string, filters ...func(releaseVersion, string) bo
 	return latestRelease, latestPre
 }
 
-func (r *ReleaseVSCodeGoTasks) approvePrereleaseVersion(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
+func (r *ReleaseVSCodeGoTasks) approveStablePrerelease(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
 	ctx.Printf("The next release candidate will be %s", versionString(release, prerelease))
 	return r.ApproveAction(ctx)
 }
 
-func (r *ReleaseVSCodeGoTasks) approveInsiderVersion(ctx *wf.TaskContext, release releaseVersion, commit string) error {
+func (r *ReleaseVSCodeGoTasks) approveInsiderRelease(ctx *wf.TaskContext, release releaseVersion, commit string) error {
 	// The insider version is picked from the actively developed master branch.
 	// The commit information is essential for the release coordinator.
-	ctx.Printf("The insider version v%v.%v.%v will released based on commit %s", release.Major, release.Minor, release.Patch, commit)
+	ctx.Printf("The insider version %s will released based on commit %s", release, commit)
 	ctx.Printf("See commit detail: https://go.googlesource.com/vscode-go/+/%s", commit)
 	return r.ApproveAction(ctx)
+}
+
+func (r *ReleaseVSCodeGoTasks) approveStableRelease(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
+	ctx.Printf("The release candidate %s will be released as %s", versionString(release, prerelease), release)
+	ctx.Printf("See release candidate detail: https://go.googlesource.com/vscode-go/+/refs/tags/%s", versionString(release, prerelease))
+	return r.ApproveAction(ctx)
+}
+
+// NewReleaseDefinition creates a new workflow definition for vscode-go stable
+// version release.
+func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
+	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
+
+	versionBumpStrategy := wf.Param(wd, nextVersionParam)
+	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
+	prerelease := wf.Task1(wd, "find the latest pre-release version", r.latestPrereleaseVersion, release)
+
+	_ = wf.Action2(wd, "await release coordinator's approval", r.approveStableRelease, release, prerelease)
+
+	return wd
+}
+
+// latestPrereleaseVersion inspects the tags in vscode-go repo that match with
+// the given version and finds the latest pre-release version.
+func (r *ReleaseVSCodeGoTasks) latestPrereleaseVersion(ctx *wf.TaskContext, release releaseVersion) (string, error) {
+	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
+	if err != nil {
+		return "", err
+	}
+
+	_, prerelease := latestVersion(tags, isSameReleaseVersion(release), isPrereleaseMatchRegex(`^rc\.\d+$`))
+	if prerelease == "" {
+		return "", fmt.Errorf("could not find any release candidate for version %s", release)
+	}
+
+	return prerelease, nil
 }
