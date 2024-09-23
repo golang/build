@@ -306,6 +306,13 @@ func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, release 
 	return nil
 }
 
+// generatePackageExtension builds the vscode-go package extension from source.
+//
+// Uses the 'revision' parameter to determine the commit to build.
+// Uses the 'release' and 'prerelease' to determine the output file name.
+//
+// Returns a CloudBuild struct with information about the built package
+// extension in Google Cloud Storage (GCS).
 func (r *ReleaseVSCodeGoTasks) generatePackageExtension(ctx *wf.TaskContext, release releaseVersion, prerelease, revision string) (CloudBuild, error) {
 	steps := func(resultURL string) []*cloudbuildpb.BuildStep {
 		const packageScriptFmt = cloudBuildClientScriptPrefix + `
@@ -905,7 +912,13 @@ func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
 	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the latest pre-release version", r.latestPrereleaseVersion, release)
 
-	_ = wf.Action2(wd, "await release coordinator's approval", r.approveStableRelease, release, prerelease)
+	approved := wf.Action2(wd, "await release coordinator's approval", r.approveStableRelease, release, prerelease)
+
+	tag := wf.Task2(wd, "find tag for the release candidate", findVSCodeReleaseTag, release, prerelease, wf.After(approved))
+	// Skip test result verification because it was already executed in the
+	// prerelease flow.
+	build := wf.Task3(wd, "generate package extension (.vsix) from release candidate tag", r.generatePackageExtension, release, wf.Const(""), tag)
+	_ = wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build)
 
 	return wd
 }
@@ -924,4 +937,12 @@ func (r *ReleaseVSCodeGoTasks) latestPrereleaseVersion(ctx *wf.TaskContext, rele
 	}
 
 	return prerelease, nil
+}
+
+// findVSCodeReleaseTag returns the tag for the VS Code release candidate.
+//
+// It wraps the versionString function and includes an extra parameter to
+// facilitate execution within the release flow steps.
+func findVSCodeReleaseTag(_ *wf.TaskContext, release releaseVersion, prerelease string) (string, error) {
+	return versionString(release, prerelease), nil
 }
