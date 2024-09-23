@@ -251,69 +251,146 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 		return fmt.Errorf("error closing upload: %w", err)
 	}
 
-	comparisons := []struct {
-		suffix      string
-		compare     string
-		numerator   string
-		denominator string
-		filter      string
-	}{
-		{
-			// Default: toolchain:baseline vs experiment without PGO
-			compare:     "toolchain",
-			numerator:   "experiment",
-			denominator: "baseline",
-			filter:      "-pgo:on", // "off" or unset (bent doesn't set pgo).
-		},
-		{
-			// toolchain:baseline vs experiment with PGO
-			suffix:      "/pgo=on,toolchain:baseline-vs-experiment",
-			compare:     "toolchain",
-			numerator:   "experiment",
-			denominator: "baseline",
-			filter:      "pgo:on",
-		},
-		{
-			// pgo:off vs on with experiment toolchain (impact of enabling PGO)
-			suffix:      "/toolchain:experiment,pgo=off-vs-on",
-			compare:     "pgo",
-			numerator:   "on",
-			denominator: "off",
-			filter:      "toolchain:experiment",
-		},
-	}
-	for _, c := range comparisons {
+	// Iterate over the comparisons, extract the results, and push them to Influx.
+	wapi := ifxc.WriteAPIBlocking(influx.Org, influx.Bucket)
+	for _, cfg := range []comparisonConfig{pgoOff, pgoOn, pgoVs} {
 		r := bytes.NewReader(buf.Bytes())
-		fmtr := benchfmt.NewReader(r, u.UploadID)
-
-		// Use the default comparisons. Namely:
-		// 1. Build a series out of commit dates (in our case, this is length 1).
-		// 2. Split out comparisons by benchmark name (unit we get for free).
-		//
-		// Copy the options for mutation.
-		opts := *benchseries.DefaultBuilderOptions()
-		opts.Compare = c.compare
-		opts.Numerator = c.numerator
-		opts.Denominator = c.denominator
-		if opts.Filter == "" {
-			opts.Filter = c.filter
-		} else {
-			opts.Filter += " " + c.filter
+		forAll, err := benchCompare(r, u.UploadID, cfg)
+		if err != nil {
+			return fmt.Errorf("performing comparison for %s: %v", u.UploadID, err)
 		}
+		// TODO(mknyszek): Use new iterators when possible.
+		forAll(func(c comparison, err error) bool {
+			if err != nil {
+				// Just log this error. We don't want to quit early if we have other good comparisons.
+				log.Printf("%s: %s: %v", c.series, c.benchmarkName, err)
+				return true
+			}
+			measurement := "benchmark-result"                   // measurement
+			benchmarkName := c.benchmarkName + cfg.suffix       // tag
+			series := c.series                                  // time
+			center, low, high := c.Center, c.Low, c.High        // fields
+			unit := c.unit                                      // tag
+			uploadTime := c.residues["upload-time"]             // field
+			cpu := c.residues["cpu"]                            // tag
+			goarch := c.residues["goarch"]                      // tag
+			goos := c.residues["goos"]                          // tag
+			benchmarksCommit := c.residues["benchmarks-commit"] // field
+			baselineCommit := c.hashPairs[series].DenHash       // field
+			experimentCommit := c.hashPairs[series].NumHash     // field
+			repository := c.residues["repository"]              // tag
+			branch := c.residues["branch"]                      // tag
 
-		if err := a.compareAndPush(ctx, ifxc, fmtr, &opts, c.suffix); err != nil {
-			return fmt.Errorf("error in compareAndPush(%s): %w", c.suffix, err)
-		}
+			// cmd/bench didn't set repository prior to
+			// CL 413915. Older runs are all against go.
+			if repository == "" {
+				repository = "go"
+			}
+
+			// Push to influx.
+			t, err := benchseries.ParseNormalizedDateString(series)
+			if err != nil {
+				log.Printf("%s: %s: error parsing normalized date: %v", c.series, c.benchmarkName, err)
+				return true
+			}
+			fields := map[string]interface{}{
+				"center":            center,
+				"low":               low,
+				"high":              high,
+				"upload-time":       uploadTime,
+				"benchmarks-commit": benchmarksCommit,
+				"baseline-commit":   baselineCommit,
+				"experiment-commit": experimentCommit,
+			}
+			tags := map[string]string{
+				"name":       benchmarkName,
+				"unit":       unit,
+				"cpu":        cpu,
+				"goarch":     goarch,
+				"goos":       goos,
+				"repository": repository,
+				"branch":     branch,
+				// TODO(prattmic): Add pkg, which
+				// benchseries currently can't handle.
+			}
+			p := influxdb2.NewPoint(measurement, tags, fields, t)
+			if err := wapi.WritePoint(ctx, p); err != nil {
+				log.Printf("%s: %s: error writing point: %v", c.series, c.benchmarkName, err)
+				return true
+			}
+			return true
+		})
 	}
-
 	return nil
 }
 
-func (a *App) compareAndPush(ctx context.Context, ifxc influxdb2.Client, r *benchfmt.Reader, opts *benchseries.BuilderOptions, suffix string) error {
+type comparisonConfig struct {
+	suffix      string
+	compare     string
+	numerator   string
+	denominator string
+	filter      string
+}
+
+var (
+	pgoOff = comparisonConfig{
+		// Default: toolchain:baseline vs experiment without PGO
+		compare:     "toolchain",
+		numerator:   "experiment",
+		denominator: "baseline",
+		filter:      "-pgo:on", // "off" or unset (bent doesn't set pgo).
+	}
+	pgoOn = comparisonConfig{
+		// toolchain:baseline vs experiment with PGO
+		suffix:      "/pgo=on,toolchain:baseline-vs-experiment",
+		compare:     "toolchain",
+		numerator:   "experiment",
+		denominator: "baseline",
+		filter:      "pgo:on",
+	}
+	pgoVs = comparisonConfig{
+		// pgo:off vs on with experiment toolchain (impact of enabling PGO)
+		suffix:      "/toolchain:experiment,pgo=off-vs-on",
+		compare:     "pgo",
+		numerator:   "on",
+		denominator: "off",
+		filter:      "toolchain:experiment",
+	}
+)
+
+type comparison struct {
+	series        string
+	benchmarkName string
+	unit          string
+	residues      map[string]string
+	hashPairs     map[string]benchseries.ComparisonHashes
+	*benchseries.ComparisonSummary
+}
+
+// benchCompare reads r, assuming it contains benchmark data, and performs the provided comparison
+// on the data, returning an iterator over all the resulting summaries.
+func benchCompare(rr io.Reader, name string, c comparisonConfig) (func(func(comparison, error) bool), error) {
+	r := benchfmt.NewReader(rr, name)
+
+	// Use the default comparisons. Namely:
+	// 1. Build a series out of commit dates (in our case, this is length 1).
+	// 2. Split out comparisons by benchmark name (unit we get for free).
+	//
+	// Copy the options for mutation.
+	opts := *benchseries.DefaultBuilderOptions()
+	opts.Compare = c.compare
+	opts.Numerator = c.numerator
+	opts.Denominator = c.denominator
+	if opts.Filter == "" {
+		opts.Filter = c.filter
+	} else {
+		opts.Filter += " " + c.filter
+	}
+
 	// Scan the results into a benchseries builder.
-	builder, err := benchseries.NewBuilder(opts)
+	builder, err := benchseries.NewBuilder(&opts)
 	if err != nil {
-		return fmt.Errorf("failed to create benchseries builder: %v", err)
+		return nil, fmt.Errorf("failed to create benchseries builder: %v", err)
 	}
 	for r.Scan() {
 		rec := r.Result()
@@ -327,14 +404,14 @@ func (a *App) compareAndPush(ctx context.Context, ifxc influxdb2.Client, r *benc
 		builder.Add(res)
 	}
 	if err := r.Err(); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Run the comparison. We don't have any existing results so our
 	// duplicate policy doesn't matter here. Just pick replacement.
 	comparisons, err := builder.AllComparisonSeries(nil, benchseries.DUPE_REPLACE)
 	if err != nil {
-		return fmt.Errorf("failed to creation comparison series: %w", err)
+		return nil, fmt.Errorf("failed to creation comparison series: %w", err)
 	}
 
 	const (
@@ -342,94 +419,52 @@ func (a *App) compareAndPush(ctx context.Context, ifxc influxdb2.Client, r *benc
 		bootstrap  = 1000
 	)
 
-	// Iterate over the comparisons, extract the results, and push them to Influx.
-	wapi := ifxc.WriteAPIBlocking(influx.Org, influx.Bucket)
-comparisonLoop:
-	for _, cs := range comparisons {
-		cs.AddSummaries(confidence, bootstrap)
+	// Iterate over the comparisons and extract the results
+	return func(yield func(sum comparison, err error) bool) {
+	comparisonLoop:
+		for _, cs := range comparisons {
+			cs.AddSummaries(confidence, bootstrap)
 
-		summaries := cs.Summaries
+			summaries := cs.Summaries
 
-		// Build a map of residues with single values. Our benchmark pipeline enforces
-		// that the only key that has a differing value across benchmark runs of the same
-		// name and unit is "toolchain."
-		//
-		// Most other keys are singular for *all* benchmarks in a run (like "goos") but
-		// even those that are not (like "pkg") remain the same even if "toolchain" differs.
-		//
-		// We build a map instead of just using them because we need to decide at upload
-		// time whether the key is an Influx tag or field.
-		residues := make(map[string]string)
-		for _, r := range cs.Residues {
-			if len(r.Slice) > 1 {
-				log.Printf("found non-singular key %q with values %v; comparison may be invalid, skipping...", r.S, r.Slice)
-				continue comparisonLoop
+			// Build a map of residues with single values. Our benchmark pipeline enforces
+			// that the only key that has a differing value across benchmark runs of the same
+			// name and unit is "toolchain."
+			//
+			// Most other keys are singular for *all* benchmarks in a run (like "goos") but
+			// even those that are not (like "pkg") remain the same even if "toolchain" differs.
+			//
+			// We build a map instead of just using them because we need to decide at upload
+			// time whether the key is an Influx tag or field.
+			residues := make(map[string]string)
+			for _, r := range cs.Residues {
+				if len(r.Slice) > 1 {
+					err := fmt.Errorf("found non-singular key %q with values %v; comparison may be invalid, skipping...", r.S, r.Slice)
+					if !yield(comparison{}, err) {
+						return
+					}
+					continue comparisonLoop
+				}
+				residues[r.S] = r.Slice[0]
 			}
-			residues[r.S] = r.Slice[0]
-		}
 
-		// N.B. In our case Series should have length 1, because we're processing
-		// a single result here. By default the string value here is the commit date.
-		for i, series := range cs.Series {
-			for j, benchmarkName := range cs.Benchmarks {
-				sum := summaries[i][j]
-				if !sum.Defined() {
-					log.Printf("Summary not defined for %s %s", series, benchmarkName)
-					continue
-				}
-
-				measurement := "benchmark-result"                  // measurement
-				benchmarkName = benchmarkName + suffix             // tag
-				series = series                                    // time
-				center, low, high := sum.Center, sum.Low, sum.High // fields
-				unit := cs.Unit                                    // tag
-				uploadTime := residues["upload-time"]              // field
-				cpu := residues["cpu"]                             // tag
-				goarch := residues["goarch"]                       // tag
-				goos := residues["goos"]                           // tag
-				benchmarksCommit := residues["benchmarks-commit"]  // field
-				baselineCommit := cs.HashPairs[series].DenHash     // field
-				experimentCommit := cs.HashPairs[series].NumHash   // field
-				repository := residues["repository"]               // tag
-				branch := residues["branch"]                       // tag
-
-				// cmd/bench didn't set repository prior to
-				// CL 413915. Older runs are all against go.
-				if repository == "" {
-					repository = "go"
-				}
-
-				// Push to influx.
-				t, err := benchseries.ParseNormalizedDateString(series)
-				if err != nil {
-					return fmt.Errorf("error parsing normalized date: %w", err)
-				}
-				fields := map[string]interface{}{
-					"center":            center,
-					"low":               low,
-					"high":              high,
-					"upload-time":       uploadTime,
-					"benchmarks-commit": benchmarksCommit,
-					"baseline-commit":   baselineCommit,
-					"experiment-commit": experimentCommit,
-				}
-				tags := map[string]string{
-					"name":       benchmarkName,
-					"unit":       unit,
-					"cpu":        cpu,
-					"goarch":     goarch,
-					"goos":       goos,
-					"repository": repository,
-					"branch":     branch,
-					// TODO(prattmic): Add pkg, which
-					// benchseries currently can't handle.
-				}
-				p := influxdb2.NewPoint(measurement, tags, fields, t)
-				if err := wapi.WritePoint(ctx, p); err != nil {
-					return fmt.Errorf("error writing point: %w", err)
+			// N.B. In our case Series should have length 1, because we're processing
+			// a single result here. By default the string value here is the commit date.
+			for i, series := range cs.Series {
+				for j, benchmarkName := range cs.Benchmarks {
+					sum := summaries[i][j]
+					if !sum.Defined() {
+						err := fmt.Errorf("summary not defined for %s %s", series, benchmarkName)
+						if !yield(comparison{}, err) {
+							return
+						}
+						continue
+					}
+					if !yield(comparison{series, benchmarkName, cs.Unit, residues, cs.HashPairs, sum}, nil) {
+						return
+					}
 				}
 			}
 		}
-	}
-	return nil
+	}, nil
 }
