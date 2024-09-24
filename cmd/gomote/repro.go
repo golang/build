@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kballard/go-shellquote"
 	"go.chromium.org/luci/auth"
 	bbpb "go.chromium.org/luci/buildbucket/proto"
 	"go.chromium.org/luci/grpc/prpc"
@@ -120,14 +121,9 @@ func repro(args []string) error {
 		gomoteBuilderType = coordBuild.Builder.Builder
 	} else {
 		// This may be a coordinator builder. Let's check, and if so, fetch one of its children as the poster-child for GOMOTE_REPRO.
-		props := build.Input.Properties.AsMap()
-		value, ok := props["mode"]
-		if !ok {
-			return fmt.Errorf("expected mode property on build %d but did not find one; try updating gomote?", buildID)
-		}
-		mode, ok := value.(float64)
-		if !ok {
-			return fmt.Errorf("expected mode property on build %d to have type float64, but it did not: found %T; try updating gomote?", buildID, value)
+		mode, err := mustGetInputProperty[float64](build, "mode")
+		if err != nil {
+			return err
 		}
 		if int(mode) == 1 /*MODE_COORDINATOR*/ {
 			log.Print("Detected coordinator-mode builder; fetching child builds to use to initialize gomote.")
@@ -208,14 +204,15 @@ func initReproInstances(ctx context.Context, instances []string, reproBuildID in
 
 func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build, instances []string, group *groupData) error {
 	// Figure out what project this build is for.
-	props := build.Input.Properties.AsMap()
-	projValue, ok := props["project"]
-	if !ok {
-		return fmt.Errorf("expected project property on build %d but did not find one; try updating gomote?", build.Id)
+	project, err := mustGetInputProperty[string](build, "project")
+	if err != nil {
+		return err
 	}
-	project, ok := projValue.(string)
-	if !ok {
-		return fmt.Errorf("expected project property on build %d to have type string, but it did not: found %v; try updating gomote?", build.Id, projValue)
+
+	// Check if it's a no-network builder.
+	noNetwork, _, err := getInputProperty[bool](build, "no_network")
+	if err != nil {
+		return err
 	}
 
 	log.Printf("Fetching test results for %d", build.Id)
@@ -293,20 +290,42 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build, 
 			tests = append(tests, t)
 		}
 	}
-	prefix := ""
-	instName := " " + instances[0]
-	if group != nil {
-		prefix = "GOMOTE_GROUP=" + group.Name + " "
-		instName = ""
+	wrapCmd := func(dir string, goArgs ...string) string {
+		gomoteCmd := []string{"gomote", "run", "-dir", dir}
+		if group == nil {
+			gomoteCmd = append(gomoteCmd, instances[0])
+		}
+		if noNetwork {
+			relGoPath, err := filepath.Rel(dir, "./goroot/bin/go")
+			if err != nil {
+				panic(err)
+			}
+			// TODO(go.dev/issue/69599): It's pretty bad that we're copying this logic out of golangbuild.
+			// We really should put this in a wrapper that is more accessible. This is a hack
+			// for now to avoid issues like go.dev/issue/69561 from being quite so hard to debug
+			// in the future.
+			ipCmd := []string{"ip", "link", "set", "dev", "lo", "up"}
+			goCmd := append([]string{relGoPath}, goArgs...)
+			unshareCmd := []string{"unshare", "--net", "--map-root-user", "--", "sh", "-c", shellquote.Join(ipCmd...) + " && " + shellquote.Join(goCmd...)}
+			gomoteCmd = append(gomoteCmd, unshareCmd...)
+		} else {
+			gomoteCmd = append(gomoteCmd, "goroot/bin/go")
+			gomoteCmd = append(gomoteCmd, goArgs...)
+		}
+		result := shellquote.Join(gomoteCmd...)
+		if group != nil {
+			result = "GOMOTE_GROUP=" + group.Name + " " + result
+		}
+		return result
 	}
 	for _, t := range tests {
-		log.Printf("$ %sgomote run%s -dir %s goroot/bin/go test -run='%s' .", prefix, instName, t.pkgPath(), t.regexp())
+		log.Printf("$ %s", wrapCmd(t.path, "test", "-run", t.regexp(), "."))
 	}
 	for _, t := range benchmarks {
-		log.Printf("$ %sgomote run%s -dir %s goroot/bin/go test -run='^$' -bench='%s' .", prefix, instName, t.pkgPath(), t.regexp())
+		log.Printf("$ %s", wrapCmd(t.path, "test", "-run", "^$", "-bench", t.regexp(), "."))
 	}
-	for _, pkg := range specialPackages {
-		log.Printf("$ %sgomote run%s -dir ./goroot goroot/bin/go tool dist test %s", prefix, instName, pkg)
+	for pkg := range specialPackages {
+		log.Printf("$ %s", wrapCmd("./goroot", "tool", "dist", "test", pkg))
 	}
 	for _, pkg := range packageFailures {
 		log.Printf("Note: Found package-level test failure for %s.", pkg)
@@ -321,13 +340,6 @@ type test struct {
 	pkg  string
 	name string
 	path string // Relative to workdir.
-}
-
-func (t test) pkgPath() string {
-	if t.path != "" {
-		return t.path
-	}
-	return t.pkg
 }
 
 // regexp returns a regexp matching this test's name, suitable for passing to -run and -bench.
@@ -347,4 +359,25 @@ func createLUCIAuthenticator(ctx context.Context) *auth.Authenticator {
 		}, sauth.CloudOAuthScopes...),
 	})
 	return auth.NewAuthenticator(ctx, auth.SilentLogin, authOpts)
+}
+
+func mustGetInputProperty[T any](build *bbpb.Build, propName string) (T, error) {
+	value, present, err := getInputProperty[T](build, propName)
+	if err == nil && !present {
+		return *new(T), fmt.Errorf("expected %s property on build %d but did not find one; try updating gomote?", propName, build.Id)
+	}
+	return value, err
+}
+
+func getInputProperty[T any](build *bbpb.Build, propName string) (T, bool, error) {
+	props := build.Input.Properties.AsMap()
+	propValue, ok := props[propName]
+	if !ok {
+		return *new(T), false, nil
+	}
+	prop, ok := propValue.(T)
+	if !ok {
+		return *new(T), true, fmt.Errorf("expected %s property on build %d to have type %T, but it did not: found %v; try updating gomote?", propName, build.Id, *new(T), propValue)
+	}
+	return prop, true, nil
 }
