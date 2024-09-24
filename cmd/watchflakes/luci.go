@@ -355,7 +355,12 @@ func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Bu
 	var commit, goCommit string
 	prop := b.GetOutput().GetProperties().GetFields()
 	for _, s := range prop["sources"].GetListValue().GetValues() {
-		x := s.GetStructValue().GetFields()["gitilesCommit"].GetStructValue().GetFields()
+		fm := s.GetStructValue().GetFields()
+		gc := fm["gitilesCommit"]
+		if gc == nil {
+			gc = fm["gitiles_commit"]
+		}
+		x := gc.GetStructValue().GetFields()
 		c := x["id"].GetStringValue()
 		switch bRepo := x["project"].GetStringValue(); bRepo {
 		case repo:
