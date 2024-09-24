@@ -177,7 +177,6 @@ func TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 			return idtoken.NewTokenSource(ctx, audience)
 		}
 	}
-
 	refresh, err := cachedToken()
 	if err != nil {
 		return nil, err
@@ -243,7 +242,15 @@ func (s *jwtTokenSource) Token() (*oauth2.Token, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return nil, fmt.Errorf("IAP token exchange failed: status %v, body %q", resp.Status, body)
+		tokenRespErr := struct {
+			Err         string `json:"error"`
+			Description string `json:"error_description"`
+		}{}
+		err := fmt.Errorf("IAP token exchange failed: status %v, body %q", resp.Status, body)
+		if unmarshErr := json.Unmarshal(body, &tokenRespErr); unmarshErr == nil && tokenRespErr.Err == "invalid_grant" {
+			return nil, AuthenticationError{Err: err, Description: tokenRespErr.Description}
+		}
+		return nil, err
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -262,3 +269,12 @@ func (s *jwtTokenSource) Token() (*oauth2.Token, error) {
 type jwtTokenJSON struct {
 	IDToken string `json:"id_token"`
 }
+
+// AuthenticationError records an authentication error.
+type AuthenticationError struct {
+	Description string
+	Err         error
+}
+
+func (ar AuthenticationError) Error() string { return ar.Description }
+func (ar AuthenticationError) Unwrap() error { return ar.Err }
