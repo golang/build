@@ -154,7 +154,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(verified))
 	build := wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
 
-	tagged := wf.Action3(wd, "tag release candidate", r.tag, revision, release, prerelease, wf.After(branched))
+	tagged := wf.Action3(wd, "tag the release candidate", r.tag, revision, release, prerelease, wf.After(branched))
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, prerelease, build, wf.After(tagged))
 
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, prerelease, revision, issue, wf.After(released))
@@ -656,10 +656,11 @@ func (r *ReleaseVSCodeGoTasks) createGitHubReleaseDraft(ctx *wf.TaskContext, rel
 	versionString := versionString(release, prerelease)
 	ctx.DisableRetries() // Beyond this point we want retries to be done manually, not automatically.
 	draft, err := r.GitHub.CreateRelease(ctx, "golang", "vscode-go", &github.RepositoryRelease{
-		TagName:    github.String(versionString),
-		Name:       github.String("Release " + versionString),
-		Body:       github.String(body),
-		Prerelease: github.Bool(true),
+		TagName: github.String(versionString),
+		Name:    github.String("Release " + versionString),
+		Body:    github.String(body),
+		// Both insider and release candidate are considered as prerelease.
+		Prerelease: github.Bool(isVSCodeGoInsiderVersion(release, prerelease) || prerelease != ""),
 		Draft:      github.Bool(true),
 	})
 	if err != nil {
@@ -694,9 +695,7 @@ type vscodeGoPrereleaseAnnouncement struct {
 }
 
 type vscodeGoReleaseAnnouncement struct {
-	Commit  string
 	Version string
-	Branch  string
 }
 
 type vscodeGoInsiderAnnouncement struct {
@@ -723,8 +722,6 @@ func (r *ReleaseVSCodeGoTasks) mailAnnouncement(ctx *wf.TaskContext, release rel
 	} else {
 		announce = vscodeGoReleaseAnnouncement{
 			Version: release.String(),
-			Commit:  revision,
-			Branch:  vscodeGoReleaseBranch(release),
 		}
 	}
 
@@ -767,7 +764,7 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 	verified := wf.Action1(wd, "verify the determined commit", r.verifyTestResults, revision, wf.After(approved))
 	build := wf.Task3(wd, "generate package extension (.vsix) from the commit", r.generatePackageExtension, release, wf.Const(""), revision, wf.After(verified))
 
-	tagged := wf.Action3(wd, "tag the commit", r.tag, revision, release, wf.Const(""), wf.After(build))
+	tagged := wf.Action3(wd, "tag the insider release", r.tag, revision, release, wf.Const(""), wf.After(build))
 
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
 	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(tagged))
@@ -914,12 +911,17 @@ func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
 
 	approved := wf.Action2(wd, "await release coordinator's approval", r.approveStableRelease, release, prerelease)
 
-	tag := wf.Task2(wd, "find tag for the release candidate", findVSCodeReleaseTag, release, prerelease, wf.After(approved))
+	commit := wf.Task2(wd, "find the commit for the release candidate", r.findVSCodeReleaseCommit, release, prerelease, wf.After(approved))
 	// Skip test result verification because it was already executed in the
 	// prerelease flow.
-	build := wf.Task3(wd, "generate package extension (.vsix) from release candidate tag", r.generatePackageExtension, release, wf.Const(""), tag)
-	_ = wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build)
+	build := wf.Task3(wd, "generate package extension (.vsix) from release candidate tag", r.generatePackageExtension, release, wf.Const(""), commit)
 
+	tagged := wf.Action3(wd, "tag the stable release", r.tag, commit, release, wf.Const(""), wf.After(build))
+
+	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
+	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build)
+
+	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, wf.Const(""), wf.Const(""), wf.Const(0), wf.After(released), wf.After(published))
 	return wd
 }
 
@@ -939,10 +941,12 @@ func (r *ReleaseVSCodeGoTasks) latestPrereleaseVersion(ctx *wf.TaskContext, rele
 	return prerelease, nil
 }
 
-// findVSCodeReleaseTag returns the tag for the VS Code release candidate.
-//
-// It wraps the versionString function and includes an extra parameter to
-// facilitate execution within the release flow steps.
-func findVSCodeReleaseTag(_ *wf.TaskContext, release releaseVersion, prerelease string) (string, error) {
-	return versionString(release, prerelease), nil
+// findVSCodeReleaseCommit returns commit for the VS Code release candidate.
+func (r *ReleaseVSCodeGoTasks) findVSCodeReleaseCommit(ctx *wf.TaskContext, release releaseVersion, prerelease string) (string, error) {
+	info, err := r.Gerrit.GetTag(ctx, "vscode-go", versionString(release, prerelease))
+	if err != nil {
+		return "", err
+	}
+
+	return info.Revision, nil
 }

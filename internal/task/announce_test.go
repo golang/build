@@ -163,8 +163,6 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 			name: "vscode-go-announce",
 			in: vscodeGoReleaseAnnouncement{
 				Version: "v0.44.2",
-				Branch:  "release-v0.44",
-				Commit:  "abc123def456ghi789",
 			},
 			wantSubject: "VSCode-Go extension v0.44.2 is released",
 		},
