@@ -443,9 +443,7 @@ cat go-publish-output.log
 	}
 
 	ctx.Printf("the output from npm ci:\n%s\n", outputs["npm-output.log"])
-	ctx.Printf("the output from package generation:\n%s\n", outputs["go-package-output.log"])
 	ctx.Printf("the output from package publication:\n%s\n", outputs["go-publish-output.log"])
-
 	return nil
 }
 
@@ -508,6 +506,10 @@ type vscodeGoReleaseData struct {
 
 	// Milestone is the tag containing issues for the current release.
 	Milestone string
+
+	// NextStable is the next stable version. Only used if the current release is
+	// insider release.
+	NextStable string
 
 	// Body is the main content of the GitHub release notes after
 	// the Git diff and milestone sections.
@@ -585,17 +587,11 @@ func (r *ReleaseVSCodeGoTasks) vscodeGoGitHubReleaseBody(ctx context.Context, re
 		}
 	}
 
+	var data vscodeGoReleaseData
 	current, previous := versionString(release, prerelease), versionString(previousRelease, previousPrerelease)
-	data := vscodeGoReleaseData{
-		CurrentTag:  current,
-		PreviousTag: previous,
-	}
 	// Insider version.
 	if isVSCodeGoInsiderVersion(release, prerelease) {
-		// For insider version, the milestone will point to the next stable minor.
-		// If the insider version is vX.ODD.Z, the milestone will be vX.ODD+1.0.
-		data.Milestone = releaseVersion{Major: release.Major, Minor: release.Minor + 1, Patch: 0}.String()
-
+		var body string
 		if release.Patch == 0 {
 			// An insider minor version release (vX.ODD.0) is normally a dummy release
 			// immediately after a stable minor version release (vX.ODD-1.0).
@@ -604,35 +600,49 @@ func (r *ReleaseVSCodeGoTasks) vscodeGoGitHubReleaseBody(ctx context.Context, re
 			const vscodeGoMinorInsiderFmt = `%s is a pre-release version identical to the official release %s, incorporating all the same bug fixes and improvements. This may include additional, experimental features that are not yet ready for general release. These features are still under development and may be subject to change or removal.
 
 See release https://github.com/golang/vscode-go/releases/tag/%s for details.`
-			data.Body = fmt.Sprintf(vscodeGoMinorInsiderFmt, current, previousRelease, previousRelease)
+			body = fmt.Sprintf(vscodeGoMinorInsiderFmt, current, previousRelease, previousRelease)
 		} else {
 			// An insider patch version release (vX.ODD.Z Z > 0) is built from master
 			// branch. The GitHub release body will be copied from the CHANGELOG.md
 			// in master branch under heading ## Unreleased.
-			data.Body, err = r.readChangeLogHeading(ctx, "Unreleased")
+			body, err = r.readChangeLogHeading(ctx, "Unreleased")
 			if err != nil {
 				return "", err
 			}
 		}
+
+		nextStable := releaseVersion{Major: release.Major, Minor: release.Minor + 1, Patch: 0}.String()
+		data = vscodeGoReleaseData{
+			CurrentTag:  current,
+			PreviousTag: previous,
+			// For insider version, the milestone will point to the next stable minor.
+			// If the insider version is vX.ODD.Z, the milestone will be vX.ODD+1.0.
+			Milestone:  nextStable,
+			NextStable: nextStable,
+			Body:       strings.TrimSpace(body),
+		}
 	} else {
-		data.Milestone = release.String()
-		// Stable version prerelease.
+		var body string
 		if prerelease != "" {
 			// For prerelease, the main body of the release will contain the
 			// instructions of installation.
-			data.Body = vscodeGoPrereleaseInstallationInstructions
+			body = vscodeGoPrereleaseInstallationInstructions
 		} else if release.Patch == 0 {
 			// The main body of the release will be copied from the CHANGELOG.md in
 			// master branch under heading ## Unreleased.
-			data.Body, err = r.readChangeLogHeading(ctx, "Unreleased")
+			body, err = r.readChangeLogHeading(ctx, "Unreleased")
 			if err != nil {
 				return "", err
 			}
 		}
-	}
 
-	// Remove any trailing spaces.
-	data.Body = strings.TrimSpace(data.Body)
+		data = vscodeGoReleaseData{
+			CurrentTag:  current,
+			PreviousTag: previous,
+			Milestone:   release.String(),
+			Body:        strings.TrimSpace(body),
+		}
+	}
 
 	tmpl, err := template.New("vscode release").Parse(vscodeGoReleaseNoteTmpl)
 	if err != nil {
