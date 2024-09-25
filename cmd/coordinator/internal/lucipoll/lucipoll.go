@@ -36,13 +36,13 @@ type Builder struct {
 }
 
 type BuilderConfigProperties struct {
-	Repo     string `json:"project,omitempty"`
-	GoBranch string `json:"go_branch,omitempty"`
+	Repo     string `json:"project"`
+	GoBranch string `json:"go_branch"`
 	Target   struct {
-		GOOS   string `json:"goos,omitempty"`
-		GOARCH string `json:"goarch,omitempty"`
+		GOOS   string `json:"goos"`
+		GOARCH string `json:"goarch"`
 	} `json:"target"`
-	KnownIssue int `json:"known_issue,omitempty"`
+	KnownIssue int `json:"known_issue"`
 }
 
 type Build struct {
@@ -242,11 +242,11 @@ func runOnce(
 			var buildOutputProps struct {
 				Sources []struct {
 					GitilesCommit struct {
-						Project string
-						Ref     string
-						Id      string
-					}
-				}
+						Project string `json:"project"`
+						Ref     string `json:"ref"`
+						Id      string `json:"id"`
+					} `json:"gitiles_commit"`
+				} `json:"sources"`
 			}
 			if data, err := b.GetOutput().GetProperties().MarshalJSON(); err != nil {
 				return nil, nil, fmt.Errorf("marshaling build output properties to JSON failed: %v", err)
@@ -330,11 +330,11 @@ func runOnce(
 			var buildOutputProps struct {
 				Sources []struct {
 					GitilesCommit struct {
-						Project string
-						Ref     string
-						Id      string
-					}
-				}
+						Project string `json:"project"`
+						Ref     string `json:"ref"`
+						Id      string `json:"id"`
+					} `json:"gitiles_commit"`
+				} `json:"sources"`
 			}
 			if data, err := b.GetOutput().GetProperties().MarshalJSON(); err != nil {
 				return nil, nil, fmt.Errorf("marshaling build output properties to JSON failed: %v", err)
