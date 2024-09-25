@@ -414,7 +414,7 @@ esac
 
 			tasks := &ReleaseVSCodeGoTasks{
 				Gerrit:     gerrit,
-				CloudBuild: NewFakeCloudBuild(t, gerrit, "vscode-go", nil, ""),
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "vscode-go", nil, "", fakeBinary{"chown", fakeEmptyBinary}, fakeBinary{"npm", fakeEmptyBinary}),
 			}
 
 			err := tasks.verifyTestResults(ctx, commit)
@@ -489,7 +489,7 @@ case "$1" in
 esac
 `, version, tc.rc)
 
-			cloudbuild := NewFakeCloudBuild(t, gerrit, "vscode-go", nil, fakeGo)
+			cloudbuild := NewFakeCloudBuild(t, gerrit, "vscode-go", nil, fakeGo, fakeBinary{"npm", fakeEmptyBinary})
 			tasks := &ReleaseVSCodeGoTasks{
 				Gerrit:     gerrit,
 				CloudBuild: cloudbuild,
@@ -687,6 +687,92 @@ CHANGE FOR v0.42.0 LINE 2
 
 			if diff := cmp.Diff(testdataFile(t, tc.wantContent), got); diff != "" {
 				t.Errorf("body text mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestUpdatePackageJSONVersion(t *testing.T) {
+	mustHaveShell(t)
+	testcases := []struct {
+		name         string
+		existingTags []string
+		want         string
+	}{
+		{
+			name:         "package json should point 0.46.0-dev",
+			existingTags: []string{"v0.44.0", "v0.45.0"},
+			want:         "0.46.0-dev\n",
+		},
+		{
+			name:         "package json should point 0.48.0-dev",
+			existingTags: []string{"v0.45.0", "v0.46.0", "v0.46.1", "v0.46.2"},
+			want:         "0.48.0-dev\n",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			commit := vscodego.Commit(map[string]string{
+				"go.mod":                      "module github.com/golang/vscode-go\n",
+				"go.sum":                      "\n",
+				"extension/package.json":      "foo\n",
+				"extension/package-lock.json": "foo\n",
+			})
+
+			for _, tag := range tc.existingTags {
+				vscodego.Tag(tag, commit)
+			}
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+
+			// fakeNPX successfully executes only when called with the command
+			// "npx vsce package V".
+			// In this case, the value "V" is written to both "package.json" and
+			// "package-lock.json".
+			fakeNPX := `#!/bin/bash -exu
+
+case "$1" in
+"vsce")
+	if [[ "$1" == "vsce" && "$2" == "package" ]]; then
+		# Write the third argument to extension/package.json
+		echo "$3" > package.json
+		echo "$3" > package-lock.json
+		exit 0
+	fi
+	exit 1
+	;;
+*)
+	echo unexpected command $@
+	exit 1
+	;;
+esac
+`
+
+			tasks := &ReleaseVSCodeGoTasks{
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, "", fakeBinary{"npm", fakeEmptyBinary}, fakeBinary{"npx", fakeNPX}),
+				Gerrit:     gerrit,
+			}
+			_, err := tasks.updatePackageJSONVersion(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			head, err := gerrit.ReadBranchHead(ctx, "vscode-go", "master")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, fname := range []string{"extension/package.json", "extension/package-lock.json"} {
+				got, err := gerrit.ReadFile(ctx, "vscode-go", head, fname)
+				if err != nil || string(got) != tc.want {
+					t.Errorf("ReadFile(%q) = (%q, %v), want (%q, nil)", fname, got, err, tc.want)
+				}
 			}
 		})
 	}

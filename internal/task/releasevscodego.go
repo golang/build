@@ -767,8 +767,13 @@ func (r *ReleaseVSCodeGoTasks) tag(ctx *wf.TaskContext, commit string, release r
 func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
+	reviewers := wf.Param(wd, reviewersParam)
+
+	changeID := wf.Task1(wd, "update package.json in master branch", r.updatePackageJSONVersion, reviewers)
+	submitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
+
 	release := wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
-	revision := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"))
+	revision := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"), wf.After(submitted))
 	approved := wf.Action2(wd, "await release coordinator's approval", r.approveInsiderRelease, release, revision)
 
 	verified := wf.Action1(wd, "verify the determined commit", r.verifyTestResults, revision, wf.After(approved))
@@ -805,6 +810,121 @@ func (r *ReleaseVSCodeGoTasks) determineInsiderVersion(ctx *wf.TaskContext) (rel
 	}
 	insider.Patch += 1
 	return insider, nil
+}
+
+// updatePackageJSONVersion updates the "package.json" and "package-lock.json"
+// files in the master branch of the vscode-go repository.
+// The updated "package.json" and "package-lock.json" will reference the next
+// stable release version with special suffix "-dev" to indicate this is a
+// prerelease.
+func (r *ReleaseVSCodeGoTasks) updatePackageJSONVersion(ctx *wf.TaskContext, reviewers []string) (string, error) {
+	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
+	if err != nil {
+		return "", err
+	}
+
+	latestStable, _ := latestVersion(tags, isReleaseVersion, isVSCodeGoStableVersion)
+	if latestStable == (releaseVersion{}) {
+		return "", fmt.Errorf("no released stable version in vscode-go")
+	}
+
+	// "package.json" in master branch should point to the next vscode-go stable
+	// version with suffix "-dev". The version inside of package.json does not
+	// have the prefix "v".
+	// If the latest released stable version is v0.44.2, the package.json should
+	// point to "0.46.0-dev".
+	devVersion := versionString(releaseVersion{Major: latestStable.Major, Minor: latestStable.Minor + 2, Patch: 0}, "dev")[1:]
+
+	clTitle := "extension/package.json: update version to " + devVersion
+	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", "master", clTitle)
+	if err != nil {
+		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, "master", err)
+	}
+	if openCL != "" {
+		ctx.Printf("not creating CL: found existing CL %s", openCL)
+		return openCL, nil
+	}
+
+	steps := func(resultURL string) []*cloudbuildpb.BuildStep {
+		script := fmt.Sprintf(cloudBuildClientScriptPrefix+`
+# Make a copy of interested files.
+cp package.json package.json.before
+cp package-lock.json package-lock.json.before
+
+npm ci &> npm-output.log
+npx vsce package %s --no-git-tag-version &> npx-output.log
+cat npm-output.log
+cat npx-output.log
+`, devVersion)
+
+		saveScriptFmt := cloudBuildClientScriptPrefix
+		for _, file := range []string{
+			"package.json",
+			"package-lock.json",
+			"package.json.before",
+			"package-lock.json.before",
+			"npx-output.log",
+			"npm-output.log",
+		} {
+			saveScriptFmt += fmt.Sprintf("gsutil cp %[1]s %[2]s/%[1]s\n", file, resultURL)
+		}
+
+		return []*cloudbuildpb.BuildStep{
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"clone", "https://go.googlesource.com/vscode-go", "vscode-go"},
+			},
+			{
+				Name:   "gcr.io/cloud-builders/npm",
+				Script: script,
+				Dir:    "vscode-go/extension",
+			},
+			{
+				Name:   "gcr.io/cloud-builders/gsutil",
+				Script: saveScriptFmt,
+				Dir:    "vscode-go/extension",
+			},
+		}
+	}
+
+	build, err := r.CloudBuild.RunCustomSteps(ctx, steps, nil)
+	if err != nil {
+		return "", err
+	}
+
+	outputs, err := buildToOutputs(ctx, r.CloudBuild, build)
+	if err != nil {
+		return "", err
+	}
+
+	ctx.Printf("the output from npm ci:\n%s\n", outputs["npm-output.log"])
+	ctx.Printf("the output from npx package:\n%s\n", outputs["npx-output.log"])
+
+	changed := map[string]string{}
+	if outputs["package.json"] != outputs["package.json.before"] {
+		changed["extension/package.json"] = outputs["package.json"]
+	}
+	if outputs["package-lock.json"] != outputs["package-lock.json.before"] {
+		changed["extension/package-lock.json"] = outputs["package-lock.json"]
+	}
+
+	// Skip CL creation as nothing changed.
+	if len(changed) == 0 {
+		ctx.Printf("package.json and package-lock.json is already up-to-date")
+		return "", nil
+	}
+
+	changeID, err := r.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
+		Project: "vscode-go",
+		Branch:  "master",
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the package.json and package-lock.json.\n", clTitle),
+	}, reviewers, changed)
+	if err != nil {
+		return "", err
+	}
+
+	ctx.Printf("created auto-submit change %s under branch master in vscode-go repo.", changeID)
+	return changeID, nil
 }
 
 func isVSCodeGoStableVersion(release releaseVersion, _ string) bool {

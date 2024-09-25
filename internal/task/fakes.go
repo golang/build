@@ -632,13 +632,20 @@ case "$1" in
 esac
 `
 
-const fakeBinary = `
+const fakeEmptyBinary = `
 #!/bin/bash -eux
 echo "this binary will always exit without any error"
 exit 0
 `
 
-func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowedTriggers map[string]map[string]string, fakeGo string) *FakeCloudBuild {
+type fakeBinary struct {
+	Name string
+	// Implementation defines the script content. This script is written to the
+	// tool directory and executed when the corresponding command is invoked.
+	Implementation string
+}
+
+func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowedTriggers map[string]map[string]string, fakeGo string, fakeBinaries ...fakeBinary) *FakeCloudBuild {
 	toolDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(toolDir, "go"), []byte(fakeGo), 0777); err != nil {
 		t.Fatal(err)
@@ -646,11 +653,11 @@ func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowed
 	if err := os.WriteFile(filepath.Join(toolDir, "gsutil"), []byte(fakeGsutil), 0777); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(toolDir, "chown"), []byte(fakeBinary), 0777); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(toolDir, "npm"), []byte(fakeBinary), 0777); err != nil {
-		t.Fatal(err)
+
+	for _, binary := range fakeBinaries {
+		if err := os.WriteFile(filepath.Join(toolDir, binary.Name), []byte(binary.Implementation), 0777); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return &FakeCloudBuild{
 		t:               t,
@@ -758,7 +765,7 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 func (cb *FakeCloudBuild) RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep, _ *CloudBuildOptions) (CloudBuild, error) {
 	var gerritProject, fullScript string
 	resultURL := "file://" + cb.t.TempDir()
-	for _, step := range steps(resultURL) {
+	for i, step := range steps(resultURL) {
 		// Cloud Build support docker hub images like "bash". See more details:
 		// https://cloud.google.com/build/docs/interacting-with-dockerhub-images
 		// Currently, the Bash script is solely for downloading the Go binary.
@@ -781,13 +788,37 @@ func (cb *FakeCloudBuild) RunCustomSteps(ctx context.Context, steps func(resultU
 			}
 			continue
 		}
+
+		// As documented by the cloudbuildpb.BuildStep, when the script field is
+		// provided, the user cannot specify the entrypoint or args.
+		if step.Script != "" && len(step.Args) > 0 {
+			return CloudBuild{}, fmt.Errorf("step[%v] can not have script and arguments", i)
+		}
+		if step.Script != "" && step.Entrypoint != "" {
+			return CloudBuild{}, fmt.Errorf("step[%v] can not have script and entrypoint", i)
+		}
+
+		// RunCustomSteps allows execution of commands or scripts in any directory,
+		// while RunScript always executes in the repo's root directory.
+		// To use RunScript within RunCustomSteps, we must first navigate to the
+		// target directory if it differs from the repo root.
+		if relative := strings.TrimPrefix(step.Dir, gerritProject+"/"); step.Dir != gerritProject && relative != "" {
+			fullScript += "pushd " + relative + "\n"
+		}
+
 		if len(step.Args) > 0 {
 			fullScript += tool + " " + strings.Join(step.Args, " ") + "\n"
 		}
 		if step.Script != "" {
 			fullScript += step.Script + "\n"
 		}
+
+		// Return to the previous dir after finish the commands or scripts execution.
+		if relative := strings.TrimPrefix(step.Dir, gerritProject+"/"); step.Dir != gerritProject && relative != "" {
+			fullScript += "popd\n"
+		}
 	}
+
 	// In real CloudBuild client, the RunScript calls this lower level method.
 	build, err := cb.RunScript(ctx, fullScript, gerritProject, nil)
 	if err != nil {
