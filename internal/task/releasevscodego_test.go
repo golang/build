@@ -414,7 +414,7 @@ esac
 
 			tasks := &ReleaseVSCodeGoTasks{
 				Gerrit:     gerrit,
-				CloudBuild: NewFakeCloudBuild(t, gerrit, "vscode-go", nil, "", fakeBinary{"chown", fakeEmptyBinary}, fakeBinary{"npm", fakeEmptyBinary}),
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "vscode-go", nil, FakeBinary{"chown", fakeEmptyBinary}, FakeBinary{"npm", fakeEmptyBinary}),
 			}
 
 			err := tasks.verifyTestResults(ctx, commit)
@@ -489,7 +489,7 @@ case "$1" in
 esac
 `, version, tc.rc)
 
-			cloudbuild := NewFakeCloudBuild(t, gerrit, "vscode-go", nil, fakeGo, fakeBinary{"npm", fakeEmptyBinary})
+			cloudbuild := NewFakeCloudBuild(t, gerrit, "vscode-go", nil, FakeBinary{Name: "go", Implementation: fakeGo}, FakeBinary{"npm", fakeEmptyBinary})
 			tasks := &ReleaseVSCodeGoTasks{
 				Gerrit:     gerrit,
 				CloudBuild: cloudbuild,
@@ -755,7 +755,7 @@ esac
 `
 
 			tasks := &ReleaseVSCodeGoTasks{
-				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, "", fakeBinary{"npm", fakeEmptyBinary}, fakeBinary{"npx", fakeNPX}),
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{"npm", fakeEmptyBinary}, FakeBinary{"npx", fakeNPX}),
 				Gerrit:     gerrit,
 			}
 			_, err := tasks.updatePackageJSONVersion(ctx, nil)

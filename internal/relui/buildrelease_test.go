@@ -143,7 +143,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	gerrit := &reviewerCheckGerrit{FakeGerrit: fakeGerrit}
 	versionTasks := &task.VersionTasks{
 		Gerrit:     gerrit,
-		CloudBuild: task.NewFakeCloudBuild(t, fakeGerrit, "", nil, fakeGo),
+		CloudBuild: task.NewFakeCloudBuild(t, fakeGerrit, "", nil, task.FakeBinary{Name: "go", Implementation: fakeGo}),
 		GoProject:  "go",
 	}
 	milestoneTasks := &task.MilestoneTasks{
@@ -178,7 +178,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		GoogleDockerBuildProject: dockerProject,
 		GoogleDockerBuildTrigger: dockerTrigger,
 		BuildBucketClient:        buildBucket,
-		CloudBuildClient:         task.NewFakeCloudBuild(t, fakeGerrit, dockerProject, map[string]map[string]string{dockerTrigger: {"_GO_VERSION": wantVersion[2:]}}, ""),
+		CloudBuildClient:         task.NewFakeCloudBuild(t, fakeGerrit, dockerProject, map[string]map[string]string{dockerTrigger: {"_GO_VERSION": wantVersion[2:]}}),
 		SwarmingClient:           task.NewFakeSwarmingClient(t, fakeGo),
 		ApproveAction: func(ctx *workflow.TaskContext) error {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {

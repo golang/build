@@ -638,18 +638,15 @@ echo "this binary will always exit without any error"
 exit 0
 `
 
-type fakeBinary struct {
+type FakeBinary struct {
 	Name string
 	// Implementation defines the script content. This script is written to the
 	// tool directory and executed when the corresponding command is invoked.
 	Implementation string
 }
 
-func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowedTriggers map[string]map[string]string, fakeGo string, fakeBinaries ...fakeBinary) *FakeCloudBuild {
+func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowedTriggers map[string]map[string]string, fakeBinaries ...FakeBinary) *FakeCloudBuild {
 	toolDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(toolDir, "go"), []byte(fakeGo), 0777); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(filepath.Join(toolDir, "gsutil"), []byte(fakeGsutil), 0777); err != nil {
 		t.Fatal(err)
 	}

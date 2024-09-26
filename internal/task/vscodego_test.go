@@ -96,7 +96,7 @@ esac
 `
 
 			releaseTask := &VSCodeGoReleaseTask{
-				CloudBuild: NewFakeCloudBuild(t, gerrit, "vscode-go", nil, fakeGo),
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "vscode-go", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
 				ScratchFS:  &ScratchFS{BaseURL: "file://" + scratchDir},
 				Revision:   test.revision,
 			}

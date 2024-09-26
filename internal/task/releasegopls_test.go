@@ -323,7 +323,7 @@ parent-branch: master
 
 			tasks := &ReleaseGoplsTasks{
 				Gerrit:     gerritClient,
-				CloudBuild: NewFakeCloudBuild(t, gerritClient, "", nil, fakeGo),
+				CloudBuild: NewFakeCloudBuild(t, gerritClient, "", nil),
 			}
 
 			_, err = tasks.updateCodeReviewConfig(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, nil, 0)
@@ -705,7 +705,7 @@ esac`, tc.wantVersion)
 
 			tasks := &ReleaseGoplsTasks{
 				Gerrit:     gerrit,
-				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, fakeGo),
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
 				Github: &FakeGitHub{
 					Milestones: map[int]string{
 						1: fmt.Sprintf("gopls/%s", tc.release.String()),
@@ -1004,7 +1004,7 @@ echo -n "foo" > file_b
 				tools.Branch(tc.branch, initial)
 			}
 
-			cloudBuild := NewFakeCloudBuild(t, NewFakeGerrit(t, tools), "", nil, fakeGo)
+			cloudBuild := NewFakeCloudBuild(t, NewFakeGerrit(t, tools), "", nil)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
 				Logger:  &testLogger{t, ""},
@@ -1182,7 +1182,7 @@ esac
 
 			tasks := &ReleaseGoplsTasks{
 				Gerrit:     gerrit,
-				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, fakeGo),
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
 				Github: &FakeGitHub{
 					Milestones: map[int]string{
 						1: fmt.Sprintf("gopls/%s", tc.release),

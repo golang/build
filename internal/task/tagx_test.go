@@ -224,31 +224,6 @@ func TestAwaitGreen(t *testing.T) {
 	}
 }
 
-const fakeGo = `#!/bin/bash -exu
-
-case "$1" in
-"get")
-  ls go.mod go.sum >/dev/null
-  for i in "${@:2}"; do
-    if [ "$i" = "toolchain@none" ]; then
-      echo "// pretend we've dropped toolchain directive" >> go.mod
-    else
-      echo "// pretend we've upgraded to $i" >> go.mod
-      echo "$i h1:asdasd" | tr '@' ' ' >> go.sum
-    fi
-  done
-  ;;
-"mod")
-  ls go.mod go.sum >/dev/null
-  echo "tidied! $*" >> go.mod
-  ;;
-*)
-  echo unexpected command $@
-  exit 1
-  ;;
-esac
-`
-
 type tagXTestDeps struct {
 	ctx         *wf.TaskContext
 	gerrit      *FakeGerrit
@@ -265,6 +240,31 @@ func mustHaveShell(t *testing.T) {
 }
 
 func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
+	const fakeGo = `#!/bin/bash -exu
+
+case "$1" in
+"get")
+	ls go.mod go.sum >/dev/null
+	for i in "${@:2}"; do
+		if [ "$i" = "toolchain@none" ]; then
+			echo "// pretend we've dropped toolchain directive" >> go.mod
+		else
+			echo "// pretend we've upgraded to $i" >> go.mod
+			echo "$i h1:asdasd" | tr '@' ' ' >> go.sum
+		fi
+	done
+	;;
+"mod")
+	ls go.mod go.sum >/dev/null
+	echo "tidied! $*" >> go.mod
+	;;
+*)
+	echo unexpected command $@
+	exit 1
+	;;
+esac
+`
+
 	mustHaveShell(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -278,7 +278,7 @@ func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
 	fakeBuildBucket := NewFakeBuildBucketClient(0, fakeGerrit.GerritURL(), "ci", projects)
 	tasks := &TagXReposTasks{
 		Gerrit:      fakeGerrit,
-		CloudBuild:  NewFakeCloudBuild(t, fakeGerrit, "project", nil, fakeGo),
+		CloudBuild:  NewFakeCloudBuild(t, fakeGerrit, "project", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
 		BuildBucket: fakeBuildBucket,
 	}
 	return &tagXTestDeps{

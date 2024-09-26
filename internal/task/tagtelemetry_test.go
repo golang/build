@@ -84,7 +84,7 @@ echo -n %q > config/config.json
 
 			tasks := &TagTelemetryTasks{
 				Gerrit:     gerrit,
-				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, fakeGo),
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
 			}
 
 			wd := tasks.NewDefinition()
