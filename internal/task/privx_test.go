@@ -76,9 +76,9 @@ func TestPrivXPatch(t *testing.T) {
 echo "Resolving deltas: 100% (5/5)"
 echo "Waiting for private key checker: 1/1 objects left"
 echo "Processing changes: refs: 1, new: 1, done"
-echo 
+echo
 echo "SUCCESS"
-echo 
+echo
 echo "  https://go-review.googlesource.com/c/net/+/558675 net/mail: remove obsolete comment [NEW]"
 echo`), 0777); err != nil {
 		t.Fatalf("failed to write git pre-receive hook: %s", err)
@@ -111,7 +111,7 @@ echo`), 0777); err != nil {
 	wd := p.NewDefinition(&TagXReposTasks{Gerrit: &privxClient{}})
 	w, err := workflow.Start(wd, map[string]any{
 		"go-internal CL number":              "1234",
-		"Reviewer usernames (optional)":      []string{},
+		reviewersParam.Name:                  []string{},
 		"Repository name":                    filepath.Base(pubRepo.dir.dir),
 		"Skip post submit result (optional)": true,
 		"CVE":                                "CVE-2024-1234",

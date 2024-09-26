@@ -511,7 +511,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			if !ok {
 				t.Fatalf("parseVersion(%q) failed", tc.version)
 			}
-			gotIssue, err := tasks.findOrCreateGitHubIssue(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, tc.create)
+			gotIssue, err := tasks.findOrCreateGitHubIssue(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, []string{"gobot"}, tc.create)
 
 			if tc.wantErr && err == nil {
 				t.Errorf("createReleaseIssue(%s) should return error but return nil", tc.version)
@@ -825,7 +825,7 @@ esac`, tc.wantVersion)
 
 		t.Run("manual input version: "+tc.name, func(t *testing.T) {
 			runTestWithInput(map[string]any{
-				reviewersParam.Name:           []string(nil),
+				releaseCoordinatorsParam.Name: []string{"gobot"},
 				"explicit version (optional)": tc.release.String(),
 				"next version":                "use explicit version",
 			})
@@ -836,7 +836,7 @@ esac`, tc.wantVersion)
 		}
 		t.Run("interpret version "+versionBump+" : "+tc.name, func(t *testing.T) {
 			runTestWithInput(map[string]any{
-				reviewersParam.Name:           []string(nil),
+				releaseCoordinatorsParam.Name: []string{"gobot"},
 				"explicit version (optional)": "",
 				"next version":                versionBump,
 			})
@@ -1317,7 +1317,7 @@ esac
 		}
 		t.Run("manual input version: "+tc.name, func(t *testing.T) {
 			runTestWithInput(map[string]any{
-				reviewersParam.Name:           []string(nil),
+				releaseCoordinatorsParam.Name: []string{"gobot"},
 				"explicit version (optional)": tc.release.String(),
 				"next version":                "use explicit version",
 			})
@@ -1328,7 +1328,7 @@ esac
 		}
 		t.Run("interpret version "+versionBump+": "+tc.name, func(t *testing.T) {
 			runTestWithInput(map[string]any{
-				reviewersParam.Name:           []string(nil),
+				releaseCoordinatorsParam.Name: []string{"gobot"},
 				"explicit version (optional)": "",
 				"next version":                versionBump,
 			})

@@ -19,6 +19,16 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+var releaseCoordinatorsParam = wf.ParamDef[[]string]{
+	Name:      "Release Coordinator Usernames",
+	ParamType: wf.SliceShort,
+	Doc: `Release Coordinator Usernames is a required list of the coordinators of the release.
+
+The first user in the list will be assigned to the release tracking issue.
+All users will be added as reviewers for automatically generated CLs.`,
+	Check: CheckCoordinators,
+}
+
 // ReleaseGoplsTasks provides workflow definitions and tasks for releasing gopls.
 type ReleaseGoplsTasks struct {
 	Github             GitHubClientInterface
@@ -41,19 +51,19 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	// bump strategy.
 	// Use with caution.
 	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit version (optional)"})
-	reviewers := wf.Param(wd, reviewersParam)
+	coordinators := wf.Param(wd, releaseCoordinatorsParam)
 
 	release := wf.Task2(wd, "determine the release version", r.determineReleaseVersion, inputVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
 	approved := wf.Action2(wd, "wait for release coordinator approval", r.approvePrerelease, release, prerelease)
 
-	issue := wf.Task2(wd, "create release git issue", r.findOrCreateGitHubIssue, release, wf.Const(true), wf.After(approved))
+	issue := wf.Task3(wd, "create release git issue", r.findOrCreateGitHubIssue, release, coordinators, wf.Const(true), wf.After(approved))
 	branchCreated := wf.Action1(wd, "create new branch if minor release", r.createBranchIfMinor, release, wf.After(issue))
 
-	configChangeID := wf.Task3(wd, "update branch's codereview.cfg", r.updateCodeReviewConfig, release, reviewers, issue, wf.After(branchCreated))
+	configChangeID := wf.Task3(wd, "update branch's codereview.cfg", r.updateCodeReviewConfig, release, coordinators, issue, wf.After(branchCreated))
 	configCommit := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, configChangeID)
 
-	dependencyChangeID := wf.Task4(wd, "update gopls' x/tools dependency", r.updateXToolsDependency, release, prerelease, reviewers, issue, wf.After(configCommit))
+	dependencyChangeID := wf.Task4(wd, "update gopls' x/tools dependency", r.updateXToolsDependency, release, prerelease, coordinators, issue, wf.After(configCommit))
 	dependencyCommit := wf.Task1(wd, "await gopls' x/tools dependency CL submission", clAwaiter{r.Gerrit}.awaitSubmission, dependencyChangeID)
 
 	verified := wf.Action1(wd, "verify installing latest gopls using release branch dependency commit", r.verifyGoplsInstallation, dependencyCommit)
@@ -61,7 +71,7 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
 	wf.Action4(wd, "mail announcement", r.mailPrereleaseAnnouncement, release, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
 
-	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, reviewers, issue, release, prerelease, wf.After(prereleaseVerified))
+	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, coordinators, issue, release, prerelease, wf.After(prereleaseVerified))
 	_ = wf.Task1(wd, "await gopls version update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmissions, vscodeGoChanges)
 
 	wf.Output(wd, "version", prereleaseVersion)
@@ -144,7 +154,7 @@ func (r *ReleaseGoplsTasks) approveRelease(ctx *wf.TaskContext, release releaseV
 // If the release issue exists, return the issue ID.
 // If 'create' is true and no issue exists, a new one is created.
 // If 'create' is false and no issue exists, an error is returned.
-func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, release releaseVersion, create bool) (int64, error) {
+func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, release releaseVersion, coordinators []string, create bool) (int64, error) {
 	versionString := release.String()
 	milestoneName := fmt.Sprintf("gopls/%s", versionString)
 	// All milestones and issues resides under go repo.
@@ -186,14 +196,20 @@ func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, release
 - [ ] tag gopls/%s
 - [ ] (if vX.Y.0 release): update dependencies in master for the next release
 `, versionString, goplsReleaseBranchName(release), versionString, versionString)
-	// TODO(hxjiang): accept a new parameter release coordinator.
-	assignee := "h9jiang"
+
+	if len(coordinators) == 0 {
+		return 0, fmt.Errorf("the input coordinators slice is empty")
+	}
+	assignee, err := lookupCoordinator(coordinators[0])
+	if err != nil {
+		return 0, fmt.Errorf("failed to find the coordinator %q", coordinators[0])
+	}
 	issue, _, err := r.Github.CreateIssue(ctx, "golang", "go", &github.IssueRequest{
-		Title:     &title,
-		Body:      &content,
+		Title:     github.String(title),
+		Body:      github.String(content),
 		Labels:    &[]string{"gopls", "Tools"},
-		Assignee:  &assignee,
-		Milestone: &milestoneID,
+		Assignee:  github.String(assignee.GitHub),
+		Milestone: github.Int(milestoneID),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to create release tracking issue for %q: %w", versionString, err)
@@ -620,7 +636,7 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	// bump strategy.
 	// Use with caution.
 	inputVersion := wf.Param(wd, wf.ParamDef[string]{Name: "explicit version (optional)"})
-	reviewers := wf.Param(wd, reviewersParam)
+	coordinators := wf.Param(wd, releaseCoordinatorsParam)
 
 	release := wf.Task2(wd, "determine the release version", r.determineReleaseVersion, inputVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the latest pre-release version", r.latestPrerelease, release)
@@ -628,13 +644,13 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 
 	tagged := wf.Action2(wd, "tag the release", r.tagRelease, release, prerelease, wf.After(approved))
 
-	issue := wf.Task2(wd, "find release git issue", r.findOrCreateGitHubIssue, release, wf.Const(false))
+	issue := wf.Task3(wd, "find release git issue", r.findOrCreateGitHubIssue, release, wf.Const([]string{}), wf.Const(false))
 	_ = wf.Action1(wd, "mail announcement", r.mailReleaseAnnouncement, release, wf.After(tagged))
 
-	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, reviewers, release, issue, wf.After(tagged))
+	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, coordinators, release, issue, wf.After(tagged))
 	_ = wf.Task1(wd, "await x/tools gopls dependency CL submission in gopls sub dir", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 
-	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, reviewers, issue, release, wf.Const(""), wf.After(tagged))
+	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, coordinators, issue, release, wf.Const(""), wf.After(tagged))
 	_ = wf.Task1(wd, "await gopls version update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmissions, vscodeGoChanges)
 
 	return wd

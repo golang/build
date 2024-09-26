@@ -57,7 +57,7 @@ func (x *TagXReposTasks) NewSingleDefinition() *wf.Definition {
 }
 
 var reviewersParam = wf.ParamDef[[]string]{
-	Name:      "Reviewer usernames (optional)",
+	Name:      "Reviewer Gerrit Usernames (optional)",
 	ParamType: wf.SliceShort,
 	Doc:       `Send code reviews to these users.`,
 	Example:   "heschi",

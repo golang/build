@@ -136,7 +136,7 @@ func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 			if !ok {
 				t.Fatalf("parseVersion(%q) failed", tc.version)
 			}
-			issueNumber, err := tasks.createReleaseMilestoneAndIssue(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, release)
+			issueNumber, err := tasks.createReleaseMilestoneAndIssue(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, release, []string{"gobot"})
 			if err != nil {
 				t.Fatal(err)
 			}

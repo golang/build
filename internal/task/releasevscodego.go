@@ -142,6 +142,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	versionBumpStrategy := wf.Param(wd, nextVersionParam)
+	coordinators := wf.Param(wd, releaseCoordinatorsParam)
 
 	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
@@ -150,7 +151,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	verified := wf.Action1(wd, "verify the release candidate", r.verifyTestResults, revision, wf.After(approved))
 
-	issue := wf.Task1(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, wf.After(verified))
+	issue := wf.Task2(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, coordinators, wf.After(verified))
 	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(verified))
 	build := wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
 
@@ -221,7 +222,7 @@ chown -R 1000:1000 .
 	return nil
 }
 
-func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContext, semv releaseVersion) (int, error) {
+func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContext, semv releaseVersion, coordinators []string) (int, error) {
 	version := fmt.Sprintf("v%v.%v.%v", semv.Major, semv.Minor, semv.Patch)
 
 	// The vscode-go release milestone name matches the release version.
@@ -246,12 +247,18 @@ func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContex
 		}
 	}
 
-	content := fmt.Sprintf(vscodeGoReleaseIssueTmplStr, version)
+	if len(coordinators) == 0 {
+		return 0, fmt.Errorf("the input coordinators slice is empty")
+	}
+	assignee, err := lookupCoordinator(coordinators[0])
+	if err != nil {
+		return 0, fmt.Errorf("failed to find the coordinator %q", coordinators[0])
+	}
 	issue, _, err := r.GitHub.CreateIssue(ctx, "golang", "vscode-go", &github.IssueRequest{
-		Title:     &title,
-		Body:      &content,
-		Assignee:  github.String("h9jiang"),
-		Milestone: &milestoneID,
+		Title:     github.String(title),
+		Body:      github.String(fmt.Sprintf(vscodeGoReleaseIssueTmplStr, version)),
+		Assignee:  github.String(assignee.GitHub),
+		Milestone: github.Int(milestoneID),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to create release tracking issue for %q: %w", version, err)

@@ -288,7 +288,7 @@ func mapCoordinators(users []string, f func(*gophers.Person) string) ([]string, 
 }
 
 // CheckCoordinators checks that all users are known
-// and have required information (name, Gerrit email).
+// and have required information (name, Gerrit email, GitHub user name).
 func CheckCoordinators(users []string) error {
 	var report strings.Builder
 	for _, user := range users {
@@ -309,8 +309,12 @@ func lookupCoordinator(user string) (*gophers.Person, error) {
 	}
 	if person == nil {
 		return nil, fmt.Errorf("unknown username %q: no @golang or @google account", user)
-	} else if person.Name == "" {
+	}
+	if person.Name == "" {
 		return nil, fmt.Errorf("release coordinator %q is missing a name", person.Gerrit)
+	}
+	if person.GitHub == "" {
+		return nil, fmt.Errorf("release coordinator %q is missing github user name", person.Gerrit)
 	}
 	return person, nil
 }
