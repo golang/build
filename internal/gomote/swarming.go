@@ -987,7 +987,9 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 							Value: name,
 						},
 					},
-					ExecutionTimeoutSecs: 86400,
+					// The swarming limits state it must be between 30s and 601140s. This information is returned
+					// as part of an error message when you attempt a request with a value outside of these boundaries.
+					ExecutionTimeoutSecs: 601140,
 				},
 				ExpirationSecs:  86400,
 				WaitForCapacity: false,
@@ -1090,7 +1092,9 @@ func (ss *SwarmingServer) newSwarmingTaskWithGolangbuild(ctx context.Context, na
 							Value: properties.BuilderId,
 						},
 					},
-					ExecutionTimeoutSecs: 86400,
+					// The swarming limits state it must be between 30s and 601140s. This information is returned
+					// as part of an error message when you attempt a request with a value outside of these boundaries.
+					ExecutionTimeoutSecs: 601140,
 				},
 				ExpirationSecs:  86400,
 				WaitForCapacity: false,
