@@ -7,6 +7,7 @@
 package gophers
 
 import (
+	"fmt"
 	"strings"
 
 	"golang.org/x/build/gerrit"
@@ -53,6 +54,9 @@ func (p *Person) mergeIDs(ids ...string) {
 		case id == "*goog":
 			p.Googler = true
 		case id == "*bot":
+			if p.Bot {
+				panic(fmt.Errorf("*bot marker is set multiple times for %+v", p))
+			}
 			p.Bot = true
 		default:
 			p.Name = id
@@ -1225,7 +1229,7 @@ func init() {
 	addPerson("Hitoshi Mitake", "mitake.hitoshi@gmail.com", "@mitake")
 	addPerson("Homan Chou", "homanchou@gmail.com")
 	addPerson("Hong Ruiqi", "hongruiqi@gmail.com", "@hongruiqi")
-	addPerson("Hongxiang Jiang", "hxjiang@golang.org", "hxjiang@google.com", "@hxjiang")
+	addPerson("Hongxiang Jiang", "hxjiang@golang.org", "hxjiang@google.com", "@h9jiang")
 	addPerson("Hsin Tsao", "tsao@google.com")
 	addPerson("Hsin Tsao", "tsao@google.com", "@lazyhackeratwork")
 	addPerson("HuKeping", "hukeping@huawei.com", "@HuKeping")
