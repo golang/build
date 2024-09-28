@@ -1033,7 +1033,7 @@ if __name__ == "__main__":
         os.remove(buildlet_path)
     urllib.request.urlretrieve("https://storage.googleapis.com/go-builder-data/buildlet.%s-%s", buildlet_path)
     make_executable(os.getcwd() + sep + buildlet_file)
-    subprocess.run(["%s", buildlet_path, "--coordinator=gomotessh.golang.org:443", "--reverse-type=swarming-task", "-swarming-bot", "-halt=false"], shell=False, env=os.environ.copy())
+    subprocess.run(["%s", buildlet_path, "--workdir=.", "--coordinator=gomotessh.golang.org:443", "--reverse-type=swarming-task", "-swarming-bot", "-halt=false"], shell=False, env=os.environ.copy())
 `
 	return fmt.Sprintf(cmd, goos, goarch, golangbuildBin)
 }
