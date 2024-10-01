@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -882,6 +883,129 @@ esac
 			got, err = gerrit.ReadFile(ctx, "vscode-go", head, "extension/package-lock.json")
 			if err != nil || string(got) != tc.wantPackageLockJSON {
 				t.Errorf("ReadFile(%q) = (%q, %v), want (%q, nil)", "extension/package-lock.json", got, err, tc.wantPackageLockJSON)
+			}
+		})
+	}
+}
+
+func TestAddChangeLogHeading(t *testing.T) {
+	changelog := `# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](http://keepachangelog.com/).
+
+## Unreleased
+
+CHANGE FOR v0.44.0
+
+## v0.42.1
+
+CHANGE FOR v0.42.1
+`
+	testcases := []struct {
+		name          string
+		release       releaseVersion
+		wantChangeLog string
+	}{
+		{
+			name:    "add v0.44.0 heading",
+			release: releaseVersion{Major: 0, Minor: 44, Patch: 0},
+			wantChangeLog: `# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](http://keepachangelog.com/).
+
+## Unreleased
+
+## v0.44.0
+
+Date: 2002-01-02
+
+CHANGE FOR v0.44.0
+
+## v0.42.1
+
+CHANGE FOR v0.42.1
+`,
+		},
+		{
+			name:    "add v0.46.0 heading",
+			release: releaseVersion{Major: 0, Minor: 46, Patch: 0},
+			wantChangeLog: `# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](http://keepachangelog.com/).
+
+## Unreleased
+
+## v0.46.0
+
+Date: 2002-01-02
+
+CHANGE FOR v0.44.0
+
+## v0.42.1
+
+CHANGE FOR v0.42.1
+`,
+		},
+		{
+			name:    "no update for non-minor version",
+			release: releaseVersion{Major: 0, Minor: 44, Patch: 3},
+			wantChangeLog: `# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](http://keepachangelog.com/).
+
+## Unreleased
+
+CHANGE FOR v0.44.0
+
+## v0.42.1
+
+CHANGE FOR v0.42.1
+`,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			vscodego.Commit(map[string]string{
+				"CHANGELOG.md": changelog,
+			})
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+
+			tasks := &ReleaseVSCodeGoTasks{
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil),
+				Gerrit:     gerrit,
+			}
+
+			_, err := tasks.addChangeLogHeading(ctx, tc.release, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			head, err := gerrit.ReadBranchHead(ctx, "vscode-go", "master")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			gotFile, err := gerrit.ReadFile(ctx, "vscode-go", head, "CHANGELOG.md")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			re := regexp.MustCompile(`Date: (.*)\n`)
+			want := re.ReplaceAllString(tc.wantChangeLog, "\n")
+			got := re.ReplaceAllString(string(gotFile), "\n")
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("change log content mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

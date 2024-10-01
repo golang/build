@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"cloud.google.com/go/cloudbuild/apiv1/v2/cloudbuildpb"
 	"github.com/google/go-github/v48/github"
@@ -1063,6 +1064,8 @@ func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ToolsTeam}})
 
 	versionBumpStrategy := wf.Param(wd, nextVersionParam)
+	reviewers := wf.Param(wd, reviewersParam)
+
 	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the latest pre-release version", r.latestPrereleaseVersion, release)
 
@@ -1074,9 +1077,13 @@ func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
 	build := wf.Task3(wd, "generate package extension (.vsix) from release candidate tag", r.generatePackageExtension, release, wf.Const(""), commit)
 
 	tagged := wf.Action3(wd, "tag the stable release", r.tag, commit, release, wf.Const(""), wf.After(build))
-
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
-	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build)
+
+	changeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLogHeading, release, reviewers, wf.After(build))
+	submitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
+	// Publish only after the CHANGELOG.md update is merged to ensure the change
+	// log reflects the latest released version.
+	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(submitted))
 
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, wf.Const(""), wf.Const(""), wf.Const(0), wf.After(released), wf.After(published))
 	return wd
@@ -1106,4 +1113,66 @@ func (r *ReleaseVSCodeGoTasks) findVSCodeReleaseCommit(ctx *wf.TaskContext, rele
 	}
 
 	return info.Revision, nil
+}
+
+// addChangeLogHeading updates the CHANGELOG.md file in the master branch of the
+// vscode-go repository with a new heading for the released version.
+// It moves all content from the "Unreleased" section to the new version's
+// section, but only for minor releases.
+// For more details on changelog format, see: https://keepachangelog.com/en/1.1.0/
+func (r *ReleaseVSCodeGoTasks) addChangeLogHeading(ctx *wf.TaskContext, release releaseVersion, reviewers []string) (string, error) {
+	if release.Patch != 0 {
+		ctx.Printf("not creating CL: %s is not a minor release", release)
+		return "", nil
+	}
+
+	clTitle := "CHANGELOG.md: add release heading for " + release.String()
+
+	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", "master", clTitle)
+	if err != nil {
+		return "", err
+	}
+	if openCL != "" {
+		ctx.Printf("not creating CL: found existing CL %s", openCL)
+		return openCL, nil
+	}
+
+	head, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", "master")
+	if err != nil {
+		return "", err
+	}
+
+	content, err := r.Gerrit.ReadFile(ctx, "vscode-go", head, "CHANGELOG.md")
+	if err != nil {
+		return "", err
+	}
+
+	lines := bytes.Split(content, []byte("\n"))
+	var output bytes.Buffer
+
+	for i, line := range lines {
+		output.Write(line)
+		// Only add a newline if it's not the last line
+		if i < len(lines)-1 {
+			output.WriteString("\n")
+		}
+		if string(line) == "## Unreleased" {
+			output.WriteString("\n")
+			output.WriteString("## " + release.String() + "\n")
+			output.WriteString("\n")
+			output.WriteString("Date: " + time.Now().Format(time.DateOnly) + "\n")
+		}
+	}
+
+	cl, err := r.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
+		Project: "vscode-go",
+		Branch:  "master",
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the CHANGELOG.md.\n", clTitle),
+	}, reviewers, map[string]string{"CHANGELOG.md": output.String()})
+	if err != nil {
+		return "", err
+	}
+
+	ctx.Printf("created auto-submit change %s under branch master in vscode-go repo.", cl)
+	return cl, nil
 }
