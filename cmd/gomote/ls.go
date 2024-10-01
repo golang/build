@@ -8,6 +8,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -71,7 +72,7 @@ func ls(args []string) error {
 	}
 	for _, inst := range lsSet {
 		client := gomoteServerClient(ctx)
-		resp, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
+		stream, err := client.ListDirectoryStreaming(ctx, &protos.ListDirectoryRequest{
 			GomoteId:  inst,
 			Directory: dir,
 			Recursive: recursive,
@@ -84,8 +85,17 @@ func ls(args []string) error {
 		if len(lsSet) > 1 {
 			fmt.Fprintf(os.Stdout, "# %s\n", inst)
 		}
-		for _, entry := range resp.GetEntries() {
-			fmt.Fprintf(os.Stdout, "%s\n", entry)
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("unable to ls: %w", err)
+			}
+			for _, entry := range resp.GetEntries() {
+				fmt.Fprintf(os.Stdout, "%s\n", entry)
+			}
 		}
 		if len(lsSet) > 1 {
 			fmt.Fprintln(os.Stdout)

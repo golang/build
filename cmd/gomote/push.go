@@ -76,7 +76,7 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 	remote := map[string]buildlet.DirEntry{} // keys like "src/make.bash"
 
 	client := gomoteServerClient(ctx)
-	resp, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
+	stream, err := client.ListDirectoryStreaming(ctx, &protos.ListDirectoryRequest{
 		GomoteId:  name,
 		Directory: ".",
 		Recursive: true,
@@ -99,11 +99,20 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 	if err != nil {
 		return fmt.Errorf("error listing buildlet's existing files: %w", err)
 	}
-	for _, entry := range resp.GetEntries() {
-		de := buildlet.DirEntry{Line: entry}
-		en := de.Name()
-		if strings.HasPrefix(en, "go/") && en != "go/" {
-			remote[en[len("go/"):]] = de
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("error listing buildlet's existing files: %w", err)
+		}
+		for _, entry := range resp.GetEntries() {
+			de := buildlet.DirEntry{Line: entry}
+			en := de.Name()
+			if strings.HasPrefix(en, "go/") && en != "go/" {
+				remote[en[len("go/"):]] = de
+			}
 		}
 	}
 	// TODO(66635) remove once gomotes can no longer be created via the coordinator.
