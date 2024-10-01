@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/maintner/maintpb"
@@ -132,7 +133,7 @@ func (gc *GitCommit) SameDiffStat(b *GitCommit) bool {
 		if af == nil || bf == nil {
 			return false
 		}
-		if *af != *bf {
+		if !proto.Equal(af, bf) {
 			return false
 		}
 	}
