@@ -19,10 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/maintner/maintpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestParseGithubEvents(t *testing.T) {
@@ -1058,12 +1057,8 @@ func t3339(s string) time.Time {
 	return t.UTC()
 }
 
-func p3339(s string) *timestamp.Timestamp {
-	tp, err := ptypes.TimestampProto(t3339(s))
-	if err != nil {
-		panic(err)
-	}
-	return tp
+func p3339(s string) *timestamppb.Timestamp {
+	return timestamppb.New(t3339(s))
 }
 
 func TestParseGithubRefs(t *testing.T) {

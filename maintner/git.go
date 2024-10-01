@@ -18,10 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/build/internal/foreach"
 	"golang.org/x/build/maintner/maintpb"
+	"google.golang.org/protobuf/proto"
 )
 
 // GitHash is a git commit in binary form (NOT hex form).

@@ -19,9 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/timestamp"
-
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -132,16 +129,6 @@ func (c *Corpus) Check() error {
 	}
 
 	return nil
-}
-
-// mustProtoFromTime turns a time.Time into a *timestamp.Timestamp or panics if
-// in is invalid.
-func mustProtoFromTime(in time.Time) *timestamp.Timestamp {
-	tp, err := ptypes.TimestampProto(in)
-	if err != nil {
-		panic(err)
-	}
-	return tp
 }
 
 // requires c.mu be held for writing

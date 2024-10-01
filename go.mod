@@ -27,7 +27,6 @@ require (
 	github.com/gliderlabs/ssh v0.3.3
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3
-	github.com/golang/protobuf v1.5.3
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-github/v48 v48.1.0
 	github.com/google/safehtml v0.0.3-0.20220430015336-00016cfeca15
@@ -67,7 +66,6 @@ require (
 	google.golang.org/appengine v1.6.8-0.20221117013220-504804fb50de
 	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142
 	google.golang.org/grpc v1.67.1
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/inf.v0 v0.9.1
 	rsc.io/github v0.3.1-0.20240418182958-01bebb0c456a
@@ -106,6 +104,7 @@ require (
 	github.com/golang/glog v1.2.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.6.0 // indirect
+	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v2.0.8+incompatible // indirect
 	github.com/google/go-querystring v1.1.0 // indirect

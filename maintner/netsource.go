@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/maintner/internal/robustio"
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/build/maintner/reclog"
+	"google.golang.org/protobuf/proto"
 )
 
 // NewNetworkMutationSource returns a mutation source from a master server.

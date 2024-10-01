@@ -14,10 +14,9 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/golang/protobuf/ptypes"
-	google_protobuf "github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/maintner/maintpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var u1 = &GitHubUser{
@@ -65,13 +64,13 @@ func (mt mutationTest) test(t *testing.T, muts ...*maintpb.Mutation) {
 }
 
 var t1, t2 time.Time
-var tp1, tp2 *google_protobuf.Timestamp
+var tp1, tp2 *timestamppb.Timestamp
 
 func init() {
 	t1, _ = time.Parse(time.RFC3339, "2016-01-02T15:04:00Z")
 	t2, _ = time.Parse(time.RFC3339, "2016-01-02T15:30:00Z")
-	tp1, _ = ptypes.TimestampProto(t1)
-	tp2, _ = ptypes.TimestampProto(t2)
+	tp1 = timestamppb.New(t1)
+	tp2 = timestamppb.New(t2)
 }
 
 func singleIssueGitHubCorpus() *Corpus {

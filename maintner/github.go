@@ -21,14 +21,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/google/go-github/v48/github"
 	"github.com/gregjones/httpcache"
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // xFromCache is the synthetic response header added by the httpcache
@@ -525,9 +524,7 @@ func (e *GitHubReview) Proto() *maintpb.GithubReview {
 		p.OtherJson = []byte(e.OtherJSON)
 	}
 	if !e.Created.IsZero() {
-		if tp, err := ptypes.TimestampProto(e.Created); err == nil {
-			p.Created = tp
-		}
+		p.Created = timestamppb.New(e.Created)
 	}
 	if e.Actor != nil {
 		p.ActorId = e.Actor.ID
@@ -549,7 +546,7 @@ func (r *GitHubRepo) newGithubReview(p *maintpb.GithubReview) *GitHubReview {
 	}
 
 	if p.Created != nil {
-		e.Created, _ = ptypes.Timestamp(p.Created)
+		e.Created = p.Created.AsTime()
 	}
 	if len(p.OtherJson) > 0 {
 		// TODO: parse it and see if we've since learned how
@@ -636,9 +633,7 @@ func (e *GitHubIssueEvent) Proto() *maintpb.GithubIssueEvent {
 		p.OtherJson = []byte(e.OtherJSON)
 	}
 	if !e.Created.IsZero() {
-		if tp, err := ptypes.TimestampProto(e.Created); err == nil {
-			p.Created = tp
-		}
+		p.Created = timestamppb.New(e.Created)
 	}
 	if e.Actor != nil {
 		p.ActorId = e.Actor.ID
@@ -703,7 +698,7 @@ func (r *GitHubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *GitHubIssueEve
 		To:              p.RenameTo,
 	}
 	if p.Created != nil {
-		e.Created, _ = ptypes.Timestamp(p.Created)
+		e.Created = p.Created.AsTime()
 	}
 	if len(p.OtherJson) > 0 {
 		// TODO: parse it and see if we've since learned how
@@ -1039,15 +1034,11 @@ func (d githubIssueDiffer) diffClosedAt(m *maintpb.GithubIssueMutation) bool {
 	return d.diffTimeField(&m.ClosedAt, d.a.getClosedAt(), d.b.GetClosedAt())
 }
 
-func (d githubIssueDiffer) diffTimeField(dst **timestamp.Timestamp, memTime, githubTime time.Time) bool {
+func (d githubIssueDiffer) diffTimeField(dst **timestamppb.Timestamp, memTime, githubTime time.Time) bool {
 	if githubTime.IsZero() || memTime.Equal(githubTime) {
 		return false
 	}
-	tproto, err := ptypes.TimestampProto(githubTime)
-	if err != nil {
-		panic(err)
-	}
-	*dst = tproto
+	*dst = timestamppb.New(githubTime)
 	return true
 }
 
@@ -1280,11 +1271,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 			return
 		}
 
-		var err error
-		gi.Created, err = ptypes.Timestamp(m.Created)
-		if err != nil {
-			panic(err)
-		}
+		gi.Created = m.Created.AsTime()
 	}
 	if m.NotExist != gi.NotExist {
 		gi.NotExist = m.NotExist
@@ -1297,18 +1284,10 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	// Mutation is stale
 	// (ignoring Created since it *should* never update)
 	if m.Updated != nil {
-		t, err := ptypes.Timestamp(m.Updated)
-		if err != nil {
-			panic(err)
-		}
-		gi.Updated = t
+		gi.Updated = m.Updated.AsTime()
 	}
 	if m.ClosedAt != nil {
-		t, err := ptypes.Timestamp(m.ClosedAt)
-		if err != nil {
-			panic(err)
-		}
-		gi.ClosedAt = t
+		gi.ClosedAt = m.ClosedAt.AsTime()
 	}
 	if m.User != nil {
 		gi.User = c.github.getUser(m.User)
@@ -1379,21 +1358,17 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 			gc.User = c.github.getUser(cmut.User)
 		}
 		if cmut.Created != nil {
-			gc.Created, _ = ptypes.Timestamp(cmut.Created)
-			gc.Created = gc.Created.UTC()
+			gc.Created = cmut.Created.AsTime().UTC()
 		}
 		if cmut.Updated != nil {
-			gc.Updated, _ = ptypes.Timestamp(cmut.Updated)
-			gc.Updated = gc.Updated.UTC()
+			gc.Updated = cmut.Updated.AsTime().UTC()
 		}
 		if cmut.Body != "" {
 			gc.Body = cmut.Body
 		}
 	}
 	if m.CommentStatus != nil && m.CommentStatus.ServerDate != nil {
-		if serverDate, err := ptypes.Timestamp(m.CommentStatus.ServerDate); err == nil {
-			gi.commentsSyncedAsOf = serverDate.UTC()
-		}
+		gi.commentsSyncedAsOf = m.CommentStatus.ServerDate.AsTime().UTC()
 	}
 
 	for _, emut := range m.Event {
@@ -1411,9 +1386,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		}
 	}
 	if m.EventStatus != nil && m.EventStatus.ServerDate != nil {
-		if serverDate, err := ptypes.Timestamp(m.EventStatus.ServerDate); err == nil {
-			gi.eventsSyncedAsOf = serverDate.UTC()
-		}
+		gi.eventsSyncedAsOf = m.EventStatus.ServerDate.AsTime().UTC()
 	}
 
 	for _, rmut := range m.Review {
@@ -1431,9 +1404,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		}
 	}
 	if m.ReviewStatus != nil && m.ReviewStatus.ServerDate != nil {
-		if serverDate, err := ptypes.Timestamp(m.ReviewStatus.ServerDate); err == nil {
-			gi.reviewsSyncedAsOf = serverDate.UTC()
-		}
+		gi.reviewsSyncedAsOf = m.ReviewStatus.ServerDate.AsTime().UTC()
 	}
 }
 
@@ -1970,14 +1941,8 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 				p.logf("bogus comment: %v", ic)
 				continue
 			}
-			created, err := ptypes.TimestampProto(*ic.CreatedAt)
-			if err != nil {
-				continue
-			}
-			updated, err := ptypes.TimestampProto(*ic.UpdatedAt)
-			if err != nil {
-				continue
-			}
+			created := timestamppb.New(*ic.CreatedAt)
+			updated := timestamppb.New(*ic.UpdatedAt)
 			since = *ic.UpdatedAt // for next round
 
 			id := int64(*ic.ID)
@@ -2014,8 +1979,9 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 		p.c.mu.RUnlock()
 
 		if res.NextPage == 0 {
-			sdp, _ := ptypes.TimestampProto(serverDate)
-			mut.GithubIssue.CommentStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
+			mut.GithubIssue.CommentStatus = &maintpb.GithubIssueSyncStatus{
+				ServerDate: timestamppb.New(serverDate),
+			}
 			morePages = false
 		}
 
@@ -2114,8 +2080,9 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			if err != nil {
 				return nil, nil, fmt.Errorf("invalid server Date response: %v", err)
 			}
-			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
-			mut.GithubIssue.EventStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
+			mut.GithubIssue.EventStatus = &maintpb.GithubIssueSyncStatus{
+				ServerDate: timestamppb.New(serverDate.UTC()),
+			}
 
 			return is, ghResp, err
 		},
@@ -2358,8 +2325,9 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 			if err != nil {
 				return nil, nil, fmt.Errorf("invalid server Date response: %v", err)
 			}
-			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
-			mut.GithubIssue.ReviewStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
+			mut.GithubIssue.ReviewStatus = &maintpb.GithubIssueSyncStatus{
+				ServerDate: timestamppb.New(serverDate.UTC()),
+			}
 
 			return is, ghResp, err
 		},

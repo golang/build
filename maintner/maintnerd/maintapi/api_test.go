@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
@@ -23,6 +22,8 @@ import (
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -78,7 +79,7 @@ func TestFindTryWork(t *testing.T) {
 
 	// Just for interactive debugging. This is using live data.
 	// The stable tests are in TestTryWorkItem and TestTryBotStatus.
-	t.Logf("Current:\n%v", proto.MarshalTextString(res))
+	t.Logf("Current:\n%v", prototext.Format(res))
 
 	t1 := time.Now()
 	res2, err := s.GoFindTryWork(context.Background(), req)
