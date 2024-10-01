@@ -11,7 +11,7 @@
 #  - upload.linux-amd64: build buildlet for linux-amd64 and upload to prod
 #  - dev-upload.linux-amd64: build buildlet for linux-amd64 and upload to dev cluster
 
-GO=go1.20
+GO=go1.22.8
 
 ALL=\
 	buildlet.aix-ppc64 \

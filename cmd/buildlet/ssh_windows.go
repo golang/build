@@ -44,7 +44,7 @@ func sshHandler(s ssh.Session) {
 		fmt.Fprint(s, "scp is not supported\n")
 		return
 	}
-	f, err := conpty.Start(shell(), conpty.ConPtyDimensions(ptyReq.Window.Width, ptyReq.Window.Height), conpty.ConPtyWorkDir(windowsWorkdir))
+	f, err := conpty.Start(shell(), conpty.ConPtyDimensions(ptyReq.Window.Width, ptyReq.Window.Height), conpty.ConPtyWorkDir(*workDir))
 	if err != nil {
 		fmt.Fprintf(s, "unable to start shell %q: %s\n", shell(), err)
 		log.Printf("unable to start shell: %s", err)
