@@ -336,6 +336,35 @@ func (ss *SwarmingServer) InstanceAlive(ctx context.Context, req *protos.Instanc
 
 // ListDirectory lists the contents of the directory on a gomote instance.
 func (ss *SwarmingServer) ListDirectory(ctx context.Context, req *protos.ListDirectoryRequest) (*protos.ListDirectoryResponse, error) {
+	entries, err := ss.listDirectory(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &protos.ListDirectoryResponse{
+		Entries: entries,
+	}, nil
+}
+
+// ListDirectoryStreaming lists the contents of the directory on a gomote instance.
+func (ss *SwarmingServer) ListDirectoryStreaming(req *protos.ListDirectoryRequest, stream grpc.ServerStreamingServer[protos.ListDirectoryResponse]) error {
+	entries, err := ss.listDirectory(stream.Context(), req)
+	if err != nil {
+		return err
+	}
+	// This could use slices.Chunk, once our go.mod is on go1.23 or higher.
+	const chunkSize = 100
+	for i := 0; i < len(entries); i += chunkSize {
+		end := min(chunkSize, len(entries[i:]))
+		if err := stream.Send(&protos.ListDirectoryResponse{
+			Entries: entries[i:end],
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ss *SwarmingServer) listDirectory(ctx context.Context, req *protos.ListDirectoryRequest) ([]string, error) {
 	creds, err := access.IAPFromContext(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
@@ -359,9 +388,7 @@ func (ss *SwarmingServer) ListDirectory(ctx context.Context, req *protos.ListDir
 	}); err != nil {
 		return nil, status.Errorf(codes.Unimplemented, "method ListDirectory not implemented")
 	}
-	return &protos.ListDirectoryResponse{
-		Entries: entries,
-	}, nil
+	return entries, nil
 }
 
 const (

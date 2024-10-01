@@ -550,19 +550,55 @@ func TestSwarmingInstanceAliveError(t *testing.T) {
 	}
 }
 
+// listDirectory calls either ListDirectoryStreaming or ListDirectory.
+func listDirectory(ctx context.Context, streaming bool, client protos.GomoteServiceClient, req *protos.ListDirectoryRequest) ([]*protos.ListDirectoryResponse, error) {
+	if streaming {
+		stream, err := client.ListDirectoryStreaming(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		var resps []*protos.ListDirectoryResponse
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			resps = append(resps, resp)
+		}
+		return resps, nil
+	} else {
+		resp, err := client.ListDirectory(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return []*protos.ListDirectoryResponse{resp}, nil
+	}
+}
+
 func TestSwarmingListDirectory(t *testing.T) {
+	t.Run("single", func(t *testing.T) { testSwarmingListDirectory(t, false) })
+	t.Run("streaming", func(t *testing.T) { testSwarmingListDirectory(t, true) })
+}
+func testSwarmingListDirectory(t *testing.T, streaming bool) {
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
 	gomoteID := mustCreateSwarmingInstance(t, client, fakeIAP())
-	if _, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
+	if _, err := listDirectory(ctx, streaming, client, &protos.ListDirectoryRequest{
 		GomoteId:  gomoteID,
 		Directory: "/foo",
 	}); err != nil {
-		t.Fatalf("client.RemoveFiles(ctx, req) = response, %s; want no error", err)
+		t.Fatalf("client.ListDirectory(ctx, req) = response, %s; want no error", err)
 	}
 }
 
 func TestSwarmingListDirectoryError(t *testing.T) {
+	t.Run("single", func(t *testing.T) { testSwarmingListDirectoryError(t, false) })
+	t.Run("streaming", func(t *testing.T) { testSwarmingListDirectoryError(t, true) })
+}
+func testSwarmingListDirectoryError(t *testing.T, streaming bool) {
 	// This test will create a gomote instance and attempt to call ListDirectory.
 	// If overrideID is set to true, the test will use a different gomoteID than
 	// the one created for the test.
@@ -624,12 +660,12 @@ func TestSwarmingListDirectoryError(t *testing.T) {
 				SkipFiles: []string{},
 				Digest:    false,
 			}
-			got, err := client.ListDirectory(tc.ctx, req)
+			got, err := listDirectory(tc.ctx, streaming, client, req)
 			if err != nil && status.Code(err) != tc.wantCode {
 				t.Fatalf("unexpected error: %s; want %s", err, tc.wantCode)
 			}
 			if err == nil {
-				t.Fatalf("client.RemoveFiles(ctx, %v) = %v, nil; want error", req, got)
+				t.Fatalf("client.ListDirectory(ctx, %v) = %v, nil; want error", req, got)
 			}
 		})
 	}
@@ -1126,14 +1162,13 @@ func TestStartNewSwarmingTask(t *testing.T) {
 		}, nil
 	}
 	ss := &SwarmingServer{
-		UnimplementedGomoteServiceServer: protos.UnimplementedGomoteServiceServer{},
-		bucket:                           nil,
-		buildlets:                        &remote.SessionPool{},
-		gceBucketName:                    "",
-		sshCertificateAuthority:          nil,
-		rendezvous:                       rdv,
-		swarmingClient:                   msc,
-		buildersClient:                   &FakeBuildersClient{},
+		bucket:                  nil,
+		buildlets:               &remote.SessionPool{},
+		gceBucketName:           "",
+		sshCertificateAuthority: nil,
+		rendezvous:              rdv,
+		swarmingClient:          msc,
+		buildersClient:          &FakeBuildersClient{},
 	}
 	id := "task-123"
 	errCh := make(chan error, 2)

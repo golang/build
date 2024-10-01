@@ -24,6 +24,8 @@ service GomoteService {
   rpc InstanceAlive (InstanceAliveRequest) returns (InstanceAliveResponse) {}
   // ListDirectory lists the contents of a directory on an gomote instance.
   rpc ListDirectory (ListDirectoryRequest) returns (ListDirectoryResponse) {}
+  // ListDirectoryStreaming lists the contents of a directory on an gomote instance.
+  rpc ListDirectoryStreaming (ListDirectoryRequest) returns (stream ListDirectoryResponse) {}
   // ListInstances lists all of the live gomote instances owned by the caller.
   rpc ListInstances (ListInstancesRequest) returns (ListInstancesResponse) {}
   // ListSwarmingBuilders lists all of the swarming builders for the project.

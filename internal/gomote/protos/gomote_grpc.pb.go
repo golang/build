@@ -23,21 +23,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	GomoteService_Authenticate_FullMethodName         = "/protos.GomoteService/Authenticate"
-	GomoteService_AddBootstrap_FullMethodName         = "/protos.GomoteService/AddBootstrap"
-	GomoteService_CreateInstance_FullMethodName       = "/protos.GomoteService/CreateInstance"
-	GomoteService_DestroyInstance_FullMethodName      = "/protos.GomoteService/DestroyInstance"
-	GomoteService_ExecuteCommand_FullMethodName       = "/protos.GomoteService/ExecuteCommand"
-	GomoteService_InstanceAlive_FullMethodName        = "/protos.GomoteService/InstanceAlive"
-	GomoteService_ListDirectory_FullMethodName        = "/protos.GomoteService/ListDirectory"
-	GomoteService_ListInstances_FullMethodName        = "/protos.GomoteService/ListInstances"
-	GomoteService_ListSwarmingBuilders_FullMethodName = "/protos.GomoteService/ListSwarmingBuilders"
-	GomoteService_ReadTGZToURL_FullMethodName         = "/protos.GomoteService/ReadTGZToURL"
-	GomoteService_RemoveFiles_FullMethodName          = "/protos.GomoteService/RemoveFiles"
-	GomoteService_SignSSHKey_FullMethodName           = "/protos.GomoteService/SignSSHKey"
-	GomoteService_UploadFile_FullMethodName           = "/protos.GomoteService/UploadFile"
-	GomoteService_WriteFileFromURL_FullMethodName     = "/protos.GomoteService/WriteFileFromURL"
-	GomoteService_WriteTGZFromURL_FullMethodName      = "/protos.GomoteService/WriteTGZFromURL"
+	GomoteService_Authenticate_FullMethodName           = "/protos.GomoteService/Authenticate"
+	GomoteService_AddBootstrap_FullMethodName           = "/protos.GomoteService/AddBootstrap"
+	GomoteService_CreateInstance_FullMethodName         = "/protos.GomoteService/CreateInstance"
+	GomoteService_DestroyInstance_FullMethodName        = "/protos.GomoteService/DestroyInstance"
+	GomoteService_ExecuteCommand_FullMethodName         = "/protos.GomoteService/ExecuteCommand"
+	GomoteService_InstanceAlive_FullMethodName          = "/protos.GomoteService/InstanceAlive"
+	GomoteService_ListDirectory_FullMethodName          = "/protos.GomoteService/ListDirectory"
+	GomoteService_ListDirectoryStreaming_FullMethodName = "/protos.GomoteService/ListDirectoryStreaming"
+	GomoteService_ListInstances_FullMethodName          = "/protos.GomoteService/ListInstances"
+	GomoteService_ListSwarmingBuilders_FullMethodName   = "/protos.GomoteService/ListSwarmingBuilders"
+	GomoteService_ReadTGZToURL_FullMethodName           = "/protos.GomoteService/ReadTGZToURL"
+	GomoteService_RemoveFiles_FullMethodName            = "/protos.GomoteService/RemoveFiles"
+	GomoteService_SignSSHKey_FullMethodName             = "/protos.GomoteService/SignSSHKey"
+	GomoteService_UploadFile_FullMethodName             = "/protos.GomoteService/UploadFile"
+	GomoteService_WriteFileFromURL_FullMethodName       = "/protos.GomoteService/WriteFileFromURL"
+	GomoteService_WriteTGZFromURL_FullMethodName        = "/protos.GomoteService/WriteTGZFromURL"
 )
 
 // GomoteServiceClient is the client API for GomoteService service.
@@ -60,6 +61,8 @@ type GomoteServiceClient interface {
 	InstanceAlive(ctx context.Context, in *InstanceAliveRequest, opts ...grpc.CallOption) (*InstanceAliveResponse, error)
 	// ListDirectory lists the contents of a directory on an gomote instance.
 	ListDirectory(ctx context.Context, in *ListDirectoryRequest, opts ...grpc.CallOption) (*ListDirectoryResponse, error)
+	// ListDirectoryStreaming lists the contents of a directory on an gomote instance.
+	ListDirectoryStreaming(ctx context.Context, in *ListDirectoryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ListDirectoryResponse], error)
 	// ListInstances lists all of the live gomote instances owned by the caller.
 	ListInstances(ctx context.Context, in *ListInstancesRequest, opts ...grpc.CallOption) (*ListInstancesResponse, error)
 	// ListSwarmingBuilders lists all of the swarming builders for the project.
@@ -176,6 +179,25 @@ func (c *gomoteServiceClient) ListDirectory(ctx context.Context, in *ListDirecto
 	return out, nil
 }
 
+func (c *gomoteServiceClient) ListDirectoryStreaming(ctx context.Context, in *ListDirectoryRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ListDirectoryResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &GomoteService_ServiceDesc.Streams[2], GomoteService_ListDirectoryStreaming_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ListDirectoryRequest, ListDirectoryResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type GomoteService_ListDirectoryStreamingClient = grpc.ServerStreamingClient[ListDirectoryResponse]
+
 func (c *gomoteServiceClient) ListInstances(ctx context.Context, in *ListInstancesRequest, opts ...grpc.CallOption) (*ListInstancesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListInstancesResponse)
@@ -276,6 +298,8 @@ type GomoteServiceServer interface {
 	InstanceAlive(context.Context, *InstanceAliveRequest) (*InstanceAliveResponse, error)
 	// ListDirectory lists the contents of a directory on an gomote instance.
 	ListDirectory(context.Context, *ListDirectoryRequest) (*ListDirectoryResponse, error)
+	// ListDirectoryStreaming lists the contents of a directory on an gomote instance.
+	ListDirectoryStreaming(*ListDirectoryRequest, grpc.ServerStreamingServer[ListDirectoryResponse]) error
 	// ListInstances lists all of the live gomote instances owned by the caller.
 	ListInstances(context.Context, *ListInstancesRequest) (*ListInstancesResponse, error)
 	// ListSwarmingBuilders lists all of the swarming builders for the project.
@@ -324,6 +348,9 @@ func (UnimplementedGomoteServiceServer) InstanceAlive(context.Context, *Instance
 }
 func (UnimplementedGomoteServiceServer) ListDirectory(context.Context, *ListDirectoryRequest) (*ListDirectoryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListDirectory not implemented")
+}
+func (UnimplementedGomoteServiceServer) ListDirectoryStreaming(*ListDirectoryRequest, grpc.ServerStreamingServer[ListDirectoryResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method ListDirectoryStreaming not implemented")
 }
 func (UnimplementedGomoteServiceServer) ListInstances(context.Context, *ListInstancesRequest) (*ListInstancesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListInstances not implemented")
@@ -481,6 +508,17 @@ func _GomoteService_ListDirectory_Handler(srv interface{}, ctx context.Context, 
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _GomoteService_ListDirectoryStreaming_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ListDirectoryRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(GomoteServiceServer).ListDirectoryStreaming(m, &grpc.GenericServerStream[ListDirectoryRequest, ListDirectoryResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type GomoteService_ListDirectoryStreamingServer = grpc.ServerStreamingServer[ListDirectoryResponse]
 
 func _GomoteService_ListInstances_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListInstancesRequest)
@@ -695,6 +733,11 @@ var GomoteService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ExecuteCommand",
 			Handler:       _GomoteService_ExecuteCommand_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "ListDirectoryStreaming",
+			Handler:       _GomoteService_ListDirectoryStreaming_Handler,
 			ServerStreams: true,
 		},
 	},
