@@ -146,33 +146,25 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 
 	release := wf.Task1(wd, "determine the release version", r.determineReleaseVersion, versionBumpStrategy)
 	prerelease := wf.Task1(wd, "find the next pre-release version", r.nextPrereleaseVersion, release)
-	revision := wf.Task2(wd, "find the revision for the pre-release version", r.findRevision, release, prerelease)
 	approved := wf.Action2(wd, "await release coordinator's approval", r.approveStablePrerelease, release, prerelease)
 
-	verified := wf.Action1(wd, "verify the release candidate", r.verifyTestResults, revision, wf.After(approved))
+	branch := wf.Task2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(approved))
+
+	changeID := wf.Task2(wd, "update package.json in release branch", r.updatePackageJSONVersionInReleaseBranch, release, coordinators, wf.After(branch))
+	submitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
+
+	// Read the head of the release branch after the required CL submission.
+	revision := wf.Task2(wd, "find the revision for the pre-release version", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), branch, wf.After(submitted))
+	verified := wf.Action1(wd, "verify the release candidate", r.verifyTestResults, revision)
 
 	issue := wf.Task2(wd, "create release milestone and issue", r.createReleaseMilestoneAndIssue, release, coordinators, wf.After(verified))
-	branched := wf.Action2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(verified))
 	build := wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
 
-	tagged := wf.Action3(wd, "tag the release candidate", r.tag, revision, release, prerelease, wf.After(branched))
+	tagged := wf.Action3(wd, "tag the release candidate", r.tag, revision, release, prerelease, wf.After(branch))
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, prerelease, build, wf.After(tagged))
 
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, prerelease, revision, issue, wf.After(released))
 	return wd
-}
-
-// findRevision determines the appropriate revision for the current release.
-// Returns the head of the master branch if this is the first release candidate
-// for a stable minor version (as no release branch exists yet).
-// Returns the head of the corresponding release branch otherwise.
-func (r *ReleaseVSCodeGoTasks) findRevision(ctx *wf.TaskContext, release releaseVersion, prerelease string) (string, error) {
-	branch := vscodeGoReleaseBranch(release)
-	if release.Patch == 0 && prerelease == "rc.1" {
-		branch = "master"
-	}
-
-	return r.Gerrit.ReadBranchHead(ctx, "vscode-go", branch)
 }
 
 func (r *ReleaseVSCodeGoTasks) verifyTestResults(ctx *wf.TaskContext, revision string) error {
@@ -269,48 +261,48 @@ func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContex
 
 // createReleaseBranch creates corresponding release branch only for the initial
 // release candidate of a minor version.
-func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, release releaseVersion, prerelease string) error {
+func (r *ReleaseVSCodeGoTasks) createReleaseBranch(ctx *wf.TaskContext, release releaseVersion, prerelease string) (string, error) {
 	branch := fmt.Sprintf("release-v%v.%v", release.Major, release.Minor)
 	releaseHead, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", branch)
 
 	if err == nil {
 		ctx.Printf("Found the release branch %q with head pointing to %s\n", branch, releaseHead)
-		return nil
+		return branch, nil
 	}
 
 	if !errors.Is(err, gerrit.ErrResourceNotExist) {
-		return fmt.Errorf("failed to read the release branch: %w", err)
+		return "", fmt.Errorf("failed to read the release branch: %w", err)
 	}
 
 	// Require vscode release branch existence if this is a non-minor release.
 	if release.Patch != 0 {
-		return fmt.Errorf("release branch is required for patch releases: %w", err)
+		return "", fmt.Errorf("release branch is required for patch releases: %w", err)
 	}
 
 	rc, err := prereleaseNumber(prerelease)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Require vscode release branch existence if this is not the first rc in
 	// a minor release.
 	if rc != 1 {
-		return fmt.Errorf("release branch is required for non-initial release candidates: %w", err)
+		return "", fmt.Errorf("release branch is required for non-initial release candidates: %w", err)
 	}
 
 	// Create the release branch using the revision from the head of master branch.
 	head, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", "master")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	ctx.DisableRetries() // Beyond this point we want retries to be done manually, not automatically.
 	_, err = r.Gerrit.CreateBranch(ctx, "vscode-go", branch, gerrit.BranchInput{Revision: head})
 	if err != nil {
-		return err
+		return "", err
 	}
 	ctx.Printf("Created branch %q at revision %s.\n", branch, head)
-	return nil
+	return branch, nil
 }
 
 // generatePackageExtension builds the vscode-go package extension from source.
@@ -776,7 +768,7 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 
 	reviewers := wf.Param(wd, reviewersParam)
 
-	changeID := wf.Task1(wd, "update package.json in master branch", r.updatePackageJSONVersion, reviewers)
+	changeID := wf.Task1(wd, "update package.json in master branch", r.updatePackageJSONVersionInMasterBranch, reviewers)
 	submitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 
 	release := wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
@@ -819,12 +811,20 @@ func (r *ReleaseVSCodeGoTasks) determineInsiderVersion(ctx *wf.TaskContext) (rel
 	return insider, nil
 }
 
-// updatePackageJSONVersion updates the "package.json" and "package-lock.json"
-// files in the master branch of the vscode-go repository.
+// updatePackageJSONVersionInReleaseBranch updates the "package.json" and
+// "package-lock.json" files in the release branch of the vscode-go repository.
+// The "package.json" and "package-lock.json" will reference the current release
+// version.
+func (r *ReleaseVSCodeGoTasks) updatePackageJSONVersionInReleaseBranch(ctx *wf.TaskContext, release releaseVersion, reviewers []string) (string, error) {
+	return r.updatePackageJSONVersion(ctx, vscodeGoReleaseBranch(release), release.String()[1:], reviewers)
+}
+
+// updatePackageJSONVersionInMasterBranch updates the "package.json" and
+// "package-lock.json" files in the master branch of the vscode-go repository.
 // The updated "package.json" and "package-lock.json" will reference the next
 // stable release version with special suffix "-dev" to indicate this is a
 // prerelease.
-func (r *ReleaseVSCodeGoTasks) updatePackageJSONVersion(ctx *wf.TaskContext, reviewers []string) (string, error) {
+func (r *ReleaseVSCodeGoTasks) updatePackageJSONVersionInMasterBranch(ctx *wf.TaskContext, reviewers []string) (string, error) {
 	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
 	if err != nil {
 		return "", err
@@ -842,10 +842,19 @@ func (r *ReleaseVSCodeGoTasks) updatePackageJSONVersion(ctx *wf.TaskContext, rev
 	// point to "0.46.0-dev".
 	devVersion := versionString(releaseVersion{Major: latestStable.Major, Minor: latestStable.Minor + 2, Patch: 0}, "dev")[1:]
 
-	clTitle := "extension/package.json: update version to " + devVersion
-	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", "master", clTitle)
+	return r.updatePackageJSONVersion(ctx, "master", devVersion, reviewers)
+}
+
+// updatePackageJSONVersion updates the "package.json" and "package-lock.json"
+// files in the given branch of the vscode-go repository with the desired version.
+func (r *ReleaseVSCodeGoTasks) updatePackageJSONVersion(ctx *wf.TaskContext, branch string, version string, reviewers []string) (string, error) {
+	clTitle := "extension/package.json: update version to " + version
+	if branch != "master" {
+		clTitle = "[" + branch + "]" + clTitle
+	}
+	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", branch, clTitle)
 	if err != nil {
-		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, "master", err)
+		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
 	}
 	if openCL != "" {
 		ctx.Printf("not creating CL: found existing CL %s", openCL)
@@ -862,7 +871,7 @@ npm ci &> npm-output.log
 npx vsce package %s --no-git-tag-version &> npx-output.log
 cat npm-output.log
 cat npx-output.log
-`, devVersion)
+`, version)
 
 		saveScriptFmt := cloudBuildClientScriptPrefix
 		for _, file := range []string{
@@ -880,6 +889,11 @@ cat npx-output.log
 			{
 				Name: "gcr.io/cloud-builders/git",
 				Args: []string{"clone", "https://go.googlesource.com/vscode-go", "vscode-go"},
+			},
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"checkout", branch},
+				Dir:  "vscode-go",
 			},
 			{
 				Name:   "gcr.io/cloud-builders/npm",
@@ -908,11 +922,13 @@ cat npx-output.log
 	ctx.Printf("the output from npx package:\n%s\n", outputs["npx-output.log"])
 
 	changed := map[string]string{}
-	if outputs["package.json"] != outputs["package.json.before"] {
-		changed["extension/package.json"] = outputs["package.json"]
+	// "npx vsce package" generate "package.json" with an offending trailing
+	// new line. Remove this new line before creating the CL.
+	if after := strings.TrimRight(outputs["package.json"], "\n"); after != outputs["package.json.before"] {
+		changed["extension/package.json"] = after
 	}
-	if outputs["package-lock.json"] != outputs["package-lock.json.before"] {
-		changed["extension/package-lock.json"] = outputs["package-lock.json"]
+	if after := outputs["package-lock.json"]; after != outputs["package-lock.json.before"] {
+		changed["extension/package-lock.json"] = after
 	}
 
 	// Skip CL creation as nothing changed.
@@ -923,7 +939,7 @@ cat npx-output.log
 
 	changeID, err := r.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: "vscode-go",
-		Branch:  "master",
+		Branch:  branch,
 		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the package.json and package-lock.json.\n", clTitle),
 	}, reviewers, changed)
 	if err != nil {

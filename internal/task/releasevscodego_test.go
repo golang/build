@@ -164,18 +164,21 @@ func TestCreateReleaseBranch(t *testing.T) {
 		version        string
 		existingBranch bool
 		wantErr        bool
+		wantBranch     string
 	}{
 		{
 			name:           "nil if the release branch does not exist for first rc in a minor release",
 			version:        "v0.44.0-rc.1",
 			existingBranch: false,
 			wantErr:        false,
+			wantBranch:     "release-v0.44",
 		},
 		{
 			name:           "nil if the release branch already exist for non-initial rc in a minor release",
 			version:        "v0.44.0-rc.4",
 			existingBranch: true,
 			wantErr:        false,
+			wantBranch:     "release-v0.44",
 		},
 		{
 			name:           "fail if the release branch does not exist for non-initial rc in a minor release",
@@ -188,6 +191,7 @@ func TestCreateReleaseBranch(t *testing.T) {
 			version:        "v0.44.3-rc.3",
 			existingBranch: true,
 			wantErr:        false,
+			wantBranch:     "release-v0.44",
 		},
 		{
 			name:           "fail if the release branch does not exist for a patch version",
@@ -218,15 +222,19 @@ func TestCreateReleaseBranch(t *testing.T) {
 				Gerrit: gerrit,
 			}
 
-			err := tasks.createReleaseBranch(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, prerelease)
+			got, err := tasks.createReleaseBranch(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, prerelease)
 			if tc.wantErr && err == nil {
 				t.Errorf("createReleaseBranch(%q) should return error but return nil", tc.version)
 			} else if !tc.wantErr && err != nil {
 				t.Errorf("createReleaseBranch(%q) should return nil but return err: %v", tc.version, err)
 			}
 
+			if got != tc.wantBranch {
+				t.Errorf("createReleaseBranch(%q) returns %q, want %q", tc.version, got, tc.wantBranch)
+			}
+
 			if !tc.wantErr {
-				if _, err := gerrit.ReadBranchHead(ctx, "vscode-go", fmt.Sprintf("release-v%v.%v", release.Major, release.Minor)); err != nil {
+				if _, err := gerrit.ReadBranchHead(ctx, "vscode-go", tc.wantBranch); err != nil {
 					t.Errorf("createReleaseBranch(%q) should ensure the release branch creation: %v", tc.version, err)
 				}
 			}
@@ -692,22 +700,25 @@ CHANGE FOR v0.42.0 LINE 2
 	}
 }
 
-func TestUpdatePackageJSONVersion(t *testing.T) {
+func TestUpdatePackageJSONVersionInMasterBranch(t *testing.T) {
 	mustHaveShell(t)
 	testcases := []struct {
-		name         string
-		existingTags []string
-		want         string
+		name                string
+		existingTags        []string
+		wantPackageJSON     string
+		wantPackageLockJSON string
 	}{
 		{
-			name:         "package json should point 0.46.0-dev",
-			existingTags: []string{"v0.44.0", "v0.45.0"},
-			want:         "0.46.0-dev\n",
+			name:                "package json should point 0.46.0-dev",
+			existingTags:        []string{"v0.44.0", "v0.45.0"},
+			wantPackageJSON:     "0.46.0-dev",
+			wantPackageLockJSON: "0.46.0-dev\n",
 		},
 		{
-			name:         "package json should point 0.48.0-dev",
-			existingTags: []string{"v0.45.0", "v0.46.0", "v0.46.1", "v0.46.2"},
-			want:         "0.48.0-dev\n",
+			name:                "package json should point 0.48.0-dev",
+			existingTags:        []string{"v0.45.0", "v0.46.0", "v0.46.1", "v0.46.2"},
+			wantPackageJSON:     "0.48.0-dev",
+			wantPackageLockJSON: "0.48.0-dev\n",
 		},
 	}
 
@@ -758,7 +769,7 @@ esac
 				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{"npm", fakeEmptyBinary}, FakeBinary{"npx", fakeNPX}),
 				Gerrit:     gerrit,
 			}
-			_, err := tasks.updatePackageJSONVersion(ctx, nil)
+			_, err := tasks.updatePackageJSONVersionInMasterBranch(ctx, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -768,11 +779,104 @@ esac
 				t.Fatal(err)
 			}
 
-			for _, fname := range []string{"extension/package.json", "extension/package-lock.json"} {
-				got, err := gerrit.ReadFile(ctx, "vscode-go", head, fname)
-				if err != nil || string(got) != tc.want {
-					t.Errorf("ReadFile(%q) = (%q, %v), want (%q, nil)", fname, got, err, tc.want)
-				}
+			got, err := gerrit.ReadFile(ctx, "vscode-go", head, "extension/package.json")
+			if err != nil || string(got) != tc.wantPackageJSON {
+				t.Errorf("ReadFile(%q) = (%q, %v), want (%q, nil)", "extension/package.json", got, err, tc.wantPackageJSON)
+			}
+
+			got, err = gerrit.ReadFile(ctx, "vscode-go", head, "extension/package-lock.json")
+			if err != nil || string(got) != tc.wantPackageLockJSON {
+				t.Errorf("ReadFile(%q) = (%q, %v), want (%q, nil)", "extension/package-lock.json", got, err, tc.wantPackageLockJSON)
+			}
+		})
+	}
+}
+
+func TestUpdatePackageJSONVersionInReleaseBranch(t *testing.T) {
+	mustHaveShell(t)
+	testcases := []struct {
+		name                string
+		release             releaseVersion
+		wantPackageJSON     string
+		wantPackageLockJSON string
+	}{
+		{
+			name:                "version 0.44.0 should update branch release-v0.44 package.json pointing 0.44.0",
+			release:             releaseVersion{Major: 0, Minor: 44, Patch: 0},
+			wantPackageJSON:     "0.44.0",
+			wantPackageLockJSON: "0.44.0\n",
+		},
+		{
+			name:                "version 0.46.2 should update branch release-v0.46 package.json pointing 0.46.2",
+			release:             releaseVersion{Major: 0, Minor: 46, Patch: 2},
+			wantPackageJSON:     "0.46.2",
+			wantPackageLockJSON: "0.46.2\n",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			commit := vscodego.Commit(map[string]string{
+				"go.mod":                      "module github.com/golang/vscode-go\n",
+				"go.sum":                      "\n",
+				"extension/package.json":      "foo\n",
+				"extension/package-lock.json": "foo\n",
+			})
+			// Prepare the release branch so the commit can be made.
+			vscodego.Branch(vscodeGoReleaseBranch(tc.release), commit)
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+
+			// fakeNPX successfully executes only when called with the command
+			// "npx vsce package V".
+			// In this case, the value "V" is written to both "package.json" and
+			// "package-lock.json".
+			fakeNPX := `#!/bin/bash -exu
+
+case "$1" in
+"vsce")
+	if [[ "$1" == "vsce" && "$2" == "package" ]]; then
+		# Write the third argument to extension/package.json with a trailing new line.
+		echo "$3" > package.json
+		echo "$3" > package-lock.json
+		exit 0
+	fi
+	exit 1
+	;;
+*)
+	echo unexpected command $@
+	exit 1
+	;;
+esac
+`
+
+			tasks := &ReleaseVSCodeGoTasks{
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{"npm", fakeEmptyBinary}, FakeBinary{"npx", fakeNPX}),
+				Gerrit:     gerrit,
+			}
+			_, err := tasks.updatePackageJSONVersionInReleaseBranch(ctx, tc.release, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			head, err := gerrit.ReadBranchHead(ctx, "vscode-go", vscodeGoReleaseBranch(tc.release))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := gerrit.ReadFile(ctx, "vscode-go", head, "extension/package.json")
+			if err != nil || string(got) != tc.wantPackageJSON {
+				t.Errorf("ReadFile(%q) = (%q, %v), want (%q, nil)", "extension/package.json", got, err, tc.wantPackageJSON)
+			}
+
+			got, err = gerrit.ReadFile(ctx, "vscode-go", head, "extension/package-lock.json")
+			if err != nil || string(got) != tc.wantPackageLockJSON {
+				t.Errorf("ReadFile(%q) = (%q, %v), want (%q, nil)", "extension/package-lock.json", got, err, tc.wantPackageLockJSON)
 			}
 		})
 	}
