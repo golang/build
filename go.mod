@@ -5,7 +5,7 @@ go 1.22.0
 require (
 	cloud.google.com/go/bigquery v1.53.0
 	cloud.google.com/go/cloudbuild v1.14.0
-	cloud.google.com/go/compute/metadata v0.3.0
+	cloud.google.com/go/compute/metadata v0.5.0
 	cloud.google.com/go/datastore v1.13.0
 	cloud.google.com/go/errorreporting v0.3.0
 	cloud.google.com/go/secretmanager v1.11.1
@@ -31,7 +31,7 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-github/v48 v48.1.0
 	github.com/google/safehtml v0.0.3-0.20220430015336-00016cfeca15
-	github.com/google/uuid v1.3.1
+	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.12.0
 	github.com/googleapis/google-cloud-go-testing v0.0.0-20200911160855-bcd43fbb19e8
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7
@@ -65,9 +65,9 @@ require (
 	golang.org/x/tools v0.25.0
 	google.golang.org/api v0.136.0
 	google.golang.org/appengine v1.6.8-0.20221117013220-504804fb50de
-	google.golang.org/genproto/googleapis/api v0.0.0-20230822172742-b8732ec3820d
-	google.golang.org/grpc v1.59.0
-	google.golang.org/protobuf v1.31.0
+	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142
+	google.golang.org/grpc v1.67.1
+	google.golang.org/protobuf v1.34.2
 	gopkg.in/inf.v0 v0.9.1
 	rsc.io/github v0.3.1-0.20240418182958-01bebb0c456a
 	rsc.io/markdown v0.0.0-20240306144322-0bf8f97ee8ef
@@ -89,7 +89,7 @@ require (
 	github.com/bazelbuild/remote-apis-sdks v0.0.0-20230809203756-67f2ffbec0ef // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/deepmap/oapi-codegen v1.8.2 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
@@ -102,7 +102,7 @@ require (
 	github.com/go-pdf/fpdf v0.5.0 // indirect
 	github.com/goccy/go-json v0.9.11 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
-	github.com/golang/glog v1.1.2 // indirect
+	github.com/golang/glog v1.2.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
@@ -157,6 +157,6 @@ require (
 	gonum.org/v1/plot v0.10.0 // indirect
 	google.golang.org/genproto v0.0.0-20230822172742-b8732ec3820d // indirect
 	google.golang.org/genproto/googleapis/bytestream v0.0.0-20230807174057-1744710a1577 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20230822172742-b8732ec3820d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240930140551-af27646dc61f // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
