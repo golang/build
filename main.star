@@ -265,7 +265,6 @@ TBD_CAPACITY_HOSTS = [
     "android-arm64",
     "dragonfly-amd64",
     "freebsd-386",
-    "freebsd-amd64",
     "freebsd-arm",
     "freebsd-arm64",
     "illumos-amd64",
@@ -360,6 +359,7 @@ def host_timeout_scale(host):
 # do not specify one.
 DEFAULT_HOST_SUFFIX = {
     "darwin-amd64": "14",
+    "freebsd-amd64": "14.1",
     "linux-amd64": "debian11",
     "linux-arm64": "debian11",
     "openbsd-amd64": "7.2",
@@ -502,7 +502,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "android-arm64": known_issue(issue_number = 61097, skip_x_repos = True),
     "dragonfly-amd64": known_issue(issue_number = 61092, skip_x_repos = True),
     "freebsd-386": known_issue(issue_number = 60468, skip_x_repos = True),
-    "freebsd-amd64": known_issue(issue_number = 61095, skip_x_repos = True),
+    "freebsd-amd64": known_issue(issue_number = 61095),
     "freebsd-arm": known_issue(issue_number = 67300, skip_x_repos = True),
     "freebsd-arm64": known_issue(issue_number = 67301, skip_x_repos = True),
     "illumos-amd64": known_issue(issue_number = 67302, skip_x_repos = True),
@@ -1218,6 +1218,8 @@ def dimensions_of(host_type):
             os = "Windows-" + suffix
         elif goos == "openbsd":
             os = "openbsd-" + suffix
+        elif goos == "freebsd":
+            os = "freebsd-" + suffix
         else:
             fail("unhandled suffix %s for host type %s" % (suffix, host_type))
 
@@ -1888,6 +1890,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     presubmit = postsubmit  # Default to running in presubmit if and only if running in postsubmit.
     presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
     presubmit = presubmit and not host_timeout_scale(host_type) > 1  # Speed.
+    presubmit = presubmit and not builder_type in known_issue_builder_types  # Known issues.
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
         presubmit = presubmit and os not in ["js", "wasip1"]
 
