@@ -688,12 +688,17 @@ CHANGE FOR v0.42.0 LINE 2
 				Gerrit: gerrit,
 			}
 
-			got, err := tasks.vscodeGoGitHubReleaseBody(ctx, tc.release, tc.prerelease)
+			gotBody, err := tasks.vscodeGoGitHubReleaseBody(ctx, tc.release, tc.prerelease)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			if diff := cmp.Diff(testdataFile(t, tc.wantContent), got); diff != "" {
+
+			re := regexp.MustCompile(`Date: (.*)\n`)
+			want := re.ReplaceAllString(testdataFile(t, tc.wantContent), "\n")
+			got := re.ReplaceAllString(string(gotBody), "\n")
+
+			if diff := cmp.Diff(want, got); diff != "" {
 				t.Errorf("body text mismatch (-want +got):\n%s", diff)
 			}
 		})

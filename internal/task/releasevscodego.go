@@ -498,6 +498,8 @@ func vsixFileName(release releaseVersion, prerelease string) string {
 // vscodeGoReleaseData holds data for the "vscode-go" extension release notes
 // template.
 type vscodeGoReleaseData struct {
+	Date string
+
 	// PreviousTag and CurrentTag are tags used to show the differences between
 	// the current release and the previous one.
 	PreviousTag string
@@ -612,6 +614,7 @@ See release https://github.com/golang/vscode-go/releases/tag/%s for details.`
 
 		nextStable := releaseVersion{Major: release.Major, Minor: release.Minor + 1, Patch: 0}.String()
 		data = vscodeGoReleaseData{
+			Date:        time.Now().Format(time.DateOnly),
 			CurrentTag:  current,
 			PreviousTag: previous,
 			// For insider version, the milestone will point to the next stable minor.
@@ -636,6 +639,7 @@ See release https://github.com/golang/vscode-go/releases/tag/%s for details.`
 		}
 
 		data = vscodeGoReleaseData{
+			Date:        time.Now().Format(time.DateOnly),
 			CurrentTag:  current,
 			PreviousTag: previous,
 			Milestone:   release.String(),
