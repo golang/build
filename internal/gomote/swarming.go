@@ -356,7 +356,7 @@ func (ss *SwarmingServer) ListDirectoryStreaming(req *protos.ListDirectoryReques
 	for i := 0; i < len(entries); i += chunkSize {
 		end := min(chunkSize, len(entries[i:]))
 		if err := stream.Send(&protos.ListDirectoryResponse{
-			Entries: entries[i:end],
+			Entries: entries[i : i+end],
 		}); err != nil {
 			return err
 		}
