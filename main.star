@@ -442,6 +442,7 @@ BUILDER_TYPES = [
     "linux-arm",
     "linux-arm64",
     "linux-arm64-boringcrypto",
+    "linux-arm64-clang15",
     "linux-arm64-longtest",
     "linux-arm64-race",
     "linux-loong64",
