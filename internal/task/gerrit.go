@@ -58,7 +58,7 @@ type GerritClient interface {
 }
 
 type RealGerritClient struct {
-	Gitiles string
+	Gitiles string // Gitiles server URL, without trailing slash. For example, "https://go.googlesource.com".
 	Client  *gerrit.Client
 }
 

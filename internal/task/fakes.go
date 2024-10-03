@@ -349,24 +349,105 @@ func (g *FakeGerrit) GerritURL() string {
 	return g.serverURL
 }
 
-func (g *FakeGerrit) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) != 4 {
+func (g *FakeGerrit) serveHTTP(w http.ResponseWriter, req *http.Request) {
+	switch url := req.URL.String(); {
+	// Serve a revision tarball (.tar.gz) like Gerrit does.
+	case strings.HasSuffix(url, ".tar.gz"):
+		parts := strings.Split(req.URL.Path, "/")
+		if len(parts) != 4 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		repo, err := g.repo(parts[1])
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		rev := strings.TrimSuffix(parts[3], ".tar.gz")
+		archive, err := repo.dir.RunCommand(req.Context(), "archive", "--format=tgz", rev)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		http.ServeContent(w, req, parts[3], time.Now(), bytes.NewReader(archive))
+		return
+
+	// Serve a git repository over HTTP like Gerrit does.
+	case strings.HasSuffix(url, "/info/refs?service=git-upload-pack"):
+		parts := strings.Split(url[:len(url)-len("/info/refs?service=git-upload-pack")], "/")
+		if len(parts) != 2 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		repo, err := g.repo(parts[1])
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		g.serveGitInfoRefsUploadPack(w, req, repo)
+		return
+	case strings.HasSuffix(url, "/git-upload-pack"):
+		parts := strings.Split(url[:len(url)-len("/git-upload-pack")], "/")
+		if len(parts) != 2 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		repo, err := g.repo(parts[1])
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		g.serveGitUploadPack(w, req, repo)
+		return
+
+	default:
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	repo, err := g.repo(parts[1])
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
+}
+func (*FakeGerrit) serveGitInfoRefsUploadPack(w http.ResponseWriter, req *http.Request, repo *FakeRepo) {
+	if req.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method should be GET", http.StatusMethodNotAllowed)
 		return
 	}
-	rev := strings.TrimSuffix(parts[3], ".tar.gz")
-	archive, err := repo.dir.RunCommand(r.Context(), "archive", "--format=tgz", rev)
+	cmd := exec.CommandContext(req.Context(), "git", "upload-pack", "--strict", "--advertise-refs", ".")
+	cmd.Dir = filepath.Join(repo.dir.dir, ".git")
+	cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	err := cmd.Run()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.ServeContent(w, r, parts[3], time.Now(), bytes.NewReader(archive))
+	w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
+	io.WriteString(w, "001e# service=git-upload-pack\n0000")
+	io.Copy(w, &buf)
+}
+func (*FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request, repo *FakeRepo) {
+	if req.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "method should be POST", http.StatusMethodNotAllowed)
+		return
+	}
+	if req.Header.Get("Content-Type") != "application/x-git-upload-pack-request" {
+		http.Error(w, "unexpected Content-Type", http.StatusBadRequest)
+		return
+	}
+	cmd := exec.CommandContext(req.Context(), "git", "upload-pack", "--strict", "--stateless-rpc", ".")
+	cmd.Dir = filepath.Join(repo.dir.dir, ".git")
+	cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
+	cmd.Stdin = req.Body
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	err := cmd.Run()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
+	io.Copy(w, &buf)
 }
 
 func (*FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.ChangeInfo, error) {

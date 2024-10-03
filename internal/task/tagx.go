@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
+	pathpkg "path"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 
 	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
 	"golang.org/x/build/gerrit"
+	"golang.org/x/build/internal/gitfs"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
@@ -389,32 +391,47 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 	}
 	script.WriteString("\n")
 
-	// Tidy the root module.
-	// Also tidy nested modules with a replace directive.
-	// TODO(go.dev/issue/68873): Dynamically detect and handle nested modules, instead of the fixed list below.
-	dirs := []string{"."}
-	switch repo.Name {
-	case "exp":
-		dirs = append(dirs, "slog/benchmarks/zap_benchmarks")     // A local replace directive as of 2023-09-05.
-		dirs = append(dirs, "slog/benchmarks/zerolog_benchmarks") // A local replace directive as of 2023-09-05.
-	case "oscar":
-		dirs = append(dirs, "internal/devtools", "internal/gaby", "internal/gcp", "internal/syncdb") // Using a checked-in go.work as of 2024-10-03.
-	case "telemetry":
-		dirs = append(dirs, "godev") // A local replace directive as of 2023-09-05.
-	case "tools":
-		dirs = append(dirs, "gopls") // A local replace directive as of 2023-09-05.
+	// Tidy the root module and nested modules.
+	// Look for the nested modules dynamically. See go.dev/issue/68873.
+	gitRepo, err := gitfs.NewRepo(x.Gerrit.GitilesURL() + "/" + repo.Name)
+	if err != nil {
+		return nil, err
+	}
+	head, err := gitRepo.Resolve("refs/heads/" + branch)
+	if err != nil {
+		return nil, err
+	}
+	ctx.Printf("Using commit %q as the branch %q head.", head, branch)
+	rootFS, err := gitRepo.CloneHash(head)
+	if err != nil {
+		return nil, err
 	}
 	var outputs []string
-	for _, dir := range dirs {
-		dropToolchain := ""
-		if !repo.HasToolchain {
-			// Don't introduce a toolchain directive if it wasn't already there.
-			// TODO(go.dev/issue/68873): Read the nested module's go.mod. For now, re-use decision from the top-level module.
-			dropToolchain = " && go get toolchain@none"
+	if err := fs.WalkDir(rootFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
-		script.WriteString(fmt.Sprintf("(cd %v && touch go.sum && go mod tidy%s)\n", dir, dropToolchain))
-		outputs = append(outputs, dir+"/go.mod", dir+"/go.sum")
+		if path != "." && d.IsDir() && (strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "_") || d.Name() == "testdata") {
+			// Skip directories that begin with ".", "_", or are named "testdata".
+			return fs.SkipDir
+		}
+		if d.Name() == "go.mod" && !d.IsDir() { // A go.mod file.
+			dir := pathpkg.Dir(path)
+			dropToolchain := ""
+			if !repo.HasToolchain {
+				// Don't introduce a toolchain directive if it wasn't already there.
+				// TODO(go.dev/issue/68873): Read the nested module's go.mod. For now, re-use decision from the top-level module.
+				dropToolchain = " && go get toolchain@none"
+			}
+			script.WriteString(fmt.Sprintf("(cd %v && touch go.sum && go mod tidy%s)\n", dir, dropToolchain))
+			outputs = append(outputs, dir+"/go.mod", dir+"/go.sum")
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
+
+	// Execute the script to generate updated go.mod/go.sum files.
 	build, err := x.CloudBuild.RunScript(ctx, script.String(), repo.Name, outputs)
 	if err != nil {
 		return nil, err
