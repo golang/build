@@ -10,8 +10,8 @@ import (
 	"context"
 	"net/http"
 
-	"google.golang.org/appengine"
-	"google.golang.org/appengine/log"
+	"google.golang.org/appengine/v2"
+	"google.golang.org/appengine/v2/log"
 )
 
 // requestContext returns the Context object for a given request.

@@ -2,9 +2,10 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-runtime: go113
+runtime: go122
 service: perfdata
 instance_class: F4_HIGHMEM
+app_engine_apis: true
 
 handlers:
   - url: /_ah/remote_api

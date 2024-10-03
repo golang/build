@@ -20,9 +20,9 @@ import (
 	"golang.org/x/build/perfdata/db"
 	"golang.org/x/build/perfdata/fs/gcs"
 	oauth2 "google.golang.org/api/oauth2/v2"
-	"google.golang.org/appengine"
-	aelog "google.golang.org/appengine/log"
-	"google.golang.org/appengine/user"
+	"google.golang.org/appengine/v2"
+	aelog "google.golang.org/appengine/v2/log"
+	"google.golang.org/appengine/v2/user"
 )
 
 // connectDB returns a DB initialized from the environment variables set in app.yaml. CLOUDSQL_CONNECTION_NAME, CLOUDSQL_USER, and CLOUDSQL_DATABASE must be set to point to the Cloud SQL instance. CLOUDSQL_PASSWORD can be set if needed.
