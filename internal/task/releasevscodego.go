@@ -80,6 +80,9 @@ var nextVersionParam = wf.ParamDef[string]{
 //go:embed template/vscode-go-release-issue.md
 var vscodeGoReleaseIssueTmplStr string
 
+//go:embed template/vscode-go-changelog-entry.md
+var vscodeGoChangelogEntryTmplStr string
+
 // vscodeGoActiveReleaseBranch returns the current active release branch in
 // vscode-go project.
 func vscodeGoActiveReleaseBranch(ctx *wf.TaskContext, gerrit GerritClient) (string, error) {
@@ -565,32 +568,13 @@ func (r *ReleaseVSCodeGoTasks) readChangeLogHeading(ctx context.Context, heading
 }
 
 func (r *ReleaseVSCodeGoTasks) vscodeGoGitHubReleaseBody(ctx context.Context, release releaseVersion, prerelease string) (string, error) {
-	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
+	baseRelease, basePrerelease, err := r.diffBaseVersion(ctx, release)
 	if err != nil {
 		return "", err
 	}
 
-	// Release notes display the diff between the current release and:
-	// - Stable minor version(vX.EVEN.0): Latest patch of the last stable minor
-	//   (vX.EVEN-2.LATEST)
-	// - Stable patch version(vX.Y.Z): Previous patch version (vX.Y.Z-1)
-	// - Insider version(vX.ODD.Z): Last stable minor (vX.ODD-1.0-rc.1) - branch
-	// 	 cut.
-	var previousRelease releaseVersion
-	var previousPrerelease string
-	if isVSCodeGoInsiderVersion(release, prerelease) {
-		previousRelease = releaseVersion{Major: release.Major, Minor: release.Minor - 1, Patch: 0}
-		previousPrerelease = "rc.1"
-	} else {
-		if release.Patch == 0 {
-			previousRelease, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor-2), isReleaseVersion)
-		} else {
-			previousRelease, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor), isReleaseVersion)
-		}
-	}
-
 	var data vscodeGoReleaseData
-	current, previous := versionString(release, prerelease), versionString(previousRelease, previousPrerelease)
+	current, previous := versionString(release, prerelease), versionString(baseRelease, basePrerelease)
 	// Insider version.
 	if isVSCodeGoInsiderVersion(release, prerelease) {
 		var body string
@@ -602,7 +586,7 @@ func (r *ReleaseVSCodeGoTasks) vscodeGoGitHubReleaseBody(ctx context.Context, re
 			const vscodeGoMinorInsiderFmt = `%s is a pre-release version identical to the official release %s, incorporating all the same bug fixes and improvements. This may include additional, experimental features that are not yet ready for general release. These features are still under development and may be subject to change or removal.
 
 See release https://github.com/golang/vscode-go/releases/tag/%s for details.`
-			body = fmt.Sprintf(vscodeGoMinorInsiderFmt, current, previousRelease, previousRelease)
+			body = fmt.Sprintf(vscodeGoMinorInsiderFmt, current, baseRelease, baseRelease)
 		} else {
 			// An insider patch version release (vX.ODD.Z Z > 0) is built from master
 			// branch. The GitHub release body will be copied from the CHANGELOG.md
@@ -613,16 +597,13 @@ See release https://github.com/golang/vscode-go/releases/tag/%s for details.`
 			}
 		}
 
-		nextStable := releaseVersion{Major: release.Major, Minor: release.Minor + 1, Patch: 0}.String()
 		data = vscodeGoReleaseData{
 			Date:        time.Now().Format(time.DateOnly),
 			CurrentTag:  current,
 			PreviousTag: previous,
-			// For insider version, the milestone will point to the next stable minor.
-			// If the insider version is vX.ODD.Z, the milestone will be vX.ODD+1.0.
-			Milestone:  nextStable,
-			NextStable: nextStable,
-			Body:       strings.TrimSpace(body),
+			Milestone:   vscodeGoMilestone(release),
+			NextStable:  releaseVersion{Major: release.Major, Minor: release.Minor + 1, Patch: 0}.String(),
+			Body:        strings.TrimSpace(body),
 		}
 	} else {
 		var body string
@@ -773,11 +754,11 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 
 	reviewers := wf.Param(wd, reviewersParam)
 
-	changeID := wf.Task1(wd, "update package.json in master branch", r.updatePackageJSONVersionInMasterBranch, reviewers)
-	submitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
+	packageChangeID := wf.Task1(wd, "update package.json in master branch", r.updatePackageJSONVersionInMasterBranch, reviewers)
+	packageSubmitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, packageChangeID)
 
 	release := wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
-	revision := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"), wf.After(submitted))
+	revision := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"), wf.After(packageSubmitted))
 	approved := wf.Action2(wd, "await release coordinator's approval", r.approveInsiderRelease, release, revision)
 
 	verified := wf.Action1(wd, "verify the determined commit", r.verifyTestResults, revision, wf.After(approved))
@@ -786,7 +767,12 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 	tagged := wf.Action3(wd, "tag the insider release", r.tag, revision, release, wf.Const(""), wf.After(build))
 
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
-	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(tagged))
+
+	changelogChangeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLog, release, reviewers, wf.After(tagged))
+	changelogSubmitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changelogChangeID)
+	// Publish only after the CHANGELOG.md update is merged to ensure the change
+	// log reflects the latest released version.
+	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(changelogSubmitted))
 
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, wf.Const(""), revision, wf.Const(0), wf.After(released), wf.After(published))
 	return wd
@@ -1079,7 +1065,7 @@ func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
 	tagged := wf.Action3(wd, "tag the stable release", r.tag, commit, release, wf.Const(""), wf.After(build))
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
 
-	changeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLogHeading, release, reviewers, wf.After(build))
+	changeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLog, release, reviewers, wf.After(build))
 	submitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 	// Publish only after the CHANGELOG.md update is merged to ensure the change
 	// log reflects the latest released version.
@@ -1115,17 +1101,53 @@ func (r *ReleaseVSCodeGoTasks) findVSCodeReleaseCommit(ctx *wf.TaskContext, rele
 	return info.Revision, nil
 }
 
-// addChangeLogHeading updates the CHANGELOG.md file in the master branch of the
-// vscode-go repository with a new heading for the released version.
-// It moves all content from the "Unreleased" section to the new version's
-// section, but only for minor releases.
-// For more details on changelog format, see: https://keepachangelog.com/en/1.1.0/
-func (r *ReleaseVSCodeGoTasks) addChangeLogHeading(ctx *wf.TaskContext, release releaseVersion, reviewers []string) (string, error) {
-	if release.Patch != 0 {
-		ctx.Printf("not creating CL: %s is not a minor release", release)
-		return "", nil
+// diffBaseVersion determines the appropriate base version for generating a
+// commit diff against the given input version.
+// The base version is selected as follows:
+//   - Stable minor version(vX.EVEN.0): Latest patch of the last stable minor
+//     (vX.EVEN-2.LATEST).
+//   - Stable patch version(vX.Y.Z): Previous patch version (vX.Y.Z-1).
+//   - Insider version(vX.ODD.Z): Last stable minor (vX.ODD-1.0-rc.1) - branch cut.
+func (r *ReleaseVSCodeGoTasks) diffBaseVersion(ctx context.Context, release releaseVersion) (releaseVersion, string, error) {
+	tags, err := r.Gerrit.ListTags(ctx, "vscode-go")
+	if err != nil {
+		return releaseVersion{}, "", err
 	}
 
+	var previousRelease releaseVersion
+	var previousPrerelease string
+	if isVSCodeGoInsiderVersion(release, "") {
+		previousRelease = releaseVersion{Major: release.Major, Minor: release.Minor - 1, Patch: 0}
+		previousPrerelease = "rc.1"
+	} else {
+		if release.Patch == 0 {
+			previousRelease, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor-2), isReleaseVersion)
+		} else {
+			previousRelease, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor), isReleaseVersion)
+		}
+	}
+	return previousRelease, previousPrerelease, nil
+}
+
+// milestoneForVersion returns the name of the github milestone associated with
+// a given version.
+func vscodeGoMilestone(release releaseVersion) string {
+	if isVSCodeGoInsiderVersion(release, "") {
+		// For insider version, the milestone will point to the next stable minor.
+		// If the insider version is vX.ODD.Z, the milestone will be vX.ODD+1.0.
+		return releaseVersion{Major: release.Major, Minor: release.Minor + 1, Patch: 0}.String()
+	}
+	return release.String()
+}
+
+// addChangeLog updates the CHANGELOG.md file in the master branch of the
+// vscode-go repository with a new heading for the released version.
+// For stable minor version, it moves all content from the "Unreleased" section
+// to the new version's section.
+// For stable patch version and insider version, add a new heading with
+// pre-defined content.
+// For more details on changelog format, see: https://keepachangelog.com/en/1.1.0/
+func (r *ReleaseVSCodeGoTasks) addChangeLog(ctx *wf.TaskContext, release releaseVersion, reviewers []string) (string, error) {
 	clTitle := "CHANGELOG.md: add release heading for " + release.String()
 
 	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", "master", clTitle)
@@ -1150,17 +1172,56 @@ func (r *ReleaseVSCodeGoTasks) addChangeLogHeading(ctx *wf.TaskContext, release 
 	lines := bytes.Split(content, []byte("\n"))
 	var output bytes.Buffer
 
-	for i, line := range lines {
-		output.Write(line)
-		// Only add a newline if it's not the last line
-		if i < len(lines)-1 {
-			output.WriteString("\n")
+	if release.Patch == 0 && isVSCodeGoStableVersion(release, "") {
+		for i, line := range lines {
+			output.Write(line)
+			// Only add a newline if it's not the last line
+			if i < len(lines)-1 {
+				output.WriteString("\n")
+			}
+			if string(line) == "## Unreleased" {
+				output.WriteString("\n")
+				output.WriteString("## " + release.String() + "\n")
+				output.WriteString("\n")
+				output.WriteString("Date: " + time.Now().Format(time.DateOnly) + "\n")
+			}
 		}
-		if string(line) == "## Unreleased" {
-			output.WriteString("\n")
-			output.WriteString("## " + release.String() + "\n")
-			output.WriteString("\n")
-			output.WriteString("Date: " + time.Now().Format(time.DateOnly) + "\n")
+	} else {
+		entryAdded := false
+		for i, line := range lines {
+			if !entryAdded && bytes.HasPrefix(line, []byte("## ")) && string(line) != "## Unreleased" {
+				entryAdded = true
+				baseRelease, basePrerelease, err := r.diffBaseVersion(ctx, release)
+				if err != nil {
+					return "", err
+				}
+
+				data := map[string]string{
+					"Current":   release.String(),
+					"Date":      time.Now().Format(time.DateOnly),
+					"Previous":  versionString(baseRelease, basePrerelease),
+					"Milestone": vscodeGoMilestone(release),
+				}
+
+				if isVSCodeGoInsiderVersion(release, "") {
+					data["NextStable"] = fmt.Sprintf("v%v.%v", release.Major, release.Minor+1)
+					data["IsPrerelease"] = "true"
+				}
+
+				tmpl, err := template.New("vscode release").Parse(vscodeGoChangelogEntryTmplStr)
+				if err != nil {
+					return "", err
+				}
+
+				if err := tmpl.Execute(&output, data); err != nil {
+					return "", err
+				}
+			}
+			output.Write(line)
+			// Only add a newline if it's not the last line
+			if i < len(lines)-1 {
+				output.WriteString("\n")
+			}
 		}
 	}
 

@@ -694,7 +694,6 @@ CHANGE FOR v0.42.0 LINE 2
 				t.Fatal(err)
 			}
 
-
 			re := regexp.MustCompile(`Date: (.*)\n`)
 			want := re.ReplaceAllString(testdataFile(t, tc.wantContent), "\n")
 			got := re.ReplaceAllString(string(gotBody), "\n")
@@ -888,7 +887,7 @@ esac
 	}
 }
 
-func TestAddChangeLogHeading(t *testing.T) {
+func TestAddChangeLog(t *testing.T) {
 	changelog := `# Changelog
 
 All notable changes to this project will be documented in this file.
@@ -950,8 +949,8 @@ CHANGE FOR v0.42.1
 `,
 		},
 		{
-			name:    "no update for non-minor version",
-			release: releaseVersion{Major: 0, Minor: 44, Patch: 3},
+			name:    "add v0.46.3 patch entry",
+			release: releaseVersion{Major: 0, Minor: 46, Patch: 3},
 			wantChangeLog: `# Changelog
 
 All notable changes to this project will be documented in this file.
@@ -960,6 +959,65 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ## Unreleased
 
 CHANGE FOR v0.44.0
+
+## v0.46.3
+
+Date: 2002-01-02
+
+**Full Changelog**: https://github.com/golang/vscode-go/compare/v0.46.2...v0.46.3
+**Milestone**: https://github.com/golang/vscode-go/issues?q=milestone%3Av0.46.3
+
+## v0.42.1
+
+CHANGE FOR v0.42.1
+`,
+		},
+		{
+			name:    "add v0.43.0 insider minor entry",
+			release: releaseVersion{Major: 0, Minor: 43, Patch: 0},
+			wantChangeLog: `# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](http://keepachangelog.com/).
+
+## Unreleased
+
+CHANGE FOR v0.44.0
+
+## v0.43.0 (prerelease)
+
+Date: 2002-01-02
+
+This is the [pre-release version](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#prerelease-extensions) of v0.44.
+
+**Full Changelog**: https://github.com/golang/vscode-go/compare/v0.42.0-rc.1...v0.43.0
+**Milestone**: https://github.com/golang/vscode-go/issues?q=milestone%3Av0.44.0
+
+## v0.42.1
+
+CHANGE FOR v0.42.1
+`,
+		},
+		{
+			name:    "add v0.45.6 insider patch entry",
+			release: releaseVersion{Major: 0, Minor: 45, Patch: 6},
+			wantChangeLog: `# Changelog
+
+All notable changes to this project will be documented in this file.
+The format is based on [Keep a Changelog](http://keepachangelog.com/).
+
+## Unreleased
+
+CHANGE FOR v0.44.0
+
+## v0.45.6 (prerelease)
+
+Date: 2002-01-02
+
+This is the [pre-release version](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#prerelease-extensions) of v0.46.
+
+**Full Changelog**: https://github.com/golang/vscode-go/compare/v0.44.0-rc.1...v0.45.6
+**Milestone**: https://github.com/golang/vscode-go/issues?q=milestone%3Av0.46.0
 
 ## v0.42.1
 
@@ -971,9 +1029,13 @@ CHANGE FOR v0.42.1
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
-			vscodego.Commit(map[string]string{
+			commit := vscodego.Commit(map[string]string{
 				"CHANGELOG.md": changelog,
 			})
+			if tc.release.Patch >= 1 {
+				vscodego.Tag(fmt.Sprintf("v%v.%v.%v", tc.release.Major, tc.release.Minor, tc.release.Patch-1), commit)
+			}
+			vscodego.Tag(fmt.Sprintf("v%v.%v.%v", tc.release.Major, tc.release.Minor-1, 0), commit)
 
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
@@ -986,7 +1048,7 @@ CHANGE FOR v0.42.1
 				Gerrit:     gerrit,
 			}
 
-			_, err := tasks.addChangeLogHeading(ctx, tc.release, nil)
+			_, err := tasks.addChangeLog(ctx, tc.release, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
