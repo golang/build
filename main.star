@@ -1466,7 +1466,7 @@ def define_builder(env, project, go_branch_short, builder_type):
                 base_props["wasmtime_version"] = "2@14.0.4"
             elif suffix == "wazero":
                 base_props["env"]["GOWASIRUNTIME"] = "wazero"
-                base_props["wazero_version"] = "2@1.7.0"
+                base_props["wazero_version"] = "3@1.8.1"
             else:
                 fail("unknown GOOS=wasip1 builder suffix: %s" % suffix)
 
