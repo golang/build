@@ -7,7 +7,7 @@ set -e
 set -u
 
 # Update to the version listed on https://openbsd.org
-readonly VERSION="${VERSION:-7.2}"
+readonly VERSION="${VERSION:-7.6}"
 readonly RELNO="${VERSION/./}"
 readonly SNAPSHOT=false
 
@@ -63,18 +63,17 @@ moreres:\
   :vmemoryuse-cur=infinity: \
   :memoryuse-max=infinity: \
   :memoryuse-cur=infinity: \
-  :maxproc-max=1024: \
-  :maxproc-cur=1024: \
+  :maxproc-max=2048: \
+  :maxproc-cur=2048: \
   :openfiles-max=4096: \
   :openfiles-cur=4096: \
   :tc=default:
 EOLOGIN
 usermod -L moreres swarming
 syspatch
-# Run syspatch twice in case syspatch itself needs patching (this is the case with OpenBSD
-# 7.1: https://www.openbsd.org/errata71.html )
+# Run syspatch twice in case syspatch itself needs patching (this has been needed previously).
 syspatch
-pkg_add -iv ${PKG_ADD_OPTIONS} bash curl git python3 sudo--gettext
+pkg_add -iv ${PKG_ADD_OPTIONS} bash curl git python%3 sudo--gettext
 chown root:wheel /etc/sudoers
 halt -p
 EOF
@@ -124,7 +123,7 @@ swarming ALL=NOPASSWD:/sbin/shutdown -r now
 EOF
 chmod +x ${SITE}/install.site
 mkdir -p ${SITE}/usr/local/bin
-CGO_ENABLED=0 GOOS=openbsd GOARCH=${ARCH/i386/386} go1.21.0 build -o ${SITE}/usr/local/bin/bootstrapswarm golang.org/x/build/cmd/bootstrapswarm
+CGO_ENABLED=0 GOOS=openbsd GOARCH=${ARCH/i386/386} go build -o ${SITE}/usr/local/bin/bootstrapswarm golang.org/x/build/cmd/bootstrapswarm
 tar --mode a=rx,u=rwx --owner root:0 --group wheel:0 -C ${SITE} -zcf ${WORK}/site${RELNO}.tgz .
 
 # Autoinstall script.
