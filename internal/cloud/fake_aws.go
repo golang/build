@@ -36,12 +36,12 @@ func NewFakeAWSClient() *FakeAWSClient {
 	return &FakeAWSClient{
 		instances: make(map[string]*Instance),
 		instanceTypes: []*InstanceType{
-			&InstanceType{"ab.large", 10},
-			&InstanceType{"ab.xlarge", 20},
-			&InstanceType{"ab.small", 30},
+			{"ab.large", 10},
+			{"ab.xlarge", 20},
+			{"ab.small", 30},
 		},
 		serviceQuotas: map[serviceQuotaKey]int64{
-			serviceQuotaKey{QuotaCodeCPUOnDemand, QuotaServiceEC2}: 384,
+			{QuotaCodeCPUOnDemand, QuotaServiceEC2}: 384,
 		},
 	}
 }

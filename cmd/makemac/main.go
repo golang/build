@@ -6,16 +6,16 @@
 //
 // It performs several different operations:
 //
-// * Detects MacService leases that MacService thinks are running, but never
-//   connected to LUCI (failed to boot?) and destroys them.
-// * Detects MacService leases that MacService thinks are running, but LUCI
-//   thinks are dead (froze/crashed?) and destoys them.
-// * Renews MacService leases that both MacService and LUCI agree are healthy
-//   to ensure they don't expire.
-// * Destroys MacService leases with images that are not requested by the
-//   configuration in config.go.
-// * Launches new MacService leases to ensure that there are the at least as
-//   many leases of each type as specified in the configuration in config.go.
+//   - Detects MacService leases that MacService thinks are running, but never
+//     connected to LUCI (failed to boot?) and destroys them.
+//   - Detects MacService leases that MacService thinks are running, but LUCI
+//     thinks are dead (froze/crashed?) and destoys them.
+//   - Renews MacService leases that both MacService and LUCI agree are healthy
+//     to ensure they don't expire.
+//   - Destroys MacService leases with images that are not requested by the
+//     configuration in config.go.
+//   - Launches new MacService leases to ensure that there are the at least as
+//     many leases of each type as specified in the configuration in config.go.
 package main
 
 import (
@@ -42,12 +42,12 @@ var (
 )
 
 const (
-	createExpirationDuration = 24*time.Hour
+	createExpirationDuration       = 24 * time.Hour
 	createExpirationDurationString = "86400s"
 
 	// Shorter renew expiration is a workaround to detect newly-created
 	// leases. See comment in handleMissingBots.
-	renewExpirationDuration = 23*time.Hour
+	renewExpirationDuration       = 23 * time.Hour
 	renewExpirationDurationString = "82800s" // 23h
 )
 
@@ -92,7 +92,7 @@ func run() error {
 	// Initialize each swarming client.
 	for sc, ic := range prodImageConfig {
 		c, err := swarming.NewClient(ctx, swarming.ClientOptions{
-			ServiceURL:          "https://"+sc.Host,
+			ServiceURL:          "https://" + sc.Host,
 			AuthenticatedClient: ac,
 		})
 		if err != nil {
@@ -482,10 +482,10 @@ func makeLeaseRequest(sc *swarmingConfig, ic *imageConfig) (macservice.LeaseRequ
 	return macservice.LeaseRequest{
 		VMResourceNamespace: macservice.Namespace{
 			CustomerName: macServiceCustomer,
-			ProjectName:  managedProjectPrefix+"/"+sc.Host,
+			ProjectName:  managedProjectPrefix + "/" + sc.Host,
 		},
 		InstanceSpecification: macservice.InstanceSpecification{
-			Profile: macservice.V1_MEDIUM_VM,
+			Profile:     macservice.V1_MEDIUM_VM,
 			AccessLevel: macservice.GOLANG_OSS,
 			DiskSelection: macservice.DiskSelection{
 				ImageHashes: macservice.ImageHashes{

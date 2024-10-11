@@ -170,7 +170,7 @@ func (ac *AWSClient) RunningInstances(ctx context.Context) ([]*Instance, error) 
 	}
 	err := ac.ec2Client.DescribeInstancesPagesWithContext(ctx, &ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
-			&ec2.Filter{
+			{
 				Name:   aws.String("instance-state-name"),
 				Values: []*string{aws.String(ec2.InstanceStateNameRunning), aws.String(ec2.InstanceStateNamePending)},
 			},
@@ -325,14 +325,14 @@ func vmConfig(config *EC2VMConfiguration) *ec2.RunInstancesInput {
 		KeyName:                           aws.String(config.SSHKeyID),
 		InstanceInitiatedShutdownBehavior: aws.String(ec2.ShutdownBehaviorTerminate),
 		TagSpecifications: []*ec2.TagSpecification{
-			&ec2.TagSpecification{
+			{
 				ResourceType: aws.String("instance"),
 				Tags: []*ec2.Tag{
-					&ec2.Tag{
+					{
 						Key:   aws.String(tagName),
 						Value: aws.String(config.Name),
 					},
-					&ec2.Tag{
+					{
 						Key:   aws.String(tagDescription),
 						Value: aws.String(config.Description),
 					},

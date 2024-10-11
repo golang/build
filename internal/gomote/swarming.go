@@ -483,7 +483,7 @@ func (ss *SwarmingServer) ListSwarmingBuilders(ctx context.Context, req *protos.
 		return nil, err
 	}
 	var builders []string
-	for builder, _ := range bs {
+	for builder := range bs {
 		builders = append(builders, builder)
 	}
 	sort.Strings(builders)
@@ -996,7 +996,7 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 		Priority:       20, // 30 is the priority for builds
 		ServiceAccount: "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
 		TaskSlices: []*swarmpb.TaskSlice{
-			&swarmpb.TaskSlice{
+			{
 				Properties: &swarmpb.TaskProperties{
 					CipdInput: &swarmpb.CipdInput{
 						Packages: packages,
@@ -1009,7 +1009,7 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 					Command:    []string{pythonBin, "-c", buildletStartup(goos, goarch)},
 					Dimensions: createStringPairs(dimensions),
 					Env: []*swarmpb.StringPair{
-						&swarmpb.StringPair{
+						{
 							Key:   "GOMOTEID",
 							Value: name,
 						},
@@ -1099,7 +1099,7 @@ func (ss *SwarmingServer) newSwarmingTaskWithGolangbuild(ctx context.Context, na
 		Priority:       20, // 30 is the priority for builds
 		ServiceAccount: "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
 		TaskSlices: []*swarmpb.TaskSlice{
-			&swarmpb.TaskSlice{
+			{
 				Properties: &swarmpb.TaskProperties{
 					CipdInput: &swarmpb.CipdInput{
 						Packages: packages,
@@ -1110,11 +1110,11 @@ func (ss *SwarmingServer) newSwarmingTaskWithGolangbuild(ctx context.Context, na
 					Command:    []string{pythonBin, "-c", golangbuildStartup(goos, goarch, golangbuildBin)},
 					Dimensions: createStringPairs(dimensions),
 					Env: []*swarmpb.StringPair{
-						&swarmpb.StringPair{
+						{
 							Key:   "GOMOTEID",
 							Value: name,
 						},
-						&swarmpb.StringPair{
+						{
 							Key:   "GOMOTE_SETUP",
 							Value: properties.BuilderId,
 						},

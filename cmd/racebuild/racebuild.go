@@ -44,7 +44,7 @@ var goRev string
 
 // TODO: use buildlet package instead of calling out to gomote.
 var platforms = []*Platform{
-	&Platform{
+	{
 		OS:      "openbsd",
 		Arch:    "amd64",
 		SubArch: "v1",
@@ -72,7 +72,7 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:      "freebsd",
 		Arch:    "amd64",
 		SubArch: "v1",
@@ -99,7 +99,7 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:      "darwin",
 		Arch:    "amd64",
 		SubArch: "v1",
@@ -126,7 +126,7 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:      "darwin",
 		Arch:    "amd64",
 		SubArch: "v3",
@@ -150,7 +150,7 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && GOAMD64=v3 ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:   "darwin",
 		Arch: "arm64",
 		Type: "darwin-arm64-12",
@@ -176,7 +176,7 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:      "linux",
 		Arch:    "amd64",
 		SubArch: "v1",
@@ -205,7 +205,7 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:      "linux",
 		Arch:    "amd64",
 		SubArch: "v3",
@@ -230,7 +230,7 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && GOAMD64=v3 ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:   "linux",
 		Arch: "ppc64le",
 		Type: "linux-ppc64le-buildlet",
@@ -260,7 +260,7 @@ cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso outdir/ra
 # (cd go/src && ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:   "linux",
 		Arch: "arm64",
 		Type: "linux-arm64-race",
@@ -288,7 +288,7 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:      "netbsd",
 		Arch:    "amd64",
 		SubArch: "v1",
@@ -316,7 +316,7 @@ cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso outdir/rac
 # (cd go/src && ./race.bash)
 			`,
 	},
-	&Platform{
+	{
 		OS:      "windows",
 		Arch:    "amd64",
 		SubArch: "v1",
@@ -365,7 +365,7 @@ call race.bat
 if %errorlevel% neq 0 exit /b %errorlevel%
 			`,
 	},
-	&Platform{
+	{
 		OS:   "linux",
 		Arch: "s390x",
 		Type: "linux-s390x-ibm",
