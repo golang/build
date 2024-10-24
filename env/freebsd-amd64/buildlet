@@ -10,8 +10,9 @@ rcvar=buildlet_enable
 
 procname=/buildlet
 pidfile="/var/run/${name}.pid"
+suppidfile="/var/run/${name}-sup.pid"
 command=/usr/sbin/daemon
-command_args="-r -fc -p ${pidfile}"
+command_args="-r -fc -p ${pidfile} -P ${suppidfile}"
 command_args="${command_args} ${procname}"
 start_precmd="${name}_prestart"
 stop_cmd=":"
@@ -43,7 +44,7 @@ buildlet_prestart()
 		swarming="${swarming}.appspot.com"
 		info "Found Swarming host ${swarming}."
 
-		buildletsh="#!/bin/sh\n\nset -x\n\nsu -l swarming -c \"/usr/local/bin/bootstrapswarm --hostname $gcehost --swarming $swarming\"\n"
+		buildletsh="#!/bin/sh\n\nset -x\n\nsu -l swarming -c \"/usr/local/bin/bootstrapswarm --hostname $gcehost --swarming $swarming && kill -s INT \$(cat $suppidfile)\"\n"
 		echo -e $buildletsh >/buildlet
 	  ;;
 	  *)
