@@ -71,7 +71,6 @@ type TagRepo struct {
 	Name         string    // Gerrit project name, e.g., "tools".
 	ModPath      string    // Module path, e.g., "golang.org/x/tools".
 	Deps         []*TagDep // Dependency modules.
-	HasToolchain bool      // Whether the go.mod file has a toolchain directive when the workflow started.
 	StartVersion string    // The version of the module when the workflow started. Empty string means repo hasn't begun release version tagging yet.
 	NewerVersion string    // The version of the module that will be tagged, or the empty string when the repo is being updated only and not tagged.
 }
@@ -192,7 +191,6 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 	result := &TagRepo{
 		Name:         project,
 		ModPath:      mf.Module.Mod.Path,
-		HasToolchain: mf.Toolchain != nil,
 		StartVersion: currentTag,
 	}
 
@@ -385,10 +383,6 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 	for _, dep := range deps {
 		script.WriteString(" " + dep.ModPath + "@" + dep.NewerVersion)
 	}
-	if !repo.HasToolchain {
-		// Don't introduce a toolchain directive if it wasn't already there.
-		script.WriteString(" toolchain@none")
-	}
 	script.WriteString("\n")
 
 	// Tidy the root module and nested modules.
@@ -418,10 +412,11 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 		if d.Name() == "go.mod" && !d.IsDir() { // A go.mod file.
 			dir := pathpkg.Dir(path)
 			dropToolchain := ""
-			if !repo.HasToolchain {
+			if had, err := hasToolchain(rootFS, path); err != nil {
+				return err
+			} else if !had {
 				// Don't introduce a toolchain directive if it wasn't already there.
-				// TODO(go.dev/issue/68873): Read the nested module's go.mod. For now, re-use decision from the top-level module.
-				dropToolchain = " && go get toolchain@none"
+				dropToolchain = " && go mod edit -toolchain=none"
 			}
 			script.WriteString(fmt.Sprintf("(cd %v && touch go.sum && go mod tidy%s)\n", dir, dropToolchain))
 			outputs = append(outputs, dir+"/go.mod", dir+"/go.sum")
@@ -437,6 +432,20 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []T
 		return nil, err
 	}
 	return buildToOutputs(ctx, x.CloudBuild, build)
+}
+
+// hasToolchain parses the specified go.mod file, and
+// reports whether it has a toolchain directive in it.
+func hasToolchain(fsys fs.FS, goModPath string) (has bool, _ error) {
+	b, err := fs.ReadFile(fsys, goModPath)
+	if err != nil {
+		return false, err
+	}
+	f, err := modfile.Parse(goModPath, b, nil)
+	if err != nil {
+		return false, err
+	}
+	return f.Toolchain != nil, nil
 }
 
 func buildToOutputs(ctx *wf.TaskContext, buildClient CloudBuildClient, build CloudBuild) (map[string]string, error) {
