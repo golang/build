@@ -29,7 +29,7 @@ var (
 	cacheable = flag.Bool("cacheable", true, "object should be cacheable")
 	file      = flag.String("file", "", "read object from `file` ('-' for stdin)")
 	verbose   = flag.Bool("verbose", false, "verbose logging")
-	project   = flag.String("project", "", "GCE Project. If blank, it's automatically inferred from the bucket name for the common Go buckets.")
+	project   = flag.String("project", "", "GCP Project. If blank, it's automatically inferred from the bucket name for the common Go buckets.")
 	doGzip    = flag.Bool("gzip", false, "gzip the stored contents (not the upload's Content-Encoding); this forces the Content-Type to be application/octet-stream. To prevent misuse, the object name must also end in '.gz'")
 	extraEnv  = flag.String("env", "", "comma-separated list of addition KEY=val environment pairs to include in build environment when building a target to upload")
 )
@@ -60,7 +60,7 @@ func main() {
 
 	proj := *project
 	if proj == "" {
-		proj, _ = bucketProject[bucket]
+		proj = bucketProject[bucket]
 		if proj == "" {
 			log.Fatalf("bucket %q doesn't have an associated project in upload.go", bucket)
 		}
@@ -138,15 +138,12 @@ func main() {
 	}
 }
 
+// bucketProject is a map from bucket name to its Google Cloud Platform project ID.
 var bucketProject = map[string]string{
-	"dev-gccgo-builder-data": "gccgo-dashboard-dev",
-	"dev-go-builder-data":    "go-dashboard-dev",
-	"gccgo-builder-data":     "gccgo-dashboard-builders",
-	"go-builder-data":        "symbolic-datum-552",
-	"go-build-log":           "symbolic-datum-552",
-	"http2-demo-server-tls":  "symbolic-datum-552",
-	"gobuilder":              "999119582588", // deprecated
-	"golang":                 "999119582588",
+	"dev-go-builder-data": "go-dashboard-dev",
+	"go-builder-data":     "symbolic-datum-552",
+	"go-build-log":        "symbolic-datum-552",
+	"golang":              "999119582588",
 }
 
 // alreadyUploaded reports whether *file has already been uploaded and the correct contents
