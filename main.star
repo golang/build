@@ -415,6 +415,7 @@ BUILDER_TYPES = [
     "linux-386-longtest",
     "linux-386-softfloat",
     "linux-amd64",
+    "linux-amd64-asan-clang15",
     "linux-amd64-boringcrypto",
     "linux-amd64-clang15",
     "linux-amd64-goamd64v3",
@@ -423,6 +424,7 @@ BUILDER_TYPES = [
     "linux-amd64-longtest-swissmap",
     "linux-amd64-longtest-aliastypeparams",
     "linux-amd64-misccompile",
+    "linux-amd64-msan-clang15",
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
     "linux-amd64-noopt",
@@ -894,6 +896,20 @@ def define_for_issue69121():
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
+    # Build and test with the aliastypeparams GOEXPERIMENT, which enables
+    # aliases with type parameters and the V2 unified IR exportdata format.
+    aliastypeparams = make_run_mod(
+        add_env = {"GODEBUG": "gotypesalias=1", "GOEXPERIMENT": "aliastypeparams"},
+        enabled = define_for_issue69121(),
+    ),
+
+    # Build and test with AddressSanitizer enabled.
+    asan = make_run_mod(
+        add_props = {"asan_mode": True},
+        test_timeout_scale = 2,
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
     # Build and test with the boringcrypto GOEXPERIMENT.
     boringcrypto = make_run_mod(
         add_env = {"GOEXPERIMENT": "boringcrypto"},
@@ -943,18 +959,17 @@ RUN_MODS = dict(
         enabled = define_for_projects_except(["oscar"]),
     ),
 
+    # Build and test with MemorySanitizer enabled.
+    msan = make_run_mod(
+        add_props = {"msan_mode": True},
+        test_timeout_scale = 2,
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
     # Build and test with the newinliner GOEXPERIMENT.
     newinliner = make_run_mod(
         add_env = {"GOEXPERIMENT": "newinliner"},
         enabled = define_for_go_starting_at("go1.22"),
-    ),
-
-    # Build and test with the swissmap GOEXPERIMENT.
-    #
-    # This can be deleted when GOEXPERIMENT=swissmap is enabled by default.
-    swissmap = make_run_mod(
-        add_env = {"GOEXPERIMENT": "swissmap"},
-        enabled = define_for_go_starting_at("go1.24", presubmit = False),
     ),
 
     # Build and test with cgo disabled.
@@ -1052,18 +1067,19 @@ RUN_MODS = dict(
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
     ),
 
+    # Build and test with the swissmap GOEXPERIMENT.
+    #
+    # This can be deleted when GOEXPERIMENT=swissmap is enabled by default.
+    swissmap = make_run_mod(
+        add_env = {"GOEXPERIMENT": "swissmap"},
+        enabled = define_for_go_starting_at("go1.24", presubmit = False),
+    ),
+
     # Build and test with the gotypesalias GODEBUG, which enables
     # explicit representation of type aliases.
     typesalias = make_run_mod(
         add_env = {"GODEBUG": "gotypesalias=1"},
         enabled = define_for_issue68798(),
-    ),
-
-    # Build and test with the aliastypeparams GOEXPERIMENT, which enables
-    # aliases with type parameters and the V2 unified IR exportdata format.
-    aliastypeparams = make_run_mod(
-        add_env = {"GODEBUG": "gotypesalias=1", "GOEXPERIMENT": "aliastypeparams"},
-        enabled = define_for_issue69121(),
     ),
 )
 
