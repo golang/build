@@ -1263,7 +1263,8 @@ def dimensions_of(host_type):
     if goos == "darwin":
         cipd_platform = "mac-" + goarch  # GOHOSTOS=darwin is written as "mac".
     elif goarch == "arm":
-        cipd_platform = goos + "-armv6l"  # GOHOSTARCH=arm is written as "armv6l".
+        suffix = "v7l" if goos == "netbsd" else "v6l"
+        cipd_platform = goos + "-arm" + suffix  # GOHOSTARCH=arm is written as "arm{suffix}".
     else:
         cipd_platform = host
 
