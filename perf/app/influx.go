@@ -7,10 +7,14 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math"
+	"math/rand/v2"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,9 +23,12 @@ import (
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"golang.org/x/build/internal/influx"
+	"golang.org/x/build/perf/app/internal/benchtab"
 	"golang.org/x/build/perfdata"
 	"golang.org/x/perf/benchfmt"
-	"golang.org/x/perf/benchseries"
+	"golang.org/x/perf/benchmath"
+	"golang.org/x/perf/benchproc"
+	"golang.org/x/perf/benchunit"
 	"google.golang.org/api/idtoken"
 )
 
@@ -263,25 +270,26 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 		}
 		// TODO(mknyszek): Use new iterators when possible.
 		forAll(func(c comparison, err error) bool {
+			comparisonID := c.keys["experiment-commit"]
 			if err != nil {
 				// Just log this error. We don't want to quit early if we have other good comparisons.
-				log.Printf("%s: %s: %v", c.series, c.benchmarkName, err)
+				log.Printf("error: %s: %s: %s: %v", comparisonID, c.benchmarkName, c.unit, err)
 				return true
 			}
-			measurement := "benchmark-result"                   // measurement
-			benchmarkName := c.benchmarkName + cfg.suffix       // tag
-			series := c.series                                  // time
-			center, low, high := c.Center, c.Low, c.High        // fields
-			unit := c.unit                                      // tag
-			uploadTime := c.residues["upload-time"]             // field
-			cpu := c.residues["cpu"]                            // tag
-			goarch := c.residues["goarch"]                      // tag
-			goos := c.residues["goos"]                          // tag
-			benchmarksCommit := c.residues["benchmarks-commit"] // field
-			baselineCommit := c.hashPairs[series].DenHash       // field
-			experimentCommit := c.hashPairs[series].NumHash     // field
-			repository := c.residues["repository"]              // tag
-			branch := c.residues["branch"]                      // tag
+			measurement := "benchmark-result"               // measurement
+			benchmarkName := c.benchmarkName + cfg.suffix   // tag
+			timestamp := c.keys["experiment-commit-time"]   // time
+			center, low, high := c.center, c.lo, c.hi       // fields
+			unit := c.unit                                  // tag
+			uploadTime := c.keys["upload-time"]             // field
+			cpu := c.keys["cpu"]                            // tag
+			goarch := c.keys["goarch"]                      // tag
+			goos := c.keys["goos"]                          // tag
+			benchmarksCommit := c.keys["benchmarks-commit"] // field
+			baselineCommit := c.keys["baseline-commit"]     // field
+			experimentCommit := c.keys["experiment-commit"] // field
+			repository := c.keys["repository"]              // tag
+			branch := c.keys["branch"]                      // tag
 
 			// cmd/bench didn't set repository prior to
 			// CL 413915. Older runs are all against go.
@@ -290,12 +298,12 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 			}
 
 			// Push to influx.
-			t, err := benchseries.ParseNormalizedDateString(series)
+			t, err := time.Parse(time.RFC3339Nano, timestamp)
 			if err != nil {
-				log.Printf("%s: %s: error parsing normalized date: %v", c.series, c.benchmarkName, err)
+				log.Printf("error: %s: %s: %s: parsing experiment-commit-time: %v", comparisonID, c.benchmarkName, c.unit, err)
 				return true
 			}
-			fields := map[string]interface{}{
+			fields := map[string]any{
 				"center":            center,
 				"low":               low,
 				"high":              high,
@@ -312,12 +320,11 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 				"goos":       goos,
 				"repository": repository,
 				"branch":     branch,
-				// TODO(prattmic): Add pkg, which
-				// benchseries currently can't handle.
+				// TODO(mknyszek): Revisit adding pkg, now that we're not using benchseries.
 			}
 			p := influxdb2.NewPoint(measurement, tags, fields, t)
 			if err := wapi.WritePoint(ctx, p); err != nil {
-				log.Printf("%s: %s: error writing point: %v", c.series, c.benchmarkName, err)
+				log.Printf("%s: %s: %s: error writing point: %v", comparisonID, c.benchmarkName, c.unit, err)
 				return true
 			}
 			return true
@@ -327,46 +334,36 @@ func (a *App) pushRunToInflux(ctx context.Context, ifxc influxdb2.Client, u perf
 }
 
 type comparisonConfig struct {
-	suffix      string
-	compare     string
-	numerator   string
-	denominator string
-	filter      string
+	suffix     string
+	columnExpr string
+	filter     string
 }
 
 var (
 	pgoOff = comparisonConfig{
 		// Default: toolchain:baseline vs experiment without PGO
-		compare:     "toolchain",
-		numerator:   "experiment",
-		denominator: "baseline",
-		filter:      "-pgo:on", // "off" or unset (bent doesn't set pgo).
+		columnExpr: "toolchain@(baseline experiment)",
+		filter:     "-pgo:on", // "off" or unset (bent doesn't set pgo).
 	}
 	pgoOn = comparisonConfig{
 		// toolchain:baseline vs experiment with PGO
-		suffix:      "/pgo=on,toolchain:baseline-vs-experiment",
-		compare:     "toolchain",
-		numerator:   "experiment",
-		denominator: "baseline",
-		filter:      "pgo:on",
+		suffix:     "/pgo=on,toolchain:baseline-vs-experiment",
+		columnExpr: "toolchain@(baseline experiment)",
+		filter:     "pgo:on",
 	}
 	pgoVs = comparisonConfig{
 		// pgo:off vs on with experiment toolchain (impact of enabling PGO)
-		suffix:      "/toolchain:experiment,pgo=off-vs-on",
-		compare:     "pgo",
-		numerator:   "on",
-		denominator: "off",
-		filter:      "toolchain:experiment",
+		suffix:     "/toolchain:experiment,pgo=off-vs-on",
+		columnExpr: "pgo@(off on)",
+		filter:     "toolchain:experiment",
 	}
 )
 
 type comparison struct {
-	series        string
-	benchmarkName string
-	unit          string
-	residues      map[string]string
-	hashPairs     map[string]benchseries.ComparisonHashes
-	*benchseries.ComparisonSummary
+	benchmarkName  string
+	unit           string
+	keys           map[string]string
+	lo, center, hi float64
 }
 
 // benchCompare reads r, assuming it contains benchmark data, and performs the provided comparison
@@ -374,99 +371,203 @@ type comparison struct {
 func benchCompare(rr io.Reader, name string, c comparisonConfig) (func(func(comparison, error) bool), error) {
 	r := benchfmt.NewReader(rr, name)
 
-	// Use the default comparisons. Namely:
-	// 1. Build a series out of commit dates (in our case, this is length 1).
-	// 2. Split out comparisons by benchmark name (unit we get for free).
-	//
-	// Copy the options for mutation.
-	opts := *benchseries.DefaultBuilderOptions()
-	opts.Compare = c.compare
-	opts.Numerator = c.numerator
-	opts.Denominator = c.denominator
-	if opts.Filter == "" {
-		opts.Filter = c.filter
-	} else {
-		opts.Filter += " " + c.filter
+	filter, err := benchproc.NewFilter(c.filter)
+	if err != nil {
+		return nil, fmt.Errorf("parsing filter: %s", err)
+	}
+
+	var parser benchproc.ProjectionParser
+	var parseErr error
+	mustParse := func(name, val string, unit bool) *benchproc.Projection {
+		var proj *benchproc.Projection
+		var err error
+		if unit {
+			proj, _, err = parser.ParseWithUnit(val, filter)
+		} else {
+			proj, err = parser.Parse(val, filter)
+		}
+		if err != nil && parseErr == nil {
+			parseErr = fmt.Errorf("parsing %s: %s", name, err)
+		}
+		return proj
+	}
+	tableBy := mustParse("table", ".config", true)
+	rowBy := mustParse("row", ".fullname", false)
+	colBy := mustParse("col", c.columnExpr, false)
+	mustParse("ignore", "go,tip,base,bentstamp,shortname,suite", false)
+	residue := parser.Residue()
+
+	// Check parse error.
+	if parseErr != nil {
+		return nil, fmt.Errorf("internal error: failed to parse projections for configuration: %v", parseErr)
 	}
 
 	// Scan the results into a benchseries builder.
-	builder, err := benchseries.NewBuilder(&opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create benchseries builder: %v", err)
-	}
+	stat := benchtab.NewBuilder(tableBy, rowBy, colBy, residue)
 	for r.Scan() {
-		rec := r.Result()
-		if err, ok := rec.(*benchfmt.SyntaxError); ok {
+		switch rec := r.Result(); rec := rec.(type) {
+		case *benchfmt.SyntaxError:
 			// Non-fatal result parse error. Warn
 			// but keep going.
 			log.Printf("Parse error: %v", err)
-			continue
+		case *benchfmt.Result:
+			if ok, _ := filter.Apply(rec); !ok {
+				continue
+			}
+			stat.Add(rec)
 		}
-		res := rec.(*benchfmt.Result)
-		builder.Add(res)
 	}
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
 
-	// Run the comparison. We don't have any existing results so our
-	// duplicate policy doesn't matter here. Just pick replacement.
-	comparisons, err := builder.AllComparisonSeries(nil, benchseries.DUPE_REPLACE)
-	if err != nil {
-		return nil, fmt.Errorf("failed to creation comparison series: %w", err)
+	// Prepopulate some assumptions about binary size units.
+	// bent does emit these, but they get stripped by perfdata.
+	// TODO(mknyszek): Remove this once perfdata stops doing that.
+	units := r.Units()
+	assumeExact := func(unit string) {
+		_, tidyUnit := benchunit.Tidy(1, unit)
+		key := benchfmt.UnitMetadataKey{Unit: tidyUnit, Key: "assume"}
+		if _, ok := units[key]; ok {
+			return // There was an assumption in the benchmark data.
+		}
+		units[key] = &benchfmt.UnitMetadata{
+			UnitMetadataKey: key,
+			OrigUnit:        unit,
+			Value:           "exact",
+		}
 	}
+	assumeExact("total-bytes")
+	assumeExact("text-bytes")
+	assumeExact("data-bytes")
+	assumeExact("rodata-bytes")
+	assumeExact("pclntab-bytes")
+	assumeExact("debug-bytes")
 
-	const (
-		confidence = 0.95
-		bootstrap  = 1000
-	)
+	// Build the comparison table.
+	const confidence = 0.95
+	thresholds := benchmath.DefaultThresholds
+	tables := stat.ToTables(benchtab.TableOpts{
+		Confidence: confidence,
+		Thresholds: &thresholds,
+		Units:      r.Units(),
+	})
 
 	// Iterate over the comparisons and extract the results
 	return func(yield func(sum comparison, err error) bool) {
-	comparisonLoop:
-		for _, cs := range comparisons {
-			cs.AddSummaries(confidence, bootstrap)
-
-			summaries := cs.Summaries
-
-			// Build a map of residues with single values. Our benchmark pipeline enforces
-			// that the only key that has a differing value across benchmark runs of the same
-			// name and unit is "toolchain."
-			//
-			// Most other keys are singular for *all* benchmarks in a run (like "goos") but
-			// even those that are not (like "pkg") remain the same even if "toolchain" differs.
-			//
-			// We build a map instead of just using them because we need to decide at upload
-			// time whether the key is an Influx tag or field.
-			residues := make(map[string]string)
-			for _, r := range cs.Residues {
-				if len(r.Slice) > 1 {
-					err := fmt.Errorf("found non-singular key %q with values %v; comparison may be invalid, skipping...", r.S, r.Slice)
-					if !yield(comparison{}, err) {
-						return
-					}
-					continue comparisonLoop
-				}
-				residues[r.S] = r.Slice[0]
+		for t, table := range tables.Tables {
+			// All the other keys, which should be identical, are captured as
+			// sub-fields of .config, our table projection.
+			keys := make(map[string]string)
+			for _, f := range tableBy.Fields()[0].Sub {
+				keys[f.Name] = tables.Keys[t].Get(f)
 			}
-
-			// N.B. In our case Series should have length 1, because we're processing
-			// a single result here. By default the string value here is the commit date.
-			for i, series := range cs.Series {
-				for j, benchmarkName := range cs.Benchmarks {
-					sum := summaries[i][j]
-					if !sum.Defined() {
-						err := fmt.Errorf("summary not defined for %s %s", series, benchmarkName)
+			for _, row := range table.Rows {
+				benchmarkName := row.StringValues()
+				for _, col := range table.Cols {
+					cell, ok := table.Cells[benchtab.TableKey{Row: row, Col: col}]
+					if !ok {
+						// Cell not present due to missing data.
+						err := fmt.Errorf("summary not defined %s", benchmarkName)
 						if !yield(comparison{}, err) {
 							return
 						}
 						continue
 					}
-					if !yield(comparison{series, benchmarkName, cs.Unit, residues, cs.HashPairs, sum}, nil) {
+					if cell.Baseline == nil {
+						// Non-comparison cell.
+						continue
+					}
+					if len(cell.Summary.Warnings) != 0 {
+						// TODO(mknyszek): Make this an actual failure once it stops failing for x/tools.
+						// x/tools has 5 runs per benchmark, but we need 6 for 0.95 confidence.
+						log.Printf("warning: %s: %s: %s: %v", name, benchmarkName, table.Unit, errors.Join(cell.Summary.Warnings...))
+					}
+					lo, center, hi := ratioSummary(cell.Baseline.Sample, cell.Sample, confidence, 1000)
+					if !yield(comparison{benchmarkName, table.Unit, keys, lo, center, hi}, nil) {
 						return
 					}
 				}
 			}
 		}
 	}, nil
+}
+
+func ratioSummary(baseline, experiment *benchmath.Sample, confidence float64, bootstrapN int) (lo, center, hi float64) {
+	ratios := make([]float64, bootstrapN)
+	sampleNum := make([]float64, len(experiment.Values))
+	sampleDen := make([]float64, len(baseline.Values))
+	for i := range ratios {
+		resampleInto(experiment.Values, sampleNum)
+		resampleInto(baseline.Values, sampleDen)
+		den := median(sampleDen)
+		if den == 0 {
+			num := median(sampleNum)
+			if num >= 0 {
+				ratios[i] = (num + 1)
+			} else {
+				ratios[i] = (num - 1)
+			}
+		} else {
+			ratios[i] = median(sampleNum) / den
+		}
+	}
+	slices.Sort(ratios)
+	p := (1 - confidence) / 2
+	lo = percentile(ratios, p)
+	hi = percentile(ratios, 1-p)
+	center = median(ratios)
+	return
+}
+
+func percentile(a []float64, p float64) float64 {
+	if len(a) == 0 {
+		return math.NaN()
+	}
+	if p == 0 {
+		return a[0]
+	}
+	n := len(a)
+	if p == 1 {
+		return a[n-1]
+	}
+	f := float64(float64(n) * p) // Suppress fused-multiply-add
+	i := int(f)
+	x := f - float64(i)
+	r := a[i]
+	if x > 0 && i+1 < len(a) {
+		r = float64(r*(1-x)) + float64(a[i+1]*x) // Suppress fused-multiply-add
+	}
+	return r
+}
+
+func median(a []float64) float64 {
+	l := len(a)
+	if l&1 == 1 {
+		return a[l/2]
+	}
+	return (a[l/2] + a[l/2-1]) / 2
+}
+
+func norm(a []float64, l float64) float64 {
+	if len(a) == 0 {
+		return math.NaN()
+	}
+	n := 0.0
+	sum := 0.0
+	for _, x := range a {
+		if math.IsInf(x, 0) || math.IsNaN(x) {
+			continue
+		}
+		sum += math.Pow(math.Abs(x), l)
+		n++
+	}
+	return math.Pow(sum/n, 1/l)
+}
+
+func resampleInto(sample, dst []float64) {
+	for i := range dst {
+		dst[i] = sample[rand.N[int](len(sample))]
+	}
+	slices.Sort(dst)
 }
