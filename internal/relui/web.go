@@ -260,7 +260,10 @@ func (s *Server) showWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 		return
 	}
 	resp, err := s.buildShowWorkflowResponse(r.Context(), id)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
 		log.Printf("showWorkflowHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -448,7 +451,11 @@ func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params
 	}
 	q := db.New(s.db)
 	workflow, err := q.Workflow(r.Context(), id)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("retryTaskHandler(_, _, %v): Workflow(%d): %v", params, id, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -476,7 +483,11 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 	}
 	q := db.New(s.db)
 	workflow, err := q.Workflow(r.Context(), id)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("approveTaskHandler(_, _, %v): Workflow(%d): %v", params, id, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -515,7 +526,11 @@ func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 	}
 	q := db.New(s.db)
 	workflow, err := q.Workflow(r.Context(), id)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("stopWorkflowHandler(_, _, %v): Workflow(%d): %v", params, id, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

@@ -702,12 +702,23 @@ func TestServerStopWorkflow(t *testing.T) {
 			rec := httptest.NewRecorder()
 			worker := NewWorker(NewDefinitionHolder(), nil, nil)
 
-			wf := &workflow.Workflow{ID: wfID}
-			if err := worker.markRunning(wf, cancel); err != nil {
-				t.Fatalf("worker.markRunning(%v, %v) = %v, wanted no error", wf, cancel, err)
+			p := testDB(ctx, t)
+			q := db.New(p)
+			wf := db.CreateWorkflowParams{
+				ID:        wfID,
+				Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+				Name:      nullString("echo"),
+				CreatedAt: time.Now().Add(-1 * time.Hour),
+				UpdatedAt: time.Now().Add(-1 * time.Hour),
+			}
+			if _, err := q.CreateWorkflow(ctx, wf); err != nil {
+				t.Fatalf("CreateWorkflow(%v) = %v, wanted no error", wf, err)
+			}
+			if err := worker.markRunning(&workflow.Workflow{ID: wfID}, cancel); err != nil {
+				t.Fatalf("worker.markRunning(%q) = %v, wanted no error", wfID, err)
 			}
 
-			s := NewServer(testDB(ctx, t), worker, nil, SiteHeader{}, nil, nil)
+			s := NewServer(p, worker, nil, SiteHeader{}, nil, nil)
 			s.m.ServeHTTP(rec, req)
 			resp := rec.Result()
 
