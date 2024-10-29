@@ -185,6 +185,7 @@ type homeResponse struct {
 	ActiveWorkflows   []db.Workflow
 	InactiveWorkflows []db.Workflow
 	Schedules         []ScheduleEntry
+	FailedToSchedule  []FailedToScheduleEntry
 }
 
 // homeHandler renders the homepage.
@@ -213,14 +214,14 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	case "all", "All", "":
 		ws, err = q.Workflows(r.Context())
 		hr.SiteHeader.NameParam = "All Workflows"
-		hr.Schedules = s.scheduler.Entries()
+		hr.Schedules, hr.FailedToSchedule = s.scheduler.Entries(r.Context())
 	case "others", "Others":
 		ws, err = q.WorkflowsByNames(r.Context(), others)
 		hr.SiteHeader.NameParam = "Others"
-		hr.Schedules = s.scheduler.Entries(others...)
+		hr.Schedules, _ = s.scheduler.Entries(r.Context(), others...)
 	default:
 		ws, err = q.WorkflowsByName(r.Context(), sql.NullString{String: name, Valid: true})
-		hr.Schedules = s.scheduler.Entries(name)
+		hr.Schedules, _ = s.scheduler.Entries(r.Context(), name)
 	}
 	if err != nil {
 		log.Printf("homeHandler: %v", err)

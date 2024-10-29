@@ -5,6 +5,7 @@
 package relui
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v4"
@@ -114,6 +116,11 @@ type Scheduler struct {
 	w    *Worker
 	cron *cron.Cron
 	db   db.PGDBTX
+
+	// failed is populated by Resume with schedules that
+	// failed to resume due to a change in workflow definition.
+	failedMu sync.Mutex
+	failed   []FailedToScheduleEntry
 }
 
 // Create schedules a job and records it in the database.
@@ -168,21 +175,24 @@ func (s *Scheduler) Resume(ctx context.Context) error {
 			log.Printf("Unable to schedule %q (schedule.id: %d): no definition found", row.WorkflowName, row.ID)
 			continue
 		}
-		params, err := UnmarshalWorkflow(row.WorkflowParams.String, def)
-		if err != nil {
-			log.Printf("Error in UnmarshalWorkflow(%q, %q) for schedule %d: %q", row.WorkflowParams.String, row.WorkflowName, row.ID, err)
-			continue
-		}
 		sched := Schedule{Once: row.Once, Cron: row.Spec}
 		sched.setType()
 		if sched.Type == ScheduleOnce && row.Once.Before(time.Now()) {
 			log.Printf("Skipping %q Schedule (schedule.id: %d): %q is in the past", sched.Type, row.ID, sched.Once.String())
 			continue
 		}
-
 		cronSched, err := sched.Parse()
 		if err != nil {
 			log.Printf("Unable to schedule %q (schedule.id %d): invalid Schedule: %q", row.WorkflowName, row.ID, err)
+			continue
+		}
+		params, err := UnmarshalWorkflow(row.WorkflowParams.String, def)
+		if err != nil {
+			log.Printf("Error in UnmarshalWorkflow(%q, %q) for schedule %d: %q", row.WorkflowParams.String, row.WorkflowName, row.ID, err)
+			s.failed = append(s.failed, FailedToScheduleEntry{
+				WorkflowSchedule: WorkflowSchedule{Schedule: row},
+				ParsedSchedule:   cronSched,
+			})
 			continue
 		}
 
@@ -195,22 +205,23 @@ func (s *Scheduler) Resume(ctx context.Context) error {
 	return nil
 }
 
-// Entries returns a slice of active jobs.
+// Entries returns a list of scheduled jobs, and a list of jobs that failed to schedule.
 //
-// Entries are filtered by workflowNames. An empty slice returns
-// all entries.
-func (s *Scheduler) Entries(workflowNames ...string) []ScheduleEntry {
+// The scheduled jobs are filtered by workflowNames, if provided, otherwise all scheduled
+// jobs are included.
+func (s *Scheduler) Entries(ctx context.Context, workflowNames ...string) ([]ScheduleEntry, []FailedToScheduleEntry) {
 	q := db.New(s.db)
-	rows, err := q.SchedulesLastRun(context.Background())
+	rows, err := q.SchedulesLastRun(ctx)
 	if err != nil {
-		log.Printf("q.SchedulesLastRun() = _, %q, wanted no error", err)
+		log.Println("leaving out last runs of scheduled workflows because SchedulesLastRun failed:", err)
+		rows = nil
 	}
 	rowMap := make(map[int32]db.SchedulesLastRunRow)
 	for _, row := range rows {
 		rowMap[row.ID] = row
 	}
 	entries := s.cron.Entries()
-	ret := make([]ScheduleEntry, 0, len(entries))
+	ses := make([]ScheduleEntry, 0, len(entries))
 	for _, e := range s.cron.Entries() {
 		entry := ScheduleEntry{Entry: e}
 		if len(workflowNames) != 0 && !slices.Contains(workflowNames, entry.WorkflowJob().Schedule.WorkflowName) {
@@ -219,9 +230,17 @@ func (s *Scheduler) Entries(workflowNames ...string) []ScheduleEntry {
 		if row, ok := rowMap[entry.WorkflowJob().Schedule.ID]; ok {
 			entry.LastRun = row
 		}
-		ret = append(ret, entry)
+		ses = append(ses, entry)
 	}
-	return ret
+	s.failedMu.Lock()
+	fes := slices.Clone(s.failed)
+	s.failedMu.Unlock()
+	for i, fe := range fes {
+		if row, ok := rowMap[fe.Schedule.ID]; ok {
+			fes[i].LastRun = row
+		}
+	}
+	return ses, fes
 }
 
 var ErrScheduleNotFound = errors.New("schedule not found")
@@ -232,13 +251,27 @@ var ErrScheduleNotFound = errors.New("schedule not found")
 // Jobs in progress are not interrupted, but will be prevented from
 // starting again.
 func (s *Scheduler) Delete(ctx context.Context, id int) error {
-	entries := s.Entries()
-	i := slices.IndexFunc(entries, func(e ScheduleEntry) bool { return int(e.WorkflowJob().Schedule.ID) == id })
-	if i == -1 {
+	// Look for a schedule with the given id, which may have been either successfully or unsuccessfully scheduled,
+	// and delete it from memory.
+	entries := s.cron.Entries()
+	s.failedMu.Lock()
+	defer s.failedMu.Unlock()
+	i := slices.IndexFunc(entries, func(e cron.Entry) bool { return int(e.Job.(*WorkflowSchedule).Schedule.ID) == id })
+	j := slices.IndexFunc(s.failed, func(e FailedToScheduleEntry) bool { return int(e.Schedule.ID) == id })
+	switch {
+	case i >= 0 && j == -1:
+		entry := entries[i]
+		s.cron.Remove(entry.ID)
+	case j >= 0 && i == -1:
+		s.failed = slices.Delete(s.failed, j, j+1)
+	case i == -1 && j == -1:
+		// No such schedule found.
 		return ErrScheduleNotFound
+	default:
+		return fmt.Errorf("internal error: Scheduler.Delete: impossible case i == %d, j == %d", i, j)
 	}
-	entry := entries[i]
-	s.cron.Remove(entry.ID)
+
+	// Next, delete the schedule with the specified id from the database.
 	return s.db.BeginFunc(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		if _, err := q.ClearWorkflowSchedule(ctx, int32(id)); err != nil {
@@ -252,11 +285,22 @@ func (s *Scheduler) Delete(ctx context.Context, id int) error {
 }
 
 type ScheduleEntry struct {
+	// Entry is the cron entry.
+	//
+	// Its Job field holds a *WorkflowSchedule that describes the scheduled
+	// workflow and how to start running a new instance of it.
 	cron.Entry
+
 	LastRun db.SchedulesLastRunRow
 }
 
-// type ScheduleEntry cron.Entry
+type FailedToScheduleEntry struct {
+	WorkflowSchedule
+	ParsedSchedule cron.Schedule
+	LastRun        db.SchedulesLastRunRow
+}
+
+func (e FailedToScheduleEntry) Next() time.Time { return e.ParsedSchedule.Next(time.Now()) }
 
 // WorkflowJob returns a *WorkflowSchedule for the ScheduleEntry.
 func (s *ScheduleEntry) WorkflowJob() *WorkflowSchedule {
@@ -274,6 +318,38 @@ type WorkflowSchedule struct {
 func (w *WorkflowSchedule) Run() {
 	id, err := w.worker.StartWorkflow(context.Background(), w.Schedule.WorkflowName, w.Params, int(w.Schedule.ID))
 	log.Printf("StartWorkflow(_, %q, %v, %d) = %q, %q", w.Schedule.WorkflowName, w.Params, w.Schedule.ID, id, err)
+}
+
+// ScheduleDesc returns a description of the schedule.
+func (w WorkflowSchedule) ScheduleDesc() string {
+	switch {
+	case !w.Schedule.Once.IsZero():
+		return "Run once on the future date."
+	case w.Schedule.Spec != "":
+		return fmt.Sprintf("Using the cron schedule %q.", w.Schedule.Spec)
+	default:
+		return ""
+	}
+}
+
+// ParamDesc returns a description of the parameters.
+func (w WorkflowSchedule) ParamDesc() string {
+	if w.Params == nil {
+		// If parameters couldn't be unmarshaled, it's because the workflow definition changed.
+		// The best description we can offer are the originally marshaled parameters, indented.
+		var buf bytes.Buffer
+		err := json.Indent(&buf, []byte(w.Schedule.WorkflowParams.String), "", "\t")
+		if err != nil {
+			return "failed to indent workflow parameters: " + err.Error()
+		}
+		return buf.String()
+	}
+
+	b, err := json.MarshalIndent(w.Params, "", "\t")
+	if err != nil {
+		return "failed to marshal workflow parameters: " + err.Error()
+	}
+	return string(b)
 }
 
 // RunOnce is a cron.Schedule for running a job at a specific time.

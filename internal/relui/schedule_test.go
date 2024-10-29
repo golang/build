@@ -128,7 +128,7 @@ func TestSchedulerCreate(t *testing.T) {
 			if diff := cmp.Diff(c.want, row, cmpopts.EquateApproxTime(time.Minute), cmpopts.IgnoreFields(db.Schedule{}, "ID")); diff != "" {
 				t.Fatalf("s.Create() mismatch (-want +got):\n%s", diff)
 			}
-			got := s.Entries()
+			got, _ := s.Entries(ctx)
 
 			diffOpts := []cmp.Option{
 				cmpopts.EquateApproxTime(time.Minute),
@@ -253,7 +253,7 @@ func TestSchedulerResume(t *testing.T) {
 			if err := s.Resume(ctx); err != nil {
 				t.Errorf("s.Resume() = %v, wanted no error", err)
 			}
-			got := s.Entries()
+			got, _ := s.Entries(ctx)
 
 			diffOpts := []cmp.Option{
 				cmpopts.EquateApproxTime(time.Minute),
@@ -310,7 +310,7 @@ func TestScheduleDelete(t *testing.T) {
 				t.Fatalf("s.Delete(%d) = %v, wantErr: %t", row.ID, err, c.wantErr)
 			}
 
-			entries := s.Entries()
+			entries, _ := s.Entries(ctx)
 			diffOpts := []cmp.Option{
 				cmpopts.EquateApproxTime(time.Minute),
 				cmpopts.IgnoreFields(db.Schedule{}, "ID"),
