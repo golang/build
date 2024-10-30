@@ -59,9 +59,11 @@ func repro(args []string) error {
 		fs.Usage()
 	}
 	// Parse as a uint even though we'll end up converting to int64 -- negative build IDs are not valid.
-	buildID, err := strconv.ParseUint(fs.Arg(0), 10, 64)
+	// Strip an optional "b" prefix. Lots of LUCI URLs and UIs use the prefix, so it makes copy-paste
+	// easier.
+	buildID, err := strconv.ParseUint(strings.TrimPrefix(fs.Arg(0), "b"), 10, 64)
 	if err != nil {
-		return fmt.Errorf("parsing build ID: %v", err)
+		return fmt.Errorf("parsing build ID %s: %v", fs.Arg(0), err)
 	}
 	// Always use a default unauthenticated client for public builds.
 	ctx := context.Background()
