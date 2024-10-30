@@ -120,6 +120,7 @@ func init() {
 	addPerson("Gopherbot", "gobot@golang.org", "@gopherbot", "5976@62eb7196-b449-3ce5-99f1-c037f21e1705", "*bot")
 	addPerson("Gerrit Bot", "letsusegerrit@gmail.com", "12446@62eb7196-b449-3ce5-99f1-c037f21e1705", "*bot")
 	addPerson("Fuzzing Team", "@golang/fuzzing")
+	addPerson("Oscar Team", "@golang/oscar-team")
 	addPerson("Security Team", "@golang/security")
 	addPerson("VulnDB Team", "@golang/vulndb")
 	addPerson("Pkgsite Team", "@golang/pkgsite")

@@ -80,6 +80,7 @@ var (
 
 	compilerTeam  = gh("golang/compiler")
 	fuzzingTeam   = gh("golang/fuzzing")
+	oscarTeam     = gh("golang/oscar-team")
 	pkgsiteTeam   = gh("golang/pkgsite")
 	releaseTeam   = gh("golang/release")
 	runtimeTeam   = gh("golang/runtime")
@@ -799,7 +800,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{jbd, shinfan, codyoss},
 	},
 	"oscar": {
-		Primary: []Owner{rsc},
+		Primary: []Owner{oscarTeam},
 	},
 	"perf": {
 		Primary: []Owner{runtimeTeam, releaseTeam},
