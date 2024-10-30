@@ -47,9 +47,11 @@ func repro(args []string) error {
 		os.Exit(1)
 	}
 	var cfg createConfig
+	var public bool
 	fs.BoolVar(&cfg.printStatus, "status", true, "print regular status updates while waiting")
 	fs.IntVar(&cfg.count, "count", 1, "number of instances to create")
 	fs.StringVar(&cfg.newGroup, "new-group", "", "also create a new group and add the new instances to it")
+	fs.BoolVar(&public, "public", true, "whether the build you're trying to reproduce is public")
 	cfg.useGolangbuild = true
 
 	fs.Parse(args)
@@ -61,19 +63,23 @@ func repro(args []string) error {
 	if err != nil {
 		return fmt.Errorf("parsing build ID: %v", err)
 	}
+	// Always use a default unauthenticated client for public builds.
 	ctx := context.Background()
-	au := createLUCIAuthenticator(ctx)
-	if err := au.CheckLoginRequired(); errors.Is(err, auth.ErrLoginRequired) {
-		log.Println("LUCI login required... initiating interactive login process")
-		if err := au.Login(); err != nil {
-			return err
+	hc := http.DefaultClient
+	if !public {
+		au := createLUCIAuthenticator(ctx)
+		if err := au.CheckLoginRequired(); errors.Is(err, auth.ErrLoginRequired) {
+			log.Println("LUCI login required... initiating interactive login process")
+			if err := au.Login(); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return fmt.Errorf("checking whether LUCI login is required: %w", err)
 		}
-	} else if err != nil {
-		return fmt.Errorf("checking whether LUCI login is required: %w", err)
-	}
-	hc, err := au.Client()
-	if err != nil {
-		return fmt.Errorf("creating HTTP client: %w", err)
+		hc, err = au.Client()
+		if err != nil {
+			return fmt.Errorf("creating HTTP client: %w", err)
+		}
 	}
 	bc := bbpb.NewBuildsPRPCClient(&prpc.Client{
 		C:       hc,

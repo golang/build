@@ -33,10 +33,5 @@ func login(args []string) error {
 	if _, err := iapclient.TokenSourceForceLogin(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "unable to authenticate into gomoteserver: %s\n", err)
 	}
-	auth := createLUCIAuthenticator(ctx)
-	log.Print("Authenticating with the LUCI service.")
-	if err := auth.Login(); err != nil {
-		fmt.Fprintf(os.Stderr, "unable to authenticate into LUCI: %s\n", err)
-	}
 	return nil
 }
