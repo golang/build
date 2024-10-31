@@ -340,6 +340,7 @@ SLOW_HOSTS = {
     "linux-ppc64le_power8": 2,
     "linux-ppc64le_power9": 2,
     "linux-riscv64": 2,
+    "netbsd-arm": 5,
     "netbsd-arm64": 2,
     "openbsd-amd64": 2,
     "openbsd-arm": 5,
