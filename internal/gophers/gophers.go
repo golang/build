@@ -1920,9 +1920,9 @@ func init() {
 	addPerson("Matthew Broberg", "matthewbbroberg@gmail.com")
 	addPerson("Matthew Byrne", "mjw.byrne@gmail.com")
 	addPerson("Matthew Cottingham", "mattcottingham@gmail.com", "@mattrco")
-	addPerson("Matthew Dempsky", "mdempsky@google.com", "@mdempsky")
+	addPerson("Matthew Dempsky", "@mdempsky")
 	addPerson("Matthew Dempsky", "matthew@dempsky.org", "8715@62eb7196-b449-3ce5-99f1-c037f21e1705")
-	addPerson("Matthew Dempsky", "mdempsky@google.com", "5440@62eb7196-b449-3ce5-99f1-c037f21e1705")
+	addPerson("Matthew Dempsky", "mdempsky@google.com", "5440@62eb7196-b449-3ce5-99f1-c037f21e1705") // keeping so that existing CLs can still be matched
 	addPerson("Matthew Denton", "mdenton@skyportsystems.com", "@mdentonSkyport")
 	addPerson("Matthew Endsley", "mendsley@gmail.com")
 	addPerson("Matthew Herrmann", "mherr@google.com")
