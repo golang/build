@@ -368,7 +368,10 @@ func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Bu
 		case "go":
 			goCommit = c
 		default:
-			log.Fatalf("repo mismatch: %s %s %s", bRepo, repo, buildURL(id))
+			// go.dev/issue/70091 pointed out that failing because of a missmatch between builder definition
+			// and input version is suboptimal. Instead log the case and continue processing.
+			log.Printf("repo mismatch: %s %s %s", bRepo, repo, buildURL(id))
+			return nil
 		}
 	}
 	if commit == "" {
