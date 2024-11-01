@@ -41,37 +41,41 @@ func (c *RealSwarmingClient) RunTask(ctx context.Context, dims map[string]string
 
 	req := &apipb.NewTaskRequest{
 		Name:           "relui task",
-		ExpirationSecs: 3 * 60 * 60,
 		Priority:       20,
 		User:           "relui",
 		ServiceAccount: c.ServiceAccount,
 		Realm:          c.Realm,
 
-		Properties: &apipb.TaskProperties{
-			EnvPrefixes: []*apipb.StringListPair{
-				{Key: "PATH", Value: []string{"tools/bin"}},
-			},
-			Env:     []*apipb.StringPair{},
-			Command: append(append([]string{"luci-auth", "context"}, shell...), script),
-			CipdInput: &apipb.CipdInput{
-				Packages: []*apipb.CipdPackage{
-					{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
-					{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: "latest"},
-					{Path: "tools", PackageName: "infra/3pp/tools/gcloud/" + cipdPlatform, Version: "latest"},
-					{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"},
+		TaskSlices: []*apipb.TaskSlice{
+			{
+				Properties: &apipb.TaskProperties{
+					EnvPrefixes: []*apipb.StringListPair{
+						{Key: "PATH", Value: []string{"tools/bin"}},
+					},
+					Env:     []*apipb.StringPair{},
+					Command: append(append([]string{"luci-auth", "context"}, shell...), script),
+					CipdInput: &apipb.CipdInput{
+						Packages: []*apipb.CipdPackage{
+							{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
+							{Path: "tools", PackageName: "golang/bootstrap-go/" + cipdPlatform, Version: "latest"},
+							{Path: "tools", PackageName: "infra/3pp/tools/gcloud/" + cipdPlatform, Version: "latest"},
+							{Path: "tools", PackageName: "infra/3pp/tools/cpython3/" + cipdPlatform, Version: "latest"},
+						},
+					},
+					Dimensions: []*apipb.StringPair{
+						{Key: "pool", Value: c.Pool},
+					},
+					ExecutionTimeoutSecs: 600,
 				},
+				ExpirationSecs: 3 * 60 * 60,
 			},
-			Dimensions: []*apipb.StringPair{
-				{Key: "pool", Value: c.Pool},
-			},
-			ExecutionTimeoutSecs: 600,
 		},
 	}
 	for k, v := range dims {
-		req.Properties.Dimensions = append(req.Properties.Dimensions, &apipb.StringPair{Key: k, Value: v})
+		req.TaskSlices[0].Properties.Dimensions = append(req.TaskSlices[0].Properties.Dimensions, &apipb.StringPair{Key: k, Value: v})
 	}
 	for k, v := range env {
-		req.Properties.Env = append(req.Properties.Env, &apipb.StringPair{Key: k, Value: v})
+		req.TaskSlices[0].Properties.Env = append(req.TaskSlices[0].Properties.Env, &apipb.StringPair{Key: k, Value: v})
 	}
 	task, err := c.SwarmingClient.NewTask(ctx, req)
 	if err != nil {
