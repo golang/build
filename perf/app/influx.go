@@ -67,6 +67,7 @@ func (a *App) syncInflux(w http.ResponseWriter, r *http.Request) {
 
 	lastPush, err := latestInfluxTimestamp(ctx, ifxc)
 	if err != nil {
+		log.Printf("Error getting latest Influx timestamp: %v", err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -79,6 +80,7 @@ func (a *App) syncInflux(w http.ResponseWriter, r *http.Request) {
 
 	uploads, err := a.uploadsSince(ctx, lastPush)
 	if err != nil {
+		log.Printf("Error getting new uploads: %v", err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
