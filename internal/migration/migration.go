@@ -78,6 +78,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	"linux-loong64-3a5000":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-loong64.
 
 	"netbsd-arm64-bsiegert": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-netbsd-arm64.
+	"netbsd-arm-bsiegert":   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-netbsd-arm.
 
 	"openbsd-amd64-72": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-openbsd-amd64.
 
