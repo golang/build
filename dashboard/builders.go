@@ -467,12 +467,12 @@ var Hosts = map[string]*HostConfig{
 	},
 	"host-netbsd-arm-bsiegert": {
 		IsReverse: true,
-		ExpectNum: 1,
+		ExpectNum: 0, // was 1 before migration to LUCI
 		Owners:    []*gophers.Person{gh("bsiegert")},
 	},
 	"host-netbsd-arm64-bsiegert": {
 		IsReverse: true,
-		ExpectNum: 1,
+		ExpectNum: 0, // was 1 before migration to LUCI
 		Owners:    []*gophers.Person{gh("bsiegert")},
 	},
 	"host-openbsd-386-72": {
