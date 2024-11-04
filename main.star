@@ -493,7 +493,6 @@ def known_issue(issue_number, skip_x_repos = False):
     )
 
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "netbsd-arm": known_issue(issue_number = 63698),
     "plan9-386": known_issue(issue_number = 63599),
     "plan9-amd64": known_issue(issue_number = 63600),
     "plan9-arm": known_issue(issue_number = 63601),
