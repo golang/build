@@ -88,7 +88,8 @@ var (
 //	26: clean up path validation and normalization
 //	27: export GOPLSCACHE=$workdir/goplscache
 //	28: add support for gomote server
-const buildletVersion = 28
+//	29: fall back to /bin/sh when SHELL is unset
+const buildletVersion = 29
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -2039,6 +2040,9 @@ func shell() string {
 	case "windows":
 		return `C:\Windows\System32\cmd.exe`
 	default:
-		return os.Getenv("SHELL")
+		if shell := os.Getenv("SHELL"); shell != "" {
+			return shell
+		}
+		return "/bin/sh"
 	}
 }
