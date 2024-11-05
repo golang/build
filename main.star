@@ -422,7 +422,7 @@ BUILDER_TYPES = [
     "linux-amd64-goamd64v3",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
-    "linux-amd64-longtest-swissmap",
+    "linux-amd64-longtest-noswissmap",
     "linux-amd64-longtest-aliastypeparams",
     "linux-amd64-misccompile",
     "linux-amd64-msan-clang15",
@@ -1079,11 +1079,11 @@ RUN_MODS = dict(
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
     ),
 
-    # Build and test with the swissmap GOEXPERIMENT.
+    # Build and test with the swissmap GOEXPERIMENT disabled.
     #
-    # This can be deleted when GOEXPERIMENT=swissmap is enabled by default.
-    swissmap = make_run_mod(
-        add_env = {"GOEXPERIMENT": "swissmap"},
+    # This can be deleted when GOEXPERIMENT=swissmap is removed.
+    noswissmap = make_run_mod(
+        add_env = {"GOEXPERIMENT": "noswissmap"},
         enabled = define_for_go_starting_at("go1.24", presubmit = False),
     ),
 
