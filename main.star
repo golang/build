@@ -1511,6 +1511,10 @@ def define_builder(env, project, go_branch_short, builder_type):
     if builder_type == "linux-arm":
         base_props["env"]["GOARM"] = "6"
 
+    # TODO(go.dev/issue/70213): Throttle back the load average.
+    if builder_type == "openbsd-ppc64":
+        base_props["env"]["GOMAXPROCS"] = "2"
+
     # Construct the basic dimensions for the build/test running part of the build.
     #
     # Note that these should generally live in the worker pools.
