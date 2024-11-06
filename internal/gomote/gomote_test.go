@@ -316,7 +316,29 @@ func TestListDirectory(t *testing.T) {
 		GomoteId:  gomoteID,
 		Directory: "/foo",
 	}); err != nil {
-		t.Fatalf("client.RemoveFiles(ctx, req) = response, %s; want no error", err)
+		t.Fatalf("client.ListDirectory(ctx, req) = response, %s; want no error", err)
+	}
+}
+
+func TestListDirectoryStreaming(t *testing.T) {
+	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
+	client := setupGomoteTest(t, context.Background())
+	gomoteID := mustCreateInstance(t, client, fakeIAP())
+	stream, err := client.ListDirectoryStreaming(ctx, &protos.ListDirectoryRequest{
+		GomoteId:  gomoteID,
+		Directory: "/foo",
+	})
+	if err != nil {
+		t.Fatalf("client.ListDirectoryStreaming(ctx, req) = response, %s; want no error", err)
+	}
+	for {
+		_, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("stream.Recv() = response, %s; want no error", err)
+		}
 	}
 }
 

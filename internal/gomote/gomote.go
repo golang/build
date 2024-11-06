@@ -31,6 +31,7 @@ import (
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -222,6 +223,36 @@ func (s *Server) InstanceAlive(ctx context.Context, req *protos.InstanceAliveReq
 
 // ListDirectory lists the contents of the directory on a gomote instance.
 func (s *Server) ListDirectory(ctx context.Context, req *protos.ListDirectoryRequest) (*protos.ListDirectoryResponse, error) {
+	entries, err := s.listDirectory(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &protos.ListDirectoryResponse{
+		Entries: entries,
+	}, nil
+}
+
+// ListDirectoryStreaming lists the contents of the directory on a gomote instance.
+func (s *Server) ListDirectoryStreaming(req *protos.ListDirectoryRequest, stream grpc.ServerStreamingServer[protos.ListDirectoryResponse]) error {
+	entries, err := s.listDirectory(stream.Context(), req)
+	if err != nil {
+		return err
+	}
+	// This could use slices.Chunk, once our go.mod is on go1.23 or higher.
+	const chunkSize = 100
+	for i := 0; i < len(entries); i += chunkSize {
+		end := min(chunkSize, len(entries[i:]))
+		if err := stream.Send(&protos.ListDirectoryResponse{
+			Entries: entries[i : i+end],
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// listDirectory lists the contents of the directory on a gomote instance.
+func (s *Server) listDirectory(ctx context.Context, req *protos.ListDirectoryRequest) ([]string, error) {
 	creds, err := access.IAPFromContext(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
@@ -245,9 +276,7 @@ func (s *Server) ListDirectory(ctx context.Context, req *protos.ListDirectoryReq
 	}); err != nil {
 		return nil, status.Errorf(codes.Unimplemented, "method ListDirectory not implemented")
 	}
-	return &protos.ListDirectoryResponse{
-		Entries: entries,
-	}, nil
+	return entries, nil
 }
 
 // ListInstances will list the gomote instances owned by the requester. The requester must be authenticated.
