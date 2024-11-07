@@ -35,8 +35,8 @@
 // definition rather than producing an output. Unlike Actions and Tasks, they
 // execute multiple times and must produce exactly the same workflow
 // modifications each time. As such, they should be pure functions of their
-// inputs. Producing different modifications, or running multiple expansions
-// concurrently, is an error that will corrupt the workflow's state.
+// inputs. Producing different modifications is an error that will corrupt
+// the workflow's state. A workflow will run at most one expansion at a time.
 //
 // Once a Definition is complete, call Start to set its parameters and
 // instantiate it into a Workflow. Call Run to execute the workflow until
@@ -486,8 +486,7 @@ func (d *dependency) ready(w *Workflow) bool {
 // Unlike normal tasks, expansions may run multiple times and must produce
 // the exact same changes to the definition each time.
 //
-// Running more than one expansion concurrently is an error and will corrupt
-// the workflow.
+// A workflow will run at most one expansion at a time.
 func Expand0[O1 any](d *Definition, name string, f func(*Definition) (Value[O1], error), opts ...TaskOption) Value[O1] {
 	return addExpansion[O1](d, name, f, nil, opts)
 }
@@ -807,6 +806,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 	doneOnce := ctx.Done()
 	for {
 		running := 0
+		runningExpansion := false // Whether an expansion is running, and hasn't completed yet.
 		allDone := true
 		for _, task := range w.tasks {
 			if !task.created {
@@ -834,11 +834,16 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				if !ready {
 					continue
 				}
+				if task.def.isExpansion && runningExpansion {
+					// Don't start a new expansion until the currently running one completes.
+					continue
+				}
 				task.started = true
 				running++
 				listener.TaskStateChanged(w.ID, task.def.name, task.toExported())
 				taskCopy := *task
 				if task.def.isExpansion {
+					runningExpansion = true
 					defCopy := w.def.shallowClone()
 					go func() { stateChan <- runExpansion(defCopy, taskCopy, args) }()
 				} else {
@@ -861,6 +866,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 		case state := <-stateChan:
 			if state.def.isExpansion && state.finished && state.err == nil {
 				state.err = w.expand(state.expanded)
+				runningExpansion = false
 			}
 			listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
 			w.tasks[state.def] = &state

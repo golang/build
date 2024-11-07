@@ -332,6 +332,74 @@ func TestManualRetry(t *testing.T) {
 	}
 }
 
+// Test that manual retry works on tasks that come from different expansions.
+//
+// This is similar to how the Go minor release workflow plans builders for
+// both releases. It previously failed due to expansions racing with with other,
+// leading to "unknown task" errors when retrying. See go.dev/issue/70249.
+func TestManualRetryMultipleExpansions(t *testing.T) {
+	// Create two sub-workflows, each one with an expansion that adds one work task.
+	// The work tasks fail on the first try, and require being successfully restarted
+	// for the workflow to complete.
+	var counters, retried [2]int
+	wd := wf.New(wf.ACL{})
+	sub1 := wd.Sub("sub1")
+	sub2 := wd.Sub("sub2")
+	for i, wd := range []*wf.Definition{sub1, sub2} {
+		out := wf.Expand0(wd, fmt.Sprintf("expand %d", i+1), func(wd *wf.Definition) (wf.Value[string], error) {
+			return wf.Task0(wd, fmt.Sprintf("work %d", i+1), func(ctx *wf.TaskContext) (string, error) {
+				ctx.DisableRetries()
+				counters[i]++
+				if counters[i] == 1 {
+					return "", fmt.Errorf("first try fail")
+				}
+				return "", nil
+			}), nil
+		})
+		wf.Output(wd, "out", out)
+	}
+
+	w := startWorkflow(t, wd, nil)
+	listener := &errorListener{
+		taskName: "work 1",
+		callback: func(string) {
+			go func() {
+				retried[0]++
+				err := w.RetryTask(context.Background(), "work 1")
+				if err != nil {
+					t.Errorf(`RetryTask("work 1") failed: %v`, err)
+				}
+			}()
+		},
+		Listener: &errorListener{
+			taskName: "work 2",
+			callback: func(string) {
+				go func() {
+					retried[1]++
+					err := w.RetryTask(context.Background(), "work 2")
+					if err != nil {
+						t.Errorf(`RetryTask("work 2") failed: %v`, err)
+					}
+				}()
+			},
+			Listener: &verboseListener{t},
+		},
+	}
+	runWorkflow(t, w, listener)
+	if counters[0] != 2 {
+		t.Errorf("sub1 task ran %v times, wanted 2", counters[0])
+	}
+	if retried[0] != 1 {
+		t.Errorf("sub1 task was retried %v times, wanted 1", retried[0])
+	}
+	if counters[1] != 2 {
+		t.Errorf("sub2 task ran %v times, wanted 2", counters[1])
+	}
+	if retried[1] != 1 {
+		t.Errorf("sub2 task was retried %v times, wanted 1", retried[1])
+	}
+}
+
 func TestAutomaticRetry(t *testing.T) {
 	counter := 0
 	needsRetry := func(ctx *wf.TaskContext) (string, error) {
