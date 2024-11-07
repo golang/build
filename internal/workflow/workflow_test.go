@@ -361,24 +361,24 @@ func TestManualRetryMultipleExpansions(t *testing.T) {
 
 	w := startWorkflow(t, wd, nil)
 	listener := &errorListener{
-		taskName: "work 1",
+		taskName: "sub1: work 1",
 		callback: func(string) {
 			go func() {
 				retried[0]++
-				err := w.RetryTask(context.Background(), "work 1")
+				err := w.RetryTask(context.Background(), "sub1: work 1")
 				if err != nil {
-					t.Errorf(`RetryTask("work 1") failed: %v`, err)
+					t.Errorf(`RetryTask("sub1: work 1") failed: %v`, err)
 				}
 			}()
 		},
 		Listener: &errorListener{
-			taskName: "work 2",
+			taskName: "sub2: work 2",
 			callback: func(string) {
 				go func() {
 					retried[1]++
-					err := w.RetryTask(context.Background(), "work 2")
+					err := w.RetryTask(context.Background(), "sub2: work 2")
 					if err != nil {
-						t.Errorf(`RetryTask("work 2") failed: %v`, err)
+						t.Errorf(`RetryTask("sub2: work 2") failed: %v`, err)
 					}
 				}()
 			},

@@ -422,6 +422,9 @@ func addAction(d *Definition, name string, f interface{}, inputs []metaValue, op
 func addExpansion[O1 any](d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *expansionResult[O1] {
 	td := addFunc(d, name, f, inputs, opts)
 	td.isExpansion = true
+	// Also record the workflow name prefix at the time the expansion is added.
+	// It'll be accessed later, when starting to run this expansion.
+	td.namePrefix = d.namePrefix
 	return &expansionResult[O1]{td}
 }
 
@@ -600,6 +603,7 @@ type Logger interface {
 type taskDefinition struct {
 	name        string
 	isExpansion bool
+	namePrefix  string // Workflow name prefix; applies only when isExpansion is true.
 	args        []metaValue
 	deps        []Dependency
 	f           interface{}
@@ -845,6 +849,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				if task.def.isExpansion {
 					runningExpansion = true
 					defCopy := w.def.shallowClone()
+					defCopy.namePrefix = task.def.namePrefix
 					go func() { stateChan <- runExpansion(defCopy, taskCopy, args) }()
 				} else {
 					go func() { stateChan <- runTask(ctx, w.ID, listener, taskCopy, args) }()
