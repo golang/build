@@ -450,6 +450,15 @@ BUILDER_TYPES = [
     "linux-arm64-clang15",
     "linux-arm64-longtest",
     "linux-arm64-race",
+    "linux-arm64_c4as16-perf_vs_gopls_0_11",
+    "linux-arm64_c4as16-perf_vs_parent",
+    "linux-arm64_c4as16-perf_vs_release",
+    "linux-arm64_c4as16-perf_vs_tip",
+    "linux-arm64_c4as16-perf_vs_oldest_stable",
+    "linux-arm64_c4ah72-perf_vs_parent",
+    "linux-arm64_c4ah72-perf_vs_release",
+    "linux-arm64_c4ah72-perf_vs_tip",
+    "linux-arm64_c4ah72-perf_vs_oldest_stable",
     "linux-loong64",
     "linux-mips",
     "linux-mips64",
@@ -1235,7 +1244,7 @@ def dimensions_of(host_type):
         if goos == "linux" and "debian" in suffix:
             # linux-amd64_debian11 -> Debian-11
             os = suffix.replace("debian", "Debian-")
-        elif goos == "linux" and goarch == "amd64" and suffix in ["c2s16", "c3h88"]:
+        elif goos == "linux" and suffix in ["c2s16", "c3h88", "c4as16", "c4ah72"]:
             # Performance test machines.
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
@@ -1269,7 +1278,12 @@ def dimensions_of(host_type):
             else:
                 machine_type = "n1-standard-16"
         elif goarch == "arm64":
-            machine_type = "t2a-standard-8"
+            if suffix == "c4as16":
+                machine_type = "c4a-standard-16"
+            elif suffix == "c4ah72":
+                machine_type = "c4a-highcpu-72"
+            else:
+                machine_type = "t2a-standard-8"
 
     # cipd_platform is almost "$GOHOSTOS-$GOHOSTARCH", with some deviations.
     if goos == "darwin":
