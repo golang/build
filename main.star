@@ -435,11 +435,13 @@ BUILDER_TYPES = [
     "linux-amd64-staticlockranking",
     "linux-amd64-typesalias",
     "linux-amd64-aliastypeparams",
+    "linux-amd64_c2s16-perf_pgo_vs_oldest_stable",
     "linux-amd64_c2s16-perf_vs_gopls_0_11",
     "linux-amd64_c2s16-perf_vs_parent",
     "linux-amd64_c2s16-perf_vs_release",
     "linux-amd64_c2s16-perf_vs_tip",
     "linux-amd64_c2s16-perf_vs_oldest_stable",
+    "linux-amd64_c3h88-perf_pgo_vs_oldest_stable",
     "linux-amd64_c3h88-perf_vs_parent",
     "linux-amd64_c3h88-perf_vs_release",
     "linux-amd64_c3h88-perf_vs_tip",
@@ -993,6 +995,20 @@ RUN_MODS = dict(
     noopt = make_run_mod(
         add_env = {"GO_GCFLAGS": "-N -l"},
         enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Run performance tests with PGO against the oldest stable Go release.
+    #
+    # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
+    # environment variables will apply, but others like compile_only, race, and longtest
+    # will have no effect.
+    #
+    # This should eventually be the default, because it produces a strict superset of data
+    # compared vs. the others performance run-mods. This is just to test and make sure it
+    # works.
+    perf_pgo_vs_oldest_stable = make_run_mod(
+        add_props = {"perf_mode": {"baseline": "refs/heads/" + GO_BRANCHES[SECOND_GO].branch, "pgo": True}},
+        enabled = define_for_optional_presubmit_only(["go"]),
     ),
 
     # Run performance tests against the gopls-release-branch.0.11 branch as a baseline. Only
@@ -1839,6 +1855,11 @@ def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit
         "mode": GOLANGBUILD_MODES["PERF"],
     })
     perf_dims = dict(base_dims)
+    timeout = 12 * time.hour
+    if "pgo" in perf_props["perf_mode"] and perf_props["perf_mode"]["pgo"] == True:
+        # Bump the timeout for PGO builders. By construction, they take 3x as long to run.
+        timeout = 36 * time.hour
+
     emit_builder(
         name = name,
         bucket = env.bucket,
@@ -1846,7 +1867,7 @@ def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit
         properties = perf_props,
         triggering_policy = triggering_policy(env, builder_type, concurrent_builds = 3),
         service_account = env.worker_sa,
-        execution_timeout = 12 * time.hour,
+        execution_timeout = timeout,
     )
 
 # triggering_policy defines the LUCI Scheduler triggering policy for postsubmit builders.
