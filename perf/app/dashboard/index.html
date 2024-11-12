@@ -31,6 +31,11 @@ license that can be found in the LICENSE file.
 			<li><a href="https://build.golang.org/">Build Dashboard</a></li>
 			<li><a href="/dashboard">Performance Dashboard</a></li>
 			<li><a href="https://farmer.golang.org/builders">Builders</a></li>
+			<span class="left-separator"></span>
+			<li><a class="alt-nav-button" href="?repository=tools&benchmark=all&branch=latest-release">x/tools Dashboard</a>
+			<li><a class="alt-nav-button" href="?benchmark=regressions&platform=linux/amd64">linux/amd64 Regressions</a>
+			<li><a class="alt-nav-button" href="?benchmark=regressions&platform=linux/arm64">linux/arm64 Regressions</a>
+			<li><a class="alt-nav-button" href="?repository=tools&benchmark=regressions&branch=latest-release">x/tools Regressions</a>
 		</ul>
 	</nav>
 </header>
@@ -45,10 +50,9 @@ license that can be found in the LICENSE file.
 				<div class="Dashboard-search-unit">
 					<input id="unit-input" type="text" name="unit" placeholder="Unit (optional)" />
 				</div>
-				<input type="submit" />
+				<input type="button" class="alt-nav-button" onclick="setBenchmarkInput('all')" value="All">
+				<input type="button" class="alt-nav-button" onclick="setBenchmarkInput('regressions')" value="Regressions first">
 			</li>
-			<li><a href="?benchmark=all">All benchmarks</a></li>
-			<li><a href="?benchmark=regressions">Regressions first</a></li>
 			<span class="left-separator"></span>
 			<li>
 				Repository:
@@ -143,6 +147,11 @@ const noDataHTML = `
 function removeLoadingMessage() {
 	let loading = document.getElementById("loading");
 	loading.parentNode.removeChild(loading);
+}
+
+function setBenchmarkInput(benchmark) {
+	let input = document.getElementById('benchmark-input');
+	input.value = benchmark;
 }
 
 function addCharts(benchmarks, repository, commits) {
@@ -488,51 +497,59 @@ fetch('./formfields.json')
 		prefillSearch(formFields);
 	});
 
+
 // Grab the repository so we can plumb it into UI elements.
 let repository = (new URLSearchParams(window.location.search)).get('repository');
 if (!repository) {
 	repository = "go";
 }
 
-// Fetch content.
-let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
-let unit = (new URLSearchParams(window.location.search)).get('unit');
-let dataURL = './data.json' + window.location.search; // Pass through all URL params.
-fetch(dataURL)
-	.then(response => {
-		if (!response.ok) {
-			failure(benchmark, response);
-			throw new Error("Data fetch failed");
-		}
-		return response.json();
-	})
-	.then(function(data) {
-		let benchmarks = data.Benchmarks;
-		let commits = data.Commits;
-
-		// Convert CommitDate and Date to a proper dates.
-		benchmarks.forEach(function(b) {
-			b.Values.forEach(function(v) {
-				v.CommitDate = new Date(v.CommitDate);
-			});
-		});
-		commits.forEach(function(c) {
-			c.Date = new Date(c.Date);
-		})
-
-		// Figure out the date range we care about.
-
-		// If we have an explicit unit, then there should be just one result.
-		if (unit) {
-			if (benchmarks.length !== 1) {
-				failure(benchmark, "got more that one benchmark when a unit was specified");
+// Display something slightly different for the landing page.
+let isLandingPage = window.location.search == '';
+if (isLandingPage) {
+	removeLoadingMessage();
+	// TODO(mknyszek): Add geomeans for all platforms.
+} else {
+	// Fetch content.
+	let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
+	let unit = (new URLSearchParams(window.location.search)).get('unit');
+	let dataURL = './data.json' + window.location.search; // Pass through all URL params.
+	fetch(dataURL)
+		.then(response => {
+			if (!response.ok) {
+				failure(benchmark, response);
 				throw new Error("Data fetch failed");
 			}
-			addTable(benchmarks[0], unit, repository, commits);
-		} else {
-			addCharts(benchmarks, repository, commits);
-		}
-	});
+			return response.json();
+		})
+		.then(function(data) {
+			let benchmarks = data.Benchmarks;
+			let commits = data.Commits;
+
+			// Convert CommitDate and Date to a proper dates.
+			benchmarks.forEach(function(b) {
+				b.Values.forEach(function(v) {
+					v.CommitDate = new Date(v.CommitDate);
+				});
+			});
+			commits.forEach(function(c) {
+				c.Date = new Date(c.Date);
+			})
+
+			// Figure out the date range we care about.
+
+			// If we have an explicit unit, then there should be just one result.
+			if (unit) {
+				if (benchmarks.length !== 1) {
+					failure(benchmark, "got more that one benchmark when a unit was specified");
+					throw new Error("Data fetch failed");
+				}
+				addTable(benchmarks[0], unit, repository, commits);
+			} else {
+				addCharts(benchmarks, repository, commits);
+			}
+		});
+}
 </script>
 
 </body>

@@ -83,6 +83,19 @@ nav .left-separator {
   padding-top: 10px;
   padding-bottom: 10px;
 }
+nav .alt-nav-button {
+  background: none;
+  border: 2px solid #375eab;
+  border-radius: 5px;
+  color: #375eab;
+  display: inline-block;
+  font-size: 16px;
+  margin: 0;
+  margin-right: 5px;
+  padding: 10px;
+  text-decoration: none;
+  cursor: pointer;
+}
 
 #dashboard {
   display: flex;
