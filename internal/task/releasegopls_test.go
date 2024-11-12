@@ -611,10 +611,6 @@ parent-branch: master
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			vscodego := NewFakeRepo(t, "vscode-go")
-			initial := vscodego.Commit(map[string]string{"extension/src/goToolsInformation.ts": "foo"})
-			vscodego.Branch("release-v0.44", initial)
-
 			tools := NewFakeRepo(t, "tools")
 			beforeHead := tools.Commit(map[string]string{
 				"gopls/go.mod":   "module golang.org/x/tools\n",
@@ -642,7 +638,7 @@ parent-branch: master
 				tools.Branch(goplsReleaseBranchName(tc.release), beforeHead)
 			}
 
-			gerrit := NewFakeGerrit(t, tools, vscodego)
+			gerrit := NewFakeGerrit(t, tools)
 
 			// fakeGo handles multiple arguments in gopls pre-release flow.
 			// - go get will write fake go.sum and go.mod to simulate pining the
@@ -651,8 +647,6 @@ parent-branch: master
 			// permission to it to simulate gopls installation.
 			// - go env will return the current dir so gopls will point to the fake
 			// script that is written by go install.
-			// - go run will write "bar" content to file in vscode-go project
-			// containing gopls versions.
 			// - go mod will exit without any error.
 			var fakeGo = fmt.Sprintf(`#!/bin/bash -exu
 
@@ -689,10 +683,6 @@ EOF
 	echo "."
 	;;
 "mod")
-	exit 0
-	;;
-"run")
-	echo -n "bar" > extension/src/goToolsInformation.ts
 	exit 0
 	;;
 *)
@@ -765,18 +755,6 @@ esac`, tc.wantVersion)
 					branch: goplsReleaseBranchName(tc.release),
 					path:   "gopls/go.mod",
 					want:   "test go mod",
-				},
-				{
-					repo:   "vscode-go",
-					branch: "master",
-					path:   "extension/src/goToolsInformation.ts",
-					want:   "bar",
-				},
-				{
-					repo:   "vscode-go",
-					branch: "release-v0.44",
-					path:   "extension/src/goToolsInformation.ts",
-					want:   "foo",
 				},
 			}
 			for _, check := range contentChecks {

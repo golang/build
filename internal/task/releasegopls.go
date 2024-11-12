@@ -71,9 +71,6 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
 	wf.Action4(wd, "mail announcement", r.mailPrereleaseAnnouncement, release, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
 
-	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, coordinators, issue, release, prerelease, wf.After(prereleaseVerified))
-	_ = wf.Task1(wd, "await gopls version update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmissions, vscodeGoChanges)
-
 	wf.Output(wd, "version", prereleaseVersion)
 
 	return wd
