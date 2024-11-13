@@ -925,7 +925,7 @@ RUN_MODS = dict(
     asan = make_run_mod(
         add_props = {"asan_mode": True},
         test_timeout_scale = 2,
-        enabled = define_for_postsubmit(["go"]),
+        enabled = define_for_go_starting_at("go1.24", presubmit = False),
     ),
 
     # Build and test with the boringcrypto GOEXPERIMENT.
@@ -981,7 +981,7 @@ RUN_MODS = dict(
     msan = make_run_mod(
         add_props = {"msan_mode": True},
         test_timeout_scale = 2,
-        enabled = define_for_postsubmit(["go"]),
+        enabled = define_for_go_starting_at("go1.24", presubmit = False),
     ),
 
     # Build and test with the newinliner GOEXPERIMENT.
