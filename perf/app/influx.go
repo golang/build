@@ -337,6 +337,7 @@ type comparisonConfig struct {
 	suffix     string
 	columnExpr string
 	filter     string
+	ignore     string
 }
 
 var (
@@ -344,6 +345,7 @@ var (
 		// Default: toolchain:baseline vs experiment without PGO
 		columnExpr: "toolchain@(baseline experiment)",
 		filter:     "-pgo:on", // "off" or unset (bent doesn't set pgo).
+		ignore:     "pgo",     // Ignore pgo entirely; bent doesn't set it, which messes up the geomean.
 	}
 	pgoOn = comparisonConfig{
 		// toolchain:baseline vs experiment with PGO
@@ -394,7 +396,11 @@ func benchCompare(rr io.Reader, name string, c comparisonConfig) (func(func(comp
 	tableBy := mustParse("table", ".config", true)
 	rowBy := mustParse("row", ".fullname", false)
 	colBy := mustParse("col", c.columnExpr, false)
-	mustParse("ignore", "go,tip,base,bentstamp,shortname,suite", false)
+	ignore := "go,tip,base,bentstamp,shortname,suite,pkg"
+	if c.ignore != "" {
+		ignore += "," + c.ignore
+	}
+	mustParse("ignore", ignore, false)
 	residue := parser.Residue()
 
 	// Check parse error.
@@ -489,8 +495,78 @@ func benchCompare(rr io.Reader, name string, c comparisonConfig) (func(func(comp
 					}
 				}
 			}
+			// Emit the geomean as a separate timeline.
+			//
+			// The "benchmark name" for this will look something like "geomean/go/gotip/vs_release/c2s16".
+			builder, ok := keys["builder"]
+			if !ok {
+				log.Printf("warning: not emitting summary, no builder value found")
+				continue
+			}
+			repo, mod, machineType, err := parseBuilder(builder)
+			if err != nil {
+				log.Printf("warning: not emitting summary, can't interpret builder: %v", err)
+				continue
+			}
+			if table.SummaryLabel != "geomean" {
+				log.Printf("warning: not emitting summary, summary is not a geomean")
+				continue
+			}
+			emitted := false
+			for _, col := range table.Cols {
+				sum, ok := table.Summary[col]
+				if !ok {
+					continue
+				}
+				if sum.HasRatio {
+					geomeanName := table.SummaryLabel + "/" + repo + "/" + mod + "/" + machineType
+					if !yield(comparison{geomeanName, table.Unit, keys, sum.Ratio, sum.Ratio, sum.Ratio}, nil) {
+						return
+					}
+					emitted = true
+					break
+				}
+			}
+			if !emitted {
+				log.Printf("warning: not emitting summary, failed to find ratio")
+			}
 		}
 	}, nil
+}
+
+func parseBuilder(builder string) (repo, mod, machineType string, err error) {
+	if strings.HasPrefix(builder, "x_") || strings.HasPrefix(builder, "z_") {
+		// Repository.
+		m := strings.SplitN(builder, "-", 2)
+		if len(m) != 2 {
+			return "", "", "", fmt.Errorf("unexpected builder name: %s", builder)
+		}
+		repo = m[0]
+		builder = m[1]
+	} else {
+		repo = "go"
+	}
+	components := strings.SplitN(builder, "-", 4)
+	// components[0] -> Go branch name, already handled elsewhere
+	// components[1] -> GOOS, already handled elsewhere
+	// components[2] -> GOARCH, mostly handled, but there's a machine specifier here after an _
+	// components[3] -> rest of the builder name; perf builders will have this start with -perf.
+	if len(components) != 4 {
+		return "", "", "", fmt.Errorf("unexpected builder name: %s", builder)
+	}
+
+	// Extract the machine type (platform specifier).
+	m := strings.SplitN(components[2], "_", 2)
+	if len(m) == 2 {
+		machineType = m[1]
+	}
+	// Extract the run mods suffix.
+	if rest, ok := strings.CutPrefix(components[3], "perf_"); ok {
+		mod = rest
+	} else {
+		return "", "", "", fmt.Errorf("unexpected builder name: missing -perf as first run mod: %s", builder)
+	}
+	return
 }
 
 func ratioSummary(baseline, experiment *benchmath.Sample, confidence float64, bootstrapN int) (lo, center, hi float64) {

@@ -12,6 +12,7 @@ function BandChart(data, {
 	height = 240, // outer height, in pixels
 	benchmark,
 	unit,
+	platform,
 	repository,
 	minViewDeltaPercent,
 	higherIsBetter,
@@ -108,6 +109,7 @@ function BandChart(data, {
 	// Set up the params for the link to the unit page.
 	let unitLinkParams = new URLSearchParams(window.location.search);
 	unitLinkParams.set("unit", unit);
+	unitLinkParams.set("platform", platform);
 	unitLinkParams.set("benchmark", benchmark);
 
 	// Title (unit).

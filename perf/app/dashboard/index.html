@@ -64,6 +64,7 @@ license that can be found in the LICENSE file.
 				<select id="branch-select" name="branch"></select>
 				Platform:
 				<select id="platform-select" name="platform">
+					<option>all</option>
 					<option>linux/amd64</option>
 					<option>linux/arm64</option>
 				</select>
@@ -154,27 +155,29 @@ function setBenchmarkInput(benchmark) {
 	input.value = benchmark;
 }
 
-function addCharts(benchmarks, repository, commits) {
+function addCharts(benchmarks, repository, goBranch, commits) {
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
 
 	let prevName = "";
+	let prevPlatform = "";
 	let grid = null;
 	let addedChart = false;
 	for (const b in benchmarks) {
 		const bench = benchmarks[b];
 
-		if (bench.Name != prevName) {
+		if (bench.Name != prevName || bench.Platform != prevPlatform) {
 			prevName = bench.Name;
+			prevPlatform = bench.Platform;
 
 			let section = document.createElement("grid");
 			section.classList.add("Dashboard-section");
 			dashboard.appendChild(section);
 
 			let link = document.createElement("a");
-			link.href = "?benchmark=" + bench.Name;
-			link.textContent = bench.Name;
+			link.href = "?benchmark=" + bench.Name + "&platform=" + bench.Platform + "&repository=" + repository + "&branch=" + goBranch;
+			link.textContent = bench.Name + " (" + bench.Platform + ")";
 
 			let title = document.createElement("h2");
 			title.classList.add("Dashboard-title");
@@ -205,11 +208,11 @@ function addCharts(benchmarks, repository, commits) {
 					diffText = "improvement";
 					isRegression = false;
 				}
-				p.innerHTML = `${regression}% ${diffText}, ${(r.Delta*100).toFixed(2)}%-point change at <a href="?benchmark=${bench.Name}&unit=${bench.Unit}#${commitToId(rd.CommitHash)}">${shortCommit}</a>.`;
+				p.innerHTML = `${regression}% ${diffText}, ${(r.Delta*100).toFixed(2)}%-point change at <a href="?benchmark=${bench.Name}&unit=${bench.Unit}&platform=${bench.Platform}#${commitToId(rd.CommitHash)}">${shortCommit}</a>.`;
 
 				// Add a link to file a bug.
 				if (isRegression) {
-					const title = `affected/package: ${regression}% regression in ${bench.Name} ${bench.Unit} at ${shortCommit}`;
+					const title = `affected/package: ${regression}% regression in ${bench.Name} ${bench.Unit} on ${bench.Platform} at ${shortCommit}`;
 					const body = `Discovered a regression in ${bench.Unit} of ${regression}% for benchmark ${bench.Name} at ${shortCommit}.\n\n<ADD MORE DETAILS>.`
 					let query = `?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=Performance`;
 					p.innerHTML += ` <a href="https://github.com/golang/go/issues/new${query}">File an issue</a>.`;
@@ -225,6 +228,7 @@ function addCharts(benchmarks, repository, commits) {
 		item.appendChild(BandChart(bench.Values, {
 			benchmark: bench.Name,
 			unit: bench.Unit,
+			platform: bench.Platform,
 			repository: repository,
 			minViewDeltaPercent: minViewDeltaPercent,
 			higherIsBetter: bench.HigherIsBetter,
@@ -249,7 +253,7 @@ function idToCommit(id) {
 	return null;
 }
 
-function addTable(bench, unit, repository, commits) {
+function addTable(bench, unit, platform, repository, goBranch, commits) {
 	let commitSelected = idToCommit(window.location.hash.slice(1));
 	let dashboard = document.getElementById("dashboard");
 
@@ -261,8 +265,8 @@ function addTable(bench, unit, repository, commits) {
 	dashboard.appendChild(section);
 
 	let link = document.createElement("a");
-	link.href = "?benchmark=" + bench.Name + "&unit=" + unit;
-	link.textContent = bench.Name + " (" + unit + ")";
+	link.href = "?benchmark=" + bench.Name + "&unit=" + unit + "&platform=" + platform + "&repository=" + repository + "&branch=" + goBranch;
+	link.textContent = bench.Name + " (" + unit + ", " + platform + ")";
 
 	let title = document.createElement("h2");
 	title.classList.add("Dashboard-title");
@@ -504,52 +508,47 @@ if (!repository) {
 	repository = "go";
 }
 
-// Display something slightly different for the landing page.
-let isLandingPage = window.location.search == '';
-if (isLandingPage) {
-	removeLoadingMessage();
-	// TODO(mknyszek): Add geomeans for all platforms.
-} else {
-	// Fetch content.
-	let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
-	let unit = (new URLSearchParams(window.location.search)).get('unit');
-	let dataURL = './data.json' + window.location.search; // Pass through all URL params.
-	fetch(dataURL)
-		.then(response => {
-			if (!response.ok) {
-				failure(benchmark, response);
+// Fetch content.
+let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
+let unit = (new URLSearchParams(window.location.search)).get('unit');
+let platform = (new URLSearchParams(window.location.search)).get('platform');
+let goBranch = (new URLSearchParams(window.location.search)).get('branch');
+let dataURL = './data.json' + window.location.search; // Pass through all URL params.
+fetch(dataURL)
+	.then(response => {
+		if (!response.ok) {
+			failure(benchmark, response);
+			throw new Error("Data fetch failed");
+		}
+		return response.json();
+	})
+	.then(function(data) {
+		let benchmarks = data.Benchmarks;
+		let commits = data.Commits;
+
+		// Convert CommitDate and Date to a proper dates.
+		benchmarks.forEach(function(b) {
+			b.Values.forEach(function(v) {
+				v.CommitDate = new Date(v.CommitDate);
+			});
+		});
+		commits.forEach(function(c) {
+			c.Date = new Date(c.Date);
+		})
+
+		// Figure out the date range we care about.
+
+		// If we have an explicit unit, then there should be just one result.
+		if (unit && platform && platform != "all") {
+			if (benchmarks.length !== 1) {
+				failure(benchmark, "got more that one benchmark when a unit was specified");
 				throw new Error("Data fetch failed");
 			}
-			return response.json();
-		})
-		.then(function(data) {
-			let benchmarks = data.Benchmarks;
-			let commits = data.Commits;
-
-			// Convert CommitDate and Date to a proper dates.
-			benchmarks.forEach(function(b) {
-				b.Values.forEach(function(v) {
-					v.CommitDate = new Date(v.CommitDate);
-				});
-			});
-			commits.forEach(function(c) {
-				c.Date = new Date(c.Date);
-			})
-
-			// Figure out the date range we care about.
-
-			// If we have an explicit unit, then there should be just one result.
-			if (unit) {
-				if (benchmarks.length !== 1) {
-					failure(benchmark, "got more that one benchmark when a unit was specified");
-					throw new Error("Data fetch failed");
-				}
-				addTable(benchmarks[0], unit, repository, commits);
-			} else {
-				addCharts(benchmarks, repository, commits);
-			}
-		});
-}
+			addTable(benchmarks[0], unit, platform, repository, goBranch, commits);
+		} else {
+			addCharts(benchmarks, repository, goBranch, commits);
+		}
+	});
 </script>
 
 </body>
