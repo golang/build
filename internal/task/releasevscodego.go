@@ -155,7 +155,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	branch := wf.Task2(wd, "create release branch", r.createReleaseBranch, release, prerelease, wf.After(approved))
 
 	changeID := wf.Task2(wd, "update package.json in release branch", r.updatePackageJSONVersionInReleaseBranch, release, coordinators, wf.After(branch))
-	submitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
+	submitted := wf.Task1(wd, "await package.json CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 
 	// Read the head of the release branch after the required CL submission.
 	revision := wf.Task2(wd, "find the revision for the pre-release version", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), branch, wf.After(submitted))
@@ -755,7 +755,7 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 	reviewers := wf.Param(wd, reviewersParam)
 
 	packageChangeID := wf.Task1(wd, "update package.json in master branch", r.updatePackageJSONVersionInMasterBranch, reviewers)
-	packageSubmitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, packageChangeID)
+	packageSubmitted := wf.Task1(wd, "await package.json CL submission", clAwaiter{r.Gerrit}.awaitSubmission, packageChangeID)
 
 	release := wf.Task0(wd, "determine the insider version", r.determineInsiderVersion)
 	revision := wf.Task2(wd, "read the head of master branch", r.Gerrit.ReadBranchHead, wf.Const("vscode-go"), wf.Const("master"), wf.After(packageSubmitted))
@@ -769,7 +769,7 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
 
 	changelogChangeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLog, release, reviewers, wf.After(tagged))
-	changelogSubmitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changelogChangeID)
+	changelogSubmitted := wf.Task1(wd, "await CHANGELOG.md CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changelogChangeID)
 	// Publish only after the CHANGELOG.md update is merged to ensure the change
 	// log reflects the latest released version.
 	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(changelogSubmitted))
@@ -1066,7 +1066,7 @@ func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
 	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
 
 	changeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLog, release, reviewers, wf.After(build))
-	submitted := wf.Task1(wd, "await config CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
+	submitted := wf.Task1(wd, "await CHANGELOG.md CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 	// Publish only after the CHANGELOG.md update is merged to ensure the change
 	// log reflects the latest released version.
 	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(submitted))
