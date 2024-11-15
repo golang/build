@@ -502,7 +502,7 @@ func gardenIssues(repo *maintner.GitHubRepo) bool {
 		return false
 	}
 	switch repo.ID().Repo {
-	case "go", "vscode-go", "vulndb":
+	case "go", "vscode-go", "vulndb", "oscar":
 		return true
 	}
 	return false

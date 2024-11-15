@@ -441,7 +441,7 @@ func usesTracker(repo string) tracker {
 	case "go", "arch", "build", "crypto", "debug", "exp", "image", "mobile", "mod", "net", "perf", "pkgsite", "playground",
 		"proposal", "review", "sync", "sys", "telemetry", "term", "text", "time", "tools", "tour", "vuln", "website", "xerrors":
 		return mainTracker
-	case "vscode-go":
+	case "vscode-go", "oscar":
 		return ownTracker
 	default:
 		return unknownTracker
