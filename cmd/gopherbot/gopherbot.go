@@ -2158,7 +2158,7 @@ func labelChangeDisallowed(label, action string) bool {
 // assignReviewersOptOut lists contributors who have opted out from
 // having reviewers automatically added to their CLs.
 var assignReviewersOptOut = map[string]bool{
-	"mdempsky@google.com": true,
+	"matthew@go.dev": true,
 }
 
 // assignReviewersToCLs looks for CLs with no humans in the reviewer or CC fields
