@@ -788,7 +788,12 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None, test_timeout_scal
                 props["test_timeout_scale"] *= test_timeout_scale
 
         # Update any environment variables.
-        props["env"].update(add_env)
+        e = dict(add_env)
+        if "GODEBUG" in e and "GODEBUG" in props["env"]:
+            # The environment variable GODEBUG holds a comma-separated list
+            # of key=value pairs. Merge them. See go.dev/doc/godebug.
+            e["GODEBUG"] = props["env"]["GODEBUG"] + "," + e["GODEBUG"]
+        props["env"].update(e)
 
     if enabled == None:
         enabled = lambda port, project, go_branch_short: (True, True, True, [])
@@ -1507,6 +1512,12 @@ def define_builder(env, project, go_branch_short, builder_type):
             continue
         if d.test_deps:
             base_props["tools_extra_test"] = d.test_deps
+
+    # Buy more time to work on result_adapter/ResultDB support
+    # for https://tip.golang.org/doc/go1.24#go-command changes.
+    # TODO(go.dev/issue/70402): Remove once ready.
+    if go_branch_short == "gotip":
+        base_props["env"]["GODEBUG"] = "gotestjsonbuildtext=1"
 
     # We run GOARCH=wasm builds on linux/amd64 with GOOS/GOARCH set,
     # and the applicable Wasm runtime provided as a CIPD dependency.
