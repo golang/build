@@ -611,6 +611,15 @@ parent-branch: master
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
+			vscodego := NewFakeRepo(t, "vscode-go")
+			initial := vscodego.Commit(map[string]string{
+				// arbitrary initial contents, to be mutated by the fakeGo script below.
+				"extension/src/goToolsInformation.ts": "foo",
+				"extension/package.json":              "foo",
+				"docs/settings.md":                    "foo",
+			})
+			vscodego.Branch("release-v0.44", initial)
+
 			tools := NewFakeRepo(t, "tools")
 			beforeHead := tools.Commit(map[string]string{
 				"gopls/go.mod":   "module golang.org/x/tools\n",
@@ -638,7 +647,7 @@ parent-branch: master
 				tools.Branch(goplsReleaseBranchName(tc.release), beforeHead)
 			}
 
-			gerrit := NewFakeGerrit(t, tools)
+			gerrit := NewFakeGerrit(t, tools, vscodego)
 
 			// fakeGo handles multiple arguments in gopls pre-release flow.
 			// - go get will write fake go.sum and go.mod to simulate pining the
@@ -648,6 +657,8 @@ parent-branch: master
 			// - go env will return the current dir so gopls will point to the fake
 			// script that is written by go install.
 			// - go mod will exit without any error.
+			// - go run will write "bar" content to files in vscode-go project
+			// containing gopls settings.
 			var fakeGo = fmt.Sprintf(`#!/bin/bash -exu
 
 case "$1" in
@@ -683,6 +694,16 @@ EOF
 	echo "."
 	;;
 "mod")
+	exit 0
+	;;
+"run")
+	# Only update the files related to gopls settings if runs generate.go.
+	for param in "$@:2"; do
+			if [[ $param == *"generate.go"* ]]; then
+				echo -n "bar" > extension/package.json
+				echo -n "bar" > docs/settings.md
+			fi
+	done
 	exit 0
 	;;
 *)
@@ -755,6 +776,42 @@ esac`, tc.wantVersion)
 					branch: goplsReleaseBranchName(tc.release),
 					path:   "gopls/go.mod",
 					want:   "test go mod",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "master",
+					path:   "extension/src/goToolsInformation.ts",
+					want:   "foo",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "master",
+					path:   "extension/package.json",
+					want:   "bar",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "master",
+					path:   "docs/settings.md",
+					want:   "bar",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "release-v0.44",
+					path:   "extension/src/goToolsInformation.ts",
+					want:   "foo",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "release-v0.44",
+					path:   "extension/package.json",
+					want:   "foo",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "release-v0.44",
+					path:   "docs/settings.md",
+					want:   "foo",
 				},
 			}
 			for _, check := range contentChecks {
@@ -1040,7 +1097,7 @@ func TestGoplsReleaseFlow(t *testing.T) {
 					"master": false, "gopls-release-branch.0.16": false,
 				},
 				"vscode-go": {
-					"master": true, "release-v0.44": true,
+					"master": true, "release-v0.44": false,
 				},
 			},
 			wantGoplsGoMod: "foo",
@@ -1056,7 +1113,7 @@ func TestGoplsReleaseFlow(t *testing.T) {
 					"master": true, "gopls-release-branch.0.17": false,
 				},
 				"vscode-go": {
-					"master": true, "release-v0.44": true,
+					"master": true, "release-v0.44": false,
 				},
 			},
 			wantGoplsGoMod: "bar",
@@ -1072,7 +1129,7 @@ func TestGoplsReleaseFlow(t *testing.T) {
 					"master": false, "gopls-release-branch.0.17": false,
 				},
 				"vscode-go": {
-					"master": true, "release-v0.44": true,
+					"master": true, "release-v0.44": false,
 				},
 			},
 			wantGoplsGoMod: "bar",
@@ -1087,7 +1144,10 @@ func TestGoplsReleaseFlow(t *testing.T) {
 
 			vscodego := NewFakeRepo(t, "vscode-go")
 			initial := vscodego.Commit(map[string]string{
-				"extension/src/goToolsInformation.ts": "foo", // arbitrary initial contents, to be mutated by the fakeGo script below
+				// arbitrary initial contents, to be mutated by the fakeGo script below.
+				"extension/src/goToolsInformation.ts": "foo",
+				"extension/package.json":              "foo",
+				"docs/settings.md":                    "foo",
 			})
 			vscodego.Branch("release-v0.44", initial)
 
@@ -1128,9 +1188,11 @@ func TestGoplsReleaseFlow(t *testing.T) {
 			// - go get will write "bar" content to gopls/go.mod in x/tools master
 			// branch to simulate the dependency upgrade.
 			// - go mod will exit without error.
+			// - go install will exit without error. Simulate the gopls
+			// installation.
 			// - go run will write "bar" content to file in vscode-go project
-			// containing gopls versions.
-			var fakeGo = fmt.Sprintf(`#!/bin/bash -exu
+			// containing gopls versions and gopls settings.
+			var fakeGo = `#!/bin/bash -exu
 
 case "$1" in
 "get")
@@ -1140,11 +1202,16 @@ case "$1" in
 "mod")
 	exit 0
 	;;
+"install")
+	exit 0
+	;;
 "run")
-	# Only update the goToolsInformation.ts if runs generate.go.
+	# Only update the files related to gopls if runs generate.go.
 	for param in "$@:2"; do
 			if [[ $param == *"generate.go"* ]]; then
 				echo -n "bar" > extension/src/goToolsInformation.ts
+				echo -n "bar" > extension/package.json
+				echo -n "bar" > docs/settings.md
 			fi
 	done
 	exit 0
@@ -1154,7 +1221,7 @@ case "$1" in
 	exit 1
 	;;
 esac
-`)
+`
 
 			var gotSubject string // subject of the announcement email that was sent
 
@@ -1271,7 +1338,31 @@ esac
 					repo:   "vscode-go",
 					branch: "release-v0.44",
 					path:   "extension/src/goToolsInformation.ts",
+					want:   "foo",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "master",
+					path:   "extension/package.json",
 					want:   "bar",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "release-v0.44",
+					path:   "extension/package.json",
+					want:   "foo",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "master",
+					path:   "docs/settings.md",
+					want:   "bar",
+				},
+				{
+					repo:   "vscode-go",
+					branch: "release-v0.44",
+					path:   "docs/settings.md",
+					want:   "foo",
 				},
 			}
 			for _, check := range contentChecks {

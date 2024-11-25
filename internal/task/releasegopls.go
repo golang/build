@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/cloudbuild/apiv1/v2/cloudbuildpb"
 	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
@@ -70,6 +71,9 @@ func (r *ReleaseGoplsTasks) NewPrereleaseDefinition() *wf.Definition {
 	prereleaseVersion := wf.Task3(wd, "tag pre-release", r.tagPrerelease, release, dependencyCommit, prerelease, wf.After(verified))
 	prereleaseVerified := wf.Action1(wd, "verify installing latest gopls using release branch pre-release version", r.verifyGoplsInstallation, prereleaseVersion)
 	wf.Action4(wd, "mail announcement", r.mailPrereleaseAnnouncement, release, prereleaseVersion, dependencyCommit, issue, wf.After(prereleaseVerified))
+
+	vscodeGoChange := wf.Task4(wd, "update gopls settings in vscode-go", r.updateVSCodeGoGoplsSetting, coordinators, issue, release, prerelease, wf.After(prereleaseVerified))
+	_ = wf.Task1(wd, "await gopls settings update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmission, vscodeGoChange)
 
 	wf.Output(wd, "version", prereleaseVersion)
 
@@ -647,8 +651,8 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	changeID := wf.Task3(wd, "updating x/tools dependency in master branch in gopls sub dir", r.updateDependencyIfMinor, coordinators, release, issue, wf.After(tagged))
 	_ = wf.Task1(wd, "await x/tools gopls dependency CL submission in gopls sub dir", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 
-	vscodeGoChanges := wf.Task4(wd, "update gopls version in vscode-go", r.updateVSCodeGoGoplsVersion, coordinators, issue, release, wf.Const(""), wf.After(tagged))
-	_ = wf.Task1(wd, "await gopls version update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmissions, vscodeGoChanges)
+	vscodeGoChange := wf.Task4(wd, "update gopls settings in vscode-go", r.updateVSCodeGoGoplsSetting, coordinators, issue, release, wf.Const(""), wf.After(tagged))
+	_ = wf.Task1(wd, "await gopls settings update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmission, vscodeGoChange)
 
 	return wd
 }
@@ -674,65 +678,148 @@ func (r *ReleaseGoplsTasks) latestPrerelease(ctx *wf.TaskContext, release releas
 	return prerelease, nil
 }
 
-// updateVSCodeGoGoplsVersion updates the gopls version in the vscode-go project.
-// For releases (input param prerelease is empty), it updates both the master
-// and release branches.
-// For pre-releases (input param prerelease is not empty), it updates only the
+// updateVSCodeGoGoplsSetting updates the gopls setting in the vscode-go project
 // master branch.
-func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsVersion(ctx *wf.TaskContext, reviewers []string, issue int64, release releaseVersion, prerelease string) ([]string, error) {
+func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsSetting(ctx *wf.TaskContext, reviewers []string, issue int64, release releaseVersion, prerelease string) (string, error) {
 	version := release.String()
 	if prerelease != "" {
 		version = version + "-" + prerelease
 	}
-	branches := []string{"master"}
-	if prerelease == "" {
-		releaseBranch, err := vscodeGoActiveReleaseBranch(ctx, r.Gerrit)
-		if err != nil {
-			return nil, err
-		}
-		branches = append(branches, releaseBranch)
+
+	tags, err := r.Gerrit.ListTags(ctx, "tools")
+	if err != nil {
+		return "", err
 	}
 
-	var cls []string
-	for _, branch := range branches {
-		clTitle := fmt.Sprintf(`extension/src/goToolsInformation: update gopls version %s`, version)
-		if branch != "master" {
-			clTitle = "[" + branch + "] " + clTitle
+	var versions []string
+	for _, tag := range tags {
+		if v, ok := strings.CutPrefix(tag, "gopls/"); ok {
+			versions = append(versions, v)
 		}
-		openCL, err := openCL(ctx, r.Gerrit, "vscode-go", branch, clTitle)
-		if err != nil {
-			return nil, fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
-		}
-		if openCL != "" {
-			ctx.Printf("not creating CL: found existing CL %s", openCL)
-			cls = append(cls, openCL)
-			continue
-		}
-		const script = `go run -C extension tools/generate.go -tools`
-		changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, "vscode-go", branch, script, []string{"extension/src/goToolsInformation.ts"})
-		if err != nil {
-			return nil, err
-		}
-
-		// Skip CL creation as nothing changed.
-		if len(changedFiles) == 0 {
-			continue
-		}
-
-		changeInput := gerrit.ChangeInput{
-			Project: "vscode-go",
-			Branch:  branch,
-			Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the gopls version.\n\nFor golang/go#%v", clTitle, issue),
-		}
-
-		cl, err := r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changedFiles)
-		if err != nil {
-			return nil, err
-		}
-		ctx.Printf("created auto-submit change %s under branch %q in vscode-go.", cl, branch)
-		cls = append(cls, cl)
 	}
-	return cls, nil
+
+	// Only updating vscode-go repo if the current gopls is the newest. This
+	// check is to make sure the settings in vscode-go does not get roll back
+	// from higher version to lower version due to a lower version gopls
+	// explicit releases (for security reasons).
+	// E.g. when releasing v0.16.5, skip update if v0.17.0 already exists.
+	latest, latestPre := latestVersion(versions)
+	if latest.Major > release.Major ||
+		(latest.Major == release.Major && latest.Minor > release.Minor) ||
+		(latest.Major == release.Major && latest.Minor == release.Minor && latest.Patch > release.Patch) {
+		latestString := latest.String()
+		if latestPre != "" {
+			latestString += "-" + latestPre
+		}
+		ctx.Printf("the newest release %s is higher than the current release %s, skip updating vscode-go", latestPre, version)
+		return "", nil
+	}
+
+	// TODO(hxjiang): also update the change log if not already.
+	// Example: https://go-review.git.corp.google.com/c/vscode-go/+/627276
+	clTitle := fmt.Sprintf(`extension: update gopls %s settings`, version)
+	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", "master", clTitle)
+	if err != nil {
+		return "", fmt.Errorf("failed to find the open CL of title %q in master branch: %w", clTitle, err)
+	}
+	if openCL != "" {
+		ctx.Printf("not creating CL: found existing CL %s", openCL)
+		return openCL, nil
+	}
+
+	files := []string{
+		"extension/src/goToolsInformation.ts", // gopls version info
+		"extension/package.json",              // gopls setting info
+		"docs/settings.md",                    // gopls setting info
+	}
+	steps := func(resultURL string) []*cloudbuildpb.BuildStep {
+		updateScript := cloudBuildClientScriptPrefix
+		for _, file := range files {
+			updateScript += fmt.Sprintf("cp %s %s.before\n", file, file)
+		}
+
+		// `go run generate.go -tools` is environment-independent because it
+		// fetches tools from the module proxy.
+		// `go run generate.go -gopls` is environment-dependent:
+		// - It requires a `gopls` executable of the correct version.
+		// - It depends on the `jq` tool being available in the environment.
+		// TODO(hxjiang): Explore making `-gopls` environment-independent.
+		// This would allow anyone to run it without a specific local setup.
+		// Consider using a Docker container to achieve this without
+		// affecting the local `gopls`.
+		updateScript += `
+export PATH="$PATH:$(go env GOPATH)/bin"
+export PATH="$PATH:/workspace/tools"
+go install golang.org/x/tools/gopls@%s
+go run -C extension tools/generate.go -w -tools -gopls
+`
+		for _, file := range files {
+			updateScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
+			updateScript += fmt.Sprintf("gsutil cp %s.before %s/%s.before\n", file, resultURL, file)
+		}
+		return []*cloudbuildpb.BuildStep{
+			{
+				Name:   "bash",
+				Script: cloudBuildClientDownloadGoScript,
+			},
+			{
+				Name: "bash",
+				Script: `set -eux
+wget -O jq https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64
+chmod +x jq
+mkdir /workspace/tools
+mv jq /workspace/tools`,
+			},
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"clone", "https://go.googlesource.com/vscode-go", "vscode-go"},
+			},
+			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"checkout", "master"},
+				Dir:  "vscode-go",
+			},
+			{
+				Name:   "gcr.io/cloud-builders/gsutil",
+				Script: fmt.Sprintf(updateScript, version),
+				Dir:    "vscode-go",
+			},
+		}
+	}
+	build, err := r.CloudBuild.RunCustomSteps(ctx, steps, nil)
+	if err != nil {
+		return "", err
+	}
+
+	outputs, err := buildToOutputs(ctx, r.CloudBuild, build)
+	if err != nil {
+		return "", err
+	}
+
+	changed := map[string]string{}
+	for _, file := range files {
+		if outputs[file] != outputs[file+".before"] {
+			changed[file] = outputs[file]
+		}
+	}
+
+	// Skip CL creation as nothing changed.
+	if len(changed) == 0 {
+		return "", nil
+	}
+
+	changeInput := gerrit.ChangeInput{
+		Project: "vscode-go",
+		Branch:  "master",
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the gopls version and settings.\n\nFor golang/go#%v", clTitle, issue),
+	}
+
+	cl, err := r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changed)
+	if err != nil {
+		return "", err
+	}
+	ctx.Printf("created auto-submit change %s under master branch in vscode-go.", cl)
+	return cl, nil
 }
 
 // tagRelease locates the commit associated with the pre-release version and

@@ -701,6 +701,8 @@ case "$1" in
   if [[ $out == '-' ]]; then
     out=/dev/stdout
   fi
+  dir=$(dirname "$out")
+  mkdir -p "${dir#file://}"
   cp "${in#file://}" "${out#file://}"
   ;;
 "cat")
@@ -846,10 +848,10 @@ func (cb *FakeCloudBuild) RunCustomSteps(ctx context.Context, steps func(resultU
 	for i, step := range steps(resultURL) {
 		// Cloud Build support docker hub images like "bash". See more details:
 		// https://cloud.google.com/build/docs/interacting-with-dockerhub-images
-		// Currently, the Bash script is solely for downloading the Go binary.
-		// The RunScripts mock implementation provides the Go binary, allowing us
-		// to bypass the Bash script for now.
-		if step.Name == "bash" && step.Script == cloudBuildClientDownloadGoScript {
+		// Currently, the Bash script is solely for downloading binaries like go.
+		// The binaries are included when calling NewFakeCloudBuild() , allowing
+		// us to bypass the Bash script for now.
+		if step.Name == "bash" {
 			continue
 		}
 		tool, found := strings.CutPrefix(step.Name, "gcr.io/cloud-builders/")
