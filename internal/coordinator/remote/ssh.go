@@ -434,24 +434,10 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 			setWinsize(f, win.Width, win.Height)
 		}
 	}()
-	go func() {
-		ss.setupRemoteSSHEnvSwarm(rs.BuilderType, workDir, f)
-		io.Copy(f, s) // stdin
-	}()
-	io.Copy(s, f) // stdout
+	go io.Copy(f, s) // stdin
+	io.Copy(s, f)    // stdout
 	cmd.Process.Kill()
 	cmd.Wait()
-}
-
-// setupRemoteSSHEnvSwarm prints environmental details to the writer.
-// This makes the new SSH session easier to use for Go testing.
-func (ss *SSHServer) setupRemoteSSHEnvSwarm(builderType, workDir string, f io.Writer) {
-	if strings.Contains(builderType, "windows") {
-		// The working directory is set in the Windows pseudo console client used in the buildlet.
-		// go.dev/issue/65826
-		return
-	}
-	fmt.Fprintf(f, "cd %s\n", workDir)
 }
 
 // setupRemoteSSHEnv sets up environment variables on the remote system.
