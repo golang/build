@@ -154,6 +154,12 @@ func create(args []string) error {
 
 	fs.Parse(args)
 	if listBuilders {
+		if luciDisabled() {
+			for _, bt := range builders() {
+				fmt.Fprintln(os.Stdout, bt.Name)
+			}
+			return nil
+		}
 		swarmingBuilders, err := swarmingBuilders()
 		if err != nil {
 			return err
