@@ -287,7 +287,10 @@ func main() {
 			Branch:    "main",
 		},
 	}
-	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, commTasks); err != nil {
+	cycleTasks := task.ReleaseCycleTasks{
+		Gerrit: gerritClient,
+	}
+	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, cycleTasks, commTasks); err != nil {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)
 	}
 

@@ -233,30 +233,3 @@ func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, revi
 	}
 	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
 }
-
-// UnwaitWaitReleaseCLs changes all open Gerrit CLs with hashtag "wait-release" into "ex-wait-release".
-// This is done once at the opening of a release cycle, currently via a standalone workflow.
-func (t *VersionTasks) UnwaitWaitReleaseCLs(ctx *workflow.TaskContext) (result struct{}, _ error) {
-	waitingCLs, err := t.Gerrit.QueryChanges(ctx, "status:open hashtag:wait-release")
-	if err != nil {
-		return struct{}{}, err
-	}
-	ctx.Printf("Processing %d open Gerrit CL with wait-release hashtag.", len(waitingCLs))
-	for _, cl := range waitingCLs {
-		const dryRun = false
-		if dryRun {
-			ctx.Printf("[dry run] Would've unwaited CL %d (%.32s…).", cl.ChangeNumber, cl.Subject)
-			continue
-		}
-		err := t.Gerrit.SetHashtags(ctx, cl.ID, gerrit.HashtagsInput{
-			Remove: []string{"wait-release"},
-			Add:    []string{"ex-wait-release"},
-		})
-		if err != nil {
-			return struct{}{}, err
-		}
-		ctx.Printf("Unwaited CL %d (%.32s…).", cl.ChangeNumber, cl.Subject)
-		time.Sleep(3 * time.Second) // Take a moment between updating CLs to avoid a high rate of modify operations.
-	}
-	return struct{}{}, nil
-}

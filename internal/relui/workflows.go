@@ -255,7 +255,7 @@ func ApproveActionDep(p db.PGDBTX) func(*wf.TaskContext) error {
 }
 
 // RegisterReleaseWorkflows registers workflows for issuing Go releases.
-func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
+func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, cycle task.ReleaseCycleTasks, comm task.CommunicationTasks) error {
 	// Register prod release workflows.
 	if err := registerProdReleaseWorkflows(ctx, h, build, milestone, version, comm); err != nil {
 		return err
@@ -292,7 +292,14 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		h.RegisterDefinition("pre-announce next minor release for Go "+strings.Join(names, " and "), wd)
 	}
 
-	// Register workflows for miscellaneous tasks that happen as part of the Go release cycle.
+	// Register workflows for miscellaneous tasks that happen as part of the Go release cycle (go.dev/s/release).
+	{
+		// Register an "apply wait-release to CLs" workflow.
+		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
+		waited := wf.Task0(wd, "Apply wait-release to CLs", cycle.ApplyWaitReleaseCLs)
+		wf.Output(wd, "waited", waited)
+		h.RegisterDefinition("apply wait-release to CLs", wd)
+	}
 	{
 		// Register a "ping early-in-cycle issues" workflow.
 		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
@@ -315,7 +322,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 	{
 		// Register an "unwait wait-release CLs" workflow.
 		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
-		unwaited := wf.Task0(wd, "Unwait wait-release CLs", version.UnwaitWaitReleaseCLs)
+		unwaited := wf.Task0(wd, "Unwait wait-release CLs", cycle.UnwaitWaitReleaseCLs)
 		wf.Output(wd, "unwaited", unwaited)
 		h.RegisterDefinition("unwait wait-release CLs", wd)
 	}
