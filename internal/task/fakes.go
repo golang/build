@@ -1146,11 +1146,11 @@ func (*FakeGitHub) CreateRelease(ctx context.Context, owner, repo string, releas
 	return nil, nil
 }
 
-func (*FakeGitHub) EditIssue(_ context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+func (*FakeGitHub) EditIssue(_ context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
 	return nil, nil, nil
 }
 
-func (f *FakeGitHub) CreateIssue(ctx context.Context, owner string, repo string, request *github.IssueRequest) (*github.Issue, *github.Response, error) {
+func (f *FakeGitHub) CreateIssue(ctx context.Context, owner, repo string, request *github.IssueRequest) (*github.Issue, *github.Response, error) {
 	if f.Issues == nil {
 		f.Issues = map[int]*github.Issue{}
 	}
@@ -1171,7 +1171,7 @@ func (f *FakeGitHub) CreateIssue(ctx context.Context, owner string, repo string,
 	return f.GetIssue(ctx, owner, repo, issueNumber)
 }
 
-func (f *FakeGitHub) GetIssue(_ context.Context, owner string, repo string, number int) (*github.Issue, *github.Response, error) {
+func (f *FakeGitHub) GetIssue(_ context.Context, owner, repo string, number int) (*github.Issue, *github.Response, error) {
 	if issue, ok := f.Issues[number]; !ok {
 		return nil, nil, fmt.Errorf("the issue %v does not exist", number)
 	} else {
@@ -1179,7 +1179,7 @@ func (f *FakeGitHub) GetIssue(_ context.Context, owner string, repo string, numb
 	}
 }
 
-func (*FakeGitHub) EditMilestone(_ context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
+func (*FakeGitHub) EditMilestone(_ context.Context, owner, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
 	return nil, nil, nil
 }
 

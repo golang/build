@@ -183,7 +183,7 @@ type fakeIssuesService struct {
 	labels map[int][]string
 }
 
-func (f *fakeIssuesService) ListLabelsByIssue(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error) {
+func (f *fakeIssuesService) ListLabelsByIssue(ctx context.Context, owner, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error) {
 	var labels []*github.Label
 	if ls, ok := f.labels[number]; ok {
 		for _, l := range ls {
@@ -194,7 +194,7 @@ func (f *fakeIssuesService) ListLabelsByIssue(ctx context.Context, owner string,
 	return labels, nil, nil
 }
 
-func (f *fakeIssuesService) AddLabelsToIssue(ctx context.Context, owner string, repo string, number int, labels []string) ([]*github.Label, *github.Response, error) {
+func (f *fakeIssuesService) AddLabelsToIssue(ctx context.Context, owner, repo string, number int, labels []string) ([]*github.Label, *github.Response, error) {
 	if f.labels == nil {
 		f.labels = map[int][]string{number: labels}
 		return nil, nil, nil
@@ -219,7 +219,7 @@ func (f *fakeIssuesService) AddLabelsToIssue(ctx context.Context, owner string, 
 	return nil, nil, nil
 }
 
-func (f *fakeIssuesService) RemoveLabelForIssue(ctx context.Context, owner string, repo string, number int, label string) (*github.Response, error) {
+func (f *fakeIssuesService) RemoveLabelForIssue(ctx context.Context, owner, repo string, number int, label string) (*github.Response, error) {
 	if ls, ok := f.labels[number]; ok {
 		for i, l := range ls {
 			if l == label {
