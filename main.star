@@ -515,18 +515,20 @@ BUILDER_TYPES = [
     "windows-arm64",
 ]
 
-def known_issue(issue_number, skip_x_repos = False):
+def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
     return struct(
         issue_number = issue_number,
         skip_x_repos = skip_x_repos,  # Whether to skip defining builders for x/ repos.
+        hide_from_presubmit = hide_from_presubmit,
     )
 
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "plan9-amd64": known_issue(issue_number = 63600),
+    "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
 
     # The known issue for these builder types tracks the work of starting to add them.
     # Skip the builder definitions for x/ repos to reduce noise.
-    # Once the builder is added and starts working in the main repo, x/ repos can be unskipped.
+    # Once the builder is added and starts working in the main repo, x/ repos can be unskipped
+    # and it can be shown in the presubmit list.
     "aix-ppc64": known_issue(issue_number = 67299, skip_x_repos = True),
     "android-386": known_issue(issue_number = 61097, skip_x_repos = True),
     "android-amd64": known_issue(issue_number = 61097, skip_x_repos = True),
@@ -738,6 +740,13 @@ PT = struct(
     LIBRARY = "library",  # A user-facing library. Needs to be tested on a representative set of platforms.
     TOOL = "tool",  # A developer tool. Typically only run on mainstream platforms such as Linux, MacOS, and Windows.
     SPECIAL = "special",  # None of the above; something that needs a handcrafted set.
+)
+
+# PRESUBMIT is a three-state enum describing the possible configurations for presubmit.
+PRESUBMIT = struct(
+    DISABLED = "disabled for presubmit",
+    OPTIONAL = "optional for presubmit",
+    ENABLED = "enabled for presubmit",
 )
 
 # PROJECTS lists the go.googlesource.com/<project> projects we build and test for.
@@ -1941,11 +1950,17 @@ def display_for_builder_type(builder_type):
     category = "|".join(components[:2])
     return category, short_name  # Produces: "$GOOS|$GOARCH", $HOST_SPECIFIER(-$RUN_MOD)*
 
-# enabled returns three boolean values and a list or None. The first boolean value
-# indicates if this builder_type should exist at all for the given project
-# and branch, the second whether it should run in presubmit by default, and
-# the third if it should run in postsubmit. The final list is a list of cq.location_filters
-# if the builder should run in presubmit by default.
+# enabled returns three values and a list or None.
+#
+# The first value is a boolean which indicates if this builder_type should exist at all for the
+# given project and branch.
+#
+# The second is a PRESUBMIT enum value that indicates whether the builder_type should be disabled,
+# optional, or enabled for presubmit.
+#
+# The third value is a boolean which indicates if this builder_type should run in postsubmit.
+#
+# The final list is a list of cq.location_filters if the second value is PRESUBMIT.ENABLED.
 def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_issue_builder_types):
     pt = PROJECTS[project]
     os, arch, suffix, run_mods = split_builder_type(builder_type)
@@ -1953,17 +1968,17 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
 
     if builder_type in known_issue_builder_types and known_issue_builder_types[builder_type] \
         .skip_x_repos and project != "go":
-        return False, False, False, []
+        return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out old OS versions from new branches.
     if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22"]:
         # Go 1.22 is last to support macOS 10.15. See go.dev/doc/go1.22#darwin.
-        return False, False, False, []
+        return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out new ports on old release branches.
     if os == "openbsd" and arch == "riscv64" and go_branch_short in ["go1.22"]:
         # The openbsd/riscv64 port is new to Go 1.23.
-        return False, False, False, []
+        return False, PRESUBMIT.DISABLED, False, []
     if os == "freebsd" and arch == "amd64" and go_branch_short in ["go1.22", "go1.23"]:
         freebsd_version = suffix
         if freebsd_version == "":
@@ -1971,14 +1986,14 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         if freebsd_version == "14.1":
             # The 14.1 freebsd/amd64 LUCI builders need fixes that aren't available on old branches.
             # Just disable the builder on these branches.
-            return False, False, False, []
+            return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out new projects on old release branches.
     if project == "oscar" and go_branch_short in ["go1.22"]:
-        return False, False, False, []
+        return False, PRESUBMIT.DISABLED, False, []
     if project == "pkgsite" and go_branch_short in ["go1.22"]:
         # See CL 609142.
-        return False, False, False, []
+        return False, PRESUBMIT.DISABLED, False, []
 
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
@@ -2014,7 +2029,12 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         if prefilt:
             presubmit_filters.extend(prefilt)
 
-    return True, presubmit, postsubmit, presubmit_filters
+    # Hide from presubmit if required.
+    presubmit_state = PRESUBMIT.ENABLED if presubmit else PRESUBMIT.OPTIONAL
+    if builder_type in known_issue_builder_types and known_issue_builder_types[builder_type].hide_from_presubmit:
+        presubmit_state = PRESUBMIT.DISABLED
+
+    return True, presubmit_state, postsubmit, presubmit_filters
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
 #
@@ -2090,21 +2110,22 @@ def _define_go_ci():
                     continue
 
                 name, _ = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
-                luci.cq_tryjob_verifier(
-                    builder = name,
-                    cq_group = cq_group.name,
-                    includable_only = not presubmit,
-                    disable_reuse = True,
-                    location_filters = [
-                        cq.location_filter(
-                            gerrit_host_regexp = "go-review.googlesource.com",
-                            gerrit_project_regexp = "^%s$" % project,
-                            path_regexp = filter,
-                        )
-                        for filter in presubmit_filters
-                        if presubmit
-                    ],
-                )
+                if presubmit != PRESUBMIT.DISABLED:
+                    luci.cq_tryjob_verifier(
+                        builder = name,
+                        cq_group = cq_group.name,
+                        includable_only = presubmit == PRESUBMIT.OPTIONAL,
+                        disable_reuse = True,
+                        location_filters = [
+                            cq.location_filter(
+                                gerrit_host_regexp = "go-review.googlesource.com",
+                                gerrit_project_regexp = "^%s$" % project,
+                                path_regexp = filter,
+                            )
+                            for filter in presubmit_filters
+                            if presubmit == PRESUBMIT.ENABLED
+                        ],
+                    )
 
                 # For golang.org/x repos, include the ability to run presubmit
                 # against all supported releases in addition to testing with tip.
@@ -2351,14 +2372,15 @@ def _define_go_internal_ci():
                 # all possible completed builders that perform testing are required.
                 name, _ = define_builder(SECURITY_TRY_ENV, project_name, go_branch_short, builder_type)
                 _, _, _, run_mods = split_builder_type(builder_type)
-                luci.cq_tryjob_verifier(
-                    builder = name,
-                    cq_group = cq_group_name,
-                    disable_reuse = True,
-                    includable_only = any([r.startswith("perf") for r in run_mods]) or
-                                      (not presubmit and not postsubmit) or
-                                      builder_type in SECURITY_KNOWN_ISSUE_BUILDER_TYPES,
-                )
+                if presubmit != PRESUBMIT.DISABLED:
+                    luci.cq_tryjob_verifier(
+                        builder = name,
+                        cq_group = cq_group_name,
+                        disable_reuse = True,
+                        includable_only = any([r.startswith("perf") for r in run_mods]) or
+                                          (presubmit == PRESUBMIT.OPTIONAL and not postsubmit) or
+                                          builder_type in SECURITY_KNOWN_ISSUE_BUILDER_TYPES,
+                    )
 
 _define_go_ci()
 _define_go_internal_ci()
