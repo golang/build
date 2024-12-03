@@ -570,14 +570,19 @@ GO_BRANCHES = {
 # INTERNAL_GO_BRANCHES mirrors GO_BRANCHES, but defines the branches to build
 # and test against for the go-internal/go repository.
 INTERNAL_GO_BRANCHES = {
-    "gotip": struct(branch_regexp = MAIN_BRANCH_NAME),
+    # Testing of private release patches are initially based on the "public"
+    # branch, which tracks MAIN_BRANCH_NAME in the public repository, and
+    # branches which are cut immediately before the release in order to submit
+    # the patches. These branches take the form "public-release-{month}-{year}".
+    # See go/go-security-release-workflow for a discussion of this.
+    "gotip": struct(branch_regexps = ["public", "public-release-[a-z]+-\\d+"]),
     # The private-release-branches are per-point release, rather than
     # per-major version, since we create them specially for each point
     # release, and want to maintain that history. We use a regex like
     # "private-release-branch.go1.23.\\d+" to match all the point branches
     # so that we don't need to manually update the config each time we issue a point release.
-    LATEST_GO: struct(branch_regexp = "private-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+"),
-    SECOND_GO: struct(branch_regexp = "private-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+"),
+    LATEST_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+"]),
+    SECOND_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+"]),
 }
 
 # TOOLS_GO_BRANCHES are Go branches that aren't used for project-wide testing
@@ -2262,7 +2267,7 @@ def _define_go_internal_ci():
                 ],
                 watch = cq.refset(
                     repo = "https://go-internal.googlesource.com/%s" % project_name,
-                    refs = ["refs/heads/%s" % go_branch.branch_regexp],
+                    refs = ["refs/heads/%s" % branch for branch in go_branch.branch_regexps],
                 ),
                 allow_submit_with_open_deps = True,
                 trust_dry_runner_deps = True,
