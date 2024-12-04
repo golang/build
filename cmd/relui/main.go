@@ -268,11 +268,12 @@ func main() {
 		ApproveAction: relui.ApproveActionDep(dbPool),
 	}
 	githubHTTPClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: *githubToken}))
+	githubClient := &task.GitHubClient{
+		V3: github.NewClient(githubHTTPClient),
+		V4: githubv4.NewClient(githubHTTPClient),
+	}
 	milestoneTasks := &task.MilestoneTasks{
-		Client: &task.GitHubClient{
-			V3: github.NewClient(githubHTTPClient),
-			V4: githubv4.NewClient(githubHTTPClient),
-		},
+		Client:        githubClient,
 		RepoOwner:     "golang",
 		RepoName:      "go",
 		ApproveAction: relui.ApproveActionDep(dbPool),
@@ -289,6 +290,7 @@ func main() {
 	}
 	cycleTasks := task.ReleaseCycleTasks{
 		Gerrit: gerritClient,
+		GitHub: githubClient,
 	}
 	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, cycleTasks, commTasks); err != nil {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)
@@ -314,10 +316,7 @@ func main() {
 	dh.RegisterDefinition("Update x/crypto NSS root bundle", bundleTasks.NewDefinition())
 
 	releaseVSCodeGoTasks := task.ReleaseVSCodeGoTasks{
-		GitHub: &task.GitHubClient{
-			V3: github.NewClient(githubHTTPClient),
-			V4: githubv4.NewClient(githubHTTPClient),
-		},
+		GitHub:             githubClient,
 		Gerrit:             gerritClient,
 		CloudBuild:         cloudBuildClient,
 		ApproveAction:      relui.ApproveActionDep(dbPool),
@@ -335,10 +334,7 @@ func main() {
 	dh.RegisterDefinition("Tag a new version of x/telemetry/config (if necessary)", tagTelemetryTasks.NewDefinition())
 
 	goplsTasks := task.ReleaseGoplsTasks{
-		Github: &task.GitHubClient{
-			V3: github.NewClient(githubHTTPClient),
-			V4: githubv4.NewClient(githubHTTPClient),
-		},
+		Github:             githubClient,
 		Gerrit:             gerritClient,
 		CloudBuild:         cloudBuildClient,
 		SendMail:           mailFunc,

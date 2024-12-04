@@ -10,6 +10,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -93,9 +94,15 @@ func mapToTgz(files map[string]string) ([]byte, error) {
 
 func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 	result := &FakeGerrit{
-		repos: map[string]*FakeRepo{},
+		repos:   make(map[string]*FakeRepo),
+		changes: make(map[string]string),
 	}
-	server := httptest.NewServer(http.HandlerFunc(result.serveHTTP))
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{repo}/+archive/{archive}", result.serveArchive) // Serve a revision tarball (.tar.gz) like Gerrit does.
+	mux.HandleFunc("GET /{repo}/+/{rev}/{path...}", result.serveGitiles)
+	mux.HandleFunc("GET /{repo}/info/refs", result.serveGitInfoRefsUploadPack) // Serve a git repository over HTTP like Gerrit does.
+	mux.HandleFunc("POST /{repo}/git-upload-pack", result.serveGitUploadPack)
+	server := httptest.NewServer(mux)
 	result.serverURL = server.URL
 	t.Cleanup(server.Close)
 
@@ -106,7 +113,8 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 }
 
 type FakeGerrit struct {
-	repos     map[string]*FakeRepo
+	repos     map[string]*FakeRepo // Repo name → repo.
+	changes   map[string]string    // Change ID → commit hash.
 	serverURL string
 }
 
@@ -194,6 +202,29 @@ func (repo *FakeRepo) ReadFile(commit, file string) ([]byte, error) {
 	return b, err
 }
 
+func (repo *FakeRepo) ReadDir(commit, dir string) ([]struct{ Name string }, error) {
+	b, err := repo.dir.RunCommand(context.Background(), "show", commit+":"+dir)
+	if err != nil && strings.Contains(err.Error(), " does not exist ") {
+		return nil, errors.Join(gerrit.ErrResourceNotExist, err)
+	} else if err != nil {
+		return nil, err
+	}
+	lines, ok := strings.CutPrefix(string(b), fmt.Sprintf("tree %s:%s\n\n", commit, dir))
+	if !ok {
+		return nil, fmt.Errorf("not a directory")
+	}
+	// TODO(dmitshur): After Go 1.24, consider simplifying strings.CutSuffix(…, "\n") + strings.Split(…, "\n") in favor of iterating over strings.Lines or so.
+	lines, ok = strings.CutSuffix(lines, "\n")
+	if !ok {
+		return nil, fmt.Errorf("internal error: FakeRepo.ReadDir: no trailing newline")
+	}
+	var des []struct{ Name string }
+	for _, name := range strings.Split(lines, "\n") {
+		des = append(des, struct{ Name string }{name})
+	}
+	return des, nil
+}
+
 var _ GerritClient = (*FakeGerrit)(nil)
 
 func (g *FakeGerrit) GitilesURL() string {
@@ -265,12 +296,20 @@ func (g *FakeGerrit) CreateBranch(ctx context.Context, project, branch string, i
 	return g.ReadBranchHead(ctx, project, branch)
 }
 
-func (g *FakeGerrit) ReadFile(ctx context.Context, project string, commit string, file string) ([]byte, error) {
+func (g *FakeGerrit) ReadFile(ctx context.Context, project, commit, file string) ([]byte, error) {
 	repo, err := g.repo(project)
 	if err != nil {
 		return nil, err
 	}
 	return repo.ReadFile(commit, file)
+}
+
+func (g *FakeGerrit) ReadDir(ctx context.Context, project, commit, dir string) ([]struct{ Name string }, error) {
+	repo, err := g.repo(project)
+	if err != nil {
+		return nil, err
+	}
+	return repo.ReadDir(commit, dir)
 }
 
 func (g *FakeGerrit) ListTags(ctx context.Context, project string) ([]string, error) {
@@ -303,11 +342,14 @@ func (g *FakeGerrit) CreateAutoSubmitChange(_ *wf.TaskContext, input gerrit.Chan
 		return "", err
 	}
 	commit := repo.CommitOnBranch(input.Branch, contents)
-	return "cl_" + commit, nil
+	changeID := fmt.Sprintf("%s~%d", repo.name, len(g.changes)+1)
+	g.changes[changeID] = commit
+	return changeID, nil
 }
 
 func (g *FakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
-	return strings.TrimPrefix(changeID, "cl_"), true, nil
+	commit, ok := g.changes[changeID]
+	return commit, ok, nil
 }
 
 func (g *FakeGerrit) Tag(ctx context.Context, project, tag, commit string) error {
@@ -349,66 +391,14 @@ func (g *FakeGerrit) GerritURL() string {
 	return g.serverURL
 }
 
-func (g *FakeGerrit) serveHTTP(w http.ResponseWriter, req *http.Request) {
-	switch url := req.URL.String(); {
-	// Serve a revision tarball (.tar.gz) like Gerrit does.
-	case strings.HasSuffix(url, ".tar.gz"):
-		parts := strings.Split(req.URL.Path, "/")
-		if len(parts) != 4 {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		repo, err := g.repo(parts[1])
-		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		rev := strings.TrimSuffix(parts[3], ".tar.gz")
-		archive, err := repo.dir.RunCommand(req.Context(), "archive", "--format=tgz", rev)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		http.ServeContent(w, req, parts[3], time.Now(), bytes.NewReader(archive))
-		return
-
-	// Serve a git repository over HTTP like Gerrit does.
-	case strings.HasSuffix(url, "/info/refs?service=git-upload-pack"):
-		parts := strings.Split(url[:len(url)-len("/info/refs?service=git-upload-pack")], "/")
-		if len(parts) != 2 {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		repo, err := g.repo(parts[1])
-		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		g.serveGitInfoRefsUploadPack(w, req, repo)
-		return
-	case strings.HasSuffix(url, "/git-upload-pack"):
-		parts := strings.Split(url[:len(url)-len("/git-upload-pack")], "/")
-		if len(parts) != 2 {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		repo, err := g.repo(parts[1])
-		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		g.serveGitUploadPack(w, req, repo)
-		return
-
-	default:
+func (g *FakeGerrit) serveGitInfoRefsUploadPack(w http.ResponseWriter, req *http.Request) {
+	repo, err := g.repo(req.PathValue("repo"))
+	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-}
-func (*FakeGerrit) serveGitInfoRefsUploadPack(w http.ResponseWriter, req *http.Request, repo *FakeRepo) {
-	if req.Method != http.MethodGet {
-		w.Header().Set("Allow", http.MethodGet)
-		http.Error(w, "method should be GET", http.StatusMethodNotAllowed)
+	if req.URL.RawQuery != "service=git-upload-pack" {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	cmd := exec.CommandContext(req.Context(), "git", "upload-pack", "--strict", "--advertise-refs", ".")
@@ -416,7 +406,7 @@ func (*FakeGerrit) serveGitInfoRefsUploadPack(w http.ResponseWriter, req *http.R
 	cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -425,10 +415,10 @@ func (*FakeGerrit) serveGitInfoRefsUploadPack(w http.ResponseWriter, req *http.R
 	io.WriteString(w, "001e# service=git-upload-pack\n0000")
 	io.Copy(w, &buf)
 }
-func (*FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request, repo *FakeRepo) {
-	if req.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		http.Error(w, "method should be POST", http.StatusMethodNotAllowed)
+func (g *FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request) {
+	repo, err := g.repo(req.PathValue("repo"))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	if req.Header.Get("Content-Type") != "application/x-git-upload-pack-request" {
@@ -441,13 +431,76 @@ func (*FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request, 
 	cmd.Stdin = req.Body
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
 	io.Copy(w, &buf)
+}
+
+func (g *FakeGerrit) serveArchive(w http.ResponseWriter, req *http.Request) {
+	repo, err := g.repo(req.PathValue("repo"))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	rev, ok := strings.CutSuffix(req.PathValue("archive"), ".tar.gz")
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	archive, err := repo.dir.RunCommand(req.Context(), "archive", "--format=tgz", rev)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	http.ServeContent(w, req, req.PathValue("archive"), time.Now(), bytes.NewReader(archive))
+}
+
+func (g *FakeGerrit) serveGitiles(w http.ResponseWriter, req *http.Request) {
+	repo, err := g.repo(req.PathValue("repo"))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	rev, path := req.PathValue("rev"), req.PathValue("path")
+	switch req.URL.Query().Get("format") {
+	case "JSON":
+		des, err := repo.ReadDir(rev, path)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, ")]}'\n") // Magic prefix.
+		var v struct {
+			ID      string `json:"id"`
+			Entries []struct {
+				Name string `json:"name"`
+			}
+		}
+		v.ID = rev
+		for _, de := range des {
+			v.Entries = append(v.Entries, struct {
+				Name string `json:"name"`
+			}(de))
+		}
+		json.NewEncoder(w).Encode(v)
+	case "TEXT":
+		b, err := repo.ReadFile(rev, path)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		enc := base64.NewEncoder(base64.StdEncoding, w)
+		enc.Write(b)
+		enc.Close()
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
 }
 
 func (*FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.ChangeInfo, error) {

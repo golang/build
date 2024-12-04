@@ -5,10 +5,16 @@
 package task
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"mime"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"golang.org/x/build/gerrit"
@@ -47,6 +53,9 @@ type GerritClient interface {
 	// ReadFile reads a file from project at the specified commit.
 	// If the file doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
 	ReadFile(ctx context.Context, project, commit, file string) ([]byte, error)
+	// ReadDir reads a directory from project at the specified commit.
+	// If the directory doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
+	ReadDir(ctx context.Context, project, commit, dir string) ([]struct{ Name string }, error)
 	// GetCommitsInRefs gets refs in which the specified commits were merged into.
 	GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error)
 	// QueryChanges gets changes which match the query.
@@ -229,6 +238,51 @@ func (c *RealGerritClient) ReadFile(ctx context.Context, project, commit, file s
 	}
 	defer body.Close()
 	return io.ReadAll(body)
+}
+
+func (c *RealGerritClient) ReadDir(ctx context.Context, project, commit, dir string) ([]struct{ Name string }, error) {
+	var resp struct {
+		Entries []struct{ Name string }
+	}
+	err := fetchGitilesJSON(ctx, c.Gitiles+"/"+url.PathEscape(project)+"/+/"+url.PathEscape(commit)+"/"+url.PathEscape(dir)+"?format=JSON", &resp)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Entries, nil
+}
+
+func fetchGitilesJSON(ctx context.Context, url string, v any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("get %q: %w", req.URL, gerrit.ErrResourceNotExist)
+	} else if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("did not get acceptable status code: %v body: %q", resp.Status, body)
+	}
+	if ct, want := resp.Header.Get("Content-Type"), "application/json"; ct != want {
+		log.Printf("fetchGitilesJSON: got response with non-'application/json' Content-Type header %q\n", ct)
+		if mediaType, _, err := mime.ParseMediaType(ct); err != nil {
+			return fmt.Errorf("bad Content-Type header %q: %v", ct, err)
+		} else if mediaType != "application/json" {
+			return fmt.Errorf("got media type %q, want %q", mediaType, "application/json")
+		}
+	}
+	const magicPrefix = ")]}'\n"
+	var buf = make([]byte, len(magicPrefix))
+	if _, err := io.ReadFull(resp.Body, buf); err != nil {
+		return err
+	} else if !bytes.Equal(buf, []byte(magicPrefix)) {
+		return fmt.Errorf("bad magic prefix")
+	}
+	return json.NewDecoder(resp.Body).Decode(v)
 }
 
 func (c *RealGerritClient) GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error) {

@@ -301,6 +301,18 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		h.RegisterDefinition("apply wait-release to CLs", wd)
 	}
 	{
+		// Register a "between freeze start and RC 1" workflow.
+		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
+		devVer := wf.Const(currentMajor + 1)
+		coordinators := wf.Param(wd, releaseCoordinators)
+		nextAPI := wf.Task2(wd, "Promote next API", cycle.PromoteNextAPI, devVer, coordinators)
+		auditIssue := wf.Task2(wd, "Open API audit issue", cycle.OpenAPIAuditIssue, devVer, nextAPI)
+		nextRelnote := wf.Task2(wd, "Merge release note fragments and add to x/website", cycle.MergeNextRelnoteAndAddToWebsite, devVer, coordinators)
+		wf.Action3(wd, "Remove release note fragments from main repo", cycle.RemoveNextRelnoteFromMainRepo, devVer, nextRelnote, coordinators)
+		wf.Output(wd, "API audit issue", auditIssue)
+		h.RegisterDefinition(fmt.Sprintf("between freeze start and RC 1 for Go 1.%d", currentMajor+1), wd)
+	}
+	{
 		// Register a "ping early-in-cycle issues" workflow.
 		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 		openTreeURL := wf.Param(wd, wf.ParamDef[string]{
