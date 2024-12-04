@@ -6,6 +6,7 @@ package task
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"path"
@@ -55,6 +56,18 @@ func (t ReleaseCycleTasks) PromoteNextAPI(ctx *wf.TaskContext, version int, revi
 	}
 	ctx.Printf("Using commit %q as the branch head.", commit)
 
+	// Confirm that "api/go1.{version}.txt" hasn't already been made.
+	promotedAPIFile := path.Join("api", fmt.Sprintf("go1.%d.txt", version))
+	_, err = t.Gerrit.ReadFile(ctx, "go", commit, promotedAPIFile)
+	if err == nil {
+		ctx.Printf("The %s file is already created, so refusing to run this task (and tasks that depend on it).", promotedAPIFile)
+		return PromotedAPI{}, fmt.Errorf("%s already exists; the scope of this task is to create that file only", promotedAPIFile)
+	} else if errors.Is(err, gerrit.ErrResourceNotExist) {
+		// OK. We'll be creating it below.
+	} else if err != nil {
+		return PromotedAPI{}, err
+	}
+
 	// Read api/next files at commit.
 	var files = make(map[string]string)
 	des, err := t.Gerrit.ReadDir(ctx, "go", commit, "api/next")
@@ -89,7 +102,7 @@ func (t ReleaseCycleTasks) PromoteNextAPI(ctx *wf.TaskContext, version int, revi
 	for _, api := range promoted.APIs {
 		fmt.Fprintln(&buf, api)
 	}
-	files[path.Join("api", fmt.Sprintf("go1.%d.txt", version))] = buf.String()
+	files[promotedAPIFile] = buf.String()
 
 	// Beyond this point we want retries to be done manually, not automatically.
 	ctx.DisableRetries()
@@ -238,6 +251,24 @@ func (t ReleaseCycleTasks) MergeNextRelnoteAndAddToWebsite(ctx *wf.TaskContext, 
 	}
 	ctx.Printf("Using commit %q as the branch head.", commit)
 
+	// Confirm that fragments haven't been merged into "_content/doc/go1.{version}.md" yet.
+	const (
+		// knownSubstringForPlaceholder is a substring used to identify when go1.N.md is still
+		// just a placeholder template like in CL 600179, without release note fragments merged in.
+		// We need some way of detecting whether the merge happened, and this will have to do.
+		knownSubstringForPlaceholder = "Eventually the release note fragments in doc/next will be merged"
+	)
+	mergedRelnoteFile := fmt.Sprintf("_content/doc/go1.%d.md", version)
+	b, err := t.Gerrit.ReadFile(ctx, "website", commit.String(), mergedRelnoteFile)
+	if err == nil && !bytes.Contains(b, []byte(knownSubstringForPlaceholder)) {
+		ctx.Printf("Release note fragments seem to be merged into %s in x/website, so refusing to run this task (and tasks that depend on it).", mergedRelnoteFile)
+		return NextRelnote{}, fmt.Errorf("%s already has merged fragments; the scope of this task is to merge fragments into that file only", mergedRelnoteFile)
+	} else if errors.Is(err, gerrit.ErrResourceNotExist) {
+		// OK. We'll be creating it below.
+	} else if err != nil {
+		return NextRelnote{}, err
+	}
+
 	// Collect all doc/next files to merge.
 	root, err := goRepo.CloneHash(commit)
 	if err != nil {
@@ -251,7 +282,7 @@ func (t ReleaseCycleTasks) MergeNextRelnoteAndAddToWebsite(ctx *wf.TaskContext, 
 	if err != nil {
 		return NextRelnote{}, fmt.Errorf("relnote.Merge: %v", err)
 	}
-	mergedRelnote := fmt.Sprintf(`---
+	mergedRelnoteContent := fmt.Sprintf(`---
 title: Go 1.%d Release Notes
 template: false
 ---
@@ -269,9 +300,7 @@ template: false
 Using doc/next content as of %s (commit %s).
 
 For golang/go#%d.`, version, time.Now().Format(time.DateOnly), commit, releaseNotesIssue),
-	}, reviewers, map[string]string{
-		fmt.Sprintf("_content/doc/go1.%d.md", version): mergedRelnote,
-	})
+	}, reviewers, map[string]string{mergedRelnoteFile: mergedRelnoteContent})
 	if err != nil {
 		return NextRelnote{}, err
 	}
