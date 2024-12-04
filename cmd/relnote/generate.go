@@ -15,9 +15,8 @@ import (
 )
 
 const prefixFormat = `---
-path: /doc/go1.%s
-template: false
 title: Go 1.%[1]s Release Notes
+template: false
 ---
 
 `
