@@ -240,6 +240,24 @@ def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worke
         priority = priority,
     )
 
+# FIRST_CLASS_PORTS lists all ports (goos-goarch pairs) that are considered to have
+# first-class support by the Go project. See https://go.dev/wiki/PortingPolicy#first-class-ports.
+FIRST_CLASS_PORTS = [
+    "darwin-amd64",
+    "darwin-arm64",
+    "linux-386",
+    "linux-amd64",
+    "linux-arm",
+    "linux-arm64",
+    "windows-386",
+    "windows-amd64",
+]
+
+# is_first_class if the goos-goarch pair is a first-class port.
+# This must not be a host, but part of the builder type (e.g. js-wasm, not its host).
+def is_first_class(goos, goarch):
+    return goos + "-" + goarch in FIRST_CLASS_PORTS
+
 # GOOGLE_LOW_CAPACITY_HOSTS are low-capacity hosts that happen to be operated
 # by Google, so we can rely on them being available.
 GOOGLE_LOW_CAPACITY_HOSTS = [
@@ -1974,6 +1992,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
     presubmit = presubmit and not host_timeout_scale(host_type) > 1  # Speed.
     presubmit = presubmit and not builder_type in known_issue_builder_types  # Known issues.
+    presubmit = presubmit and (is_first_class(os, arch) or arch == "wasm")  # Only first-class ports or wasm.
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
         presubmit = presubmit and os not in ["js", "wasip1"]
 
