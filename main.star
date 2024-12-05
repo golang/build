@@ -1557,7 +1557,7 @@ def define_builder(env, project, go_branch_short, builder_type):
 
     # TODO(go.dev/issue/70213): Throttle back the load average.
     if builder_type == "openbsd-ppc64":
-        base_props["env"]["GOMAXPROCS"] = "2"
+        base_props["env"]["GOMAXPROCS"] = "8"
 
     # Construct the basic dimensions for the build/test running part of the build.
     #
