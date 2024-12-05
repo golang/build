@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"path"
 	"slices"
 	"strconv"
@@ -26,8 +27,9 @@ import (
 
 // ReleaseCycleTasks implements tasks related to the Go release cycle (go.dev/s/release).
 type ReleaseCycleTasks struct {
-	Gerrit GerritClient
-	GitHub GitHubClientInterface
+	Gerrit        GerritClient
+	GitHub        GitHubClientInterface
+	ApproveAction func(*wf.TaskContext) error
 }
 
 // PromotedAPI holds information about APIs promoted to an api/go1.N.txt file.
@@ -224,6 +226,28 @@ CC @aclements, @ianlancetaylor, @golang/release.`))
 	}
 
 	return issue.GetNumber(), nil
+}
+
+// CheckRelnoteCLs checks for existing documentation-only CLs that need to be merged, closed, or skipped.
+func (t ReleaseCycleTasks) CheckRelnoteCLs(ctx *wf.TaskContext) error {
+	const query = "status:open repo:go dir:doc/next -dir:src -hashtag:wait-release -is:wip"
+	openRelnoteCLs, err := t.Gerrit.QueryChanges(ctx, query)
+	if err != nil {
+		return err
+	}
+	if len(openRelnoteCLs) == 0 {
+		ctx.Printf("There are no open Gerrit CLs that are only updating doc/next. Proceeding.")
+		return nil
+	}
+	ctx.Printf("There are %d open Gerrit CLs that are only updating doc/next:", len(openRelnoteCLs))
+	for _, cl := range openRelnoteCLs {
+		ctx.Printf("• go.dev/cl/%d - %s", cl.ChangeNumber, cl.Subject)
+	}
+	ctx.Printf(`They were found using the following Gerrit search query:
+https://go-review.googlesource.com/q/%s
+
+Please approve this task when it's okay to proceed.`, url.PathEscape(query))
+	return t.ApproveAction(ctx)
 }
 
 // NextRelnote holds information about merged release notes.

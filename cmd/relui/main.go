@@ -289,8 +289,9 @@ func main() {
 		},
 	}
 	cycleTasks := task.ReleaseCycleTasks{
-		Gerrit: gerritClient,
-		GitHub: githubClient,
+		Gerrit:        gerritClient,
+		GitHub:        githubClient,
+		ApproveAction: relui.ApproveActionDep(dbPool),
 	}
 	if err := relui.RegisterReleaseWorkflows(ctx, dh, buildTasks, milestoneTasks, versionTasks, cycleTasks, commTasks); err != nil {
 		log.Fatalf("RegisterReleaseWorkflows: %v", err)

@@ -305,11 +305,17 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 		devVer := wf.Const(currentMajor + 1)
 		coordinators := wf.Param(wd, releaseCoordinators)
+
+		// APIs.
 		nextAPI := wf.Task2(wd, "Promote next API", cycle.PromoteNextAPI, devVer, coordinators)
 		auditIssue := wf.Task2(wd, "Open API audit issue", cycle.OpenAPIAuditIssue, devVer, nextAPI)
-		nextRelnote := wf.Task2(wd, "Merge release note fragments and add to x/website", cycle.MergeNextRelnoteAndAddToWebsite, devVer, coordinators)
-		wf.Action3(wd, "Remove release note fragments from main repo", cycle.RemoveNextRelnoteFromMainRepo, devVer, nextRelnote, coordinators)
 		wf.Output(wd, "API audit issue", auditIssue)
+
+		// Release notes.
+		relnoteCLsChecked := wf.Action0(wd, "Check for open release note fragment CLs", cycle.CheckRelnoteCLs)
+		nextRelnote := wf.Task2(wd, "Merge release note fragments and add to x/website", cycle.MergeNextRelnoteAndAddToWebsite, devVer, coordinators, wf.After(relnoteCLsChecked))
+		wf.Action3(wd, "Remove release note fragments from main repo", cycle.RemoveNextRelnoteFromMainRepo, devVer, nextRelnote, coordinators)
+
 		h.RegisterDefinition(fmt.Sprintf("between freeze start and RC 1 for Go 1.%d", currentMajor+1), wd)
 	}
 	{
