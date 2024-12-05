@@ -314,7 +314,8 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		// Release notes.
 		relnoteCLsChecked := wf.Action0(wd, "Check for open release note fragment CLs", cycle.CheckRelnoteCLs)
 		nextRelnote := wf.Task2(wd, "Merge release note fragments and add to x/website", cycle.MergeNextRelnoteAndAddToWebsite, devVer, coordinators, wf.After(relnoteCLsChecked))
-		wf.Action3(wd, "Remove release note fragments from main repo", cycle.RemoveNextRelnoteFromMainRepo, devVer, nextRelnote, coordinators)
+		relnoteTest := wf.After(nextAPI) // cmd/relnote.TestCheckAPIFragments needs the API promotion to happen first.
+		wf.Action3(wd, "Remove release note fragments from main repo", cycle.RemoveNextRelnoteFromMainRepo, devVer, nextRelnote, coordinators, relnoteTest)
 
 		h.RegisterDefinition(fmt.Sprintf("between freeze start and RC 1 for Go 1.%d", currentMajor+1), wd)
 	}
