@@ -246,7 +246,7 @@ if {$::env(DOWNLOAD_UPDATES)} {
 
 expect -re $prompt
 sleep 1
-send "pkg install -y bash curl git gdb python\n"
+send "pkg install -y bash curl doas git gdb python\n"
 
 expect -re $prompt
 send "sync\n"
