@@ -314,7 +314,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		// Release notes.
 		relnoteCLsChecked := wf.Action0(wd, "Check for open release note fragment CLs", cycle.CheckRelnoteCLs)
 		nextRelnote := wf.Task2(wd, "Merge release note fragments and add to x/website", cycle.MergeNextRelnoteAndAddToWebsite, devVer, coordinators, wf.After(relnoteCLsChecked))
-		relnoteTest := wf.After(nextAPI) // cmd/relnote.TestCheckAPIFragments needs the API promotion to happen first.
+		relnoteTest := wf.After(nextAPI) // cmd/relnote.TestCheckAPIFragments needs API promotion to be completed.
 		wf.Action3(wd, "Remove release note fragments from main repo", cycle.RemoveNextRelnoteFromMainRepo, devVer, nextRelnote, coordinators, relnoteTest)
 
 		h.RegisterDefinition(fmt.Sprintf("between freeze start and RC 1 for Go 1.%d", currentMajor+1), wd)
@@ -502,7 +502,8 @@ This is intended for releases with 1+ PRIVATE-track security fixes.`,
 
 	// Build, test, and sign release.
 	source, signedAndTestedArtifacts, modules := build.addBuildTasks(wd, major, kind, nextVersion, timestamp, srcSpec)
-	okayToTagAndPublish := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
+	waitReleaseApproval := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
+	okayToTagAndPublish := wf.Action3(wd, "Re-check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal, wf.After(waitReleaseApproval))
 
 	dlcl := wf.Task5(wd, "Mail DL CL", version.MailDLCL, wf.Const(major), kindVal, nextVersion, coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
 	dlclCommit := wf.Task2(wd, "Wait for DL CL submission", version.AwaitCL, dlcl, wf.Const(""))
