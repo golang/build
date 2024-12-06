@@ -1965,6 +1965,14 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     if os == "openbsd" and arch == "riscv64" and go_branch_short in ["go1.22"]:
         # The openbsd/riscv64 port is new to Go 1.23.
         return False, False, False, []
+    if os == "freebsd" and arch == "amd64" and go_branch_short in ["go1.22", "go1.23"]:
+        freebsd_version = suffix
+        if freebsd_version == "":
+            freebsd_version = DEFAULT_HOST_SUFFIX[host_type]
+        if freebsd_version == "14.1":
+            # The 14.1 freebsd/amd64 LUCI builders need fixes that aren't available on old branches.
+            # Just disable the builder on these branches.
+            return False, False, False, []
 
     # Filter out new projects on old release branches.
     if project == "oscar" and go_branch_short in ["go1.22"]:
