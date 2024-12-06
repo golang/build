@@ -578,10 +578,15 @@ MAIN_BRANCH_NAME = "master"
 LATEST_GO = "go1.23"
 SECOND_GO = "go1.22"
 
+# NEXT_GO is the next release candidate. Once this is released, LATEST_GO
+# becomes SECOND_GO and this becomes LATEST_GO, then NEXT_GO can be deleted.
+NEXT_GO = "go1.24"
+
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
     "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.22.6"),
+    NEXT_GO: struct(branch = "release-branch." + NEXT_GO, bootstrap = "1.22.6"),
     LATEST_GO: struct(branch = "release-branch." + LATEST_GO, bootstrap = "1.20.6"),
     SECOND_GO: struct(branch = "release-branch." + SECOND_GO, bootstrap = "1.20.6"),
 }
@@ -600,6 +605,7 @@ INTERNAL_GO_BRANCHES = {
     # release, and want to maintain that history. We use a regex like
     # "private-release-branch.go1.23.\\d+" to match all the point branches
     # so that we don't need to manually update the config each time we issue a point release.
+    NEXT_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[NEXT_GO].branch + ".\\d+"]),
     LATEST_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+"]),
     SECOND_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+"]),
 }
