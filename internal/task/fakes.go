@@ -113,9 +113,10 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 }
 
 type FakeGerrit struct {
-	repos     map[string]*FakeRepo // Repo name → repo.
-	changes   map[string]string    // Change ID → commit hash.
 	serverURL string
+	repos     map[string]*FakeRepo // Repo name → repo.
+	changesMu sync.Mutex
+	changes   map[string]string // Change ID → commit hash.
 }
 
 type FakeRepo struct {
@@ -342,13 +343,17 @@ func (g *FakeGerrit) CreateAutoSubmitChange(_ *wf.TaskContext, input gerrit.Chan
 		return "", err
 	}
 	commit := repo.CommitOnBranch(input.Branch, contents)
+	g.changesMu.Lock()
 	changeID := fmt.Sprintf("%s~%d", repo.name, len(g.changes)+1)
 	g.changes[changeID] = commit
+	g.changesMu.Unlock()
 	return changeID, nil
 }
 
 func (g *FakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
+	g.changesMu.Lock()
 	commit, ok := g.changes[changeID]
+	g.changesMu.Unlock()
 	return commit, ok, nil
 }
 
