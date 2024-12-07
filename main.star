@@ -2112,26 +2112,25 @@ def _define_go_ci():
             # Define builders.
             for builder_type in BUILDER_TYPES:
                 exists, presubmit, _, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)
-                if not exists:
+                if not exists or presubmit == PRESUBMIT.DISABLED:
                     continue
 
                 name, _ = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
-                if presubmit != PRESUBMIT.DISABLED:
-                    luci.cq_tryjob_verifier(
-                        builder = name,
-                        cq_group = cq_group.name,
-                        includable_only = presubmit == PRESUBMIT.OPTIONAL,
-                        disable_reuse = True,
-                        location_filters = [
-                            cq.location_filter(
-                                gerrit_host_regexp = "go-review.googlesource.com",
-                                gerrit_project_regexp = "^%s$" % project,
-                                path_regexp = filter,
-                            )
-                            for filter in presubmit_filters
-                            if presubmit == PRESUBMIT.ENABLED
-                        ],
-                    )
+                luci.cq_tryjob_verifier(
+                    builder = name,
+                    cq_group = cq_group.name,
+                    includable_only = presubmit == PRESUBMIT.OPTIONAL,
+                    disable_reuse = True,
+                    location_filters = [
+                        cq.location_filter(
+                            gerrit_host_regexp = "go-review.googlesource.com",
+                            gerrit_project_regexp = "^%s$" % project,
+                            path_regexp = filter,
+                        )
+                        for filter in presubmit_filters
+                        if presubmit == PRESUBMIT.ENABLED
+                    ],
+                )
 
                 # For golang.org/x repos, include the ability to run presubmit
                 # against all supported releases in addition to testing with tip.
