@@ -91,7 +91,7 @@ import (
 var pFlag = flag.Int("p", 2, "run `n` builds in parallel")
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: gorebuild [goos-goarch][@version]...\n")
+	fmt.Fprintf(os.Stderr, "usage: gorebuild [flags] [goos-goarch][@version]...\n")
 	flag.PrintDefaults()
 	os.Exit(2)
 }

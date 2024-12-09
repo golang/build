@@ -12,6 +12,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // SHA256 returns the hexadecimal SHA256 hash of data.
@@ -31,29 +33,51 @@ func SHA256(data []byte) string {
 }
 
 // Get returns the content at the named URL.
-func Get(log *Log, url string) (data []byte, err error) {
+//
+// When it encounters what might be a temporary network error,
+// it tries fetching multiple times with delays before giving up.
+func Get(log *Log, url string) (_ []byte, err error) {
 	defer func() {
 		if err != nil && log != nil {
 			log.Printf("%s", err)
 		}
 	}()
 
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
+	// Fetching happens over an unreliable network connection,
+	// and will fail sometimes. Be willing to try a few times.
+	const maxTries = 5
+	var fetchErrors []error
+	for i := range maxTries {
+		time.Sleep(time.Duration(i*i) * time.Second)
+		resp, err := http.Get(url)
+		if err != nil {
+			fetchErrors = append(fetchErrors, fmt.Errorf("attempt %d: failed to GET: %v", i+1, err))
+			continue
+		}
+		if resp.StatusCode != 200 {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+			resp.Body.Close()
+			err := fmt.Errorf("non-200 OK status code: %v body: %q", resp.Status, body)
+			if resp.StatusCode/100 == 5 {
+				// Consider a 5xx server response to possibly succeed later.
+				fetchErrors = append(fetchErrors, fmt.Errorf("attempt %d: %v", i+1, err))
+				continue
+			}
+			return nil, fmt.Errorf("get %s: %v", url, err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			fetchErrors = append(fetchErrors, fmt.Errorf("attempt %d: failed to read body: %v", i+1, err))
+			continue
+		}
+		if log != nil {
+			log.Printf("downloaded %s", url)
+		}
+		return body, nil
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("get %s: %s", url, resp.Status)
-	}
-	data, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("get %s: %s", url, err)
-	}
-	if log != nil {
-		log.Printf("downloaded %s", url)
-	}
-	return data, nil
+	// All tries exhausted, give up at this point.
+	return nil, fmt.Errorf("get %s: %v", url, errors.Join(fetchErrors...))
 }
 
 // GerritTarGz returns a .tar.gz file corresponding to the named repo and ref on Go's Gerrit server.
