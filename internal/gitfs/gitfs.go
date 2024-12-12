@@ -616,8 +616,6 @@ func (r *Repo) fetch(h Hash) (fs.FS, error) {
 			continue
 		}
 		if len(line) == 0 || line[0] == 0 || line[0] > 3 {
-			fmt.Printf("%q\n", line)
-			continue
 			return nil, fmt.Errorf("fetch: malformed response: invalid sideband: %q", line)
 		}
 		switch line[0] {
