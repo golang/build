@@ -40,7 +40,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	// TODO: probably always want to skip, might make sense to not include this
 	skipPostSubmit := wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
 	cve := wf.Param(wd, wf.ParamDef[string]{Name: "CVE"})
-	githubIssue := wf.Param(wd, wf.ParamDef[string]{Name: "GitHub issue", Doc: "The GitHub issue number of the report.", Example: "#12345"})
+	githubIssue := wf.Param(wd, wf.ParamDef[string]{Name: "GitHub issue", Doc: "A link to the GitHub issue for the report.", Example: "https://go.dev/issue/70779"})
 	relNote := wf.Param(wd, wf.ParamDef[string]{Name: "Release note", ParamType: wf.LongString})
 	acknowledgement := wf.Param(wd, wf.ParamDef[string]{Name: "Acknowledgement"})
 
