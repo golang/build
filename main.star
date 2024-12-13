@@ -2155,6 +2155,18 @@ def _define_go_ci():
                         disable_reuse = True,
                     )
 
+                # Add an x/debug builder to the Go presubmit. It mostly
+                # only matters when changes to cmd/compile, cmd/link, or
+                # the runtime are made, but certain satellite packages like
+                # internal/abi also matter. Just enable it for everything,
+                # it's a fast builder.
+                if project == "go" and builder_type == "linux-amd64":
+                    luci.cq_tryjob_verifier(
+                        builder = PUBLIC_TRY_ENV.bucket + "/" + builder_name("debug", go_branch_short, builder_type),
+                        cq_group = cq_group.name,
+                        disable_reuse = True,
+                    )
+
                 # Add an x/website builder to the Go presubmit
                 # but only when release notes are being edited.
                 # This is to catch problems with Markdown/HTML.
