@@ -25,7 +25,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dghubble/oauth1 v0.7.0
 	github.com/esimov/stackblur-go v1.1.0
-	github.com/gliderlabs/ssh v0.3.3
+	github.com/gliderlabs/ssh v0.3.9-0.20241212082318-d137aad99cd6
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3
 	github.com/google/go-cmp v0.6.0
@@ -51,7 +51,7 @@ require (
 	go.chromium.org/luci v0.0.0-20240207061751-3ff7b3e74e1c
 	go.opencensus.io v0.24.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
-	golang.org/x/crypto v0.30.0
+	golang.org/x/crypto v0.31.0
 	golang.org/x/exp v0.0.0-20230809094429-853ea248256d
 	golang.org/x/image v0.23.0
 	golang.org/x/mod v0.22.0
