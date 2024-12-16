@@ -106,6 +106,13 @@ func init() {
 	add(&Repo{GoGerritProject: "grpc-review"})
 
 	add(&Repo{
+		GoGerritProject: "open2opaque",
+		MirrorToGitHub:  true,
+		ImportPath:      "google.golang.org/open2opaque",
+		GitHubRepo:      "golang/open2opaque",
+	})
+
+	add(&Repo{
 		GoGerritProject: "protobuf",
 		MirrorToGitHub:  true,
 		ImportPath:      "google.golang.org/protobuf",
