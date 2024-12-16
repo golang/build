@@ -771,6 +771,7 @@ PROJECTS = {
     "mod": PT.CORE,
     "net": PT.CORE,
     "oauth2": PT.LIBRARY,
+    "open2opaque": PT.SPECIAL,
     "oscar": PT.TOOL,
     "perf": PT.TOOL,
     "pkgsite": PT.TOOL,
@@ -2011,7 +2012,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     elif project == "exp":
         # Not quite sure what to do with exp/shiny. For now just run on major platforms.
         enable_types = ["linux-386", "linux-amd64", "linux-arm64", "windows-386", "windows-amd64", "darwin-amd64"]
-    elif project == "protobuf":
+    elif project == "protobuf" or project == "open2opaque":
         enable_types = ["linux-amd64"]  # See issue go.dev/issue/63597.
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
