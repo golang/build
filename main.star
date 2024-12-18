@@ -1354,7 +1354,8 @@ def dimensions_of(host_type):
     if goos == "plan9":  # TODO(go.dev/issue/62025): Simplify builder definition.
         return {
             "cipd_platform": "linux-amd64",
-            "id": "%s-%s" % (goos, goarch),
+            "target_goos": goos,
+            "target_goarch": goarch,
         }
 
     dims = {"cipd_platform": cipd_platform}
@@ -1381,7 +1382,7 @@ def is_fully_supported(dims):
         dims: The dimensions of a task/bot.
     """
 
-    if "id" in dims:  # TODO(go.dev/issue/62025): Simplify builder definition.
+    if "target_goos" in dims and dims["target_goos"] == "plan9":  # TODO(go.dev/issue/62025): Simplify builder definition.
         return False
 
     supported_cipd_platforms = [
