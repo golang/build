@@ -1410,7 +1410,7 @@ def builder_name(project, go_branch_short, builder_type):
         # it's clear what the builder is building and testing.
         return "%s-%s" % (go_branch_short, builder_type)
 
-    elif project in ["dl", "protobuf"]:
+    elif project in ["dl", "protobuf", "open2opaque"]:
         # A special, non-golang.org/x/* repository.
         # Put "z" at the beginning to sort this at the bottom of the builder list.
         return "z_%s-%s-%s" % (project, go_branch_short, builder_type)
@@ -1426,8 +1426,8 @@ def project_title(project):
         fail("project_title doesn't have support for the 'go' project")
     elif project == "dl":
         return "golang.org/dl"
-    elif project == "protobuf":
-        return "google.golang.org/protobuf"
+    elif project in ["protobuf", "open2opaque"]:
+        return "google.golang.org/%s" % project
     else:
         # A golang.org/x/* repository. Since these are very common,
         # the 'golang.org/' prefix is left out for brevity.
@@ -2012,7 +2012,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     elif project == "exp":
         # Not quite sure what to do with exp/shiny. For now just run on major platforms.
         enable_types = ["linux-386", "linux-amd64", "linux-arm64", "windows-386", "windows-amd64", "darwin-amd64"]
-    elif project == "protobuf" or project == "open2opaque":
+    elif project in ["protobuf", "open2opaque"]:
         enable_types = ["linux-amd64"]  # See issue go.dev/issue/63597.
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
