@@ -1781,6 +1781,7 @@ func init() {
 	addPerson("Maarten Bezemer", "maarten.bezemer@gmail.com")
 	addPerson("Maciej Dębski", "maciejd@google.com", "26521@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Maciej Galkowski", "maciejgalkowski@gmail.com")
+	addPerson("Madeline Kalil", "mkalil@google.com", "@madelinekalil")
 	addPerson("Maggie Nolan", "nolanmar@google.com")
 	addPerson("Magnus Hiie", "magnus.hiie@gmail.com")
 	addPerson("Mahmoud Bassiouny", "mbassiouny@google.com")
