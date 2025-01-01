@@ -27,7 +27,7 @@ import (
 type Client struct {
 	httpClient *http.Client
 
-	// endPointURL is the Kubernetes master URL ending in
+	// endpointURL is the Kubernetes master URL ending in
 	// "/api/v1".
 	endpointURL string
 

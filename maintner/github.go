@@ -568,7 +568,7 @@ type GitHubComment struct {
 	Body    string
 }
 
-// GitHubDismissedReview is the contents of a dismissed review event. For more
+// GitHubDismissedReviewEvent is the contents of a dismissed review event. For more
 // details, see https://developer.github.com/v3/issues/events/.
 type GitHubDismissedReviewEvent struct {
 	ReviewID         int64

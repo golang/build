@@ -75,7 +75,7 @@ type EC2Buildlet struct {
 	// hosts provides the host configuration for all hosts. It is passed in to facilitate
 	// testing.
 	hosts map[string]*dashboard.HostConfig
-	// isRemoteBuildletFunc informs the caller is a VM instance is being used as a remote
+	// isRemoteBuildlet informs the caller is a VM instance is being used as a remote
 	// buildlet.
 	//
 	// TODO(golang.org/issues/38337) remove once we find a way to pass in remote buildlet

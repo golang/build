@@ -157,7 +157,7 @@ func cachedToken() (*oauth2.Token, error) {
 	return &refreshToken, nil
 }
 
-// TokenSource returns a TokenSource that can be used to access Go's
+// TokenSourceForceLogin returns a TokenSource that can be used to access Go's
 // IAP-protected sites. It will delete any existing authentication token
 // credentials and prompt for login.
 func TokenSourceForceLogin(ctx context.Context) (oauth2.TokenSource, error) {

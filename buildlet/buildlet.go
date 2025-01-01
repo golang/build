@@ -53,12 +53,12 @@ type VMOpts struct {
 	// after the instance operation succeeds.
 	OnInstanceCreated func()
 
-	// OnInstanceCreated optionally specifies a hook to run synchronously
+	// OnGotInstanceInfo optionally specifies a hook to run synchronously
 	// after the computeService.Instances.Get call.
 	// Only valid for GCE resources.
 	OnGotInstanceInfo func(*compute.Instance)
 
-	// OnInstanceCreated optionally specifies a hook to run synchronously
+	// OnGotEC2InstanceInfo optionally specifies a hook to run synchronously
 	// after the EC2 instance information is retrieved.
 	// Only valid for EC2 resources.
 	OnGotEC2InstanceInfo func(*cloud.Instance)
