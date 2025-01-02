@@ -851,19 +851,19 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"tools/go/analysis": {
-		Primary:   []Owner{taking},
+		Primary:   []Owner{adonovan, taking},
 		Secondary: []Owner{matloob, zpavlinovic},
 	},
 	"tools/go/ast": {
-		Primary:   []Owner{gri},
+		Primary:   []Owner{adonovan, gri},
 		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/buildutil": {
-		Primary:   []Owner{matloob},
+		Primary:   []Owner{adonovan, matloob},
 		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/callgraph": {
-		Primary:   []Owner{zpavlinovic},
+		Primary:   []Owner{adonovan, zpavlinovic},
 		Secondary: []Owner{taking, toolsTeam},
 	},
 	"tools/go/gcexportdata": {
@@ -878,20 +878,21 @@ var entries = map[string]*Entry{
 		Primary: []Owner{matloob},
 	},
 	"tools/go/loader": {
-		Primary: []Owner{matloob},
+		Primary: []Owner{adonovan, matloob},
 	},
 	"tools/go/packages": {
-		Primary: []Owner{matloob},
+		Primary:   []Owner{matloob},
+		Secondary: []Owner{adonovan},
 	},
 	"tools/go/ssa": {
-		Primary:   []Owner{taking},
+		Primary:   []Owner{taking, adonovan},
 		Secondary: []Owner{findleyr},
 	},
 	"tools/imports": {
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/analysisinternal": {
-		Primary:   []Owner{matloob},
+		Primary:   []Owner{adonovan, matloob},
 		Secondary: []Owner{toolsTeam},
 	},
 	"tools/internal/apidiff": {
