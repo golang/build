@@ -6,6 +6,15 @@
 // for certain common mistakes, like no package in the first line of the commit message
 // or having long lines in the commit message body.
 //
+// The rules attempt to be graceful when encountering a new or unknown repo.
+// A new repo usually does not require updating anything here, especially
+// if the repo primarily contains Go code and follows typical patterns like
+// using the main Go issue tracker. If a new repo is unusual in some way that
+// causes a notable problem, some simple options include:
+//   - adding the repo to skipAll to ignore the repo entirely
+//   - adding the repo to the skip field on individiual rules
+//   - updating the usesTracker and packageExample functions if needed
+//
 // A rule is primarily defined via a function that takes a Change (CL or PR) as input
 // and reports zero or 1 findings, which is just a string (usually 1-2 short sentences).
 // A rule can also optionally return a note, which might be auxiliary advice such as
@@ -71,6 +80,9 @@ type rule struct {
 	// only lists the only repos that this rule will run against.
 	only []string
 }
+
+// skipAll lists repos that we ignore entirely by skipping all rules.
+var skipAll = []string{"wiki"}
 
 // ruleGroups defines our live set of rules. It is a [][]rule
 // because the individual rules are arranged into groups of rules
@@ -404,7 +416,7 @@ func bugExamples(repo string) string {
 
 // packageExample returns an example usage of a package/component in a commit title
 // for a given repo, along with what to call the leading words before the first
-// colon ("package" vs. "component").
+// colon (e.g., "package" vs. "component").
 func packageExample(repo string) (component string, example string) {
 	switch repo {
 	default:
@@ -413,6 +425,8 @@ func packageExample(repo string) (component string, example string) {
 		return "component", "_content/doc/go1.21: fix [...]"
 	case "vscode-go":
 		return "component", "src/goInstallTools: improve [...]"
+	case "wiki":
+		return "page name or component", "MinimumRequirements: update [...]"
 	}
 }
 
@@ -439,7 +453,7 @@ func usesTracker(repo string) tracker {
 	// we also leave unspecified for now.
 	switch repo {
 	case "go", "arch", "build", "crypto", "debug", "exp", "image", "mobile", "mod", "net", "perf", "pkgsite", "playground",
-		"proposal", "review", "sync", "sys", "telemetry", "term", "text", "time", "tools", "tour", "vuln", "website", "xerrors":
+		"proposal", "review", "sync", "sys", "telemetry", "term", "text", "time", "tools", "tour", "vuln", "website", "wiki", "xerrors":
 		return mainTracker
 	case "vscode-go", "oscar":
 		return ownTracker

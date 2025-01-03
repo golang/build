@@ -81,6 +81,9 @@ type Result struct {
 
 // Check runs the defined rules against one Change.
 func Check(change Change) (results []Result) {
+	if slices.Contains(skipAll, change.Repo) {
+		return nil
+	}
 	for _, group := range ruleGroups {
 		for _, rule := range group {
 			if slices.Contains(rule.skip, change.Repo) || len(rule.only) > 0 && !slices.Contains(rule.only, change.Repo) {

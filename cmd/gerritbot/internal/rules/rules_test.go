@@ -47,6 +47,12 @@ The commit title and commit message body come from the GitHub PR title and descr
 `,
 		},
 		{
+			title: `A bad wiki commit title we allow`, // We ignore the wiki repo.
+			repo:  "wiki",
+			body:  "A bad body we allow",
+			want:  "",
+		},
+		{
 			title: goodCommitTitle,
 			body:  "This commit body is missing a bug reference.",
 			want: `Possible problems detected:
