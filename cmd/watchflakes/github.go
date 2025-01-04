@@ -42,8 +42,6 @@ var (
 	testFlakes *github.Project
 )
 
-var scriptRE = regexp.MustCompile(`(?m)(^( {4}|\t)#!watchflakes\n((( {4}|\t).*)?\n)+|^\x60{3}\n#!watchflakes\n(([^\x60].*)?\n)+\x60{3}\n)`)
-
 // readIssues reads the GitHub issues in the Test Flakes project.
 // It also sets up the repo, labels, and testFlakes variables for
 // use by other functions below.
