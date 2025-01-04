@@ -96,8 +96,17 @@ var scriptTests = [...]struct {
 	{
 		`default <- pkg == "cmd/go" && test == "TestScript" &&
 		            output !~ ` + "`" + `The process cannot access the file because it is being used by another process.` + "`" + `  # tracked in go.dev/issue/71112`,
-		nil,
-		"script:2.22: unexpected !",
+		[]*script.Rule{{
+			Action: "default",
+			Pattern: &script.AndExpr{
+				X: &script.AndExpr{
+					X: &script.CmpExpr{Field: "pkg", Op: "==", Literal: "cmd/go"},
+					Y: &script.CmpExpr{Field: "test", Op: "==", Literal: "TestScript"},
+				},
+				Y: &script.RegExpr{Field: "output", Not: true, Regexp: regexp.MustCompile(`(?m)The process cannot access the file because it is being used by another process.`)},
+			},
+		}},
+		"",
 	},
 	{
 		`post <- pkg ~ "^cmd/go"`,

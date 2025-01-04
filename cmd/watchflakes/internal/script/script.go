@@ -454,7 +454,7 @@ Top:
 		p.i++
 		p.tok = p.s[p.pos:p.i]
 		return
-	case '<': // <-, <=
+	case '<': // < <- <=
 		p.pos = p.i
 		p.i++
 		if p.i < len(p.s) && (p.s[p.i] == '-' || p.s[p.i] == '=') {
@@ -462,7 +462,15 @@ Top:
 		}
 		p.tok = p.s[p.pos:p.i]
 		return
-	case '!', '>': // ! != > >=
+	case '!': // ! !~ !=
+		p.pos = p.i
+		p.i++
+		if p.i < len(p.s) && (p.s[p.i] == '~' || p.s[p.i] == '=') {
+			p.i++
+		}
+		p.tok = p.s[p.pos:p.i]
+		return
+	case '>': // > >=
 		p.pos = p.i
 		p.i++
 		if p.i < len(p.s) && p.s[p.i] == '=' {

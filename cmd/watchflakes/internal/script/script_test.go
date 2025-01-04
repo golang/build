@@ -25,7 +25,7 @@ var lexTests = [...]struct {
 	{"x ~", "a ~"},
 	{"x &", "a err: :1.3: invalid syntax at &"},
 	{"x &y", "a err: :1.3: invalid syntax at &"},
-	{"output !~ `content`", "a ! ~ `"},
+	{"output !~ `content`", "a !~ `"},
 }
 
 func TestLex(t *testing.T) {
