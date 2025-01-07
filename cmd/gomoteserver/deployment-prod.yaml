@@ -29,6 +29,9 @@ spec:
           - "-listen-https-selfsigned=:444"
           - "-private-host-key=secret:symbolic-datum-552/gomoteserver-private-host-key"
           - "-public-host-key=secret:symbolic-datum-552/gomoteserver-public-host-key"
+          - "-autocert-directory=https://dv.acme-v02.api.pki.goog/directory"
+          - "-autocert-email=go-builders@google.com"
+          - "-autocert-eab=secret:symbolic-datum-552/gomoteserver-certificates-eab"
         ports:
         - containerPort: 80
         - containerPort: 443
