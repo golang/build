@@ -464,6 +464,7 @@ BUILDER_TYPES = [
     "linux-amd64_c3h88-perf_vs_release",
     "linux-amd64_c3h88-perf_vs_tip",
     "linux-amd64_c3h88-perf_vs_oldest_stable",
+    "linux-amd64_docker",
     "linux-arm",
     "linux-arm64",
     "linux-arm64-boringcrypto",
@@ -791,6 +792,7 @@ PROJECTS = {
     "vulndb": PT.TOOL,
     "website": PT.TOOL,
     "xerrors": PT.TOOL,
+    "vscode-go": PT.SPECIAL,
 }
 
 # projects_of_type returns projects of the given types.
@@ -1306,6 +1308,8 @@ def dimensions_of(host_type):
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
             cpu = goarch + "-64-" + suffix.replace("power", "POWER")
+        elif goos == "linux" and goarch == "amd64" and suffix == "docker":
+            os = "Ubuntu-20"
         elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffix
@@ -1365,6 +1369,10 @@ def dimensions_of(host_type):
         dims["cpu"] = cpu
     if machine_type != None:
         dims["machine_type"] = machine_type
+
+    # machines with docker installed have a special dimension.
+    if suffix == "docker":
+        dims["docker_installed"] = "true"
     return dims
 
 def is_capacity_constrained(low_capacity_hosts, host_type):
@@ -2003,6 +2011,12 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         # See CL 609142.
         return False, PRESUBMIT.DISABLED, False, []
 
+    # Docker builder should only be used in VSCode-Go repo.
+    if suffix == "docker" and project != "vscode-go":
+        return False, PRESUBMIT.DISABLED, False, []
+    if suffix != "docker" and project == "vscode-go":
+        return False, PRESUBMIT.DISABLED, False, []
+
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
     enable_types = None
@@ -2015,6 +2029,8 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         enable_types = ["linux-386", "linux-amd64", "linux-arm64", "windows-386", "windows-amd64", "darwin-amd64"]
     elif project in ["protobuf", "open2opaque"]:
         enable_types = ["linux-amd64"]  # See issue go.dev/issue/63597.
+    elif project == "vscode-go":
+        enable_types = ["linux-amd64_docker"]
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
@@ -2025,6 +2041,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     presubmit = presubmit and (is_first_class(os, arch) or arch == "wasm")  # Only first-class ports or wasm.
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
         presubmit = presubmit and os not in ["js", "wasip1"]
+
+    # TODO(hxjiang): enable presubmit after fully migrated to LUCI.
+    if project == "vscode-go":
+        presubmit = False
 
     # Apply policies for each run mod.
     presubmit_filters = []
