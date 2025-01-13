@@ -2030,7 +2030,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     elif project in ["protobuf", "open2opaque"]:
         enable_types = ["linux-amd64"]  # See issue go.dev/issue/63597.
     elif project == "vscode-go":
-        enable_types = ["linux-amd64_docker"]
+        enable_types = ["linux-amd64"]
     elif pt == PT.SPECIAL:
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
