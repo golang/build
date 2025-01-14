@@ -349,9 +349,9 @@ func TestPreAnnounceRelease(t *testing.T) {
 			cves:         []string{"cve-2022-1234", "cve-2023-1234"},
 			coordinators: []string{"tatiana"},
 			want:         SentMail{Subject: "[security] Go 1.18.4 and Go 1.17.11 pre-announcement"},
-			wantLog: `pre-announcement subject: [security] Go 1.18.4 and Go 1.17.11 pre-announcement
+			wantLog: `announcement subject: [security] Go 1.18.4 and Go 1.17.11 pre-announcement
 
-pre-announcement body HTML:
+announcement body HTML:
 <p>Hello gophers,</p>
 <p>We plan to issue Go 1.18.4 and Go 1.17.11 during US business hours on Tuesday, July 12.</p>
 <p>These minor releases include PRIVATE security fixes to the standard library, covering the following CVEs:</p>
@@ -363,7 +363,7 @@ pre-announcement body HTML:
 <p>Thanks,<br>
 Tatiana for the Go team</p>
 
-pre-announcement body text:
+announcement body text:
 Hello gophers,
 
 We plan to issue Go 1.18.4 and Go 1.17.11 during US business hours on Tuesday, July 12.
@@ -390,6 +390,123 @@ Tatiana for the Go team` + "\n",
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
 			sentMail, err := tasks.PreAnnounceRelease(ctx, tc.versions, tc.target, tc.security, tc.cves, tc.coordinators)
+			if err != nil {
+				if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
+					t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
+				}
+				t.Fatal("task function returned non-nil error:", err)
+			}
+			if diff := cmp.Diff(tc.want, sentMail); diff != "" {
+				t.Errorf("sent mail mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.wantLog, buf.String()); diff != "" {
+				t.Errorf("log mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestPreAnnounceXFix(t *testing.T) {
+	if testing.Short() {
+		t.Skip("not running test that uses internet in short mode")
+	}
+
+	tests := [...]struct {
+		name         string
+		target       Date
+		module       string
+		packages     []string
+		cves         []string
+		coordinators []string
+		want         SentMail
+		wantLog      string
+	}{
+		{
+			name:         "x fix, single package",
+			target:       Date{2022, time.July, 12},
+			module:       "golang.org/x/crypto",
+			packages:     []string{"golang.org/x/crypto/ssh"},
+			cves:         []string{"CVE-2025-1234", "CVE-2025-1235"},
+			coordinators: []string{"roland"},
+			want:         SentMail{Subject: "[security] golang.org/x/crypto fix pre-announcement"},
+			wantLog: `announcement subject: [security] golang.org/x/crypto fix pre-announcement
+
+announcement body HTML:
+<p>Hello gophers,</p>
+<p>We plan to issue a security fix for the package golang.org/x/crypto/ssh in the golang.org/x/crypto module during US business hours on Tuesday, July 12.</p>
+<p>This will cover the following CVEs:</p>
+<ul>
+<li>CVE-2025-1234</li>
+<li>CVE-2025-1235</li>
+</ul>
+<p>Following our security policy, this is the pre-announcement of the fix.</p>
+<p>Thanks,<br>
+Roland for the Go team</p>
+
+announcement body text:
+Hello gophers,
+
+We plan to issue a security fix for the package golang.org/x/crypto/ssh in the golang.org/x/crypto module during US business hours on Tuesday, July 12.
+
+This will cover the following CVEs:
+
+-	CVE-2025-1234
+
+-	CVE-2025-1235
+
+Following our security policy, this is the pre-announcement of the fix.
+
+Thanks,
+Roland for the Go team` + "\n",
+		},
+		{
+			name:         "x fix, multiple packages",
+			target:       Date{2022, time.July, 12},
+			module:       "golang.org/x/crypto",
+			packages:     []string{"golang.org/x/crypto/ssh", "golang.org/x/crypto/ocsp", "golang.org/x/crypto/xts"},
+			cves:         []string{"CVE-2025-1234", "CVE-2025-1235"},
+			coordinators: []string{"roland"},
+			want:         SentMail{Subject: "[security] golang.org/x/crypto fix pre-announcement"},
+			wantLog: `announcement subject: [security] golang.org/x/crypto fix pre-announcement
+
+announcement body HTML:
+<p>Hello gophers,</p>
+<p>We plan to issue a security fix for the packages golang.org/x/crypto/ssh, golang.org/x/crypto/ocsp, and golang.org/x/crypto/xts in the golang.org/x/crypto module during US business hours on Tuesday, July 12.</p>
+<p>This will cover the following CVEs:</p>
+<ul>
+<li>CVE-2025-1234</li>
+<li>CVE-2025-1235</li>
+</ul>
+<p>Following our security policy, this is the pre-announcement of the fix.</p>
+<p>Thanks,<br>
+Roland for the Go team</p>
+
+announcement body text:
+Hello gophers,
+
+We plan to issue a security fix for the packages golang.org/x/crypto/ssh, golang.org/x/crypto/ocsp, and golang.org/x/crypto/xts in the golang.org/x/crypto module during US business hours on Tuesday, July 12.
+
+This will cover the following CVEs:
+
+-	CVE-2025-1234
+
+-	CVE-2025-1235
+
+Following our security policy, this is the pre-announcement of the fix.
+
+Thanks,
+Roland for the Go team` + "\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := AnnounceMailTasks{
+				SendMail:    func(h MailHeader, c MailContent) error { return nil },
+				testHookNow: func() time.Time { return time.Date(2022, time.July, 7, 0, 0, 0, 0, time.UTC) },
+			}
+			var buf bytes.Buffer
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
+			sentMail, err := tasks.PreAnnounceXFix(ctx, tc.module, tc.packages, tc.target, tc.cves, tc.coordinators)
 			if err != nil {
 				if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
 					t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.

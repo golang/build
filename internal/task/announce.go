@@ -89,6 +89,25 @@ type releasePreAnnouncement struct {
 	Names []string
 }
 
+type golangOrgXPreAnnouncement struct {
+	// Target is the planned date for the release.
+	Target Date
+
+	// Module is the module the security fixes are in.
+	Module string
+
+	// Package is the package the security fix is in.
+	Packages []string
+
+	// CVEs is the list of CVEs for PRIVATE track fixes to
+	// be included in the release pre-announcement.
+	CVEs []string
+
+	// Names is an optional list of release coordinator names to
+	// include in the sign-off message.
+	Names []string
+}
+
 // A Date represents a single calendar day (year, month, day).
 //
 // This type does not include location information, and
@@ -156,42 +175,7 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, kind Relea
 		r.SecondaryVersion = published[1].Version
 	}
 
-	// Generate the announcement email.
-	m, err := announcementMail(r)
-	if err != nil {
-		return SentMail{}, err
-	}
-	ctx.Printf("announcement subject: %s\n\n", m.Subject)
-	ctx.Printf("announcement body HTML:\n%s\n", m.BodyHTML)
-	ctx.Printf("announcement body text:\n%s", m.BodyText)
-
-	// Before sending, check to see if this announcement already exists.
-	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
-		// Proceeding would risk sending a duplicate email, so error out instead.
-		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %w", err)
-	} else if threadURL != "" {
-		// This should never happen since this task runs once per release.
-		// It can happen under unusual circumstances, for example if the task crashes after
-		// mailing but before completion, or if parts of the release workflow are restarted,
-		// or if a human mails the announcement email manually out of band.
-		//
-		// So if we see that the email exists, consider it as "task completed successfully"
-		// and pretend we were the ones that sent it, so the high level workflow can keep going.
-		ctx.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
-		return SentMail{m.Subject}, nil
-	}
-
-	// Send the announcement email to the destination mailing lists.
-	if t.SendMail == nil {
-		return SentMail{Subject: "[dry-run] " + m.Subject}, nil
-	}
-	ctx.DisableRetries()
-	err = t.SendMail(t.AnnounceMailHeader, m)
-	if err != nil {
-		return SentMail{}, err
-	}
-
-	return SentMail{m.Subject}, nil
+	return t.generateAndSendAnnouncementMail(ctx, r)
 }
 
 // PreAnnounceRelease sends an email pre-announcing a Go release
@@ -232,34 +216,7 @@ func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, version
 		r.SecondaryVersion = versions[1]
 	}
 
-	// Generate the pre-announcement email.
-	m, err := announcementMail(r)
-	if err != nil {
-		return SentMail{}, err
-	}
-	ctx.Printf("pre-announcement subject: %s\n\n", m.Subject)
-	ctx.Printf("pre-announcement body HTML:\n%s\n", m.BodyHTML)
-	ctx.Printf("pre-announcement body text:\n%s", m.BodyText)
-
-	// Before sending, check to see if this pre-announcement already exists.
-	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
-		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %w", err)
-	} else if threadURL != "" {
-		ctx.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
-		return SentMail{m.Subject}, nil
-	}
-
-	// Send the pre-announcement email to the destination mailing lists.
-	if t.SendMail == nil {
-		return SentMail{Subject: "[dry-run] " + m.Subject}, nil
-	}
-	ctx.DisableRetries()
-	err = t.SendMail(t.AnnounceMailHeader, m)
-	if err != nil {
-		return SentMail{}, err
-	}
-
-	return SentMail{m.Subject}, nil
+	return t.generateAndSendAnnouncementMail(ctx, r)
 }
 
 func coordinatorFirstNames(users []string) ([]string, error) {
@@ -267,6 +224,40 @@ func coordinatorFirstNames(users []string) ([]string, error) {
 		name, _, _ := strings.Cut(p.Name, " ")
 		return name
 	})
+}
+
+func (t AnnounceMailTasks) PreAnnounceXFix(ctx *workflow.TaskContext, module string, pkgs []string, target Date, cves []string, users []string) (SentMail, error) {
+	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
+		return SentMail{}, fmt.Errorf("insufficient time for pre-announce release task; a minimum of a minute left on context is required")
+	}
+	now := time.Now().UTC()
+	if t.testHookNow != nil {
+		now = t.testHookNow()
+	}
+	for _, p := range pkgs {
+		if !strings.HasPrefix(p, module) {
+			return SentMail{}, fmt.Errorf("package %q is not inside module %q", p, module)
+		}
+	}
+	if !target.After(now.Year(), now.Month(), now.Day()) { // A very simple check. Improve as needed.
+		return SentMail{}, fmt.Errorf("target release date is not in the future")
+	}
+	if len(cves) == 0 {
+		return SentMail{}, errors.New("CVEs are not specified")
+	}
+	names, err := coordinatorFirstNames(users)
+	if err != nil {
+		return SentMail{}, err
+	}
+	r := golangOrgXPreAnnouncement{
+		Target:   target,
+		Module:   module,
+		Packages: pkgs,
+		CVEs:     cves,
+		Names:    names,
+	}
+
+	return t.generateAndSendAnnouncementMail(ctx, r)
 }
 
 func coordinatorEmails(users []string) ([]string, error) {
@@ -337,6 +328,8 @@ type MailContent struct {
 // which must be one of these types:
 //   - releaseAnnouncement for a release announcement
 //   - releasePreAnnouncement for a release pre-announcement
+//   - golangOrgXPreAnnouncement for a golang.org/x (or other Go module) security
+//     release pre-announcement
 //   - goplsPrereleaseAnnouncement for a gopls pre-announcement
 func announcementMail(data any) (MailContent, error) {
 	// Select the appropriate template name.
@@ -368,6 +361,8 @@ func announcementMail(data any) (MailContent, error) {
 		}
 	case releasePreAnnouncement:
 		name = "pre-announce-minor.md"
+	case golangOrgXPreAnnouncement:
+		name = "pre-announce-x.md"
 	case goplsReleaseAnnouncement:
 		name = "gopls-announce.md"
 	case goplsPrereleaseAnnouncement:
@@ -482,6 +477,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 }).ParseFS(tmplDir,
 	"template/announce-*.md",
 	"template/pre-announce-minor.md",
+	"template/pre-announce-x.md",
 	// Gopls release announcements.
 	"template/gopls-announce.md",
 	"template/gopls-pre-announce.md",
@@ -786,3 +782,41 @@ func (markdownToTextRenderer) Render(w io.Writer, source []byte, n ast.Node) err
 	return ast.Walk(n, walk)
 }
 func (markdownToTextRenderer) AddOptions(...renderer.Option) {}
+
+func (t AnnounceMailTasks) generateAndSendAnnouncementMail(ctx *workflow.TaskContext, data any) (SentMail, error) {
+	// Generate the announcement email.
+	m, err := announcementMail(data)
+	if err != nil {
+		return SentMail{}, err
+	}
+	ctx.Printf("announcement subject: %s\n\n", m.Subject)
+	ctx.Printf("announcement body HTML:\n%s\n", m.BodyHTML)
+	ctx.Printf("announcement body text:\n%s", m.BodyText)
+
+	// Before sending, check to see if this announcement already exists.
+	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
+		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %w", err)
+	} else if threadURL != "" {
+		// This should never happen since this task runs once per release.
+		// It can happen under unusual circumstances, for example if the task crashes after
+		// mailing but before completion, or if parts of the release workflow are restarted,
+		// or if a human mails the announcement email manually out of band.
+		//
+		// So if we see that the email exists, consider it as "task completed successfully"
+		// and pretend we were the ones that sent it, so the high level workflow can keep going.
+		ctx.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
+		return SentMail{m.Subject}, nil
+	}
+
+	// Send the announcement email to the destination mailing lists.
+	if t.SendMail == nil {
+		return SentMail{Subject: "[dry-run] " + m.Subject}, nil
+	}
+	ctx.DisableRetries()
+	err = t.SendMail(t.AnnounceMailHeader, m)
+	if err != nil {
+		return SentMail{}, err
+	}
+
+	return SentMail{m.Subject}, nil
+}

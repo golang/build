@@ -292,6 +292,22 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 		h.RegisterDefinition("pre-announce next minor release for Go "+strings.Join(names, " and "), wd)
 	}
 
+	// Register pre-announcement workflow for golang.org/x/ fixes.
+	{
+		wd := wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
+
+		module := wf.Param(wd, wf.ParamDef[string]{Name: "Module path", ParamType: wf.BasicString})
+		pkgs := wf.Param(wd, wf.ParamDef[[]string]{Name: "Packages affected", ParamType: wf.SliceShort})
+		targetDate := wf.Param(wd, targetDateParam)
+		cves := wf.Param(wd, securityPreAnnCVEsParam)
+		coordinators := wf.Param(wd, releaseCoordinators)
+
+		sentMail := wf.Task5(wd, "mail-pre-announcement", comm.PreAnnounceXFix, module, pkgs, targetDate, cves, coordinators)
+		wf.Output(wd, "Pre-announcement URL", wf.Task1(wd, "await-pre-announcement", comm.AwaitAnnounceMail, sentMail))
+
+		h.RegisterDefinition("pre-announce golang.org/x security fix", wd)
+	}
+
 	// Register workflows for miscellaneous tasks that happen as part of the Go release cycle (go.dev/s/release).
 	{
 		// Register an "apply wait-release to CLs" workflow.
