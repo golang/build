@@ -831,6 +831,10 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None, test_timeout_scal
             # The environment variable GODEBUG holds a comma-separated list
             # of key=value pairs. Merge them. See go.dev/doc/godebug.
             e["GODEBUG"] = props["env"]["GODEBUG"] + "," + e["GODEBUG"]
+        if "GOEXPERIMENT" in e and "GOEXPERIMENT" in props["env"]:
+            # The environment variable GOEXPERIMENT holds a comma-separated list
+            # of experiment names. Merge them. See https://pkg.go.dev/internal/goexperiment.
+            e["GOEXPERIMENT"] = props["env"]["GOEXPERIMENT"] + "," + e["GOEXPERIMENT"]
         props["env"].update(e)
 
     if enabled == None:
@@ -1638,6 +1642,13 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Turn on the no-network check.
     if builder_type in NO_NETWORK_BUILDERS:
         base_props["no_network"] = True
+
+    # Set GOEXPERIMENT=synctest in x/net for go1.24 and above.
+    #
+    # N.B. This must come before applying run mods, which may add more
+    # GOEXPERIMENTs.
+    if project == "net" and (go_branch_short == "gotip" or go_branch_short >= "go1.24"):
+        base_props["env"]["GOEXPERIMENT"] = "synctest"
 
     for mod in run_mods:
         if not mod in RUN_MODS:
