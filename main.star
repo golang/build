@@ -1562,12 +1562,6 @@ def define_builder(env, project, go_branch_short, builder_type):
         if d.test_deps:
             base_props["tools_extra_test"] = d.test_deps
 
-    # Buy more time to work on result_adapter/ResultDB support
-    # for https://tip.golang.org/doc/go1.24#go-command changes.
-    # TODO(go.dev/issue/70435): Remove once ready.
-    if project != "build" and go_branch_short in ["gotip", NEXT_GO]:
-        base_props["env"]["GODEBUG"] = "gotestjsonbuildtext=1"
-
     # We run GOARCH=wasm builds on linux/amd64 with GOOS/GOARCH set,
     # and the applicable Wasm runtime provided as a CIPD dependency.
     #
