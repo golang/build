@@ -451,6 +451,7 @@ BUILDER_TYPES = [
     "linux-amd64-racecompile",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
+    "linux-amd64-tiplang",
     "linux-amd64-typesalias",
     "linux-amd64-aliastypeparams",
     "linux-amd64_c2s16-perf_pgo_vs_oldest_stable",
@@ -1157,6 +1158,18 @@ RUN_MODS = dict(
     noswissmap = make_run_mod(
         add_env = {"GOEXPERIMENT": "noswissmap"},
         enabled = define_for_go_starting_at("go1.24", presubmit = False),
+    ),
+
+    # Build and test with go.mod upgraded to the latest version.
+    #
+    # Enabled only in postsubmit for non-special subrepos.
+    tiplang = make_run_mod(
+        add_props = {"upgrade_go_mod_lang": True},
+        enabled = define_for_postsubmit([
+            proj
+            for proj, typ in PROJECTS.items()
+            if proj != "go" and typ != PT.SPECIAL
+        ], go_branches = ["gotip"]),
     ),
 
     # Build and test with the gotypesalias GODEBUG, which enables
