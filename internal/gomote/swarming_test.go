@@ -1137,7 +1137,8 @@ func TestStartNewSwarmingTask(t *testing.T) {
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(os.Stdout)
 
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	rdv := rendezvous.New(ctx, rendezvous.OptionValidator(func(ctx context.Context, jwt string) bool {
 		return true
 	}))

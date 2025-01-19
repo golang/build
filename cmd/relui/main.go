@@ -216,7 +216,7 @@ func main() {
 		log.Fatalln("pgxpool.Connect:", err)
 	}
 	defer dbPool.Close()
-	dbPool = &relui.MetricsDB{dbPool}
+	dbPool = &relui.MetricsDB{PGDBTX: dbPool}
 
 	var gr *metrics.MonitoredResource
 	if metadata.OnGCE() {

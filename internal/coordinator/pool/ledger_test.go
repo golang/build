@@ -359,7 +359,7 @@ func TestLedgerUpdateInstanceTypes(t *testing.T) {
 		types []*cloud.InstanceType
 	}{
 		{"no-type", []*cloud.InstanceType{}},
-		{"single-type", []*cloud.InstanceType{{"x", 15}}},
+		{"single-type", []*cloud.InstanceType{{Type: "x", CPU: 15}}},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {

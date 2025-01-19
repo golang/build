@@ -889,7 +889,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 			t.Fatalf("FailUnfinishedTasks(_, %v) = _, %v, wanted no error", fail, err)
 		}
 
-		params := httprouter.Params{{"id", wfID.String()}, {"name", "beep"}}
+		params := httprouter.Params{{Key: "id", Value: wfID.String()}, {Key: "name", Value: "beep"}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "tasks", "beep", "retry"), nil)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
@@ -930,7 +930,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 			t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", gtg, err)
 		}
 
-		params := httprouter.Params{{"id", wfID.String()}, {"name", "approve"}}
+		params := httprouter.Params{{Key: "id", Value: wfID.String()}, {Key: "name", Value: "approve"}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "tasks", "approve", "approve"), nil)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
@@ -962,7 +962,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 		}
 		s.w.markRunning(&workflow.Workflow{ID: wfID}, func() {})
 
-		params := httprouter.Params{{"id", wfID.String()}}
+		params := httprouter.Params{{Key: "id", Value: wfID.String()}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "stop"), nil)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
@@ -986,7 +986,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 			t.Fatalf("Scheduler.Create() = _, %v, wanted no error", err)
 		}
 
-		params := httprouter.Params{{"id", strconv.Itoa(int(sched.ID))}}
+		params := httprouter.Params{{Key: "id", Value: strconv.Itoa(int(sched.ID))}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/schedules/", strconv.Itoa(int(sched.ID)), "delete"), nil)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
