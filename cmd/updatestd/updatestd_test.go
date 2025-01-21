@@ -24,9 +24,8 @@ func TestBuildList(t *testing.T) {
 	// Check that buildList(".") returns sensible results.
 	main, deps := buildList(".")
 	if want := (module{
-		Path:     "golang.org/x/build",
-		Main:     true,
-		Indirect: false,
+		Path: "golang.org/x/build",
+		Main: true,
 	}); main != want {
 		t.Errorf("got main = %+v, want %+v", main, want)
 	}

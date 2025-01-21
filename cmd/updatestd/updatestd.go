@@ -41,7 +41,7 @@ func main() {
 		flag.PrintDefaults()
 	}
 	goroot := flag.String("goroot", "", "path to a working copy of https://go.googlesource.com/go (required)")
-	branch := flag.String("branch", "", "branch to target, such as master or release-branch.go1.Y (required)")
+	branch := flag.String("branch", "", "branch to target, such as master or internal-branch.go1.Y-vendor (required)")
 	flag.Parse()
 	if flag.NArg() != 0 || *goroot == "" || *branch == "" {
 		flag.Usage()
@@ -172,11 +172,8 @@ func (w Work) UpdateModule(dir string) error {
 		gerritProj := m.Path[len("golang.org/x/"):]
 		hash, ok := w.ProjectHashes[gerritProj]
 		if !ok {
-			if m.Indirect {
-				log.Printf("skipping %s because branch %s doesn't exist and it's indirect\n", m.Path, w.Branch)
-				continue
-			}
-			return fmt.Errorf("no hash for Gerrit project %q", gerritProj)
+			log.Printf("skipping %s because branch %s doesn't exist\n", m.Path, w.Branch)
+			continue
 		}
 		goGet = append(goGet, m.Path+"@"+hash)
 	}
@@ -222,9 +219,8 @@ func buildList(dir string) (main module, deps []module) {
 }
 
 type module struct {
-	Path     string // Module path.
-	Main     bool   // Is this the main module?
-	Indirect bool   // Is this module only an indirect dependency of main module?
+	Path string // Module path.
+	Main bool   // Is this the main module?
 }
 
 // gorootVersion reads the GOROOT/src/internal/goversion/goversion.go
