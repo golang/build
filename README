@@ -9,4 +9,4 @@ See https://www.chromium.org/developers/how-tos/depottools/#installing
 to install it.
 
 Configuration changes take effect within minutes of CL submission.
-You can view the status at https://luci-config.appspot.com/#/projects/golang.
+You can view the status at https://config.luci.app/config_set/projects/golang.

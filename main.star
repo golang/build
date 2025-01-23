@@ -17,7 +17,6 @@ luci.project(
     notify = "luci-notify.appspot.com",
     scheduler = "luci-scheduler.appspot.com",
     swarming = "chromium-swarm.appspot.com",
-    tricium = "tricium-prod.appspot.com",
     bindings = [
         # Admin permissions.
         luci.binding(
@@ -45,7 +44,6 @@ luci.project(
         luci.binding(
             roles = "role/buildbucket.triggerer",
             users = [
-                "tricium-prod@appspot.gserviceaccount.com",
                 "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
                 "security-coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
             ],
@@ -1956,20 +1954,6 @@ def triggering_policy(env, builder_type, concurrent_builds = 5):
         pending_timeout = time.week,
     )
 
-luci.builder(
-    name = "tricium",
-    bucket = "try",
-    executable = luci.recipe(
-        name = "tricium_simple",
-    ),
-    service_account = "luci-task@golang-ci-luci.iam.gserviceaccount.com",
-    dimensions = {
-        "pool": "luci.golang.try",
-        "os": "Linux",
-        "cpu": "x86-64",
-    },
-)
-
 def display_for_builder_type(builder_type):
     """Produces the category and short name for a luci.console_view_entry.
 
@@ -2138,21 +2122,6 @@ def _define_go_ci():
                 allow_submit_with_open_deps = True,
                 trust_dry_runner_deps = True,
                 allow_non_owner_dry_runner = True,
-                verifiers = [
-                    luci.cq_tryjob_verifier(
-                        builder = "try/tricium",
-                        location_filters = [
-                            cq.location_filter(
-                                gerrit_host_regexp = "%s-review.googlesource.com" % host,
-                                gerrit_project_regexp = filter_project,
-                                path_regexp = ".+",
-                            )
-                            for host in ["go", "go-internal"]
-                            for filter_project in PROJECTS
-                        ],
-                        mode_allowlist = [cq.MODE_ANALYZER_RUN],
-                    ),
-                ],
                 post_actions = POST_ACTIONS,
             )
 
@@ -2361,8 +2330,6 @@ def _define_go_ci():
 def _define_go_internal_ci():
     for project_name in ["go", "net", "crypto"]:
         for go_branch_short, go_branch in INTERNAL_GO_BRANCHES.items():
-            # TODO(yifany): Simplify cq.location_filter once Tricium to CV
-            # migration (go/luci/tricium) is done.
             cq_group_name = ("go-internal_%s_%s" % (project_name, go_branch_short)).replace(".", "-")
             luci.cq_group(
                 name = cq_group_name,
@@ -2383,21 +2350,6 @@ def _define_go_internal_ci():
                 allow_submit_with_open_deps = True,
                 trust_dry_runner_deps = True,
                 allow_non_owner_dry_runner = True,
-                verifiers = [
-                    luci.cq_tryjob_verifier(
-                        builder = "try/tricium",
-                        location_filters = [
-                            cq.location_filter(
-                                gerrit_host_regexp = "%s-review.googlesource.com" % host,
-                                gerrit_project_regexp = filter_project,
-                                path_regexp = ".+",
-                            )
-                            for host in ["go", "go-internal"]
-                            for filter_project in PROJECTS
-                        ],
-                        mode_allowlist = [cq.MODE_ANALYZER_RUN],
-                    ),
-                ],
                 # TODO(prattmic): Set post_actions to apply TryBot-Result labels.
             )
 
