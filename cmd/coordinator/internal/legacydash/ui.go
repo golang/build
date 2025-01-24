@@ -551,6 +551,11 @@ func (tb *uiTemplateDataBuilder) buildTemplateData(ctx context.Context, datastor
 		// to do there in the case of LUCI.
 	}
 
+	if tb.showLUCI() {
+		data.Pagination = &Pagination{} // Disable pagination links because they don't have LUCI results now.
+		data.LinkToLUCI = true
+	}
+
 	return data, nil
 }
 
@@ -875,7 +880,7 @@ var osPriority = map[string]int{
 
 // TagState represents the state of all Packages at a branch.
 type TagState struct {
-	Name     string      // Go branch name: "master", "release-branch.go1.4", etc
+	Name     string      // Go branch name: "master", "release-branch.go1.4", etc.
 	Tag      *CommitInfo // current Go commit on the Name branch
 	Packages []*PackageState
 	Builders []string
@@ -888,6 +893,15 @@ func (ts *TagState) Branch() string {
 		return "master"
 	}
 	return ts.Name
+}
+
+// LUCIBranch returns the short Go branch name as used in LUCI: "tip", "1.24", etc.
+func (ts *TagState) LUCIBranch() string {
+	shortGoBranch := "tip"
+	if after, ok := strings.CutPrefix(ts.Name, "release-branch.go"); ok {
+		shortGoBranch = after
+	}
+	return shortGoBranch
 }
 
 // PackageState represents the state of a Package (x/foo repo) for given Go branch.
@@ -944,6 +958,7 @@ type uiTemplateData struct {
 	Branches   []string
 	Branch     string
 	Repo       string // the repo gerrit project name. "go" if unspecified in the request.
+	LinkToLUCI bool   // whether to display links to LUCI UI
 }
 
 // getActiveBuilds returns the builds that coordinator is currently doing.
