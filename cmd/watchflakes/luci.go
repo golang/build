@@ -23,6 +23,7 @@ import (
 	"go.chromium.org/luci/grpc/prpc"
 	rdbpb "go.chromium.org/luci/resultdb/proto/v1"
 	spb "go.chromium.org/luci/swarming/proto/api_v2"
+	goluci "golang.org/x/build/internal/luci"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -147,6 +148,8 @@ type Failure struct {
 
 type Bot struct {
 	ID          string
+	Goos        string
+	Goarch      string
 	Dead        bool
 	Quarantined bool
 }
@@ -686,7 +689,8 @@ func (c *LUCIClient) fetchLogsForBuild(r *BuildResult) {
 // from the list of returned bots.
 type filter func(bot *spb.BotInfo) bool
 
-// filterOutDarwin filters out darwin machines which no longer exist.
+// filterOutDarwin filters out darwin bots which no longer exist but are still
+// listed as valid bots.
 func filterOutDarwin(bot *spb.BotInfo) bool {
 	return strings.HasPrefix(bot.BotId, "darwin-")
 }
@@ -724,7 +728,12 @@ nextCursor:
 			continue
 		}
 		if bot.IsDead || bot.Quarantined {
-			brokenBots = append(brokenBots, Bot{ID: bot.BotId, Dead: bot.IsDead, Quarantined: bot.Quarantined})
+			goos, goarch, err := platform(bot)
+			if err != nil {
+				fmt.Printf("failed to determine platform for %s: %s\n", bot.GetBotId(), err)
+				continue
+			}
+			brokenBots = append(brokenBots, Bot{ID: bot.BotId, Dead: bot.IsDead, Quarantined: bot.Quarantined, Goos: goos, Goarch: goarch})
 		}
 	}
 	if resp.GetCursor() != "" {
@@ -732,6 +741,40 @@ nextCursor:
 		goto nextCursor
 	}
 	return brokenBots, nil
+}
+
+// platform determines the platform that the bot is running.
+func platform(bot *spb.BotInfo) (string, string, error) {
+	var goos, goarch, targetGoos, targetGoarch string
+	var err error
+
+	for _, d := range bot.GetDimensions() {
+		key := d.GetKey()
+		switch key {
+		case "cipd_platform":
+			val := d.GetValue()
+			if len(val) == 0 {
+				return "", "", fmt.Errorf("invalid cipd_platform value: %+v", val)
+			}
+			goos, goarch, err = goluci.PlatformToGoValues(val[0])
+			if err != nil {
+				return "", "", fmt.Errorf("unable to parse cipd_platform value %q: %w", val[0], err)
+			}
+		case "target_goarch":
+			if val := d.GetValue(); len(val) == 1 {
+				targetGoarch = val[0]
+			}
+		case "target_goos":
+			if val := d.GetValue(); len(val) == 1 {
+				targetGoos = val[0]
+			}
+		default:
+		}
+	}
+	if targetGoarch != "" && targetGoos != "" {
+		goos, goarch = targetGoos, targetGoarch
+	}
+	return goos, goarch, nil
 }
 
 func fetchURL(url string) string {

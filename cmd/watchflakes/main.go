@@ -7,11 +7,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,6 +26,7 @@ import (
 	rdbpb "go.chromium.org/luci/resultdb/proto/v1"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/cmd/watchflakes/internal/script"
+	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/internal/secret"
 	"rsc.io/github"
 )
@@ -106,6 +112,7 @@ func main() {
 Repeat:
 	startTime := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	reportBrokenBots(ctx, c)
 	var boards []*Dashboard
 	if *build == "" {
 		// fetch the dashboard
@@ -300,6 +307,132 @@ Repeat:
 		<-ticker.C
 		goto Repeat
 	}
+}
+
+func reportBrokenBots(ctx context.Context, c *LUCIClient) {
+	// query for broken bots
+	brokenBots, err := c.ListBrokenBots(ctx, filterOutDarwin)
+	if err != nil {
+		log.Printf("failed to query for bots: %s", err)
+		return
+	}
+	// query for existing broken bot issues
+	existingIssues, err := readBuilderIssues()
+	if err != nil {
+		log.Printf("failed querying for existing builder issues: %s", err)
+		return
+	}
+	// map used as set to check for existing issues for a bot ID.
+	// botID -> issue number
+	botIssues := make(map[string]int)
+	for _, issue := range existingIssues {
+		if botID, ok := botIDFromIssueBody(issue.Body); ok {
+			fmt.Printf("found existing issue: %+v for %s\n", issue, botID)
+			botIssues[botID] = issue.Number
+		}
+	}
+	po, err := getPlatformOwners()
+	if err != nil {
+		log.Printf("failed to query for platform owners: %s", err)
+	}
+	// for each broken bot, is there an existing open issue?
+	for _, bot := range brokenBots {
+		if issueID, ok := botIssues[bot.ID]; ok {
+			fmt.Printf("issue #%d found for broken bot %s\n", issueID, bot.ID)
+			continue
+		}
+		title := brokenBotIssueTitle(bot.ID)
+		var botOwners []string
+		if v, ok := po[bot.Goos]; ok {
+			for _, bo := range v {
+				botOwners = append(botOwners, "@"+bo)
+			}
+		}
+		if v, ok := po[bot.Goarch]; ok {
+			for _, bo := range v {
+				botOwners = append(botOwners, "@"+bo)
+			}
+		}
+		if !*post {
+			fmt.Printf("dry-run: skipped posting a new broken bot issue for %s\n", bot.ID)
+			continue
+		}
+		i, err := postNewBrokenBot(title, brokenBotIssueBody(bot, botOwners))
+		if err != nil {
+			log.Printf("failed to post broken bot issue: %s", err)
+			continue
+		}
+		fmt.Printf("Posted new broken bot issue for %s, issue: %s\n", bot.ID, i.ID)
+	}
+}
+
+func getPlatformOwners() (map[string][]string, error) {
+	url := "https://dev.golang.org/owners"
+	var o owners.Request
+	o.Payload.Platform = true
+
+	body, err := json.Marshal(o)
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal json: %s", err)
+	}
+	r, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query for platform owners: %s", err)
+	}
+	defer r.Body.Close()
+	if r.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to query for platform owners, response code=%d", r.StatusCode)
+	}
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read http response body: %w", err)
+	}
+	var response owners.Response
+	err = json.Unmarshal(b, &response)
+	if err != nil {
+		return nil, fmt.Errorf("unable to unmarshal owners response: %s", err)
+	}
+	m := map[string][]string{}
+	for k, v := range response.Payload.Platforms {
+		if len(v.Primary) == 0 {
+			continue
+		}
+		var primaries []string
+		for _, p := range v.Primary {
+			primaries = append(primaries, p.GitHubUsername)
+		}
+		m[k] = primaries
+	}
+	return m, nil
+}
+
+var issueFooter = regexp.MustCompile(`<!-- DO NOT EDIT: (.*?) -->`)
+
+func botIDFromIssueBody(body string) (string, bool) {
+	matches := issueFooter.FindStringSubmatch(body)
+	if len(matches) != 2 {
+		return "", false
+	}
+	return matches[1], true
+}
+
+func brokenBotIssueTitle(botID string) string {
+	return fmt.Sprintf("x/build: bot %s reported as broken", botID)
+}
+
+func brokenBotIssueBody(bot Bot, owners []string) string {
+	var state string
+	if bot.Dead {
+		state = "dead"
+	} else if bot.Quarantined {
+		state = "quarantined"
+	} else {
+		state = "unknown"
+	}
+	botURL := fmt.Sprintf("https://chromium-swarm.appspot.com/bot?id=%s", bot.ID)
+	body := "The bot [%s](%s) has been reported as broken. It is currently in %q state. Please work to resolve the issue.\n\n%s\n%s"
+	footer := fmt.Sprintf("<!-- DO NOT EDIT: %s -->", bot.ID)
+	return fmt.Sprintf(body, bot.ID, botURL, state, strings.Join(owners, "\n"), footer)
 }
 
 const SKIP = bbpb.Status_STATUS_UNSPECIFIED // for smashing the status to skip a non-flake failure

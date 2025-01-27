@@ -40,6 +40,7 @@ var (
 	repo       *github.Repo
 	labels     map[string]*github.Label
 	testFlakes *github.Project
+	brokenBots *github.Project
 )
 
 // readIssues reads the GitHub issues in the Test Flakes project.
@@ -106,6 +107,71 @@ func readIssues(old []*Issue) ([]*Issue, error) {
 		return issues[i].Number < issues[j].Number
 	})
 
+	return issues, nil
+}
+
+// readBuilderIssues reads the GitHub issues in the Broken Bots project.
+// It also sets up the repo, labels, and testFlakes variables for
+// use by other functions below.
+func readBuilderIssues() ([]*Issue, error) {
+	// Find repo.
+	r, err := gh.Repo("golang", "go")
+	if err != nil {
+		return nil, err
+	}
+	repo = r
+
+	var builderLabel *github.Label
+
+	// Find labels.
+	list, err := gh.SearchLabels("golang", "go", "")
+	if err != nil {
+		return nil, err
+	}
+	for _, label := range list {
+		if label.Name == "Builders" {
+			builderLabel = label
+			break
+		}
+	}
+	if builderLabel == nil {
+		return nil, fmt.Errorf("cannot find builder label")
+	}
+
+	labels = make(map[string]*github.Label)
+	for _, label := range list {
+		labels[label.Name] = label
+	}
+
+	// Find Test Flakes project.
+	ps, err := gh.Projects("golang", "")
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range ps {
+		if p.Title == "Broken Bots" {
+			brokenBots = p
+			break
+		}
+	}
+	if brokenBots == nil {
+		return nil, fmt.Errorf("cannot find Broken Bots project")
+	}
+
+	// Read all issues in Test Flakes.
+	var issues []*Issue
+	items, err := gh.ProjectItems(brokenBots)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		if item.Issue != nil {
+			issues = append(issues, &Issue{Issue: item.Issue, NewBody: true, Stale: true})
+		}
+	}
+	sort.Slice(issues, func(i, j int) bool {
+		return issues[i].Number < issues[j].Number
+	})
 	return issues, nil
 }
 
@@ -329,7 +395,7 @@ func readComments(issue *Issue) {
 }
 
 // postNew creates a new issue with the given title and body,
-// setting the NeedsInvestigation label and placing the issue int
+// setting the NeedsInvestigation label and placing the issue in
 // the Test Flakes project.
 // It automatically adds signature to the body.
 func postNew(title, body string) *github.Issue {
@@ -344,6 +410,24 @@ func postNew(title, body string) *github.Issue {
 		log.Fatal(err)
 	}
 	return issue
+}
+
+// postNewBrokenBot creates a new issue with the given title and body,
+// setting the NeedsInvestigation label and placing the issue in
+// the Broken Bots project.
+// It automatically adds signature to the body.
+func postNewBrokenBot(title, body string) (*github.Issue, error) {
+	var args []any
+	if lab := labels["NeedsInvestigation"]; lab != nil {
+		args = append(args, lab)
+	}
+	if lab := labels["Builders"]; lab != nil {
+		args = append(args, lab)
+	}
+
+	args = append(args, brokenBots)
+	issue, err := gh.CreateIssue(repo, title, body+signature, args...)
+	return issue, err
 }
 
 // postComment posts a new comment on the issue.
