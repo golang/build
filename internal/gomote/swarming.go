@@ -30,6 +30,7 @@ import (
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/gomote/protos"
+	goluci "golang.org/x/build/internal/luci"
 	"golang.org/x/build/internal/rendezvous"
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/grpc"
@@ -136,7 +137,7 @@ func (ss *SwarmingServer) AddBootstrap(ctx context.Context, req *protos.AddBoots
 		}
 		break
 	}
-	goos, goarch, err := platformToGoValues(cipdPlatform)
+	goos, goarch, err := goluci.PlatformToGoValues(cipdPlatform)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "unknown platform type")
 	}
@@ -948,20 +949,6 @@ func createStringPairs(m map[string]string) []*swarmpb.StringPair {
 	return dims
 }
 
-func platformToGoValues(platform string) (goos string, goarch string, err error) {
-	goos, goarch, ok := strings.Cut(platform, "-")
-	if !ok {
-		return "", "", fmt.Errorf("cipd_platform not in proper format=%s", platform)
-	}
-	if goos == "Mac" || goos == "mac" {
-		goos = "darwin"
-	}
-	if goarch == "armv6l" {
-		goarch = "arm"
-	}
-	return goos, goarch, nil
-}
-
 func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts, useGolangbuild bool) (string, error) {
 	if useGolangbuild {
 
@@ -971,7 +958,7 @@ func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dime
 	if !ok {
 		return "", fmt.Errorf("dimensions require cipd_platform: instance=%s", name)
 	}
-	goos, goarch, err := platformToGoValues(cipdPlatform)
+	goos, goarch, err := goluci.PlatformToGoValues(cipdPlatform)
 	if err != nil {
 		return "", err
 	}
@@ -1071,7 +1058,7 @@ func (ss *SwarmingServer) newSwarmingTaskWithGolangbuild(ctx context.Context, na
 	if !ok {
 		return "", fmt.Errorf("dimensions require cipd_platform: instance=%s", name)
 	}
-	goos, goarch, err := platformToGoValues(cipdPlatform)
+	goos, goarch, err := goluci.PlatformToGoValues(cipdPlatform)
 	if err != nil {
 		return "", err
 	}
