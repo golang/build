@@ -2046,10 +2046,6 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
         presubmit = presubmit and os not in ["js", "wasip1"]
 
-    # TODO(hxjiang): enable presubmit after fully migrated to LUCI.
-    if project == "vscode-go":
-        presubmit = False
-
     # Apply policies for each run mod.
     presubmit_filters = []
     for mod in run_mods:
@@ -2098,13 +2094,6 @@ POST_ACTIONS = [
 def _define_go_ci():
     # Presubmit.
     for project in PROJECTS:
-        # TODO(hxjiang): Temporarily disable LUCI's CQ for vscode-go repo during
-        # migration to Kokoro. LUCI's CQ runs and completes quickly, resetting
-        # the CQ +1 vote before Kokoro can trigger, preventing Kokoro from
-        # running the tests. Disabling the CQ group for vscode-go ensures Kokoro
-        # runs the tests during the migration.
-        if project == "vscode-go":
-            continue
         for go_branch_short, go_branch in GO_BRANCHES.items():
             # Set up a CQ group for the builder definitions below.
             cq_group = go_cq_group(project, go_branch_short)
