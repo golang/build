@@ -60,13 +60,18 @@ type Request struct {
 		//
 		// If All is true, Paths must be empty.
 		All bool `json:"all"`
+
+		// Platform indicates that the response should contain all platform
+		// owners entries.
+		Platform bool `json:"platform"`
 	} `json:"payload"`
 	Version int `json:"v"` // API version
 }
 
 type Response struct {
 	Payload struct {
-		Entries map[string]*Entry `json:"entries"` // paths in request -> Entry
+		Entries   map[string]*Entry `json:"entries"`   // paths in request -> Entry
+		Platforms map[string]*Entry `json:"platforms"` // platforms (GOOS or GOARCH) -> Entry
 	} `json:"payload"`
 	Error string `json:"error,omitempty"`
 }
@@ -133,14 +138,18 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		var resp Response
 		if req.Payload.All {
 			resp.Payload.Entries = entries
+			resp.Payload.Platforms = archOses
 		} else {
 			resp.Payload.Entries = make(map[string]*Entry)
 			for _, p := range req.Payload.Paths {
 				resp.Payload.Entries[p] = match(p)
 			}
+			if req.Payload.Platform {
+				resp.Payload.Platforms = archOses
+			}
 		}
-		// resp.Payload.Entries must not be mutated because it contains
-		// references to the global "entries" value.
+		// resp.Payload.Entries and resp.Payload.Platforms must not be mutated because they
+		// contain references to the global "entries" and "archOses" values.
 
 		var buf bytes.Buffer
 		if err := json.NewEncoder(&buf).Encode(resp); err != nil {

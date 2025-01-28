@@ -64,26 +64,44 @@ func TestMatch(t *testing.T) {
 }
 
 func TestHandler(t *testing.T) {
+	copyEntries := func(m map[string]*Entry) map[string]*Entry {
+		out := make(map[string]*Entry)
+		for k, v := range m {
+			e := &Entry{
+				Primary: v.Primary,
+			}
+			if len(v.Secondary) != 0 {
+				e.Secondary = v.Secondary
+			}
+			out[k] = e
+		}
+		return out
+	}
+
 	testCases := []struct {
-		method  string
-		code    int
-		paths   []string
-		entries map[string]*Entry
+		method    string
+		code      int
+		all       bool
+		paths     []string
+		entries   map[string]*Entry
+		platforms map[string]*Entry
 	}{
-		{"PUT", http.StatusMethodNotAllowed, nil, nil},
-		{"OPTIONS", http.StatusOK, nil, nil},
+		{"PUT", http.StatusMethodNotAllowed, false, nil, nil, nil},
+		{"OPTIONS", http.StatusOK, false, nil, nil, nil},
 		{
-			"POST", http.StatusOK,
+			"POST", http.StatusOK, false,
 			[]string{"nonexistent/path"},
 			map[string]*Entry{"nonexistent/path": nil},
+			nil,
 		},
 		{
-			"POST", http.StatusOK,
+			"POST", http.StatusOK, false,
 			[]string{"go/src/archive/zip/a.go"},
 			map[string]*Entry{"go/src/archive/zip/a.go": {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}}},
+			nil,
 		},
 		{
-			"POST", http.StatusOK,
+			"POST", http.StatusOK, false,
 			[]string{
 				"go/src/archive/zip/a.go",
 				"go/src/archive/zip/b.go",
@@ -92,9 +110,10 @@ func TestHandler(t *testing.T) {
 				"go/src/archive/zip/a.go": {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}},
 				"go/src/archive/zip/b.go": {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}},
 			},
+			nil,
 		},
 		{
-			"POST", http.StatusOK,
+			"POST", http.StatusOK, false,
 			[]string{
 				"go/src/archive/zip/a.go",
 				"crypto/chacha20poly1305/chacha20poly1305.go",
@@ -103,6 +122,25 @@ func TestHandler(t *testing.T) {
 				"go/src/archive/zip/a.go":                     {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}},
 				"crypto/chacha20poly1305/chacha20poly1305.go": {Primary: []Owner{filippo, roland, securityTeam}},
 			},
+			nil,
+		},
+		{
+			"POST", http.StatusOK, false,
+			[]string{
+				"go/src/archive/zip/a.go",
+				"crypto/chacha20poly1305/chacha20poly1305.go",
+			},
+			map[string]*Entry{
+				"go/src/archive/zip/a.go":                     {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}},
+				"crypto/chacha20poly1305/chacha20poly1305.go": {Primary: []Owner{filippo, roland, securityTeam}},
+			},
+			archOses,
+		},
+		{
+			"POST", http.StatusOK, true,
+			[]string{},
+			copyEntries(entries),
+			archOses,
 		},
 	}
 
@@ -110,7 +148,11 @@ func TestHandler(t *testing.T) {
 		var buf bytes.Buffer
 		if tc.paths != nil {
 			var oReq Request
+			oReq.Payload.All = tc.all
 			oReq.Payload.Paths = tc.paths
+			if len(tc.platforms) > 0 {
+				oReq.Payload.Platform = true
+			}
 			if err := json.NewEncoder(&buf).Encode(oReq); err != nil {
 				t.Errorf("could not encode request: %v", err)
 				continue
@@ -144,6 +186,9 @@ func TestHandler(t *testing.T) {
 			t.Errorf("got unexpected error in response: %q", oResp.Error)
 		}
 		if diff := cmp.Diff(oResp.Payload.Entries, tc.entries); diff != "" {
+			t.Errorf("%s: (-got +want)\n%s", tc.method, diff)
+		}
+		if diff := cmp.Diff(oResp.Payload.Platforms, tc.platforms); diff != "" {
 			t.Errorf("%s: (-got +want)\n%s", tc.method, diff)
 		}
 	}
