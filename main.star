@@ -2144,8 +2144,12 @@ def _define_go_ci():
                 # Make presubmit mandatory for builders deemed "fast".
                 # See go.dev/issue/17626.
                 if project != "go" and go_branch_short != "gotip":
-                    x_repo_presubmit = builder_type in ["linux-amd64", "linux-386", "darwin-amd64_14", "windows-amd64"] and \
-                                       enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)[2]
+                    first_class_subset = builder_type in ["linux-amd64", "linux-386", "darwin-amd64_14", "windows-amd64"]
+                    vscode_go_special_case = project == "vscode-go" and builder_type == "linux-amd64_docker"
+
+                    in_postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)[2]
+
+                    x_repo_presubmit = in_postsubmit and (first_class_subset or vscode_go_special_case)
                     luci.cq_tryjob_verifier(
                         builder = name,
                         cq_group = go_cq_group(project, "gotip").name,
