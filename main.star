@@ -1994,6 +1994,9 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22"]:
         # Go 1.22 is last to support macOS 10.15. See go.dev/doc/go1.22#darwin.
         return False, PRESUBMIT.DISABLED, False, []
+    elif os == "darwin" and suffix == "11" and go_branch_short not in ["go1.22", "go1.23", "go1.24"]:
+        # Go 1.24 is last to support macOS 11. See go.dev/doc/go1.24#darwin.
+        return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out new ports on old release branches.
     if os == "openbsd" and arch == "riscv64" and go_branch_short in ["go1.22"]:
