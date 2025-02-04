@@ -91,9 +91,9 @@ func TestTrybots(t *testing.T) {
 		{
 			repo:   "go",
 			branch: "master",
-			want: []string{
-				"freebsd-amd64-12_3",
+			want:   []string{
 				// Stopped.
+				//"freebsd-amd64-12_3",
 				//"linux-386",
 				//"linux-amd64",
 				//"linux-amd64-boringcrypto",
@@ -108,9 +108,9 @@ func TestTrybots(t *testing.T) {
 		{
 			repo:   "go",
 			branch: "release-branch.go1.22",
-			want: []string{
-				"freebsd-amd64-12_3",
+			want:   []string{
 				// Stopped.
+				//"freebsd-amd64-12_3",
 				//"linux-386",
 				//"linux-amd64",
 				//"linux-amd64-boringcrypto",
@@ -131,9 +131,9 @@ func TestTrybots(t *testing.T) {
 		{
 			repo:   "go",
 			branch: "release-branch.go1.21",
-			want: []string{
-				"freebsd-amd64-12_3",
+			want:   []string{
 				// Stopped.
+				//"freebsd-amd64-12_3",
 				//"linux-386",
 				//"linux-amd64",
 				//"linux-amd64-boringcrypto",
@@ -167,9 +167,9 @@ func TestTrybots(t *testing.T) {
 			branch: "master",
 			want: []string{
 				"freebsd-386-13_0",
-				"freebsd-amd64-12_3",
-				"freebsd-amd64-13_0",
 				// Stopped.
+				//"freebsd-amd64-12_3",
+				//"freebsd-amd64-13_0",
 				//"linux-386",
 				//"linux-amd64",
 				//"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test

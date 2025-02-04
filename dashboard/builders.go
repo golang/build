@@ -2915,6 +2915,14 @@ func addBuilder(c BuildConfig) {
 	Builders[c.Name] = &c
 }
 
+// TestingKnobForceEnableLinuxAMD64 is a helper intended to be used in tests
+// that need to force the linux-amd64 builder to build all repositories.
+func TestingKnobForceEnableLinuxAMD64() (cleanup func()) {
+	old := Builders["linux-amd64"].buildsRepo
+	Builders["linux-amd64"].buildsRepo = func(_, _, _ string) bool { return true }
+	return func() { Builders["linux-amd64"].buildsRepo = old }
+}
+
 // fasterTrybots is a distTestAdjust policy function.
 // It skips (returns false) the test/ directory and reboot tests for trybots.
 func fasterTrybots(run bool, distTest string, isNormalTry bool) bool {

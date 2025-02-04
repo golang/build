@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/coordinator/pool"
@@ -157,6 +158,8 @@ func TestStagingClusterBuilders(t *testing.T) {
 // See golang.org/issue/28891.
 func TestIssue28891(t *testing.T) {
 	testingKnobSkipBuilds = true
+	cleanup := dashboard.TestingKnobForceEnableLinuxAMD64()
+	defer func() { testingKnobSkipBuilds = false; cleanup() }()
 
 	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/net CL 258478.
 		Project:   "net",
@@ -184,6 +187,8 @@ func TestIssue28891(t *testing.T) {
 // See golang.org/issue/42127.
 func TestIssue42127(t *testing.T) {
 	testingKnobSkipBuilds = true
+	cleanup := dashboard.TestingKnobForceEnableLinuxAMD64()
+	defer func() { testingKnobSkipBuilds = false; cleanup() }()
 
 	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/net CL 264058.
 		Project:   "net",
@@ -210,6 +215,8 @@ func TestIssue42127(t *testing.T) {
 // "master" and "release-branch.go1.N". See golang.org/issue/37512.
 func TestXRepoBranches(t *testing.T) {
 	testingKnobSkipBuilds = true
+	cleanup := dashboard.TestingKnobForceEnableLinuxAMD64()
+	defer func() { testingKnobSkipBuilds = false; cleanup() }()
 
 	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/tools CL 227356.
 		Project:   "tools",
@@ -234,6 +241,7 @@ func TestXRepoBranches(t *testing.T) {
 // the latest request is used. See golang.org/issue/42084.
 func TestIssue42084(t *testing.T) {
 	testingKnobSkipBuilds = true
+	defer func() { testingKnobSkipBuilds = false }()
 
 	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for CL 324763. TryMessage is set later.
 		Project:   "go",

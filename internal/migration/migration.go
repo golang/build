@@ -77,6 +77,9 @@ var BuildersPortedToLUCI = map[string]bool{
 	"linux-ppc64-sid-power10":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64_power10.
 	"linux-loong64-3a5000":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-loong64.
 
+	"freebsd-amd64-12_3": true, "freebsd-amd64-13_0": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-freebsd-amd64 (a newer OS version, but we won't be adding exactly 12.3 or 13.0 to LUCI by now).
+	"freebsd-amd64-race": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-freebsd-amd64-race.
+
 	"netbsd-arm64-bsiegert": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-netbsd-arm64.
 	"netbsd-arm-bsiegert":   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-netbsd-arm.
 
