@@ -420,6 +420,7 @@ BUILDER_TYPES = [
     "dragonfly-amd64",
     "freebsd-386",
     "freebsd-amd64",
+    "freebsd-amd64-race",
     "freebsd-arm",
     "freebsd-arm64",
     "freebsd-riscv64",
@@ -2010,6 +2011,9 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
             # The 14.1 freebsd/amd64 LUCI builders need fixes that aren't available on old branches.
             # Just disable the builder on these branches.
             return False, PRESUBMIT.DISABLED, False, []
+    if os == "freebsd" and arch == "amd64" and "race" in run_mods and go_branch_short in ["go1.22", "go1.23", "go1.24"]:
+        # The freebsd-amd64-race LUCI builders may need fixes that aren't available on old branches.
+        return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out new projects on old release branches.
     if project == "oscar" and go_branch_short in ["go1.22"]:
