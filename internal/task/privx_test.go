@@ -47,11 +47,34 @@ func (c *privxClient) Tag(ctx context.Context, repo string, tag string, commit s
 	return nil
 }
 
+func (c *privxClient) GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error) {
+	return map[string]*gerrit.ActionInfo{
+		"submit": &gerrit.ActionInfo{Enabled: true},
+	}, nil
+}
+
+func (c *privxClient) CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error) {
+	return "", nil
+}
+
+func (c *privxClient) MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error) {
+	return gerrit.ChangeInfo{}, nil
+}
+
+func (c *privxClient) RebaseChange(ctx context.Context, changeID string, revision string) (gerrit.ChangeInfo, error) {
+	return gerrit.ChangeInfo{}, nil
+}
+
+func (c *privxClient) SubmitChange(ctx context.Context, changeID string) (gerrit.ChangeInfo, error) {
+	return gerrit.ChangeInfo{}, nil
+}
+
 func (c *privxClient) GetChange(ctx context.Context, changeID string, opts ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error) {
 	return &gerrit.ChangeInfo{
 		Project:         "net",
 		Status:          gerrit.ChangeStatusMerged,
 		CurrentRevision: "dead",
+		Submittable:     true,
 		Revisions: map[string]gerrit.RevisionInfo{
 			"dead": {
 				Fetch: map[string]*gerrit.FetchInfo{

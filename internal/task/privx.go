@@ -46,7 +46,8 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	repos := wf.Task0(wd, "Load all repositories", tagx.SelectRepos)
 
-	repos = wf.Task4(wd, "Publish change", func(ctx *wf.TaskContext, clNumber string, reviewers []string, repos []TagRepo, repoName string) ([]TagRepo, error) {
+	// check change is ready
+	checkedChange := wf.Task3(wd, "Check change", func(ctx *wf.TaskContext, clNumber string, repoName string, repos []TagRepo) (*gerrit.ChangeInfo, error) {
 		if !slices.ContainsFunc(repos, func(r TagRepo) bool { return r.Name == repoName }) {
 			return nil, fmt.Errorf("no repository %q", repoName)
 		}
@@ -57,6 +58,82 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		}
 		if changeInfo.Project != repoName {
 			return nil, fmt.Errorf("CL is for unexpected project, got: %s, want %s", changeInfo.Project, repoName)
+		}
+
+		if !changeInfo.Submittable {
+			return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNumber))
+		}
+		ra, err := x.PrivateGerrit.GetRevisionActions(ctx.Context, clNumber, "current")
+		if err != nil {
+			return nil, err
+		}
+		if ra["submit"] == nil || !ra["submit"].Enabled {
+			return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNumber))
+		}
+
+		return changeInfo, nil
+	}, clNumber, repoName, repos)
+
+	// create checkpoint branch
+	checkpointBranch := wf.Task1(wd, "Create checkpoint branch", func(ctx *wf.TaskContext, repoName string) (string, error) {
+		publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx.Context, repoName, "public")
+		if err != nil {
+			return "", err
+		}
+		checkpointName := fmt.Sprintf("public-%s", time.Now().UTC().Format("2006-01-02-1504"))
+		if _, err := x.PrivateGerrit.CreateBranch(ctx.Context, "go", checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
+			return "", err
+		}
+		return checkpointName, nil
+	}, repoName, wf.After(checkedChange))
+
+	// move and rebase change onto checkpoint branch
+	movedChange := wf.Task2(wd, "Move change+rebase onto checkpoint branch", func(ctx *wf.TaskContext, change *gerrit.ChangeInfo, checkpointBranch string) (*gerrit.ChangeInfo, error) {
+		newCI, err := x.PrivateGerrit.MoveChange(ctx.Context, change.ChangeID, checkpointBranch, true)
+		if err != nil {
+			return nil, err
+		}
+		newCI, err = x.PrivateGerrit.RebaseChange(ctx.Context, change.ChangeID, "")
+		if err != nil {
+			return nil, err
+		}
+		return &newCI, nil
+	}, checkedChange, checkpointBranch)
+
+	// wait for change to be submitted
+	submittedChange := wf.Task1(wd, "Await submission", func(ctx *wf.TaskContext, change *gerrit.ChangeInfo) (*gerrit.ChangeInfo, error) {
+		var submitted gerrit.ChangeInfo
+		if _, err := AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
+			// The ChangeInfo object returned by RebaseChange doesn't contain
+			// information about submittability, so we need to refetch it using
+			// GetChange.
+			ci, err := x.PrivateGerrit.GetChange(ctx, change.ChangeID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+			if err != nil {
+				return "", false, err
+			}
+
+			if !ci.Submittable {
+				return "", false, nil
+			}
+
+			submitted, err = x.PrivateGerrit.SubmitChange(ctx, ci.ChangeID)
+			if err != nil {
+				return "", false, err
+			}
+			return "", true, nil
+
+		}); err != nil {
+			return nil, err
+		}
+
+		return &submitted, nil
+	}, movedChange)
+
+	// publish change publicly
+	publicChange := wf.Task3(wd, "Publish change", func(ctx *wf.TaskContext, change *gerrit.ChangeInfo, reviewers []string, repoName string) (*gerrit.ChangeInfo, error) {
+		changeInfo, err := x.PrivateGerrit.GetChange(ctx, change.ChangeID, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION"}})
+		if err != nil {
+			return nil, err
 		}
 		if changeInfo.Status != gerrit.ChangeStatusMerged {
 			return nil, fmt.Errorf("CL %s not merged, status is %s", clNumber, changeInfo.Status)
@@ -136,13 +213,16 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		if err != nil {
 			return nil, err
 		}
-		return repos, nil
-	}, clNumber, reviewers, repos, repoName)
+		return change, nil
+	}, submittedChange, reviewers, repoName)
 
-	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, repos, repoName, skipPostSubmit, reviewers)
+	// tag repository
+	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, repos, repoName, skipPostSubmit, reviewers, wf.After(publicChange))
 
+	// wait for manual approval of the announcement message
 	okayToAnnoucne := wf.Action0(wd, "Wait to Announce", x.ApproveAction, wf.After(tagged))
 
+	// send announcement email
 	wf.Task5(wd, "Mail announcement", func(ctx *wf.TaskContext, tagged TagRepo, cve string, githubIssue string, relNote string, acknowledgement string) (string, error) {
 		var buf bytes.Buffer
 		if err := privXPatchAnnouncementTmpl.Execute(&buf, map[string]string{
