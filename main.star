@@ -815,7 +815,10 @@ def projects_of_type(types):
 # - postsubmit - false means the builder should not run in postsubmit
 # - presubmit location filters - any cq.location_filter to apply to presubmit
 # If enabled is not provided, the builder defaults are used as is for the run_mod.
-def make_run_mod(add_props = {}, add_env = {}, enabled = None, test_timeout_scale = 1):
+#
+# known_issues_by_project is an optional map of known issues by project name. It can be
+# used to add a project-specific known issue; no support for combining known issues yet.
+def make_run_mod(add_props = {}, add_env = {}, enabled = None, known_issues_by_project = None, test_timeout_scale = 1):
     def apply_mod(props, project):
         props.update(add_props)
 
@@ -838,6 +841,12 @@ def make_run_mod(add_props = {}, add_env = {}, enabled = None, test_timeout_scal
             # of experiment names. Merge them. See https://pkg.go.dev/internal/goexperiment.
             e["GOEXPERIMENT"] = props["env"]["GOEXPERIMENT"] + "," + e["GOEXPERIMENT"]
         props["env"].update(e)
+
+        # Add project-specific known issues.
+        if known_issues_by_project and project in known_issues_by_project:
+            if "known_issue" in props:
+                fail("builder already has a known_issue; no support for combining known issues yet")
+            props["known_issue"] = known_issues_by_project[project]
 
     if enabled == None:
         enabled = lambda port, project, go_branch_short: (True, True, True, [])
@@ -1171,6 +1180,10 @@ RUN_MODS = dict(
             for proj, typ in PROJECTS.items()
             if proj != "go" and typ != PT.SPECIAL
         ], go_branches = ["gotip"]),
+        known_issues_by_project = {
+            "crypto": 71612,
+            "tools": 71613,
+        },
     ),
 
     # Build and test with the gotypesalias GODEBUG, which enables
