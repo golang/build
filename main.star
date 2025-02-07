@@ -1485,12 +1485,11 @@ def make_console_gen(project, go_branch_short, builders, by_go_commit = False, k
         title += " (known issue)"
         name += "-known_issue"
         links = []
-        for builder_name, builder_type in builders.items():
+        for builder_name, b in builders.items():
             builder_name = builder_name.split("/")[1]  # Remove the bucket.
-            issue = KNOWN_ISSUE_BUILDER_TYPES[builder_type].issue_number
             links.append({
-                "text": "%s: go.dev/issue/%d" % (builder_name, issue),
-                "url": "https://go.dev/issue/%d" % issue,
+                "text": "%s: go.dev/issue/%d" % (builder_name, b.known_issue),
+                "url": "https://go.dev/issue/%d" % b.known_issue,
                 "alt": "Known issue link for %s" % builder_name,
             })
         header = {"links": [{"name": "Known issues", "links": links}]}
@@ -1504,10 +1503,10 @@ def make_console_gen(project, go_branch_short, builders, by_go_commit = False, k
             entries = [
                 luci.console_view_entry(
                     builder = name,
-                    category = display_for_builder_type(builder_type)[0],
-                    short_name = display_for_builder_type(builder_type)[1],
+                    category = display_for_builder_type(b.builder_type)[0],
+                    short_name = display_for_builder_type(b.builder_type)[1],
                 )
-                for name, builder_type in builders.items()
+                for name, b in builders.items()
             ],
             header = header,
         )
@@ -1540,6 +1539,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     Returns:
         The full name including a bucket prefix.
         A list of the builders this builder will trigger (by full name).
+        A known issue number that is set for the builder, or 0 if none.
     """
 
     os, arch, suffix, run_mods = split_builder_type(builder_type)
@@ -1793,7 +1793,8 @@ def define_builder(env, project, go_branch_short, builder_type):
     else:
         fail("unhandled builder definition")
 
-    return env.bucket + "/" + name, downstream_builders
+    known_issue = base_props["known_issue"] if "known_issue" in base_props else 0
+    return env.bucket + "/" + name, downstream_builders, known_issue
 
 def define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
     os, arch, _, _ = split_builder_type(builder_type)
@@ -2129,7 +2130,7 @@ def _define_go_ci():
                 if not exists or presubmit == PRESUBMIT.DISABLED:
                     continue
 
-                name, _ = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
+                name, _, _ = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
                 luci.cq_tryjob_verifier(
                     builder = name,
                     cq_group = cq_group.name,
@@ -2206,7 +2207,7 @@ def _define_go_ci():
             if project == "tools" and go_branch_short == "gotip":
                 for extra_go_release, _ in TOOLS_GO_BRANCHES.items():
                     builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
-                    try_builder, _ = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
+                    try_builder, _, _ = define_builder(PUBLIC_TRY_ENV, project, extra_go_release, builder_type)
                     luci.cq_tryjob_verifier(
                         builder = try_builder,
                         cq_group = cq_group.name,
@@ -2228,11 +2229,11 @@ def _define_go_ci():
                 if not exists or not postsubmit:
                     continue
 
-                name, triggers = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
-                if builder_type in KNOWN_ISSUE_BUILDER_TYPES:
-                    postsubmit_builders_known_issue[name] = builder_type
+                name, triggers, known_issue = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
+                if known_issue != 0:
+                    postsubmit_builders_known_issue[name] = struct(builder_type = builder_type, known_issue = known_issue)
                 else:
-                    postsubmit_builders[name] = builder_type
+                    postsubmit_builders[name] = struct(builder_type = builder_type)
 
                 # Collect all the builders that have triggers from the Go repository. Every builder needs at least one.
                 if project == "go":
@@ -2244,13 +2245,13 @@ def _define_go_ci():
             if project == "tools" and go_branch_short == "gotip":
                 for extra_go_release, _ in TOOLS_GO_BRANCHES.items():
                     builder_type = "linux-amd64"  # Just one fast and highly available builder is deemed enough.
-                    ci_builder, _ = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
-                    postsubmit_builders[ci_builder] = builder_type
+                    ci_builder, _, _ = define_builder(PUBLIC_CI_ENV, project, extra_go_release, builder_type)
+                    postsubmit_builders[ci_builder] = struct(builder_type = builder_type)
                     postsubmit_builders_with_go_repo_trigger[ci_builder] = True
 
             # Collect all the postsubmit builders by port and project.
-            for name, builder_type in postsubmit_builders.items() + postsubmit_builders_known_issue.items():
-                os, arch, _, _ = split_builder_type(builder_type)
+            for name, b in postsubmit_builders.items() + postsubmit_builders_known_issue.items():
+                os, arch, _, _ = split_builder_type(b.builder_type)
                 port = "%s/%s" % (os, arch)
                 postsubmit_builders_by_port.setdefault(port, []).append(name)
                 postsubmit_builders_by_project_and_branch.setdefault((project, go_branch.branch, go_branch_short), []).append(name)
@@ -2388,7 +2389,7 @@ def _define_go_internal_ci():
 
                 # Define presubmit builders. Since there's no postsubmit to monitor,
                 # all possible completed builders that perform testing are required.
-                name, _ = define_builder(SECURITY_TRY_ENV, project_name, go_branch_short, builder_type)
+                name, _, _ = define_builder(SECURITY_TRY_ENV, project_name, go_branch_short, builder_type)
                 _, _, _, run_mods = split_builder_type(builder_type)
                 if presubmit != PRESUBMIT.DISABLED:
                     luci.cq_tryjob_verifier(
