@@ -6,7 +6,7 @@
 # Builds FreeBSD image based on raw disk images provided by FreeBSD.org
 # This script boots the image once, side-loads GCE Go builder configuration via
 # an ISO mounted as the CD-ROM, and customizes the system before powering down.
-# SSH is enabled, and a user gopher, password gopher, is created.
+# SSH is enabled, and a user swarming, password swarming, is created.
 
 # Only tested on Ubuntu 20.04.
 # Requires packages: qemu-system-x86 qemu-img expect genisoimage
@@ -99,9 +99,15 @@ case $1 in
   readonly SHA256=7b8fcc2330c8d9f66dd012c5859167d56c227ece39188c8f55b2bddbf688875f # https://lists.freebsd.org/archives/freebsd-snapshots/2021-December/000036.html
   readonly BLIND_SWITCH_CONSOLE=1
 ;;
+14.1)
+  readonly VERSION=14.1-RELEASE
+  readonly VERSION_TRAILER=
+  readonly SHA256=f2eb6f0033e573f580d43f0cf5a0e9c17c6994de9e502c711fd2325dac3b8f69
+  readonly BLIND_SWITCH_CONSOLE=1
+;;
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2 13.0 13.0-SNAPSHOT"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2 13.0 13.0-SNAPSHOT 14.1"
   exit 1
 esac
 
@@ -120,26 +126,28 @@ fi
 
 qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw -F raw disk.qcow2 16G
 
-mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d
+mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d iso/usr/local/bin
 cp loader.conf iso/boot
 cp rc.conf iso/etc
 cp sysctl.conf iso/etc
 cp buildlet iso/usr/local/etc/rc.d
+CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -o iso/usr/local/bin/bootstrapswarm golang.org/x/build/cmd/bootstrapswarm
 
 cat >iso/install.sh <<'EOF'
 #!/bin/sh
 set -x
 
-mkdir -p /usr/local/etc/rc.d/
+mkdir -p /usr/local/etc/rc.d/ /usr/local/bin/
 cp /mnt/usr/local/etc/rc.d/buildlet /usr/local/etc/rc.d/buildlet
 chmod +x /usr/local/etc/rc.d/buildlet
 cp /mnt/boot/loader.conf /boot/loader.conf
 cp /mnt/etc/rc.conf /etc/rc.conf
+cp /mnt/usr/local/bin/bootstrapswarm /usr/local/bin/bootstrapswarm
 cat /mnt/etc/sysctl.conf >> /etc/sysctl.conf
 adduser -f - <<ADDUSEREOF
-gopher::::::Gopher Gopherson::/bin/sh:gopher
+swarming::::::Swarming Gopher Gopherson::/bin/sh:swarming
 ADDUSEREOF
-pw user mod gopher -G wheel
+pw user mod swarming -G wheel
 
 # Enable serial console early in boot process.
 echo '-h' > /boot.conf
@@ -238,7 +246,7 @@ if {$::env(DOWNLOAD_UPDATES)} {
 
 expect -re $prompt
 sleep 1
-send "pkg install -y bash curl git gdb\n"
+send "pkg install -y bash curl doas git gdb python\n"
 
 expect -re $prompt
 send "sync\n"

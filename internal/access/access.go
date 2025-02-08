@@ -69,12 +69,17 @@ func RequireIAPAuthHandler(h http.Handler, audience string) http.Handler {
 			fmt.Fprintf(w, "must run under IAP\n")
 			return
 		}
-		if err := validateIAPJWT(r.Context(), jwt, audience, idtoken.Validate); err != nil {
+		payload, err := validateIAPJWT(r.Context(), jwt, audience, idtoken.Validate)
+		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			log.Printf("JWT validation error: %v", err)
 			return
 		}
-		h.ServeHTTP(w, r)
+		// TODO: idtoken.Payload doesn't include email for some reason, so we
+		// get it from claims, which _should_ also contain it.
+		ctx := context.WithValue(r.Context(), "subject", payload.Subject)
+		ctx = context.WithValue(ctx, "email", payload.Claims["email"])
+		h.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -93,7 +98,7 @@ func iapAuthFunc(audience string, validatorFn validator) grpcauth.AuthFunc {
 		if len(jwtHeaders) == 0 {
 			return ctx, status.Error(codes.Unauthenticated, "IAP JWT not found in request")
 		}
-		if err := validateIAPJWT(ctx, jwtHeaders[0], audience, validatorFn); err != nil {
+		if _, err := validateIAPJWT(ctx, jwtHeaders[0], audience, validatorFn); err != nil {
 			return nil, err
 		}
 		ctx, err := contextWithIAPMD(ctx, md)
@@ -105,21 +110,22 @@ func iapAuthFunc(audience string, validatorFn validator) grpcauth.AuthFunc {
 	}
 }
 
-func validateIAPJWT(ctx context.Context, jwt, audience string, validatorFn validator) error {
+func validateIAPJWT(ctx context.Context, jwt, audience string, validatorFn validator) (*idtoken.Payload, error) {
 	payload, err := validatorFn(ctx, jwt, audience)
 	if err != nil {
 		log.Printf("access: error validating JWT: %s", err)
-		return status.Error(codes.Unauthenticated, "unable to authenticate")
+		return nil, status.Error(codes.Unauthenticated, "unable to authenticate")
 	}
 	if payload.Issuer != "https://cloud.google.com/iap" {
 		log.Printf("access: incorrect issuer: %q", payload.Issuer)
-		return status.Error(codes.Unauthenticated, "incorrect issuer")
+		return nil, status.Error(codes.Unauthenticated, "incorrect issuer")
 	}
 	if payload.Expires+30 < time.Now().Unix() || payload.IssuedAt-30 > time.Now().Unix() {
 		log.Printf("Bad JWT times: expires %v, issued %v", time.Unix(payload.Expires, 0), time.Unix(payload.IssuedAt, 0))
-		return status.Error(codes.Unauthenticated, "JWT timestamp invalid")
+		return nil, status.Error(codes.Unauthenticated, "JWT timestamp invalid")
 	}
-	return nil
+
+	return payload, nil
 }
 
 // contextWithIAPMD copies the headers set by IAP into the context.

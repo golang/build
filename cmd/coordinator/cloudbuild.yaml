@@ -1,0 +1,24 @@
+# Copyright 2023 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '-f'
+    - 'cmd/coordinator/Dockerfile'
+    - '--build-arg'
+    - 'version=${TAG_NAME}'
+    - '-t'
+    - 'gcr.io/symbolic-datum-552/coordinator:${TAG_NAME}'
+    - '-t'
+    - 'gcr.io/symbolic-datum-552/coordinator:latest'
+    - '.'
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/symbolic-datum-552/coordinator:${TAG_NAME}']
+images:
+- 'gcr.io/symbolic-datum-552/coordinator:${TAG_NAME}'
+- 'gcr.io/symbolic-datum-552/coordinator:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY

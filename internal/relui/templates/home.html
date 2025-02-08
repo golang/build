@@ -32,57 +32,55 @@
       </tr>
       </thead>
       <tbody>
-
-      </tbody>
       {{- /* gotype: golang.org/x/build/internal/relui.ScheduleEntry */ -}}
-      {{range $schedule := .Schedules}}
+      {{range .Schedules}}
         <tr class="WorkflowList-item">
           <td class="WorkflowList-itemState">
-              {{if ne $schedule.LastRun.WorkflowError.String ""}}
-                <img
-                        class="WorkflowList-itemStateIcon"
-                        alt="{{$schedule.LastRun.WorkflowError.String}}"
-                        src="{{baseLink "/static/images/error_red_24dp.svg"}}" />
-              {{else if $schedule.LastRun.WorkflowFinished.Bool}}
-                <img
-                        class="WorkflowList-itemStateIcon"
-                        alt="finished"
-                        src="{{baseLink "/static/images/check_circle_green_24dp.svg"}}" />
-              {{else if not $schedule.LastRun.WorkflowCreatedAt.Time.IsZero }}
-                <img
-                        class="WorkflowList-itemStateIcon"
-                        alt="started"
-                        src="{{baseLink "/static/images/pending_yellow_24dp.svg"}}" />
+              {{if ne .LastRun.WorkflowError.String ""}}
+                <img class="WorkflowList-itemStateIcon"
+                     alt="{{.LastRun.WorkflowError.String}}"
+                     src="{{baseLink "/static/images/error_red_24dp.svg"}}" />
+              {{else if .LastRun.WorkflowFinished.Bool}}
+                <img class="WorkflowList-itemStateIcon"
+                     alt="finished"
+                     src="{{baseLink "/static/images/check_circle_green_24dp.svg"}}" />
+              {{else if not .LastRun.WorkflowCreatedAt.Time.IsZero }}
+                <img class="WorkflowList-itemStateIcon"
+                     alt="started"
+                     src="{{baseLink "/static/images/pending_yellow_24dp.svg"}}" />
               {{else}}
-                <img
-                        class="WorkflowList-itemStateIcon"
-                        alt="pending"
-                        src="{{baseLink "/static/images/pending_grey_24dp.svg"}}" />
+                <img class="WorkflowList-itemStateIcon"
+                     alt="pending"
+                     src="{{baseLink "/static/images/pending_grey_24dp.svg"}}" />
               {{end}}
           </td>
           <td class="WorkflowList-itemName">
-            {{with $schedule.WorkflowJob}}
-              {{.Schedule.WorkflowName}}
-            {{end}}
+            <span title="{{.WorkflowJob.ParamDesc}}">{{.WorkflowJob.Schedule.WorkflowName}}</span>
           </td>
           <td class="WorkflowList-itemCreated">
-            {{if not $schedule.Next.IsZero}}
-              {{$schedule.Next.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
-            {{end}}
+            <span title="{{.WorkflowJob.ScheduleDesc}}">
+              {{if not .Next.IsZero}}
+                {{.Next.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+              {{else}}
+                N/A
+              {{end}}
+            </span>
           </td>
           <td class="WorkflowList-itemUpdated">
-            {{if not $schedule.LastRun.WorkflowCreatedAt.Time.IsZero }}
-              <a href="{{baseLink "/workflows/" $schedule.LastRun.WorkflowID.String}}">
-                {{$schedule.LastRun.WorkflowCreatedAt.Time.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+            {{if not .LastRun.WorkflowCreatedAt.Time.IsZero }}
+              <a href="{{baseLink "/workflows/" .LastRun.WorkflowID.String}}">
+                {{.LastRun.WorkflowCreatedAt.Time.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
               </a>
-            {{else if not $schedule.Prev.IsZero}}
-              {{$schedule.Prev.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+            {{else if not .Prev.IsZero}}
+              {{.Prev.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+            {{else}}
+              N/A
             {{end}}
           </td>
           <td class="WorkflowList-itemAction">
             <div class="WorkflowList-deleteSchedule">
-              <form action="{{baseLink (printf "/schedules/%d/delete" $schedule.WorkflowJob.Schedule.ID)}}" method="post">
-                <input type="hidden" name="schedule.id" value="{{$schedule.WorkflowJob.Schedule.ID}}" />
+              <form action="{{baseLink (printf "/schedules/%d/delete" .WorkflowJob.Schedule.ID)}}" method="post">
+                <input type="hidden" name="schedule.id" value="{{.WorkflowJob.Schedule.ID}}" />
                 <input class="Button Button--small"
                        name="schedule.delete"
                        type="submit"
@@ -97,7 +95,73 @@
           <td>None</td>
         </tr>
       {{end}}
+      </tbody>
     </table>
+
+    {{with .FailedToSchedule}}
+    <h2>Failed to Schedule Workflows</h2>
+    <table class="WorkflowList">
+      <thead>
+      <tr class="WorkflowList-itemHeader">
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemStateHeader">State</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemName">Name</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemCreated">Next Run</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemUpdated">Last Run</th>
+        <th class="WorkflowList-itemHeaderCol WorkflowList-itemActions">Actions</th>
+      </tr>
+      </thead>
+      <tbody>
+      {{- /* gotype: golang.org/x/build/internal/relui.FailedToScheduleEntry */ -}}
+      {{range .}}
+        <tr class="WorkflowList-item">
+          <td class="WorkflowList-itemState">
+            <img class="WorkflowList-itemStateIcon"
+                 alt="error"
+                 src="{{baseLink "/static/images/error_red_24dp.svg"}}" />
+          </td>
+          <td class="WorkflowList-itemName">
+            <span title="{{.ParamDesc}}">{{.Schedule.WorkflowName}}</span>
+          </td>
+          <td class="WorkflowList-itemCreated">
+            <span title="{{.ScheduleDesc}}">
+              {{if not .Next.IsZero}}
+                {{.Next.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+              {{else}}
+                N/A
+              {{end}}
+            </span>
+          </td>
+          <td class="WorkflowList-itemUpdated">
+            {{if not .LastRun.WorkflowCreatedAt.Time.IsZero }}
+              <a href="{{baseLink "/workflows/" .LastRun.WorkflowID.String}}">
+                {{.LastRun.WorkflowCreatedAt.Time.UTC.Format "Mon, 02 Jan 2006 15:04:05 MST"}}
+              </a>
+            {{else}}
+              N/A
+            {{end}}
+          </td>
+          <td class="WorkflowList-itemAction">
+            <div class="WorkflowList-deleteSchedule">
+              <form action="{{baseLink (printf "/schedules/%d/delete" .Schedule.ID)}}" method="post">
+                <input type="hidden" name="schedule.id" value="{{.Schedule.ID}}" />
+                <input class="Button Button--small"
+                       name="schedule.delete"
+                       type="submit"
+                       value="Delete"
+                       onclick="return this.form.reportValidity() && confirm('This will permanently delete the schedule.\n\nReady to proceed?')" />
+              </form>
+            </div>
+          </td>
+        </tr>
+      {{else}}
+        <tr>
+          <td>None</td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+    {{end}}
+
     <h2>Completed Workflows</h2>
     {{template "workflow_list" .InactiveWorkflows}}
   </section>

@@ -14,10 +14,22 @@ import (
 	wf "golang.org/x/build/internal/workflow"
 )
 
+// Published holds information for a Go release
+// that by this time has already been published.
+//
+// Published in this context refers to it being
+// available for download at https://go.dev/dl/.
+// It doesn't mean it has been announced by now;
+// that step happens sometime after publication.
+type Published struct {
+	Version string        // Version that's published, in the same format as Go tags. For example, "go1.21rc1".
+	Files   []WebsiteFile // Files that are published.
+}
+
 // CommunicationTasks combines communication tasks together.
 type CommunicationTasks struct {
 	AnnounceMailTasks
-	TweetTasks
+	SocialMediaTasks
 }
 
 var AwaitDivisor int = 1

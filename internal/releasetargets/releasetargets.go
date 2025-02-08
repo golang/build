@@ -5,7 +5,10 @@
 package releasetargets
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -14,14 +17,13 @@ import (
 )
 
 type Target struct {
-	Name            string
-	GOOS, GOARCH    string
-	SecondClass     bool
-	Builder         string
-	BuildOnly       bool
-	LongTestBuilder string
-	Race            bool
-	ExtraEnv        []string // Extra environment variables set during toolchain build.
+	Name         string
+	GOOS, GOARCH string
+	SecondClass  bool     // A port that is not a first class port. See go.dev/wiki/PortingPolicy#first-class-ports.
+	ExtraEnv     []string // Extra environment variables set during toolchain build.
+
+	// For Darwin targets, the minimum targeted version, e.g. 10.13 or 13.
+	MinMacOSVersion string
 }
 
 // ReleaseTargets maps a target name (usually but not always $GOOS-$GOARCH)
@@ -30,6 +32,13 @@ type ReleaseTargets map[string]*Target
 
 type OSArch struct {
 	OS, Arch string
+}
+
+func (o OSArch) String() string {
+	if o.OS == "linux" && o.Arch == "arm" {
+		return "linux-armv6l"
+	}
+	return o.OS + "-" + o.Arch
 }
 
 func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
@@ -42,121 +51,51 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 	return result
 }
 
-// allReleases contains all the targets for all releases we're currently
+// allFirstClass lists first-class port targets for all releases we're currently
 // supporting. To reduce duplication, targets from earlier versions are
-// propagated forward unless overridden. To remove a target in a later release,
-// set it to nil explicitly.
+// propagated forward unless overridden. To stop configuring a target in a
+// later release, set it to nil explicitly.
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
-var allReleases = map[int]ReleaseTargets{
-	18: {
+var allFirstClass = map[int]ReleaseTargets{
+	22: {
 		"darwin-amd64": &Target{
-			Builder:  "darwin-amd64-12_0",
-			Race:     true,
-			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
+			MinMacOSVersion: "10.15", // go.dev/issue/57125
 		},
 		"darwin-arm64": &Target{
-			Builder: "darwin-arm64-12",
-			Race:    true,
+			MinMacOSVersion: "11", // Big Sur was the first release with M1 support.
 		},
-		"freebsd-386": &Target{
-			SecondClass: true,
-			Builder:     "freebsd-386-12_3",
-		},
-		"freebsd-amd64": &Target{
-			SecondClass: true,
-			Builder:     "freebsd-amd64-12_3",
-			Race:        true,
-		},
-		"linux-386": &Target{
-			Builder:         "linux-386-stretch",
-			LongTestBuilder: "linux-386-longtest",
-		},
+		"linux-386": &Target{},
 		"linux-armv6l": &Target{
-			GOARCH:  "arm",
-			Builder: "linux-arm-aws",
+			GOARCH:   "arm",
+			ExtraEnv: []string{"GOARM=6"},
 		},
-		"linux-arm64": &Target{
-			Builder: "linux-arm64",
-		},
-		"linux-amd64": &Target{
-			Builder:         "linux-amd64-stretch",
-			LongTestBuilder: "linux-amd64-longtest",
-			Race:            true,
-		},
-		"linux-s390x": &Target{
-			SecondClass: true,
-			Builder:     "linux-s390x-crosscompile",
-			BuildOnly:   true,
-		},
-		"linux-ppc64le": &Target{
-			SecondClass: true,
-			Builder:     "linux-ppc64le-buildlet",
-			BuildOnly:   true,
-		},
-		// *-oldcc amd64/386 builders needed for 1.18, 1.19
-		"windows-386": &Target{
-			Builder: "windows-386-2008-oldcc",
-		},
-		"windows-amd64": &Target{
-			Builder:         "windows-amd64-2008-oldcc",
-			LongTestBuilder: "windows-amd64-longtest-oldcc",
-			Race:            true,
-		},
-		"windows-arm64": &Target{
-			SecondClass: true,
-			Builder:     "windows-arm64-11",
-		},
+		"linux-amd64":   &Target{},
+		"linux-arm64":   &Target{},
+		"windows-386":   &Target{},
+		"windows-amd64": &Target{},
 	},
-	19: {
-		"linux-386": &Target{
-			Builder:         "linux-386-buster",
-			LongTestBuilder: "linux-386-longtest",
-		},
-		"linux-amd64": &Target{
-			Builder:         "linux-amd64-buster",
-			LongTestBuilder: "linux-amd64-longtest",
-			Race:            true,
-		},
-	},
-	20: {
-		// 1.20 drops Race .as from the distribution.
+	23: {
 		"darwin-amd64": &Target{
-			Builder:  "darwin-amd64-13",
-			ExtraEnv: []string{"CGO_CFLAGS=-mmacosx-version-min=10.13"}, // Issues #36025 #35459
+			MinMacOSVersion: "11", // go.dev/issue/64207
 		},
-		"darwin-arm64": &Target{
-			Builder: "darwin-arm64-12",
-		},
-		"freebsd-386": &Target{
-			SecondClass: true,
-			Builder:     "freebsd-386-13_0",
-		},
-		"freebsd-amd64": &Target{
-			SecondClass: true,
-			Builder:     "freebsd-amd64-13_0",
-		},
-		"linux-386": &Target{
-			Builder:         "linux-386-bullseye",
-			LongTestBuilder: "linux-386-longtest",
-		},
-		"linux-amd64": &Target{
-			Builder:         "linux-amd64-bullseye",
-			LongTestBuilder: "linux-amd64-longtest",
-		},
-		"windows-386": &Target{
-			Builder: "windows-386-2008",
-		},
-		"windows-amd64": &Target{
-			Builder:         "windows-amd64-2008",
-			LongTestBuilder: "windows-amd64-longtest",
-		},
+	},
+	24: {
+		// There aren't any release target changes specific to Go 1.24 at this time.
 	},
 }
 
+//go:generate ./genlatestports.bash
+//go:embed allports/*.txt
+var allPortsFS embed.FS
+var allPorts = map[int][]OSArch{}
+
 func init() {
-	for _, targets := range allReleases {
+	for _, targets := range allFirstClass {
 		for name, target := range targets {
+			if target == nil {
+				continue
+			}
 			if target.Name != "" {
 				panic(fmt.Sprintf("target.Name in %q should be left inferred", name))
 			}
@@ -168,34 +107,83 @@ func init() {
 			if target.GOARCH == "" {
 				target.GOARCH = parts[1]
 			}
+
+			if (target.MinMacOSVersion != "") != (target.GOOS == "darwin") {
+				panic("must set MinMacOSVersion in target " + target.Name)
+			}
+		}
+	}
+	files, err := allPortsFS.ReadDir("allports")
+	if err != nil {
+		panic(err)
+	}
+	for _, f := range files {
+		major := 0
+		if n, err := fmt.Sscanf(f.Name(), "go1.%d.txt", &major); err != nil || n == 0 {
+			panic("failed to parse filename " + f.Name())
+		}
+		body, err := fs.ReadFile(allPortsFS, "allports/"+f.Name())
+		if err != nil {
+			panic(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+			os, arch, _ := strings.Cut(line, "/")
+			allPorts[major] = append(allPorts[major], OSArch{os, arch})
 		}
 	}
 }
 
 func sortedReleases() []int {
 	var releases []int
-	for rel := range allReleases {
+	for rel := range allFirstClass {
+		releases = append(releases, rel)
+	}
+	for rel := range allPorts {
 		releases = append(releases, rel)
 	}
 	sort.Ints(releases)
-	return releases
+	return slices.Compact(releases)
+}
+
+var unbuildableOSs = map[string]bool{
+	"android": true,
+	"ios":     true,
+	"js":      true,
+	"wasip1":  true,
 }
 
 // TargetsForGo1Point returns the ReleaseTargets that apply to the given
 // version.
 func TargetsForGo1Point(x int) ReleaseTargets {
 	targets := ReleaseTargets{}
+	var ports []OSArch
 	for _, release := range sortedReleases() {
 		if release > x {
 			break
 		}
-		for osarch, target := range allReleases[release] {
+		for osArch, target := range allFirstClass[release] {
 			if target == nil {
-				delete(targets, osarch)
+				delete(targets, osArch)
 			} else {
 				copy := *target
-				targets[osarch] = &copy
+				targets[osArch] = &copy
 			}
+		}
+		if p, ok := allPorts[release]; ok {
+			ports = p
+		}
+	}
+	for _, osArch := range ports {
+		_, unbuildable := unbuildableOSs[osArch.OS]
+		_, exists := targets[osArch.String()]
+		if unbuildable || exists {
+			continue
+		}
+		targets[osArch.String()] = &Target{
+			Name:        osArch.String(),
+			GOOS:        osArch.OS,
+			GOARCH:      osArch.Arch,
+			SecondClass: true,
 		}
 	}
 	return targets

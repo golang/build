@@ -66,7 +66,7 @@ func (br *BuilderRev) SnapshotURL(buildEnv *buildenv.Environment) string {
 
 var TestHookSnapshotExists func(*BuilderRev) bool
 
-// snapshotExists reports whether the snapshot exists in storage.
+// SnapshotExists reports whether the snapshot exists in storage.
 // It returns potentially false negatives on network errors.
 // Callers must not depend on this as more than an optimization.
 func (br *BuilderRev) SnapshotExists(ctx context.Context, buildEnv *buildenv.Environment) bool {
@@ -98,10 +98,16 @@ type GoBuilder struct {
 	// GorootBootstrap is an optional absolute Unix-style path to the
 	// bootstrap toolchain, overriding the default.
 	GorootBootstrap string
+	// GoDevDLBootstrap is whether the bootstrap comes from go.dev/dl/,
+	// meaning its content is inside a directory named "go" as opposed
+	// to the root of the archive. GorootBootstrap must be empty if so.
+	GoDevDLBootstrap bool
+	// Force controls whether to use the -force flag when building Go.
+	// See go.dev/issue/56679.
+	Force bool
 }
 
-// RunMake builds the tool chain.
-// goroot is relative to the workdir with forward slashes.
+// RunMake builds the toolchain.
 // w is the Writer to send build output to.
 // remoteErr and err are as described at the top of this file.
 func (gb GoBuilder) RunMake(ctx context.Context, bc buildlet.Client, w io.Writer) (remoteErr, err error) {
@@ -109,13 +115,36 @@ func (gb GoBuilder) RunMake(ctx context.Context, bc buildlet.Client, w io.Writer
 	makeSpan := gb.CreateSpan("make", gb.Conf.MakeScript())
 	env := append(gb.Conf.Env(), "GOBIN=")
 	if gb.GorootBootstrap != "" {
+		if gb.GoDevDLBootstrap {
+			return nil, fmt.Errorf("cannot set a non-empty GorootBootstrap together with GoDevDLBootstrap")
+		}
 		env = append(env, "GOROOT_BOOTSTRAP="+gb.GorootBootstrap)
+	}
+	makeArgs := gb.Conf.MakeScriptArgs()
+	if gb.Force {
+		makeArgs = append(makeArgs, "-force")
+	}
+	var makePath []string
+	if gb.GoDevDLBootstrap {
+		// When using go.dev/dl/ tarballs for bootstrap, their GOROOT ends up being
+		// $WORKDIR/go1.4/go, which differs from the genbootstrap tarballs where it's
+		// $WORKDIR/go1.4 (without the 'go' subdirectory) instead. So, it's necessary
+		// to arrange for it to be found.
+		//
+		// GOROOT_BOOTSTRAP defaults to $WORKDIR/go1.4 via cmd/buildlet, and since
+		// $WORKDIR expansion is supported in $PATH but not in other environment variables,
+		// setting it to a correct value here would need an extra bc.WorkDir remote call.
+		// So it is simpler to clear out GOROOT_BOOTSTRAP and let the bootstrap
+		// toolchain be found by adding its go/bin directory to the front of $PATH.
+		env = append(env, "GOROOT_BOOTSTRAP=")
+		makePath = []string{"$WORKDIR/go1.4/go/bin", "$PATH"}
 	}
 	remoteErr, err = bc.Exec(ctx, path.Join(gb.Goroot, gb.Conf.MakeScript()), buildlet.ExecOpts{
 		Output:   w,
 		ExtraEnv: env,
 		Debug:    true,
-		Args:     gb.Conf.MakeScriptArgs(),
+		Args:     makeArgs,
+		Path:     makePath,
 	})
 	if err != nil {
 		makeSpan.Done(err)
@@ -195,7 +224,7 @@ func VersionTgz(rev string) io.Reader {
 		}
 	}
 
-	contents := fmt.Sprintf("devel " + rev)
+	contents := "devel " + rev
 	check(tw.WriteHeader(&tar.Header{
 		Name: "VERSION",
 		Mode: 0644,

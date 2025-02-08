@@ -44,7 +44,7 @@ func (f clientOptFunc) modify(o *clientOpt) { f(o) }
 // OptProject returns an option setting the GCE Project ID to projectName.
 // This is the named project ID, not the numeric ID.
 // If unspecified, the current active project ID is used, if the program is running
-// on a GCE intance.
+// on a GCE instance.
 func OptProject(projectName string) ClientOpt {
 	return clientOptFunc(func(o *clientOpt) {
 		o.Project = projectName

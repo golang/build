@@ -214,8 +214,12 @@ func StartNewVM(creds *google.Credentials, buildEnv *buildenv.Environment, instN
       emptyDir:
         medium: Memory
 `, opts.ProjectID, hconf.ContainerImage))
-	} else if hconf.IsContainer() && hconf.CosArchitecture() == dashboard.CosArchARM64 {
+		addMeta("user-data", `#cloud-config
 
+runcmd:
+- sysctl -w kernel.core_pattern=core
+`)
+	} else if hconf.IsContainer() && hconf.CosArchitecture() == dashboard.CosArchARM64 {
 		addMeta("user-data", fmt.Sprintf(`#cloud-config
 
 write_files:
@@ -239,6 +243,7 @@ write_files:
 runcmd:
 - systemctl daemon-reload
 - systemctl start buildlet.service
+- sysctl -w kernel.core_pattern=core
 `, opts.ProjectID, hconf.ContainerImage))
 	}
 

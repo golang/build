@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -30,15 +31,16 @@ import (
 func putTar(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "puttar usage: gomote puttar [put-opts] [instance] <source>")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "<source> may be one of:")
-		fmt.Fprintln(os.Stderr, "- A path to a local .tar.gz file.")
-		fmt.Fprintln(os.Stderr, "- A URL that points at a .tar.gz file.")
-		fmt.Fprintln(os.Stderr, "- The '-' character to indicate a .tar.gz file passed via stdin.")
-		fmt.Fprintln(os.Stderr, "- Git hash (min 7 characters) for the Go repository (extract a .tar.gz of the repository at that commit w/o history)")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
+		log := usageLogger
+		log.Print("puttar usage: gomote puttar [put-opts] [instance] <source>")
+		log.Print()
+		log.Print("<source> may be one of:")
+		log.Print("- A path to a local .tar.gz file.")
+		log.Print("- A URL that points at a .tar.gz file.")
+		log.Print("- The '-' character to indicate a .tar.gz file passed via stdin.")
+		log.Print("- Git hash (min 7 characters) for the Go repository (extract a .tar.gz of the repository at that commit w/o history)")
+		log.Print()
+		log.Print("Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -54,7 +56,7 @@ func putTar(args []string) error {
 	case 1:
 		// Must be just the source, so we need an active group.
 		if activeGroup == nil {
-			fmt.Fprintln(os.Stderr, "no active group found; need an active group with only 1 argument")
+			log.Print("no active group found; need an active group with only 1 argument")
 			fs.Usage()
 		}
 		for _, inst := range activeGroup.Instances {
@@ -66,10 +68,10 @@ func putTar(args []string) error {
 		putSet = []string{fs.Arg(0)}
 		src = fs.Arg(1)
 	case 0:
-		fmt.Fprintln(os.Stderr, "error: not enough arguments")
+		log.Print("error: not enough arguments")
 		fs.Usage()
 	default:
-		fmt.Fprintln(os.Stderr, "error: too many arguments")
+		log.Print("error: too many arguments")
 		fs.Usage()
 	}
 
@@ -206,9 +208,9 @@ func doPutTar(ctx context.Context, name, dir string, tgz io.Reader) error {
 func putBootstrap(args []string) error {
 	fs := flag.NewFlagSet("putbootstrap", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "putbootstrap usage: gomote putbootstrap [instance]")
+		log.Print("putbootstrap usage: gomote putbootstrap [instance]")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
+		log.Print("Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -218,7 +220,7 @@ func putBootstrap(args []string) error {
 	switch fs.NArg() {
 	case 0:
 		if activeGroup == nil {
-			fmt.Fprintln(os.Stderr, "no active group found; need an active group with only 1 argument")
+			log.Print("no active group found; need an active group with only 1 argument")
 			fs.Usage()
 		}
 		for _, inst := range activeGroup.Instances {
@@ -227,7 +229,7 @@ func putBootstrap(args []string) error {
 	case 1:
 		putSet = []string{fs.Arg(0)}
 	default:
-		fmt.Fprintln(os.Stderr, "error: too many arguments")
+		log.Print("error: too many arguments")
 		fs.Usage()
 	}
 
@@ -235,15 +237,18 @@ func putBootstrap(args []string) error {
 	for _, inst := range putSet {
 		inst := inst
 		eg.Go(func() error {
-			client := gomoteServerClient(ctx)
-			resp, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
-				GomoteId: inst,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
-			}
-			if resp.GetBootstrapGoUrl() == "" {
-				fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", inst)
+			// TODO(66635) remove once gomotes can no longer be created via the coordinator.
+			if luciDisabled() {
+				client := gomoteServerClient(ctx)
+				resp, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
+					GomoteId: inst,
+				})
+				if err != nil {
+					return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
+				}
+				if resp.GetBootstrapGoUrl() == "" {
+					fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", inst)
+				}
 			}
 			return nil
 		})
@@ -255,9 +260,9 @@ func putBootstrap(args []string) error {
 func put(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "put usage: gomote put [put-opts] [instance] <source or '-' for stdin> [destination]")
+		log.Print("put usage: gomote put [put-opts] [instance] <source or '-' for stdin> [destination]")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
+		log.Print("Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -285,20 +290,20 @@ func put(args []string) error {
 		if fs.NArg() == 2 {
 			dst = fs.Arg(1)
 		} else if fs.NArg() != 1 {
-			fmt.Fprintln(os.Stderr, "error: too many arguments")
+			log.Print("error: too many arguments")
 			fs.Usage()
 		}
 	} else if err == nil {
 		putSet = append(putSet, fs.Arg(0))
 		if fs.NArg() == 1 {
-			fmt.Fprintln(os.Stderr, "error: missing source")
+			log.Print("error: missing source")
 			fs.Usage()
 		}
 		src = fs.Arg(1)
 		if fs.NArg() == 3 {
 			dst = fs.Arg(2)
 		} else if fs.NArg() != 2 {
-			fmt.Fprintln(os.Stderr, "error: too many arguments")
+			log.Print("error: too many arguments")
 			fs.Usage()
 		}
 	} else {

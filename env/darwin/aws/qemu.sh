@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright 2022 Go Authors All rights reserved.
+# Copyright 2022 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
@@ -19,14 +19,13 @@ OVMF_CODE="$HOME/sysroot-macos-x86_64/share/qemu/edk2-x86_64-code.fd"
 
 # These arguments should be kept in sync with cmd/runqemubuildlet/darwin.go.
 args=(
-  -m 4096
+  -m 10240
   -cpu host
   -machine q35
   -usb -device usb-kbd -device usb-tablet
-  # QEMU scales poorly with CPU count on macOS (see
-  # https://go.dev/issue/48945#issuecomment-1378850381). Increasing CPU count
-  # also increases boot time.
-  -smp cpus=4
+  # macOS only likes a power-of-two number of cores, but odd socket count is
+  # fine.
+  -smp cpus=6,sockets=3,cores=2,threads=1
   -device usb-ehci,id=ehci
   -device nec-usb-xhci,id=xhci
   -global nec-usb-xhci.msi=off

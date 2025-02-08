@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build ignore
-// +build ignore
 
 // The arhost binary is a wrapper for llvm-ar, designed to be called by
 // cmd/link. The -extar flag is not enough because llvm-ar and ar don't

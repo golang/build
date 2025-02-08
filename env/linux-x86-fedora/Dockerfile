@@ -17,6 +17,8 @@ RUN yum -y update && yum -y install \
     which \
     openssh-server \
     make \
+    sudo \
+    iproute \
     && true
 
 RUN ssh-keygen -A
@@ -35,6 +37,6 @@ RUN mkdir -p /goboot-amd64 \
 		/goboot/test \
 	&& find /goboot -type d -name testdata | xargs rm -rf
 
-COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/* /usr/local/bin/
 
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]

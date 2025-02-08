@@ -12,18 +12,30 @@ function BandChart(data, {
 	height = 240, // outer height, in pixels
 	benchmark,
 	unit,
+	platform,
 	repository,
 	minViewDeltaPercent,
 	higherIsBetter,
+	history,
 } = {}) {
+	// Compute a set of valid hashes so we can filter out any bad values.
+	// This is to work around a bug where some test results have bad commits
+	// attached to them.
+	// TODO(mknyszek): Consider doing this data cleaning server-side.
+	let historySet = new Set();
+	for (let i = 0; i < history.length; i++) {
+		historySet.add(history[i].Hash);
+	}
+	data = data.filter(d => historySet.has(d.CommitHash));
+
 	// Compute values.
-	const C = d3.map(data, d => d.CommitHash);
-	const X = d3.map(data, d => d.CommitDate);
+	const CT = d3.map(data, d => d.CommitDate);
+	const X = d3.map(data, d => d.CommitHash);
 	const Y = d3.map(data, d => d.Center);
 	const Y1 = d3.map(data, d => d.Low);
 	const Y2 = d3.map(data, d => d.High);
 	const I = d3.range(X.length);
-	if (defined === undefined) defined = (d, i) => !isNaN(X[i]) && !isNaN(Y1[i]) && !isNaN(Y2[i]);
+	if (defined === undefined) defined = (d, i) => !isNaN(Y1[i]) && !isNaN(Y2[i]);
 	const D = d3.map(data, defined);
 
 	const xRange = [marginLeft, width - marginRight]; // [left, right]
@@ -74,9 +86,9 @@ function BandChart(data, {
 	}
 
 	// Construct scales and axes.
-	const xOrdTicks = d3.range(xRange[0], xRange[1], (xRange[1]-xRange[0])/(X.length-1));
+	const xOrdTicks = d3.range(xRange[0], xRange[1], (xRange[1]-xRange[0])/(history.length-1));
 	xOrdTicks.push(xRange[1]);
-	const xScale = d3.scaleOrdinal(X, xOrdTicks);
+	const xScale = d3.scaleOrdinal(d3.map(history, d => d.Hash), xOrdTicks);
 	const yScale = d3.scaleLinear(yDomain, yRange);
 	const yAxis = d3.axisLeft(yScale).ticks(height / 40, "+%");
 
@@ -94,6 +106,12 @@ function BandChart(data, {
 		.attr("width", xRange[1] - xRange[0])
 		.attr("height", yRange[0] - yRange[1]);
 
+	// Set up the params for the link to the unit page.
+	let unitLinkParams = new URLSearchParams(window.location.search);
+	unitLinkParams.set("unit", unit);
+	unitLinkParams.set("platform", platform);
+	unitLinkParams.set("benchmark", benchmark);
+
 	// Title (unit).
 	svg.append("g")
 		.attr("transform", `translate(${marginLeft},0)`)
@@ -103,7 +121,7 @@ function BandChart(data, {
 			.attr("x2", width - marginLeft - marginRight)
 			.attr("stroke-opacity", 0.1))
 		.call(g => g.append("a")
-			.attr("xlink:href", "?benchmark=" + benchmark + "&unit=" + unit)
+			.attr("xlink:href", "?" + unitLinkParams.toString())
 			.append("text")
 				.attr("x", xRange[0]-40)
 				.attr("y", 24)
@@ -196,8 +214,8 @@ function BandChart(data, {
 	// Add a harder gridline for Y=0 to make it stand out.
 
 	const line0 = d3.line()
-		.defined(i => D[i])
-		.x(i => xScale(X[i]))
+		.defined(i => xRange[i])
+		.x(i => xRange[i])
 		.y(i => yScale(0))
 
 	svg.append("path")
@@ -250,21 +268,24 @@ function BandChart(data, {
 		.selectAll("path")
 		.data(I)
 		.join("a")
-			.attr("xlink:href", (d, i) => "https://go.googlesource.com/"+repository+"/+show/"+C[i])
+			.attr("xlink:href", (d, i) => "?" + unitLinkParams.toString() + "#commit" + X[i])
 			.append("rect")
 				.attr("pointer-events", "all")
 				.attr("x", (d, i) => {
 					if (i == 0) {
-						return xOrdTicks[i];
+						return xScale(X[i]);
 					}
-					return xOrdTicks[i-1]+(xOrdTicks[i]-xOrdTicks[i-1])/2;
+					return xScale(X[i]) - (xScale(X[i])-xScale(X[i-1]))/2;
 				})
 				.attr("y", marginTop)
 				.attr("width", (d, i) => {
-					if (i == 0 || i == X.length-1) {
-						return (xOrdTicks[1]-xOrdTicks[0]) / 2;
+					if (i == 0) {
+						return (xScale(X[i+1])-xScale(X[i]))/2;
 					}
-					return xOrdTicks[1]-xOrdTicks[0];
+					if (i == X.length-1) {
+						return (xScale(X[i])-xScale(X[i-1]))/2;
+					}
+					return (xScale(X[i])-xScale(X[i-1]))/2 + (xScale(X[i+1])-xScale(X[i]))/2;
 				})
 				.attr("height", height-marginTop-marginBottom)
 				.on("mouseover", (d, i) => {
@@ -291,11 +312,11 @@ function BandChart(data, {
 							.attr("text-anchor", "end")
 							.attr("font-family", "sans-serif")
 							.attr("font-size", 12)
-							.text(C[i].slice(0, 7) + " ("
+							.text(X[i].slice(0, 7) + " ("
 								+ Intl.DateTimeFormat([], {
 									dateStyle: "long",
 									timeStyle: "short"
-								}).format(X[i])
+								}).format(CT[i])
 								+ ")")
 						)
 						.call(g => g.append('text')

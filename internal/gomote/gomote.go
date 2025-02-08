@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package gomote
 
@@ -32,6 +31,7 @@ import (
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/types"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -223,6 +223,36 @@ func (s *Server) InstanceAlive(ctx context.Context, req *protos.InstanceAliveReq
 
 // ListDirectory lists the contents of the directory on a gomote instance.
 func (s *Server) ListDirectory(ctx context.Context, req *protos.ListDirectoryRequest) (*protos.ListDirectoryResponse, error) {
+	entries, err := s.listDirectory(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return &protos.ListDirectoryResponse{
+		Entries: entries,
+	}, nil
+}
+
+// ListDirectoryStreaming lists the contents of the directory on a gomote instance.
+func (s *Server) ListDirectoryStreaming(req *protos.ListDirectoryRequest, stream grpc.ServerStreamingServer[protos.ListDirectoryResponse]) error {
+	entries, err := s.listDirectory(stream.Context(), req)
+	if err != nil {
+		return err
+	}
+	// This could use slices.Chunk, once our go.mod is on go1.23 or higher.
+	const chunkSize = 100
+	for i := 0; i < len(entries); i += chunkSize {
+		end := min(chunkSize, len(entries[i:]))
+		if err := stream.Send(&protos.ListDirectoryResponse{
+			Entries: entries[i : i+end],
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// listDirectory lists the contents of the directory on a gomote instance.
+func (s *Server) listDirectory(ctx context.Context, req *protos.ListDirectoryRequest) ([]string, error) {
 	creds, err := access.IAPFromContext(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
@@ -246,9 +276,7 @@ func (s *Server) ListDirectory(ctx context.Context, req *protos.ListDirectoryReq
 	}); err != nil {
 		return nil, status.Errorf(codes.Unimplemented, "method ListDirectory not implemented")
 	}
-	return &protos.ListDirectoryResponse{
-		Entries: entries,
-	}, nil
+	return entries, nil
 }
 
 // ListInstances will list the gomote instances owned by the requester. The requester must be authenticated.
@@ -333,7 +361,7 @@ func (s *Server) ExecuteCommand(req *protos.ExecuteCommandRequest, stream protos
 		Path:     req.GetPath(),
 	})
 	if execErr != nil {
-		// there were system errors preventing the command from being started or seen to completition.
+		// there were system errors preventing the command from being started or seen to completion.
 		return status.Errorf(codes.Aborted, "unable to execute command: %s", execErr)
 	}
 	if remoteErr != nil {
@@ -501,7 +529,7 @@ func (s *Server) WriteFileFromURL(ctx context.Context, req *protos.WriteFileFrom
 	}
 	var rc io.ReadCloser
 	// objects stored in the gomote staging bucket are only accessible when you have been granted explicit permissions. A builder
-	// requires a signed URL in order to access objects stored in the the gomote staging bucket.
+	// requires a signed URL in order to access objects stored in the gomote staging bucket.
 	if onObjectStore(s.gceBucketName, req.GetUrl()) {
 		object, err := objectFromURL(s.gceBucketName, req.GetUrl())
 		if err != nil {
@@ -572,7 +600,7 @@ func (s *Server) WriteTGZFromURL(ctx context.Context, req *protos.WriteTGZFromUR
 	return &protos.WriteTGZFromURLResponse{}, nil
 }
 
-// session is a helper function that retreives a session associated with the gomoteID and ownerID.
+// session is a helper function that retrieves a session associated with the gomoteID and ownerID.
 func (s *Server) session(gomoteID, ownerID string) (*remote.Session, error) {
 	session, err := s.buildlets.Session(gomoteID)
 	if err != nil {
@@ -622,7 +650,7 @@ func emailToUser(email string) (string, error) {
 	return email[strings.Index(email, ":")+1 : strings.LastIndex(email, "@")], nil
 }
 
-// onObjectStore returns true if the the url is for an object on GCS.
+// onObjectStore returns true if the url is for an object on GCS.
 func onObjectStore(bucketName, url string) bool {
 	return strings.HasPrefix(url, fmt.Sprintf("https://storage.googleapis.com/%s/", bucketName))
 }

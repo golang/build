@@ -12,7 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -23,10 +23,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/maintner/internal/robustio"
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/build/maintner/reclog"
+	"google.golang.org/protobuf/proto"
 )
 
 // NewNetworkMutationSource returns a mutation source from a master server.
@@ -53,7 +53,7 @@ func NewNetworkMutationSource(server, cacheDir string) MutationSource {
 // TailNetworkMutationSource returns if fn returns an error, if ctx expires,
 // or if it runs into a network error.
 func TailNetworkMutationSource(ctx context.Context, server string, fn func(MutationStreamEvent) error) error {
-	td, err := ioutil.TempDir("", "maintnertail")
+	td, err := os.MkdirTemp("", "maintnertail")
 	if err != nil {
 		return err
 	}
@@ -194,17 +194,21 @@ func (ns *netMutSource) locallyCachedSegments() (segs []fileSeg, err error) {
 			log.Printf("No network connection; using %d locally cached segments.", len(segs))
 		}
 	}()
-	fis, err := ioutil.ReadDir(ns.cacheDir)
+	des, err := os.ReadDir(ns.cacheDir)
 	if err != nil {
 		return nil, err
 	}
-	fiMap := map[string]os.FileInfo{}
+	fiMap := map[string]fs.FileInfo{}
 	segHex := map[int]string{}
 	segGrowing := map[int]bool{}
-	for _, fi := range fis {
-		name := fi.Name()
+	for _, de := range des {
+		name := de.Name()
 		if !strings.HasSuffix(name, ".mutlog") {
 			continue
+		}
+		fi, err := de.Info()
+		if err != nil {
+			return nil, err
 		}
 		fiMap[name] = fi
 
@@ -649,7 +653,7 @@ func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (_ file
 	// then perhaps encoding the desired file size into the
 	// filename suffix (instead of just *.growing.mutlog) so
 	// concurrent readers know where to stop.
-	tf, err := ioutil.TempFile(ns.cacheDir, "tempseg")
+	tf, err := os.CreateTemp(ns.cacheDir, "tempseg")
 	if err != nil {
 		return fileSeg{}, nil, err
 	}

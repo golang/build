@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 // Code related to the Build Results API.
 
@@ -13,7 +11,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -27,7 +25,7 @@ import (
 
 type gRPCServer struct {
 	// embed an UnimplementedCoordinatorServer to avoid errors when adding new RPCs to the proto.
-	*protos.UnimplementedCoordinatorServer
+	protos.UnimplementedCoordinatorServer
 
 	// dashboardURL is the base URL of the Dashboard service (https://build.golang.org)
 	dashboardURL string
@@ -77,7 +75,7 @@ func (g *gRPCServer) clearFromDashboard(ctx context.Context, builder, hash, key 
 		log.Printf("gRPCServer.ClearResults: error performing wipe for %q/%q: %v", builder, hash, err)
 		return grpcstatus.Error(codes.Internal, codes.Internal.String())
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		log.Printf("gRPCServer.ClearResults: error reading response body for %q/%q: %v", builder, hash, err)

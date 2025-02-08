@@ -1,14 +1,24 @@
+// Copyright 2023 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package relui
 
 import (
 	"context"
 	"database/sql"
 	"errors"
+	"flag"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
+	"go.chromium.org/luci/auth"
+	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
+	"go.chromium.org/luci/grpc/prpc"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
@@ -43,7 +53,7 @@ func TestAwaitFunc(t *testing.T) {
 			didWork := make(chan struct{}, 2)
 			success := make(chan interface{})
 			done := make(chan interface{})
-			wd := workflow.New()
+			wd := workflow.New(workflow.ACL{})
 
 			awaitFunc := func(ctx *workflow.TaskContext) error {
 				_, err := task.AwaitCondition(ctx, 10*time.Millisecond, func() (int, bool, error) {
@@ -172,4 +182,32 @@ func runWorkflow(t *testing.T, ctx context.Context, w *workflow.Workflow, listen
 		listener = &verboseListener{t: t}
 	}
 	return w.Run(ctx, listener)
+}
+
+var flagRelevantBuildersMajor = flag.Int("relevant-builders-major", 0, "TestReadRelevantBuildersLive's readRelevantBuilders major version")
+
+func TestReadRelevantBuildersLive(t *testing.T) {
+	if !testing.Verbose() || flag.Lookup("test.run").Value.String() != "^TestReadRelevantBuildersLive$" {
+		t.Skip("not running a live test requiring manual verification if not explicitly requested with go test -v -run=^TestReadRelevantBuildersLive$")
+	} else if *flagRelevantBuildersMajor == 0 {
+		t.Fatal("-relevant-builders-major flag must specify a non-zero major version")
+	}
+
+	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
+	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, chromeinfra.DefaultAuthOptions()).Client()
+	if err != nil {
+		t.Fatal("auth.NewAuthenticator:", err)
+	}
+	buildersClient := buildbucketpb.NewBuildersClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
+	tasks := BuildReleaseTasks{
+		BuildBucketClient: &task.RealBuildBucketClient{BuildersClient: buildersClient},
+	}
+	got, err := tasks.readRelevantBuilders(ctx, *flagRelevantBuildersMajor, task.KindMajor)
+	if err != nil {
+		t.Fatal("readRelevantBuilders:", err)
+	}
+	t.Logf("relevant builders:\n%s", strings.Join(got, "\n"))
 }

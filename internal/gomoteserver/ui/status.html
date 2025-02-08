@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<!--
+ Copyright 2023 The Go Authors. All rights reserved.
+ Use of this source code is governed by a BSD-style
+ license that can be found in the LICENSE file.
+-->
+
+<html lang="en">
+<head>
+<title>Gomote Server</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>
+    <a href="/">Gomote Server</a>
+  </h1>
+  <div class="clear"></div>
+</header>
+
+<h2>Instances <a href='#instances'>¶</a></h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Created</th>
+      <th>Expires</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range .Instances }}
+    <tr>
+      <td>{{ .Name }}</td>
+      <td>{{ .Created }} ago</td>
+      <td>in {{ .Expires }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+
+<div class="footer"><strong>Version: </strong>{{ .Version }}</div>
+</body>
+</html>

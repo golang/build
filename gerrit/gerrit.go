@@ -4,8 +4,10 @@
 
 // Package gerrit contains code to interact with Gerrit servers.
 //
-// The API is not subject to the Go 1 compatibility promise and may change at
-// any time.
+// This package doesn't intend to provide complete coverage of the Gerrit API,
+// but only a small subset for the current needs of the Go project infrastructure.
+// Its API is not subject to the Go 1 compatibility promise and may change at any time.
+// For general-purpose Gerrit API clients, see https://pkg.go.dev/search?q=gerrit.
 package gerrit
 
 import (
@@ -68,9 +70,9 @@ var ErrNotModified = errors.New("gerrit: requested modification resulted in no c
 // HTTPError is the error type returned when a Gerrit API call does not return
 // the expected status.
 type HTTPError struct {
-	Res     *http.Response
-	Body    []byte // 4KB prefix
-	BodyErr error  // any error reading Body
+	Res     *http.Response // non-nil
+	Body    []byte         // 4KB prefix
+	BodyErr error          // any error reading Body
 }
 
 func (e *HTTPError) Error() string {
@@ -219,13 +221,22 @@ const (
 // ChangeInfo is a Gerrit data structure.
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-info
 type ChangeInfo struct {
-	// ID is the ID of the change in the format
-	// "'<project>~<branch>~<Change-Id>'", where 'project',
-	// 'branch' and 'Change-Id' are URL encoded. For 'branch' the
-	// refs/heads/ prefix is omitted.
-	ID           string `json:"id"`
-	ChangeNumber int    `json:"_number"`
-	ChangeID     string `json:"change_id"`
+	// The ID of the change. Subject to a 'GerritBackendFeature__return_new_change_info_id' experiment,
+	// the format is either "'<project>~<_number>'" (new format),
+	// or "'<project>~<branch>~<Change-Id>'" (old format).
+	// 'project', '_number', and 'branch' are URL encoded.
+	// For 'branch' the refs/heads/ prefix is omitted.
+	// The callers must not rely on the format.
+	ID string `json:"id"`
+
+	// ChangeNumber is a change number like "4247".
+	ChangeNumber int `json:"_number"`
+
+	// ChangeID is the Change-Id footer value like "I8473b95934b5732ac55d26311a706c9c2bde9940".
+	// Note that some of the functions in this package take a changeID parameter that is a {change-id},
+	// which is a distinct concept from a Change-Id footer. (See the documentation links for details,
+	// including https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#change-id).
+	ChangeID string `json:"change_id"`
 
 	Project string `json:"project"`
 
@@ -315,6 +326,9 @@ type ChangeInfo struct {
 	// MoreChanges is set on the last change from QueryChanges if
 	// the result set is truncated by an 'n' parameter.
 	MoreChanges bool `json:"_more_changes"`
+
+	// ContainsGitConflicts indicates if the change has merge conflicts.
+	ContainsGitConflicts bool `json:"contains_git_conflicts"`
 }
 
 // ReviewerUpdateInfo is a Gerrit data structure.
@@ -648,7 +662,7 @@ func (c *Client) ListReviewers(ctx context.Context, changeID string) ([]Reviewer
 
 // HashtagsInput is the request body used when modifying a CL's hashtags.
 //
-// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#hashtags-input
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#hashtags-input
 type HashtagsInput struct {
 	Add    []string `json:"add"`
 	Remove []string `json:"remove"`
@@ -658,7 +672,7 @@ type HashtagsInput struct {
 // and removing hashtags in one request. On success it returns the new
 // set of hashtags.
 //
-// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#set-hashtags
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#set-hashtags
 func (c *Client) SetHashtags(ctx context.Context, changeID string, hashtags HashtagsInput) ([]string, error) {
 	var res []string
 	err := c.do(ctx, &res, "POST", fmt.Sprintf("/changes/%s/hashtags", changeID), reqBodyJSON{&hashtags})
@@ -677,11 +691,18 @@ func (c *Client) RemoveHashtags(ctx context.Context, changeID string, tags ...st
 
 // GetHashtags returns a CL's current hashtags.
 //
-// See https://gerrit-documentation.storage.googleapis.com/Documentation/2.15.1/rest-api-changes.html#get-hashtags
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-hashtags
 func (c *Client) GetHashtags(ctx context.Context, changeID string) ([]string, error) {
 	var res []string
 	err := c.do(ctx, &res, "GET", fmt.Sprintf("/changes/%s/hashtags", changeID))
 	return res, err
+}
+
+// DeleteTopic deletes the topic of a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#delete-topic.
+func (c *Client) DeleteTopic(ctx context.Context, changeID string) error {
+	return c.do(ctx, nil, "DELETE", "/changes/"+changeID+"/topic", wantResStatus(http.StatusNoContent))
 }
 
 // AbandonChange abandons the given change.
@@ -732,7 +753,7 @@ type ProjectInfo struct {
 //
 // The returned slice is sorted by project ID and excludes the "All-Projects" and "All-Users" projects.
 //
-// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-projects
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-projects.
 func (c *Client) ListProjects(ctx context.Context) ([]ProjectInfo, error) {
 	var res map[string]ProjectInfo
 	err := c.do(ctx, &res, "GET", "/projects/")
@@ -766,7 +787,7 @@ func (c *Client) CreateProject(ctx context.Context, name string, p ...ProjectInp
 		pi = p[0]
 	}
 	var res ProjectInfo
-	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s", name), reqBodyJSON{&pi}, wantResStatus(http.StatusCreated))
+	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s", url.PathEscape(name)), reqBodyJSON{&pi}, wantResStatus(http.StatusCreated))
 	return res, err
 }
 
@@ -792,7 +813,7 @@ type ChangeInput struct {
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#put-edit-file.
 func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID string, path string, content string) error {
-	return c.do(ctx, nil, "PUT", "/changes/"+changeID+"/edit/"+url.QueryEscape(path),
+	return c.do(ctx, nil, "PUT", "/changes/"+changeID+"/edit/"+url.PathEscape(path),
 		reqBodyRaw{strings.NewReader(content)}, wantResStatus(http.StatusNoContent))
 }
 
@@ -801,7 +822,7 @@ func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID str
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#delete-edit-file.
 func (c *Client) DeleteFileInChangeEdit(ctx context.Context, changeID string, path string) error {
-	return c.do(ctx, nil, "DELETE", "/changes/"+changeID+"/edit/"+url.QueryEscape(path), wantResStatus(http.StatusNoContent))
+	return c.do(ctx, nil, "DELETE", "/changes/"+changeID+"/edit/"+url.PathEscape(path), wantResStatus(http.StatusNoContent))
 }
 
 // PublishChangeEdit promotes the change edit to a regular patch set.
@@ -814,7 +835,7 @@ func (c *Client) PublishChangeEdit(ctx context.Context, changeID string) error {
 // GetProjectInfo returns info about a project.
 func (c *Client) GetProjectInfo(ctx context.Context, name string) (ProjectInfo, error) {
 	var res ProjectInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s", name))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s", url.PathEscape(name)))
 	return res, err
 }
 
@@ -826,11 +847,19 @@ type BranchInfo struct {
 	CanDelete bool   `json:"can_delete"`
 }
 
+// The BranchInput entity contains information for the creation of a new branch.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#branch-input
+type BranchInput struct {
+	Ref      string `json:"ref,omitempty"`
+	Revision string `json:"revision,omitempty"`
+	// ValidationOptions is optional.
+}
+
 // GetProjectBranches returns the branches for the project name. The branches are stored in a map
 // keyed by reference.
 func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[string]BranchInfo, error) {
 	var res []BranchInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/", name))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/", url.PathEscape(name)))
 	if err != nil {
 		return nil, err
 	}
@@ -841,12 +870,30 @@ func (c *Client) GetProjectBranches(ctx context.Context, name string) (map[strin
 	return m, nil
 }
 
+// ListBranches lists all branches in the project.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#list-branches.
+func (c *Client) ListBranches(ctx context.Context, project string) ([]BranchInfo, error) {
+	var res []BranchInfo
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches", url.PathEscape(project)))
+	return res, err
+}
+
 // GetBranch gets a particular branch in project.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-branch.
 func (c *Client) GetBranch(ctx context.Context, project, branch string) (BranchInfo, error) {
 	var res BranchInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s", project, branch))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/branches/%s", url.PathEscape(project), branch))
+	return res, err
+}
+
+// CreateBranch create a new branch in the project.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#create-branch
+func (c *Client) CreateBranch(ctx context.Context, project, branch string, input BranchInput) (BranchInfo, error) {
+	var res BranchInfo
+	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s/branches/%s", url.PathEscape(project), url.PathEscape(branch)), reqBodyJSON{&input}, wantResStatus(http.StatusCreated))
 	return res, err
 }
 
@@ -855,7 +902,7 @@ func (c *Client) GetBranch(ctx context.Context, project, branch string) (BranchI
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-content-from-commit.
 func (c *Client) GetFileContent(ctx context.Context, project, commit, path string) (io.ReadCloser, error) {
 	var body io.ReadCloser
-	err := c.do(ctx, nil, "GET", fmt.Sprintf("/projects/%s/commits/%s/files/%s/content", project, commit, url.QueryEscape(path)), respBodyRaw{&body})
+	err := c.do(ctx, nil, "GET", fmt.Sprintf("/projects/%s/commits/%s/files/%s/content", url.PathEscape(project), commit, url.PathEscape(path)), respBodyRaw{&body})
 	if err != nil {
 		return nil, err
 	}
@@ -924,7 +971,7 @@ func (ti *TagInfo) Equal(v *TagInfo) bool {
 // reference.
 func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]TagInfo, error) {
 	var res []TagInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/", name))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/", url.PathEscape(name)))
 	if err != nil {
 		return nil, err
 	}
@@ -940,7 +987,7 @@ func (c *Client) GetProjectTags(ctx context.Context, name string) (map[string]Ta
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#get-tag.
 func (c *Client) GetTag(ctx context.Context, project, tag string) (TagInfo, error) {
 	var res TagInfo
-	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/%s", project, tag))
+	err := c.do(ctx, &res, "GET", fmt.Sprintf("/projects/%s/tags/%s", url.PathEscape(project), url.PathEscape(tag)))
 	return res, err
 }
 
@@ -1011,13 +1058,6 @@ func (c *Client) QueryAccounts(ctx context.Context, q string, opts ...QueryAccou
 		"S": condInt(opt.Start),
 	})
 	return changes, err
-}
-
-// GetProjects returns a map of all projects on the Gerrit server.
-func (c *Client) GetProjects(ctx context.Context, branch string) (map[string]*ProjectInfo, error) {
-	mp := make(map[string]*ProjectInfo)
-	err := c.do(ctx, &mp, "GET", fmt.Sprintf("/projects/?b=%s&format=JSON", branch))
-	return mp, err
 }
 
 type TimeStamp time.Time
@@ -1164,6 +1204,78 @@ func (c *Client) GetCommitsInRefs(ctx context.Context, project string, commits, 
 	vals := url.Values{}
 	vals["commit"] = commits
 	vals["ref"] = refs
-	err := c.do(ctx, &result, "GET", "/projects/"+project+"/commits:in", urlValues(vals))
+	err := c.do(ctx, &result, "GET", "/projects/"+url.PathEscape(project)+"/commits:in", urlValues(vals))
 	return result, err
+}
+
+// CherryPickRevision cherry picks a change revision to a destination branch.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#cherry-pick.
+func (c *Client) CherryPickRevision(ctx context.Context, changeID, revisionID string, cpi CherryPickInput) (ChangeInfo, error) {
+	var change ChangeInfo
+	err := c.do(ctx, &change, "POST", "/changes/"+changeID+"/revisions/"+revisionID+"/cherrypick", reqBodyJSON{&cpi}, wantResStatus(http.StatusOK))
+	return change, err
+}
+
+// CherryPickInput contains the options for creating a new cherry-pick.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#cherrypick-input.
+type CherryPickInput struct {
+	Destination    string `json:"destination"`
+	KeepReviewers  bool   `json:"keep_reviewers"`
+	AllowConflicts bool   `json:"allow_conflicts"`
+	Message        string `json:"message,omitempty"`
+}
+
+// MoveChange moves a change onto a destination branch.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#move-change.
+func (c *Client) MoveChange(ctx context.Context, changeID string, mi MoveInput) (ChangeInfo, error) {
+	var change ChangeInfo
+	err := c.do(ctx, &change, "POST", "/changes/"+changeID+"/move", reqBodyJSON{&mi}, wantResStatus(http.StatusOK))
+	return change, err
+}
+
+// MoveInput contains the options for moving a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#move-input.
+type MoveInput struct {
+	DestinationBranch string `json:"destination_branch"`
+	KeepAllVotes      bool   `json:"keep_all_votes"`
+}
+
+// RebaseChange rebases a change onto a new base revision, or directly on top of
+// the target branch.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#rebase-change.
+func (c *Client) RebaseChange(ctx context.Context, changeID string, ri RebaseInput) (ChangeInfo, error) {
+	var change ChangeInfo
+	err := c.do(ctx, &change, "POST", "/changes/"+changeID+"/rebase", reqBodyJSON{&ri}, wantResStatus(http.StatusOK))
+	return change, err
+}
+
+// RebaseInput contains the options for rebasing a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#rebase-input.
+type RebaseInput struct {
+	Base           string `json:"base,omitempty"`
+	AllowConflicts bool   `json:"allow_conflicts"`
+}
+
+// GetCommitMessage retrieves the commit message for a change.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#get-message.
+func (c *Client) GetCommitMessage(ctx context.Context, changeID string) (CommitMessageInfo, error) {
+	var cmi CommitMessageInfo
+	err := c.do(ctx, &cmi, "GET", "/changes/"+changeID+"/message")
+	return cmi, err
+}
+
+// CommitMessageInfo contains information about a commit message.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#commit-message-info.
+type CommitMessageInfo struct {
+	Subject     string            `json:"subject"`
+	FullMessage string            `json:"full_message"`
+	Footers     map[string]string `json:"footers"`
 }

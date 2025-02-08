@@ -1,4 +1,4 @@
-# Copyright 2022 Go Authors All rights reserved.
+# Copyright 2022 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
@@ -57,6 +57,7 @@ metadata:
   namespace: prod
   name: perf-internal
   annotations:
+    cloud.google.com/backend-config: '{"default": "build-ingress-perf-backend"}'
     cloud.google.com/neg: '{"ingress": false}'
     cloud.google.com/app-protocols: '{"https":"HTTP2"}'
 spec:
@@ -67,3 +68,11 @@ spec:
   selector:
     app: perf
   type: NodePort
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  namespace: prod
+  name: build-ingress-perf-backend
+spec:
+  timeoutSec: 3600  # For long calls to /cron/syncinflux.

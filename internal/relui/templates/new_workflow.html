@@ -83,16 +83,6 @@
                 {{end}}
               </select>
             </div>
-          {{else if or (eq $p.Type.String "string") (eq $p.Type.String "task.Date")}}
-            <div class="NewWorkflow-parameter NewWorkflow-parameter--{{$p.Type.String}}">
-              <label for="workflow.params.{{$p.Name}}" title="{{$p.Doc}}">{{$p.Name}}</label>
-              <input
-                id="workflow.params.{{$p.Name}}"
-                name="workflow.params.{{$p.Name}}"
-                {{- with $p.HTMLInputType}}type="{{.}}"{{end}}
-                {{- if $p.RequireNonZero}}required{{end}}
-                placeholder="{{$p.Example}}" />
-            </div>
           {{else if eq $p.Type.String "[]string"}}
             <div class="NewWorkflow-parameter NewWorkflow-parameter--slice">
               <div class="NewWorkflow-parameterRow">
@@ -108,6 +98,33 @@
                   >+
                 </button>
               </div>
+            </div>
+          {{else if eq $p.HTMLElement "textarea"}}
+            <div class="NewWorkflow-parameter NewWorkflow-parameter--{{$p.Type.String}}">
+              <label for="workflow.params.{{$p.Name}}" title="{{$p.Doc}}">{{$p.Name}}</label>
+              <textarea
+                id="workflow.params.{{$p.Name}}"
+                name="workflow.params.{{$p.Name}}"
+                placeholder="{{$p.Example}}"></textarea>
+            </div>
+          {{else if or (eq $p.Type.String "string") (eq $p.Type.String "task.Date")}}
+            <div class="NewWorkflow-parameter NewWorkflow-parameter--{{$p.Type.String}}">
+              <label for="workflow.params.{{$p.Name}}" title="{{$p.Doc}}">{{$p.Name}}</label>
+              <input
+                id="workflow.params.{{$p.Name}}"
+                name="workflow.params.{{$p.Name}}"
+                {{- with $p.HTMLInputType}}type="{{.}}"{{end}}
+                {{- if $p.RequireNonZero}}required{{end}}
+                placeholder="{{$p.Example}}" />
+            </div>
+          {{else if eq $p.Type.String "bool"}}
+            <div class="NewWorkflow-parameter NewWorkflow-parameter--bool">
+              <label for="workflow.params.{{$p.Name}}" title="{{$p.Doc}}">{{$p.Name}}</label>
+              <input
+                id="workflow.params.{{$p.Name}}"
+                name="workflow.params.{{$p.Name}}"
+                {{- with $p.HTMLInputType}}type="{{.}}"{{end}}
+                {{- if $p.RequireNonZero}}required{{end}} />
             </div>
           {{else}}
             <div class="NewWorkflow-parameter">

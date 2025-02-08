@@ -107,6 +107,43 @@ GitHub-Last-Rev: deadbeef
 GitHub-Pull-Request: golang/go#42
 `,
 		},
+		{
+			"cq-include-trybots",
+			newPullRequest("cmd/gerritbot: title of change",
+				`Body text
+Cq-Include-Trybots: bot-a-123,bot-b-123`),
+			nil,
+			`cmd/gerritbot: title of change
+
+Body text
+
+Change-Id: I8ef4fc7aa2b40846583a9cbf175d75d023b5564e
+GitHub-Last-Rev: deadbeef
+GitHub-Pull-Request: golang/go#42
+Cq-Include-Trybots: bot-a-123,bot-b-123
+`,
+		},
+		{
+			"cq-include-trybots-middle",
+			newPullRequest("cmd/gerritbot: title of change",
+				`Body text
+
+Cq-Include-Trybots: bot-a-123,bot-b-123
+
+More text`),
+			nil,
+			`cmd/gerritbot: title of change
+
+Body text
+
+More text
+
+Change-Id: I8ef4fc7aa2b40846583a9cbf175d75d023b5564e
+GitHub-Last-Rev: deadbeef
+GitHub-Pull-Request: golang/go#42
+Cq-Include-Trybots: bot-a-123,bot-b-123
+`,
+		},
 	}
 
 	for _, tc := range testCases {

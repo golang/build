@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/build/internal/criadb"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/task"
@@ -51,7 +52,8 @@ type Server struct {
 	baseURL   *url.URL // nil means "/".
 	header    SiteHeader
 	// mux used if baseURL is set
-	bm *http.ServeMux
+	bm   *http.ServeMux
+	cria *criadb.AuthDatabase // nil means all workflows are unrestricted.
 
 	templates       *template.Template
 	homeTmpl        *template.Template
@@ -62,7 +64,10 @@ type Server struct {
 // worker, base URL and site header.
 //
 // The base URL may be nil, which is the same as "/".
-func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *metrics.Service) *Server {
+//
+// cria may be nil, in which case workflows are unrestricted, this is
+// mainly intended to ease development.
+func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *metrics.Service, cria *criadb.AuthDatabase) *Server {
 	s := &Server{
 		db:        p,
 		m:         &metricsRouter{router: httprouter.New()},
@@ -70,6 +75,7 @@ func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *
 		scheduler: NewScheduler(p, w),
 		baseURL:   baseURL,
 		header:    header,
+		cria:      cria,
 	}
 	if err := s.scheduler.Resume(context.Background()); err != nil {
 		log.Fatalf("s.scheduler.Resume() = %v", err)
@@ -144,11 +150,12 @@ func (s *Server) mustLookup(name string) *template.Template {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var h http.Handler = s.m
 	if s.bm != nil {
-		s.bm.ServeHTTP(w, r)
-		return
+		h = s.bm
 	}
-	s.m.ServeHTTP(w, r)
+
+	h.ServeHTTP(w, r)
 }
 
 func BaseLink(baseURL *url.URL) func(target string, extras ...string) string {
@@ -178,6 +185,7 @@ type homeResponse struct {
 	ActiveWorkflows   []db.Workflow
 	InactiveWorkflows []db.Workflow
 	Schedules         []ScheduleEntry
+	FailedToSchedule  []FailedToScheduleEntry
 }
 
 // homeHandler renders the homepage.
@@ -206,14 +214,14 @@ func (s *Server) homeHandler(w http.ResponseWriter, r *http.Request) {
 	case "all", "All", "":
 		ws, err = q.Workflows(r.Context())
 		hr.SiteHeader.NameParam = "All Workflows"
-		hr.Schedules = s.scheduler.Entries()
+		hr.Schedules, hr.FailedToSchedule = s.scheduler.Entries(r.Context())
 	case "others", "Others":
 		ws, err = q.WorkflowsByNames(r.Context(), others)
 		hr.SiteHeader.NameParam = "Others"
-		hr.Schedules = s.scheduler.Entries(others...)
+		hr.Schedules, _ = s.scheduler.Entries(r.Context(), others...)
 	default:
 		ws, err = q.WorkflowsByName(r.Context(), sql.NullString{String: name, Valid: true})
-		hr.Schedules = s.scheduler.Entries(name)
+		hr.Schedules, _ = s.scheduler.Entries(r.Context(), name)
 	}
 	if err != nil {
 		log.Printf("homeHandler: %v", err)
@@ -253,7 +261,10 @@ func (s *Server) showWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 		return
 	}
 	resp, err := s.buildShowWorkflowResponse(r.Context(), id)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
 		log.Printf("showWorkflowHandler: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -313,7 +324,9 @@ func (s *Server) newWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	out := bytes.Buffer{}
 	name := r.FormValue("workflow.name")
 	resp := &newWorkflowResponse{
-		SiteHeader:      s.header,
+		SiteHeader: s.header,
+		// TODO: we may want to filter the workflows presented here to just ones
+		// the user is authorized to create.
 		Definitions:     s.w.dh.Definitions(),
 		Name:            name,
 		ScheduleTypes:   ScheduleTypes,
@@ -342,33 +355,56 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	if !s.authorizedForWorkflow(r.Context(), d, w, r) {
+		// authorizedForWorkflow writes errors to w itself.
+		return
+	}
 	params := make(map[string]interface{})
 	for _, p := range d.Parameters() {
 		switch p.Type().String() {
 		case "string":
 			v := r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name()))
-			if p.RequireNonZero() && v == "" {
-				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
+			if err := p.Valid(v); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 			params[p.Name()] = v
 		case "[]string":
 			v := r.Form[fmt.Sprintf("workflow.params.%s", p.Name())]
-			if p.RequireNonZero() && len(v) == 0 {
-				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
+			if err := p.Valid(v); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 			params[p.Name()] = v
 		case "task.Date":
-			v, err := time.Parse("2006-01-02", r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name())))
+			t, err := time.Parse("2006-01-02", r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name())))
 			if err != nil {
 				http.Error(w, fmt.Sprintf("parameter %q parsing error: %v", p.Name(), err), http.StatusBadRequest)
 				return
-			} else if p.RequireNonZero() && v.IsZero() {
-				http.Error(w, fmt.Sprintf("parameter %q must have non-zero value", p.Name()), http.StatusBadRequest)
+			}
+			v := task.Date{Year: t.Year(), Month: t.Month(), Day: t.Day()}
+			if err := p.Valid(v); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			params[p.Name()] = task.Date{Year: v.Year(), Month: v.Month(), Day: v.Day()}
+			params[p.Name()] = v
+		case "bool":
+			vStr := r.FormValue(fmt.Sprintf("workflow.params.%s", p.Name()))
+			var v bool
+			switch vStr {
+			case "on":
+				v = true
+			case "":
+				v = false
+			default:
+				http.Error(w, fmt.Sprintf("parameter %q has an unexpected value %q", p.Name(), vStr), http.StatusBadRequest)
+				return
+			}
+			if err := p.Valid(v); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			params[p.Name()] = v
 		default:
 			http.Error(w, fmt.Sprintf("parameter %q has an unsupported type %q", p.Name(), p.Type()), http.StatusInternalServerError)
 			return
@@ -414,6 +450,25 @@ func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	q := db.New(s.db)
+	workflow, err := q.Workflow(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("retryTaskHandler(_, _, %v): Workflow(%d): %v", params, id, err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	d := s.w.dh.Definition(workflow.Name.String)
+	if d == nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if !s.authorizedForWorkflow(r.Context(), d, w, r) {
+		// authorizedForWorkflow writes errors to w itself.
+		return
+	}
 	if err := s.w.RetryTask(r.Context(), id, params.ByName("name")); err != nil {
 		log.Printf("s.w.RetryTask(_, %q): %v", id, err)
 	}
@@ -428,6 +483,24 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 		return
 	}
 	q := db.New(s.db)
+	workflow, err := q.Workflow(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("approveTaskHandler(_, _, %v): Workflow(%d): %v", params, id, err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	d := s.w.dh.Definition(workflow.Name.String)
+	if d == nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if !s.authorizedForWorkflow(r.Context(), d, w, r) {
+		// authorizedForWorkflow writes errors to w itself.
+		return
+	}
 	t, err := q.ApproveTask(r.Context(), db.ApproveTaskParams{
 		WorkflowID: id,
 		Name:       params.ByName("name"),
@@ -452,6 +525,25 @@ func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
+	q := db.New(s.db)
+	workflow, err := q.Workflow(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	} else if err != nil {
+		log.Printf("stopWorkflowHandler(_, _, %v): Workflow(%d): %v", params, id, err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	d := s.w.dh.Definition(workflow.Name.String)
+	if d == nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if !s.authorizedForWorkflow(r.Context(), d, w, r) {
+		// authorizedForWorkflow writes errors to w itself.
+		return
+	}
 	if !s.w.cancelWorkflow(id) {
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
@@ -464,6 +556,32 @@ func (s *Server) deleteScheduleHandler(w http.ResponseWriter, r *http.Request, p
 	if err != nil {
 		log.Printf("deleteScheduleHandler(_, _, %v) strconv.Atoi(%q) = %d, %v", params, params.ByName("id"), id, err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	q := db.New(s.db)
+	rows, err := q.Schedules(r.Context())
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	var workflowName string
+	for _, row := range rows {
+		if row.ID == int32(id) {
+			workflowName = row.WorkflowName
+			break
+		}
+	}
+	if workflowName == "" {
+		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
+	}
+	d := s.w.dh.Definition(workflowName)
+	if d == nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if !s.authorizedForWorkflow(r.Context(), d, w, r) {
+		// authorizedForWorkflow writes errors to w itself.
 		return
 	}
 	err = s.scheduler.Delete(r.Context(), id)
@@ -542,4 +660,41 @@ func prettySize(size int) string {
 		return fmt.Sprintf("%v bytes", size)
 	}
 	return fmt.Sprintf("%.0fMiB", float64(size)/mb)
+}
+
+// authorizedForWorkflow checks if the authenticated user who sent request r is
+// authorized to access workflow d, by checking if they are a member of any of
+// the configured groups in d.acl. Group membership is determined by querying
+// the CrIA authorization database. It writes a response to w if and only if
+// it returns false, in which case the caller doesn't need to.
+func (s *Server) authorizedForWorkflow(ctx context.Context, d *workflow.Definition, w http.ResponseWriter, r *http.Request) bool {
+	if s.cria == nil {
+		return true
+	}
+	authorizedGroups := d.AuthorizedGroups()
+	if authorizedGroups == nil {
+		return true
+	}
+
+	email := ctx.Value("email")
+	if email == nil {
+		log.Printf("request context did not contain expected 'email' value from IAP JWT")
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return false
+	}
+
+	isMember, err := s.cria.IsMemberOfAny(ctx, fmt.Sprintf("user:%s", email), authorizedGroups)
+	if err != nil {
+		log.Printf("cria.IsMemberOfAny(user:%s) failed: %s", email, err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return false
+	}
+	if !isMember {
+		// TODO(roland): At some point we way want to provide a better UX for
+		// this case. Currently it will just blast the user with the browser
+		// default 403 status page.
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return false
+	}
+	return true
 }

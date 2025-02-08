@@ -7,7 +7,10 @@ We plan to issue Go {{short .Version}}{{with .SecondaryVersion}} and Go {{. | sh
 {{if .SecondaryVersion -}}
 These minor releases include
 {{- else -}}
-This minor release includes{{end}} PRIVATE security fixes to {{.Security}}.
+This minor release includes{{end}} PRIVATE security fixes to {{.Security}}, covering the following CVE{{if gt (len .CVEs) 1}}s{{end}}:
+
+{{range .CVEs}}- {{.}}
+{{end}}
 
 Following our security policy, this is the pre-announcement of {{if .SecondaryVersion}}those releases{{else}}the release{{end}}.
 

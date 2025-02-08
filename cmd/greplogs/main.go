@@ -19,7 +19,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -141,7 +140,7 @@ func main() {
 	var stripDir string
 	if *flagDashboard {
 		revDir := filepath.Join(xdgCacheDir(), "fetchlogs", "rev")
-		fis, err := ioutil.ReadDir(revDir)
+		fis, err := os.ReadDir(revDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %s\n", revDir, err)
 			os.Exit(1)
@@ -235,7 +234,7 @@ func process(path, nicePath string) (found bool, err error) {
 	}
 
 	// TODO: Use streaming if possible.
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}

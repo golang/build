@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build ignore
-// +build ignore
 
 // The clanghost binary is like clangwrap.sh but for self-hosted iOS.
 //
@@ -25,6 +24,14 @@ func main() {
 		os.Exit(1)
 	}
 	args := os.Args[1:]
+	// Intercept requests for the path of the "ar" tool and instead
+	// always return "ar", so that the "ar" wrapper is used instead of
+	// /usr/bin/ar. See issue https://go.dev/issue/59221 and CL
+	// https://go.dev/cl/479775 for more detail.
+	if len(args) != 0 && args[0] == "--print-prog-name=ar" {
+		fmt.Printf("ar\n")
+		os.Exit(0)
+	}
 	cmd := exec.Command("clang", "-isysroot", sdkpath, "-mios-version-min=12.0")
 	cmd.Args = append(cmd.Args, args...)
 	cmd.Stdout = os.Stdout

@@ -1,10 +1,11 @@
-// Copyright 2017 The Go Authors.  All rights reserved.
+// Copyright 2017 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,7 +18,6 @@ import (
 	"github.com/google/safehtml"
 	"github.com/google/safehtml/template"
 	"golang.org/x/build/perfdata/query"
-	"golang.org/x/net/context"
 	"golang.org/x/perf/benchstat"
 	"golang.org/x/perf/storage/benchfmt"
 )

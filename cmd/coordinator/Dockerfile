@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.19 AS build
+FROM golang:1.23-bookworm AS build
 LABEL maintainer="golang-dev@googlegroups.com"
 
 RUN mkdir /gocache
@@ -33,7 +33,7 @@ COPY . /go/src/golang.org/x/build/
 RUN go install -ldflags "-X 'main.Version=$version'" golang.org/x/build/cmd/coordinator
 
 
-FROM debian:bullseye AS build_drawterm
+FROM debian:bookworm AS build_drawterm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git-core ca-certificates make gcc libc6-dev libx11-dev
@@ -48,7 +48,7 @@ RUN git clone https://github.com/0intro/conterm /tmp/conterm && \
     rm -rf /tmp/conterm
 
 
-FROM debian:bullseye
+FROM debian:bookworm
 
 # openssh client is for the gomote ssh proxy client.
 # telnet is for the gomote ssh proxy to windows. (no ssh server there)

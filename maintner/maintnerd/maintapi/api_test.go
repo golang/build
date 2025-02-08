@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
@@ -23,6 +22,8 @@ import (
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -78,7 +79,7 @@ func TestFindTryWork(t *testing.T) {
 
 	// Just for interactive debugging. This is using live data.
 	// The stable tests are in TestTryWorkItem and TestTryBotStatus.
-	t.Logf("Current:\n%v", proto.MarshalTextString(res))
+	t.Logf("Current:\n%v", prototext.Format(res))
 
 	t1 := time.Now()
 	res2, err := s.GoFindTryWork(context.Background(), req)
@@ -197,8 +198,7 @@ func TestTryWorkItem(t *testing.T) {
 		}},
 
 		// Test that a golang.org/x repo TryBot on a branch like
-		// "internal-branch.go1.N-suffix", "release-branch.go1.N", or "release-branch.go1.N-suffix"
-		// tests with Go 1.N (rather than tip + two supported releases).
+		// "internal-branch.go1.N-suffix" tests with Go 1.N (rather than tip + two supported releases).
 		// See issues 28891, 42127, and 36882.
 		{"net", 314649, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
 			Project:     "net",
@@ -209,26 +209,6 @@ func TestTryWorkItem(t *testing.T) {
 			GoCommit:    []string{"e67a58b7cb2b228e04477dfdb1aacd8348e63534"},
 			GoBranch:    []string{"release-branch.go1.16"},
 			GoVersion:   []*apipb.MajorMinor{{Major: 1, Minor: 16}},
-		}},
-		{"net", 258478, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
-			Project:     "net",
-			Branch:      "release-branch.go1.15",
-			ChangeId:    "I546597cedf3715e6617babcb3b62140bf1857a27",
-			Commit:      "a5fa9d4b7c91aa1c3fecbeb6358ec1127b910dd6",
-			AuthorEmail: "michael.fraenkel@gmail.com",
-			GoCommit:    []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
-			GoBranch:    []string{"release-branch.go1.15"},
-			GoVersion:   []*apipb.MajorMinor{{Major: 1, Minor: 15}},
-		}},
-		{"net", 264058, &gerrit.ChangeInfo{}, nil, &apipb.GerritTryWorkItem{
-			Project:     "net",
-			Branch:      "release-branch.go1.15-bundle",
-			ChangeId:    "I546597cedf3715e6617babcb3b62140bf1857a27",
-			Commit:      "abf26a14a65b111d492067f407f32455c5b1048c",
-			AuthorEmail: "michael.fraenkel@gmail.com",
-			GoCommit:    []string{"72ccabc99449b2cb5bb1438eb90244d55f7b02f5"},
-			GoBranch:    []string{"release-branch.go1.15"},
-			GoVersion:   []*apipb.MajorMinor{{Major: 1, Minor: 15}},
 		}},
 
 		// Test that TryBots run on branches of the x/ repositories, other than
@@ -374,6 +354,53 @@ func TestTryWorkItem(t *testing.T) {
 				},
 			},
 		},
+
+		// Test that TRY= request messages with an older patchset-level comment are included.
+		// See https://go-review.googlesource.com/c/go/+/493535/comments/c72580be_773332cb where
+		// a Run-TryBot+1 request is posted on PS 2 with a patchset-level comment left on PS 1.
+		{
+			proj:  "go",
+			clnum: 493535,
+			ci: &gerrit.ChangeInfo{
+				CurrentRevision: "f8aa751e53d7019eb1114da68754c77cc0830163",
+				Revisions: map[string]gerrit.RevisionInfo{
+					"a2afb09fc37fcff8ff43d895def78274d6ec4d74": {PatchSetNumber: 1},
+					"f8aa751e53d7019eb1114da68754c77cc0830163": {PatchSetNumber: 2},
+				},
+				Messages: []gerrit.ChangeMessageInfo{
+					// A message posted a minute after PS 2 was uploaded.
+					{
+						Author:         &gerrit.AccountInfo{NumericID: 1234},
+						Message:        "Patch Set 2: Code-Review+2 Run-TryBot+1\n\n(1 comment)",
+						Time:           gerrit.TimeStamp(time.Date(2023, 5, 8, 16, 14, 3, 0, time.UTC)),
+						RevisionNumber: 2,
+					},
+				},
+			},
+			comments: map[string][]gerrit.CommentInfo{
+				"/PATCHSET_LEVEL": {
+					// Its patchset-level comment is associated with PS 1.
+					{
+						PatchSet: 1,
+						Message:  "TRY\u003dplan9\n\nThanks!",
+						Updated:  gerrit.TimeStamp(time.Date(2023, 5, 8, 16, 14, 3, 0, time.UTC)),
+						Author:   &gerrit.AccountInfo{NumericID: 1234},
+					},
+				},
+			},
+			want: &apipb.GerritTryWorkItem{
+				Project:     "go",
+				Branch:      "master",
+				ChangeId:    "Ia30f51307cc6d07a7e3ada6bf9d60bf9951982ff",
+				Commit:      "f8aa751e53d7019eb1114da68754c77cc0830163",
+				AuthorEmail: "millerresearch@gmail.com",
+				Version:     2,
+				GoVersion:   []*apipb.MajorMinor{{Major: 1, Minor: 17}},
+				TryMessage: []*apipb.TryVoteMessage{
+					{Message: "plan9", AuthorId: 1234, Version: 2},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(strconv.Itoa(int(tt.clnum)), func(t *testing.T) {
@@ -417,11 +444,6 @@ func TestParseInternalBranchVersion(t *testing.T) {
 		{"not-internal-branch", 0, 0, false},
 		{"internal-branch.go1.16.2", 0, 0, false},
 		{"internal-branch.go42-suffix", 42, 0, true}, // Be ready in case Go 42 is released after 7.5 million years.
-
-		// Old naming scheme for internal branches. See issue 36882.
-		{"release-branch.go1.15", 1, 15, true},
-		{"release-branch.go1.15-bundle", 1, 15, true},
-		{"release-branch.go1.15-other", 0, 0, false}, // There are no other branches that need to be supported for now.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

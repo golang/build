@@ -13,8 +13,11 @@ https://go.dev/issue/new
 
 If you have Go installed already, an easy way to try {{.Version}}
 is by using the go command:
+
+```
 $ go install golang.org/dl/{{.Version}}@latest
 $ {{.Version}} download
+```
 
 You can download binary and source distributions from the usual place:
 https://go.dev/dl/#{{.Version}}

@@ -6,18 +6,17 @@ package dashboard
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
+	"golang.org/x/build/internal/migration"
 )
 
 func TestOSARCHAccessors(t *testing.T) {
@@ -40,21 +39,21 @@ func TestDistTestsExecTimeout(t *testing.T) {
 		{
 			&BuildConfig{
 				env:          []string{},
-				testHostConf: &HostConfig{},
+				TestHostConf: &HostConfig{},
 			},
 			20 * time.Minute,
 		},
 		{
 			&BuildConfig{
 				env:          []string{"GO_TEST_TIMEOUT_SCALE=2"},
-				testHostConf: &HostConfig{},
+				TestHostConf: &HostConfig{},
 			},
 			40 * time.Minute,
 		},
 		{
 			&BuildConfig{
 				env: []string{},
-				testHostConf: &HostConfig{
+				TestHostConf: &HostConfig{
 					env: []string{"GO_TEST_TIMEOUT_SCALE=3"},
 				},
 			},
@@ -64,7 +63,7 @@ func TestDistTestsExecTimeout(t *testing.T) {
 		{
 			&BuildConfig{
 				env: []string{"GO_TEST_TIMEOUT_SCALE=2"},
-				testHostConf: &HostConfig{
+				TestHostConf: &HostConfig{
 					env: []string{"GO_TEST_TIMEOUT_SCALE=3"},
 				},
 			},
@@ -92,114 +91,64 @@ func TestTrybots(t *testing.T) {
 		{
 			repo:   "go",
 			branch: "master",
-			want: []string{
-				"freebsd-amd64-12_3",
-				"js-wasm",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-boringcrypto",
-				"linux-amd64-nounified",
-				"linux-amd64-race",
-				"linux-amd64-unified",
-				"linux-arm-aws",
-				"linux-arm64",
-				"openbsd-amd64-72",
-				"windows-386-2008",
-				"windows-386-2012",
-				"windows-amd64-2016",
-
-				"misc-compile-darwin",
-				"misc-compile-freebsd",
-				"misc-compile-windows-arm",
-				"misc-compile-mips",
-				"misc-compile-mipsle",
-				"misc-compile-netbsd",
-				"misc-compile-netbsd-arm",
-				"misc-compile-openbsd",
-				"misc-compile-openbsd-arm",
-				"misc-compile-plan9",
-				"misc-compile-ppc",
-				"misc-compile-solaris",
-				"misc-compile-other-1",
-				"misc-compile-other-2",
-				"misc-compile-go1.20",
+			want:   []string{
+				// Stopped.
+				//"freebsd-amd64-12_3",
+				//"linux-386",
+				//"linux-amd64",
+				//"linux-amd64-boringcrypto",
+				//"linux-amd64-newinliner",
+				//"linux-amd64-race",
+				//"linux-arm64",
+				//"openbsd-amd64-72",
+				//"windows-386-2016",
+				//"windows-amd64-2016",
 			},
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.20",
-			want: []string{
-				"freebsd-amd64-12_3",
-				"js-wasm",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-boringcrypto",
-				"linux-amd64-race",
-				"linux-arm-aws",
-				"linux-arm64",
-				"openbsd-amd64-72",
-				"windows-386-2008",
-				"windows-386-2012",
-				"windows-amd64-2016",
-
-				"misc-compile-darwin",
-				"misc-compile-freebsd",
-				"misc-compile-windows-arm",
-				"misc-compile-mips",
-				"misc-compile-mipsle",
-				"misc-compile-netbsd",
-				"misc-compile-netbsd-arm",
-				"misc-compile-openbsd",
-				"misc-compile-openbsd-arm",
-				"misc-compile-plan9",
-				"misc-compile-ppc",
-				"misc-compile-solaris",
-				"misc-compile-other-1",
-				"misc-compile-other-2",
-				"misc-compile-go1.20",
+			branch: "release-branch.go1.22",
+			want:   []string{
+				// Stopped.
+				//"freebsd-amd64-12_3",
+				//"linux-386",
+				//"linux-amd64",
+				//"linux-amd64-boringcrypto",
+				//"linux-amd64-race",
+				//"linux-arm64",
+				//"openbsd-amd64-72",
+				//"windows-386-2016",
+				//"windows-amd64-2016",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
-				"linux-386-longtest",
-				"linux-amd64-longtest",
-				"linux-arm64-longtest",
-				"windows-amd64-longtest",
+				// Stopped.
+				//"linux-386-longtest",
+				//"linux-amd64-longtest",
+				//"linux-arm64-longtest",
+				//"windows-amd64-longtest",
 			},
 		},
 		{
 			repo:   "go",
-			branch: "release-branch.go1.18",
-			want: []string{
-				"freebsd-amd64-12_3",
-				"js-wasm",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-race",
-				"linux-arm-aws",
-				"linux-arm64",
-				"openbsd-amd64-72",
-				"windows-386-2008-oldcc",
-				"windows-386-2012-oldcc",
-				"windows-amd64-2016-oldcc",
-
-				"misc-compile-darwin",
-				"misc-compile-freebsd",
-				"misc-compile-windows-arm",
-				"misc-compile-mips",
-				"misc-compile-mipsle",
-				"misc-compile-netbsd",
-				"misc-compile-netbsd-arm",
-				"misc-compile-openbsd",
-				"misc-compile-openbsd-arm",
-				"misc-compile-plan9",
-				"misc-compile-ppc",
-				"misc-compile-solaris",
-				"misc-compile-other-1",
-				"misc-compile-other-2",
+			branch: "release-branch.go1.21",
+			want:   []string{
+				// Stopped.
+				//"freebsd-amd64-12_3",
+				//"linux-386",
+				//"linux-amd64",
+				//"linux-amd64-boringcrypto",
+				//"linux-amd64-race",
+				//"linux-arm64",
+				//"openbsd-amd64-72",
+				//"windows-386-2016",
+				//"windows-amd64-2016",
 
 				// Include longtest builders on Go repo release branches. See issue 37827.
-				"linux-386-longtest",
-				"linux-amd64-longtest",
-				"windows-amd64-longtest-oldcc",
+				// Stopped.
+				//"linux-386-longtest",
+				//"linux-amd64-longtest",
+				//"linux-arm64-longtest",
+				//"windows-amd64-longtest",
 			},
 		},
 		{
@@ -208,6 +157,9 @@ func TestTrybots(t *testing.T) {
 			want: []string{
 				"android-amd64-emu",
 				"linux-amd64-androidemu",
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-race",
 			},
 		},
 		{
@@ -215,29 +167,48 @@ func TestTrybots(t *testing.T) {
 			branch: "master",
 			want: []string{
 				"freebsd-386-13_0",
-				"freebsd-amd64-12_3",
-				"freebsd-amd64-13_0",
-				"linux-386",
-				"linux-amd64",
-				"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
-				"linux-amd64-race",
-				"linux-arm-aws",
-				"linux-arm64",
+				// Stopped.
+				//"freebsd-amd64-12_3",
+				//"freebsd-amd64-13_0",
+				//"linux-386",
+				//"linux-amd64",
+				//"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
+				//"linux-amd64-race",
+				//"linux-arm64",
 				"netbsd-amd64-9_3",
 				"openbsd-386-72",
-				"openbsd-amd64-72",
-				"windows-386-2008",
-				"windows-amd64-2016",
+				// Stopped.
+				//"openbsd-amd64-72",
+				//"windows-386-2016",
+				//"windows-amd64-2016",
 			},
 		},
 		{
 			repo:   "exp",
 			branch: "master",
-			want: []string{
-				"linux-amd64",
-				"linux-amd64-race",
-				"windows-386-2008",
-				"windows-amd64-2016",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-race",
+				//"windows-amd64-2016",
+			},
+		},
+		{
+			repo:   "vulndb",
+			branch: "master",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-race",
+			},
+		},
+		{
+			repo:   "website",
+			branch: "master",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-race",
 			},
 		},
 	}
@@ -255,6 +226,8 @@ func TestTrybots(t *testing.T) {
 }
 
 func checkBuildersForProject(t *testing.T, gotBuilders []*BuildConfig, want []string) {
+	t.Helper()
+
 	var got []string
 	for _, bc := range gotBuilders {
 		got = append(got, bc.Name)
@@ -287,9 +260,23 @@ func TestPostSubmit(t *testing.T) {
 		{
 			repo:   "vulndb",
 			branch: "master",
-			want: []string{
-				"linux-amd64",
-				"linux-amd64-longtest",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-longtest",
+				//"linux-amd64-race",
+				//"linux-amd64-longtest-race",
+			},
+		},
+		{
+			repo:   "website",
+			branch: "master",
+			want:   []string{
+				// Stopped.
+				//"linux-amd64",
+				//"linux-amd64-longtest",
+				//"linux-amd64-race",
+				//"linux-amd64-longtest-race",
 			},
 		},
 	}
@@ -405,13 +392,12 @@ func TestBuilderConfig(t *testing.T) {
 
 		{b("linux-amd64", "net"), both},
 
-		{b("linux-loong64-3a5000", "go"), onlyPost},
-		{b("linux-loong64-3a5000@go1.99", "go"), onlyPost},
-		{b("linux-loong64-3a5000@go1.18", "go"), none}, // Go 1.18 doesn't support this port.
-		{b("linux-loong64-3a5000", "sys"), onlyPost},
-		{b("linux-loong64-3a5000@go1.99", "sys"), onlyPost},
-		{b("linux-loong64-3a5000@go1.18", "sys"), none},
-		{b("linux-loong64-3a5000", "net"), onlyPost},
+		// Builders for linux/loong64 are fully ported to LUCI and stopped in the coordinator.
+		{b("linux-loong64-3a5000", "go"), none},
+		{b("linux-loong64-3a5000@go1.99", "go"), none},
+		{b("linux-loong64-3a5000", "sys"), none},
+		{b("linux-loong64-3a5000@go1.99", "sys"), none},
+		{b("linux-loong64-3a5000", "net"), none},
 
 		// OpenBSD 7.2.
 		{b("openbsd-amd64-72", "go"), both},
@@ -466,20 +452,84 @@ func TestBuilderConfig(t *testing.T) {
 		{b("android-amd64-emu", "go"), onlyPost},
 		{b("android-386-emu", "go"), onlyPost},
 
-		// Only test tip for js/wasm, and only for some repos:
-		{b("js-wasm", "go"), both},
-		{b("js-wasm", "arch"), onlyPost},
-		{b("js-wasm", "crypto"), onlyPost},
-		{b("js-wasm", "sys"), onlyPost},
-		{b("js-wasm", "net"), onlyPost},
-		{b("js-wasm", "benchmarks"), none},
-		{b("js-wasm", "debug"), none},
-		{b("js-wasm", "mobile"), none},
-		{b("js-wasm", "perf"), none},
-		{b("js-wasm", "talks"), none},
-		{b("js-wasm", "tools"), none},
-		{b("js-wasm", "tour"), none},
-		{b("js-wasm", "website"), none},
+		// Builders for js/wasm are fully ported to LUCI and stopped in the coordinator.
+		{b("js-wasm-node18", "go"), none},
+		{b("js-wasm-node18@go1.21", "go"), none},
+		{b("js-wasm-node18@go1.20", "go"), none},
+		{b("js-wasm-node18", "arch"), none},
+		{b("js-wasm-node18", "crypto"), none},
+		{b("js-wasm-node18", "sys"), none},
+		{b("js-wasm-node18", "net"), none},
+		{b("js-wasm-node18", "benchmarks"), none},
+		{b("js-wasm-node18", "debug"), none},
+		{b("js-wasm-node18", "mobile"), none},
+		{b("js-wasm-node18", "perf"), none},
+		{b("js-wasm-node18", "talks"), none},
+		{b("js-wasm-node18", "tools"), none},
+		{b("js-wasm-node18", "tour"), none},
+		{b("js-wasm-node18", "website"), none},
+
+		// Builders for wasip1-wasm are fully ported to LUCI and stopped in the coordinator.
+		{b("wasip1-wasm-wazero", "go"), none},
+		{b("wasip1-wasm-wazero@go1.21", "go"), none},
+		{b("wasip1-wasm-wazero@go1.20", "go"), none},
+		{b("wasip1-wasm-wasmtime", "go"), none},
+		{b("wasip1-wasm-wasmtime@go1.21", "go"), none},
+		{b("wasip1-wasm-wasmtime@go1.20", "go"), none},
+		{b("wasip1-wasm-wasmer", "go"), none},
+		{b("wasip1-wasm-wasmer@go1.21", "go"), none},
+		{b("wasip1-wasm-wasmer@go1.20", "go"), none},
+		{b("wasip1-wasm-wasmedge", "go"), none},
+		{b("wasip1-wasm-wasmedge@go1.21", "go"), none},
+		{b("wasip1-wasm-wasmedge@go1.20", "go"), none},
+		{b("wasip1-wasm-wazero", "arch"), none},
+		{b("wasip1-wasm-wazero", "crypto"), none},
+		{b("wasip1-wasm-wazero", "sys"), none},
+		{b("wasip1-wasm-wazero", "net"), none},
+		{b("wasip1-wasm-wazero", "benchmarks"), none},
+		{b("wasip1-wasm-wazero", "debug"), none},
+		{b("wasip1-wasm-wazero", "mobile"), none},
+		{b("wasip1-wasm-wazero", "perf"), none},
+		{b("wasip1-wasm-wazero", "talks"), none},
+		{b("wasip1-wasm-wazero", "tools"), none},
+		{b("wasip1-wasm-wazero", "tour"), none},
+		{b("wasip1-wasm-wazero", "website"), none},
+		{b("wasip1-wasm-wasmtime", "arch"), none},
+		{b("wasip1-wasm-wasmtime", "crypto"), none},
+		{b("wasip1-wasm-wasmtime", "sys"), none},
+		{b("wasip1-wasm-wasmtime", "net"), none},
+		{b("wasip1-wasm-wasmtime", "benchmarks"), none},
+		{b("wasip1-wasm-wasmtime", "debug"), none},
+		{b("wasip1-wasm-wasmtime", "mobile"), none},
+		{b("wasip1-wasm-wasmtime", "perf"), none},
+		{b("wasip1-wasm-wasmtime", "talks"), none},
+		{b("wasip1-wasm-wasmtime", "tools"), none},
+		{b("wasip1-wasm-wasmtime", "tour"), none},
+		{b("wasip1-wasm-wasmtime", "website"), none},
+		{b("wasip1-wasm-wasmer", "arch"), none},
+		{b("wasip1-wasm-wasmer", "crypto"), none},
+		{b("wasip1-wasm-wasmer", "sys"), none},
+		{b("wasip1-wasm-wasmer", "net"), none},
+		{b("wasip1-wasm-wasmer", "benchmarks"), none},
+		{b("wasip1-wasm-wasmer", "debug"), none},
+		{b("wasip1-wasm-wasmer", "mobile"), none},
+		{b("wasip1-wasm-wasmer", "perf"), none},
+		{b("wasip1-wasm-wasmer", "talks"), none},
+		{b("wasip1-wasm-wasmer", "tools"), none},
+		{b("wasip1-wasm-wasmer", "tour"), none},
+		{b("wasip1-wasm-wasmer", "website"), none},
+		{b("wasip1-wasm-wasmedge", "arch"), none},
+		{b("wasip1-wasm-wasmedge", "crypto"), none},
+		{b("wasip1-wasm-wasmedge", "sys"), none},
+		{b("wasip1-wasm-wasmedge", "net"), none},
+		{b("wasip1-wasm-wasmedge", "benchmarks"), none},
+		{b("wasip1-wasm-wasmedge", "debug"), none},
+		{b("wasip1-wasm-wasmedge", "mobile"), none},
+		{b("wasip1-wasm-wasmedge", "perf"), none},
+		{b("wasip1-wasm-wasmedge", "talks"), none},
+		{b("wasip1-wasm-wasmedge", "tools"), none},
+		{b("wasip1-wasm-wasmedge", "tour"), none},
+		{b("wasip1-wasm-wasmedge", "website"), none},
 
 		// Race builders. Linux for all, GCE builders for
 		// post-submit, and only post-submit for "go" for
@@ -498,6 +548,10 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64-longtest", "net"), onlyPost},
 		{b("linux-amd64-longtest@go1.99", "go"), both},
 		{b("linux-amd64-longtest@go1.99", "net"), none},
+		{b("darwin-amd64-longtest", "go"), onlyPost},
+		{b("darwin-amd64-longtest", "net"), onlyPost},
+		{b("darwin-amd64-longtest@go1.99", "go"), onlyPost},
+		{b("darwin-amd64-longtest@go1.99", "net"), none},
 		{b("windows-amd64-longtest", "go"), onlyPost},
 		{b("windows-amd64-longtest@go1.99", "go"), both},
 		{b("windows-amd64-longtest", "net"), onlyPost},
@@ -512,14 +566,18 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "exp"), both},
 		{b("linux-amd64-race", "exp"), both},
 		{b("linux-amd64-longtest", "exp"), onlyPost},
-		{b("windows-386-2008", "exp"), both},
+		{b("windows-386-2016", "exp"), none},
 		{b("windows-amd64-2016", "exp"), both},
-		{b("darwin-amd64-10_14", "exp"), onlyPost},
-		{b("darwin-amd64-10_15", "exp"), onlyPost},
+		{b("darwin-amd64-10_15", "exp"), none},
+		{b("darwin-amd64-11_0", "exp"), onlyPost},
 		// ... but not on most others:
 		{b("freebsd-386-12_3", "exp"), none},
 		{b("freebsd-amd64-12_3", "exp"), none},
-		{b("js-wasm", "exp"), none},
+		{b("js-wasm-node18", "exp"), none},
+		{b("wasip1-wasm-wazero", "exp"), none},
+		{b("wasip1-wasm-wasmtime", "exp"), none},
+		{b("wasip1-wasm-wasmer", "exp"), none},
+		{b("wasip1-wasm-wasmedge", "exp"), none},
 
 		// exp is experimental; it doesn't test against release branches.
 		{b("linux-amd64@go1.99", "exp"), none},
@@ -530,27 +588,43 @@ func TestBuilderConfig(t *testing.T) {
 		{b("linux-amd64", "build"), both},
 		{b("linux-amd64-longtest", "build"), onlyPost},
 		{b("windows-amd64-2016", "build"), both},
-		{b("darwin-amd64-10_14", "build"), none},
-		{b("darwin-amd64-10_15", "build"), onlyPost},
+		{b("darwin-amd64-10_15", "build"), none},
+		{b("darwin-amd64-11_0", "build"), onlyPost},
 		{b("linux-amd64-fedora", "build"), none},
 		{b("linux-amd64-clang", "build"), none},
 		{b("linux-amd64-sid", "build"), none},
 		{b("linux-amd64-bullseye", "build"), none},
+		{b("linux-amd64-bookworm", "build"), none},
 		{b("linux-amd64-nocgo", "build"), none},
 		{b("linux-386-longtest", "build"), none},
 
 		{b("linux-amd64", "vulndb"), both},
 		{b("linux-amd64-longtest", "vulndb"), onlyPost},
 
-		{b("js-wasm", "build"), none},
+		{b("linux-amd64-sid@go1.22", "pkgsite"), none},
+		{b("freebsd-amd64-13_0@go1.22", "pkgsite"), none},
+		{b("linux-amd64@go1.20", "pkgsite-metrics"), both},
+
+		{b("js-wasm-node18", "build"), none},
+		{b("wasip1-wasm-wazero", "build"), none},
+		{b("wasip1-wasm-wasmtime", "build"), none},
+		{b("wasip1-wasm-wasmer", "build"), none},
+		{b("wasip1-wasm-wasmedge", "build"), none},
 		{b("android-386-emu", "build"), none},
 		{b("android-amd64-emu", "build"), none},
 
-		// Only use latest macOS for subrepos, and only amd64:
-		{b("darwin-amd64-10_14", "net"), onlyPost},
+		{b("darwin-amd64-11_0", "go"), onlyPost},
+		// Go 1.22 is the last release with macOS 10.15 support:
+		{b("darwin-amd64-10_15", "go"), none},
+		{b("darwin-amd64-10_15@go1.23", "go"), none},
+		{b("darwin-amd64-10_15@go1.22", "go"), onlyPost},
+		{b("darwin-amd64-10_15", "net"), none},
+		{b("darwin-amd64-10_15@go1.23", "net"), none},
+		{b("darwin-amd64-10_15@go1.22", "net"), onlyPost},
 
-		{b("darwin-amd64-10_15", "go"), onlyPost},
-		{b("darwin-amd64-10_14", "go"), onlyPost},
+		// The darwin longtest builder added during the Go 1.21 dev cycle:
+		{b("darwin-amd64-longtest@go1.21", "go"), onlyPost},
+		{b("darwin-amd64-longtest@go1.20", "go"), none},
 
 		// plan9 only lived at master. We didn't support any past releases.
 		// But it's off for now as it's always failing.
@@ -576,22 +650,11 @@ func TestBuilderConfig(t *testing.T) {
 		{b("dragonfly-amd64-622", "net"), onlyPost},
 
 		{b("linux-amd64-staticlockranking", "go"), onlyPost},
-		{b("linux-amd64-staticlockranking@go1.19", "go"), onlyPost},
 		{b("linux-amd64-staticlockranking", "net"), none},
 
-		{b("linux-amd64-unified", "go"), both},
-		{b("linux-amd64-unified", "tools"), onlyPost},
-		{b("linux-amd64-unified", "net"), none},
-		{b("linux-amd64-unified@dev.unified", "go"), both},
-		{b("linux-amd64-unified@dev.unified", "tools"), onlyPost},
-		{b("linux-amd64-unified@dev.unified", "net"), none},
-
-		{b("linux-amd64-nounified", "go"), both},
-		{b("linux-amd64-nounified", "tools"), both},
-		{b("linux-amd64-nounified", "net"), none},
-		{b("linux-amd64-nounified@dev.unified", "go"), both},
-		{b("linux-amd64-nounified@dev.unified", "tools"), both},
-		{b("linux-amd64-nounified@dev.unified", "net"), none},
+		{b("linux-amd64-newinliner", "go"), both},
+		{b("linux-amd64-newinliner", "tools"), none},
+		{b("linux-amd64-newinliner@go1.22", "go"), none},
 	}
 	for _, tt := range tests {
 		t.Run(tt.br.testName, func(t *testing.T) {
@@ -609,7 +672,11 @@ func TestBuilderConfig(t *testing.T) {
 			}
 			gotPost := bc.BuildsRepoPostSubmit(tt.br.repo, tt.br.branch, tt.br.goBranch)
 			if tt.want&isBuilder != 0 && !gotPost {
-				t.Errorf("not a post-submit builder, but expected")
+				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder; stopped {
+					t.Logf("not a post-submit builder because it's intentionally stopped")
+				} else {
+					t.Errorf("not a post-submit builder, but expected")
+				}
 			}
 			if tt.want&notBuilder != 0 && gotPost {
 				t.Errorf("unexpectedly a post-submit builder")
@@ -617,7 +684,11 @@ func TestBuilderConfig(t *testing.T) {
 
 			gotTry := bc.BuildsRepoTryBot(tt.br.repo, tt.br.branch, tt.br.goBranch)
 			if tt.want&isTrybot != 0 && !gotTry {
-				t.Errorf("not trybot, but expected")
+				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder; stopped {
+					t.Logf("not a trybot builder because it's intentionally stopped")
+				} else {
+					t.Errorf("not trybot, but expected")
+				}
 			}
 			if tt.want&notTrybot != 0 && gotTry {
 				t.Errorf("unexpectedly a trybot")
@@ -668,6 +739,10 @@ func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
 }
 
 func TestShouldRunDistTest(t *testing.T) {
+	if stopped := migration.BuildersPortedToLUCI["linux-amd64"] && migration.StopPortedBuilder; stopped {
+		t.Skip("test can't be used because linux builders are stopped")
+	}
+
 	type buildMode int
 	const (
 		tryMode    buildMode = 0
@@ -688,11 +763,11 @@ func TestShouldRunDistTest(t *testing.T) {
 		{"linux-amd64", "reboot", tryMode, true},
 		{"linux-amd64-race", "reboot", tryMode, false},
 
-		{"darwin-amd64-10_14", "test:foo", postSubmit, false},
-		{"darwin-amd64-10_14", "reboot", postSubmit, false},
-		{"darwin-amd64-10_14", "api", postSubmit, false},
-		{"darwin-amd64-10_14", "codewalk", postSubmit, false},
-		{"darwin-amd64-10_15", "test:foo", postSubmit, false},
+		{"darwin-amd64-13", "test:foo", postSubmit, false},
+		{"darwin-amd64-13", "reboot", postSubmit, false},
+		{"darwin-amd64-13", "api", postSubmit, false},
+		{"darwin-amd64-13", "codewalk", postSubmit, false},
+		{"darwin-amd64-12_0", "test:foo", postSubmit, false},
 	}
 	for _, tt := range tests {
 		bc, ok := Builders[tt.builder]
@@ -723,11 +798,10 @@ func TestSlowBotAliases(t *testing.T) {
 		}
 	}
 
-	out, err := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "tool", "dist", "list").Output()
+	ports, err := listPorts()
 	if err != nil {
-		t.Errorf("dist list: %v", err)
+		t.Fatal("listPorts:", err)
 	}
-	ports := strings.Fields(string(out))
 
 	done := map[string]bool{}
 
@@ -761,11 +835,10 @@ func TestSlowBotAliases(t *testing.T) {
 	}
 
 	for _, port := range ports {
-		slash := strings.IndexByte(port, '/')
-		if slash == -1 {
+		goos, goarch, ok := strings.Cut(port, "/")
+		if !ok {
 			t.Fatalf("unexpected port %q", port)
 		}
-		goos, goarch := port[:slash], port[slash+1:]
 		check(goos+"-"+goarch, false)
 		check(goos, false)
 		check(goarch, true)
@@ -776,16 +849,32 @@ func TestSlowBotAliases(t *testing.T) {
 	}
 }
 
+// TestCrossCompileOnlyBuilders checks to make sure that only misc-compile
+// builders and the linux-s390x-crosscompile builder have IsCrossCompileOnly
+// return true.
+func TestCrossCompileOnlyBuilders(t *testing.T) {
+	for _, conf := range Builders {
+		isMiscCompile := strings.HasPrefix(conf.Name, "misc-compile") || conf.Name == "linux-s390x-crosscompile"
+		if ccOnly := conf.IsCrossCompileOnly(); isMiscCompile != ccOnly {
+			t.Errorf("builder %q has unexpected IsCrossCompileOnly state (want %t, got %t)", conf.Name, isMiscCompile, ccOnly)
+		}
+	}
+}
+
 // TestTryBotsCompileAllPorts verifies that each port (go tool dist list)
 // is covered by either a real TryBot or a misc-compile TryBot.
 //
 // The special pseudo-port 'linux-arm-arm5' is tested in TestMiscCompileLinuxGOARM5.
 func TestTryBotsCompileAllPorts(t *testing.T) {
-	out, err := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "tool", "dist", "list").Output()
-	if err != nil {
-		t.Errorf("dist list: %v", err)
+	if migration.StopLegacyMiscCompileTryBots {
+		t.Log("nothing to test since legacy misc-compile trybots are stopped")
+		return
 	}
-	ports := strings.Fields(string(out))
+
+	ports, err := listPorts()
+	if err != nil {
+		t.Fatal("listPorts:", err)
+	}
 
 	// knownMissing tracks Go ports that that are known to be
 	// completely missing TryBot (pre-submit) test coverage.
@@ -793,7 +882,12 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	// All completed ports should have either a real TryBot or at least a misc-compile TryBot,
 	// so this map is meant to be used to temporarily fix tests
 	// when the work of adding a new port is actively underway.
-	knownMissing := map[string]bool{}
+	knownMissing := map[string]bool{
+		"openbsd-mips64": true, // go.dev/issue/58110
+
+		"js-wasm":     true, // Fully ported to LUCI and stopped in the coordinator.
+		"wasip1-wasm": true, // Fully ported to LUCI and stopped in the coordinator.
+	}
 
 	var done = make(map[string]bool)
 	check := func(goos, goarch string) {
@@ -821,12 +915,23 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 			}
 
 			if strings.HasPrefix(conf.Name, "misc-compile-") {
-				re, err := regexp.Compile(conf.allScriptArgs[0])
-				if err != nil {
-					t.Fatalf("invalid misc-compile filtering pattern for builder %q: %q",
-						conf.Name, conf.allScriptArgs[0])
+				var cGoos, cGoarch string
+				for _, v := range conf.env {
+					if strings.HasPrefix(v, "GOOS=") {
+						cGoos = v[len("GOOS="):]
+					}
+					if strings.HasPrefix(v, "GOARCH=") {
+						cGoarch = v[len("GOARCH="):]
+					}
 				}
-				if re.MatchString(goosArch) {
+				if cGoos == "" {
+					t.Errorf("missing GOOS env var for misc-compile builder %q", conf.Name)
+				}
+				if cGoarch == "" {
+					t.Errorf("missing GOARCH env var for misc-compile builder %q", conf.Name)
+				}
+				cGoosArch := cGoos + "-" + cGoarch
+				if goosArch == cGoosArch {
 					// There's a misc-compile TryBot for this GOOS/GOARCH pair.
 					done[goosArch] = true
 					break
@@ -843,40 +948,52 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	}
 
 	for _, port := range ports {
-		slash := strings.IndexByte(port, '/')
-		if slash == -1 {
+		goos, goarch, ok := strings.Cut(port, "/")
+		if !ok {
 			t.Fatalf("unexpected port %q", port)
 		}
-		check(port[:slash], port[slash+1:])
+		check(goos, goarch)
 	}
 }
 
 // The 'linux-arm-arm5' pseduo-port is supported by src/buildall.bash
 // and tests linux/arm with GOARM=5 set. Since it's not a normal port,
 // the TestTryBotsCompileAllPorts wouldn't report if the misc-compile
-// TryBot that covers is is accidentally removed. Check it explicitly.
+// TryBot that covers is accidentally removed. Check it explicitly.
 func TestMiscCompileLinuxGOARM5(t *testing.T) {
-	var ok bool
+	if migration.StopLegacyMiscCompileTryBots {
+		t.Log("nothing to test since legacy misc-compile trybots are stopped")
+		return
+	}
+
 	for _, b := range Builders {
 		if !strings.HasPrefix(b.Name, "misc-compile-") {
 			continue
 		}
-		re, err := regexp.Compile(b.allScriptArgs[0])
-		if err != nil {
-			t.Fatalf("invalid misc-compile filtering pattern for builder %q: %q",
-				b.Name, b.allScriptArgs[0])
+		var hasGOOS, hasGOARCH, hasGOARM bool
+		for _, v := range b.env {
+			if v == "GOOS=linux" {
+				hasGOOS = true
+				continue
+			}
+			if v == "GOARCH=arm" {
+				hasGOARCH = true
+				continue
+			}
+			if v == "GOARM=5" {
+				hasGOARM = true
+				continue
+			}
 		}
-		if re.MatchString("linux-arm-arm5") {
-			ok = true
-			break
+		if hasGOOS && hasGOARCH && hasGOARM {
+			// Found it. Nothing left to do.
+			return
 		}
 	}
-	if !ok {
-		// We get here if the linux-arm-arm5 port is no longer checked by
-		// a misc-compile TryBot. Report it as a failure in case the coverage
-		// was removed accidentally (e.g., as part of a refactor).
-		t.Errorf("no misc-compile TryBot coverage for the special 'linux-arm-arm5' pseudo-port")
-	}
+	// We get here if the linux-arm-arm5 port is no longer checked by
+	// a misc-compile TryBot. Report it as a failure in case the coverage
+	// was removed accidentally (e.g., as part of a refactor).
+	t.Errorf("no misc-compile TryBot coverage for the special 'linux-arm-arm5' pseudo-port")
 }
 
 // Test that we have longtest builders and
@@ -936,7 +1053,7 @@ func TestHostConfigIsVM(t *testing.T) {
 			config: &HostConfig{
 				VMImage:        "image-x",
 				ContainerImage: "",
-				isEC2:          false,
+				IsEC2:          false,
 			},
 			want: true,
 		},
@@ -945,7 +1062,7 @@ func TestHostConfigIsVM(t *testing.T) {
 			config: &HostConfig{
 				VMImage:        "",
 				ContainerImage: "container-image-x",
-				isEC2:          false,
+				IsEC2:          false,
 			},
 			want: false,
 		},
@@ -954,7 +1071,7 @@ func TestHostConfigIsVM(t *testing.T) {
 			config: &HostConfig{
 				VMImage:        "image-x",
 				ContainerImage: "container-image-x",
-				isEC2:          true,
+				IsEC2:          true,
 			},
 			want: false,
 		},
@@ -963,122 +1080,15 @@ func TestHostConfigIsVM(t *testing.T) {
 			config: &HostConfig{
 				VMImage:        "image-x",
 				ContainerImage: "",
-				isEC2:          true,
+				IsEC2:          true,
 			},
 			want: true,
 		},
 	}
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf(tc.desc), func(t *testing.T) {
+		t.Run(tc.desc, func(t *testing.T) {
 			if got := tc.config.IsVM(); got != tc.want {
 				t.Errorf("HostConfig.IsVM() = %t; want %t", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestModulesEnv(t *testing.T) {
-	testCases := []struct {
-		desc        string
-		buildConfig *BuildConfig
-		repo        string
-		want        []string
-	}{
-		{
-			desc: "ec2-builder-repo-non-go",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     true,
-				},
-			},
-			repo: "bar",
-			want: []string{"GOPROXY=https://proxy.golang.org"},
-		},
-		{
-			desc: "reverse-builder-repo-non-go",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: true,
-					isEC2:     false,
-				},
-			},
-			repo: "bar",
-			want: []string{"GOPROXY=https://proxy.golang.org"},
-		},
-		{
-			desc: "reverse-builder-repo-go",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: true,
-					isEC2:     false,
-				},
-			},
-			repo: "go",
-			want: []string{"GOPROXY=off"},
-		},
-		{
-			desc: "builder-repo-go",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     false,
-				},
-			},
-			repo: "go",
-			want: []string{"GOPROXY=off"},
-		},
-		{
-			desc: "builder-repo-go-outbound-network-allowed",
-			buildConfig: &BuildConfig{
-				Name: "test-longtest",
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     false,
-				},
-			},
-			repo: "go",
-			want: nil,
-		},
-		{
-			desc: "builder-repo-special-case",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     false,
-				},
-			},
-			repo: "build",
-			want: []string{"GO111MODULE=on"},
-		},
-		{
-			desc: "reverse-builder-repo-special-case",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: true,
-					isEC2:     false,
-				},
-			},
-			repo: "build",
-			want: []string{"GOPROXY=https://proxy.golang.org", "GO111MODULE=on"},
-		},
-		{
-			desc: "builder-repo-non-special-case",
-			buildConfig: &BuildConfig{
-				testHostConf: &HostConfig{
-					IsReverse: false,
-					isEC2:     false,
-				},
-			},
-			repo: "bar",
-			want: nil,
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			got := tc.buildConfig.ModulesEnv(tc.repo)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("BuildConfig.ModulesEnv(%q) mismatch (-want, +got)\n%s", tc.repo, diff)
 			}
 		})
 	}
@@ -1124,6 +1134,16 @@ func TestHostsSort(t *testing.T) {
 	}
 }
 
+func TestBuildersPortedToLUCI(t *testing.T) {
+	// Check that map keys refer to builder names that exist,
+	// otherwise the entry is a no-op. Mostly to catch typos.
+	for name := range migration.BuildersPortedToLUCI {
+		if _, ok := Builders[name]; !ok {
+			t.Errorf("BuildersPortedToLUCI contains an unknown legacy builder name %v", name)
+		}
+	}
+}
+
 func TestHostConfigCosArchitecture(t *testing.T) {
 	testCases := []struct {
 		desc       string
@@ -1143,80 +1163,16 @@ func TestHostConfigCosArchitecture(t *testing.T) {
 	}
 }
 
-func TestWindowsCCSetup(t *testing.T) {
-	// For 1.18 + 1.19 we want to see the "-oldcc" variants,
-	// where for 1.20 and main branch we want the non-oldcc variants,
-	// both for trybots and post-submit testing.
-	tests := []struct {
-		repo   string // "go", "net", etc
-		branch string // of repo
-		want   string
-	}{
-		{
-			repo:   "go",
-			branch: "master",
-			want:   "newcc",
-		},
-		{
-			repo:   "tools",
-			branch: "master",
-			want:   "newcc",
-		},
-		{
-			repo:   "go",
-			branch: "go1.20",
-			want:   "newcc",
-		},
-		{
-			repo:   "go",
-			branch: "go1.19",
-			want:   "oldcc",
-		},
-		{
-			repo:   "build",
-			branch: "go1.19",
-			want:   "oldcc",
-		},
-	}
-
-	checkWindowsBuilders := func(got []*BuildConfig, want string, repo, branch string) {
-		t.Helper()
-		for _, b := range got {
-			bname := b.Name
-			if !strings.HasPrefix(bname, "windows-amd64") &&
-				!strings.HasPrefix(bname, "windows-386") {
-				continue
-			}
-			hasOldCC := strings.Contains(bname, "oldcc")
-			if want == "newcc" && hasOldCC {
-				t.Errorf("got unexpected oldcc builder %q repo %s branch %s",
-					bname, repo, branch)
-			} else if want == "oldcc" && !hasOldCC {
-				t.Errorf("got unexpected newcc builder %q repo %s branch %s",
-					bname, repo, branch)
-			}
+// listPorts lists supported Go ports
+// found by running go tool dist list.
+func listPorts() ([]string, error) {
+	cmd := exec.Command("go", "tool", "dist", "list")
+	out, err := cmd.Output()
+	if err != nil {
+		if ee := (*exec.ExitError)(nil); errors.As(err, &ee) {
+			out = append(out, ee.Stderr...)
 		}
+		return nil, fmt.Errorf("%q failed: %s\n%s", cmd, err, out)
 	}
-
-	for i, tt := range tests {
-		if tt.branch == "" || tt.repo == "" {
-			t.Errorf("incomplete test entry %d", i)
-			return
-		}
-		if tt.want != "newcc" && tt.want != "oldcc" {
-			t.Errorf("incorrect 'want' field in test entry %d", i)
-			return
-		}
-		t.Run(fmt.Sprintf("%s/%s", tt.repo, tt.branch), func(t *testing.T) {
-			goBranch := tt.branch // hard-code the common case for now
-			got := TryBuildersForProject(tt.repo, tt.branch, goBranch)
-			checkWindowsBuilders(got, tt.want, tt.repo, tt.branch)
-		})
-		t.Run(fmt.Sprintf("%s/%s", tt.repo, tt.branch), func(t *testing.T) {
-			goBranch := tt.branch // hard-code the common case for now
-			got := buildersForProject(tt.repo, tt.branch, goBranch, (*BuildConfig).BuildsRepoPostSubmit)
-			checkWindowsBuilders(got, tt.want, tt.repo, tt.branch)
-		})
-
-	}
+	return strings.Fields(string(out)), nil
 }

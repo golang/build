@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 package remote
 
@@ -19,7 +17,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -93,6 +90,17 @@ func SSHKeyPair() (privateKey []byte, publicKey []byte, err error) {
 	return
 }
 
+// SSHOption are options to set for the SSH server.
+type SSHOption func(*SSHServer)
+
+// EnableLUCIOption sets the configuration needed for swarming bots to connect to the
+// SSH server.
+func EnableLUCIOption() SSHOption {
+	return func(s *SSHServer) {
+		s.server.Handler = s.HandleIncomingSSHPostAuthSwarming
+	}
+}
+
 // SSHServer is the SSH server that the coordinator provides.
 type SSHServer struct {
 	gomotePublicKey    string
@@ -102,7 +110,7 @@ type SSHServer struct {
 }
 
 // NewSSHServer creates an SSH server used to access remote buildlet sessions.
-func NewSSHServer(addr string, hostPrivateKey, gomotePublicKey, caPrivateKey []byte, sp *SessionPool) (*SSHServer, error) {
+func NewSSHServer(addr string, hostPrivateKey, gomotePublicKey, caPrivateKey []byte, sp *SessionPool, opts ...SSHOption) (*SSHServer, error) {
 	hostSigner, err := ssh.ParsePrivateKey(hostPrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse SSH host key: %v; not configuring SSH server", err)
@@ -129,6 +137,9 @@ func NewSSHServer(addr string, hostPrivateKey, gomotePublicKey, caPrivateKey []b
 		},
 	}
 	s.server.Handler = s.HandleIncomingSSHPostAuth
+	for _, opt := range opts {
+		opt(s)
+	}
 	return s, nil
 }
 
@@ -299,6 +310,136 @@ func (ss *SSHServer) HandleIncomingSSHPostAuth(s gssh.Session) {
 	cmd.Wait()
 }
 
+// HandleIncomingSSHPostAuthSwarming handles post-authentication requests for the SSH server. This handler uses
+// Sessions for session management.
+func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
+	inst := s.User()
+	ptyReq, winCh, isPty := s.Pty()
+	if !isPty {
+		fmt.Fprintf(s, "scp etc not yet supported; https://go.dev/issue/21140\n")
+		return
+	}
+	rs, err := ss.sessionPool.Session(inst)
+	if err != nil {
+		fmt.Fprintf(s, "unknown instance %q", inst)
+		return
+	}
+	ctx, cancel := context.WithCancel(s.Context())
+	defer cancel()
+	if err := ss.sessionPool.KeepAlive(ctx, inst); err != nil {
+		log.Printf("ssh: KeepAlive on session=%s failed: %s", inst, err)
+	}
+
+	sshUser := "swarming"
+	isPlan9 := strings.Contains(rs.HostType, "plan9")
+	useLocalSSHProxy := !isPlan9
+	if sshUser == "" && useLocalSSHProxy {
+		fmt.Fprintf(s, "instance %q host type %q does not have SSH configured\n", inst, rs.HostType)
+		return
+	}
+	// TODO(go.dev/issue/64064) do we still need hermetic checks?
+	log.Printf("connecting to ssh to instance %q ...", inst)
+	fmt.Fprint(s, "# Welcome to the gomote ssh proxy.\n")
+	fmt.Fprint(s, "# Connecting to/starting remote ssh...\n")
+	fmt.Fprint(s, "#\n")
+
+	var localProxyPort int
+	bc, err := ss.sessionPool.BuildletClient(inst)
+	if err != nil {
+		fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
+		return
+	}
+	if useLocalSSHProxy {
+		sshConn, err := bc.ConnectSSH(sshUser, ss.gomotePublicKey)
+		log.Printf("buildlet(%q).ConnectSSH = %T, %v", inst, sshConn, err)
+		if err != nil {
+			fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
+			return
+		}
+		defer sshConn.Close()
+
+		// Now listen on some localhost port that we'll proxy to sshConn.
+		// The openssh ssh command line tool will connect to this IP.
+		ln, err := net.Listen("tcp", "localhost:0")
+		if err != nil {
+			fmt.Fprintf(s, "local listen error: %v\n", err)
+			return
+		}
+		localProxyPort = ln.Addr().(*net.TCPAddr).Port
+		log.Printf("ssh local proxy port for %s: %v", inst, localProxyPort)
+		var lnCloseOnce sync.Once
+		lnClose := func() { lnCloseOnce.Do(func() { ln.Close() }) }
+		defer lnClose()
+
+		// Accept at most one connection from localProxyPort and proxy
+		// it to sshConn.
+		go func() {
+			c, err := ln.Accept()
+			lnClose()
+			if err != nil {
+				return
+			}
+			defer c.Close()
+			errc := make(chan error, 1)
+			go func() {
+				_, err := io.Copy(c, sshConn)
+				errc <- err
+			}()
+			go func() {
+				_, err := io.Copy(sshConn, c)
+				errc <- err
+			}()
+			err = <-errc
+		}()
+	}
+	workDir, err := bc.WorkDir(ctx)
+	if err != nil {
+		fmt.Fprintf(s, "Error getting WorkDir: %v\n", err)
+		return
+	}
+	ip, _, ipErr := net.SplitHostPort(bc.IPPort())
+
+	fmt.Fprint(s, "# `gomote push` and the builders use:\n")
+	fmt.Fprintf(s, "# - workdir: %s\n", workDir)
+	fmt.Fprintf(s, "# - GOROOT: %s/go\n", workDir)
+	fmt.Fprintf(s, "# - GOPATH: %s/gopath\n", workDir)
+	fmt.Fprint(s, "# Happy debugging.\n")
+
+	log.Printf("ssh to %s: starting ssh -p %d for %s@localhost", inst, localProxyPort, sshUser)
+	cmd := exec.Command("ssh",
+		"-p", strconv.Itoa(localProxyPort),
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no",
+		"-i", ss.privateHostKeyFile,
+		sshUser+"@localhost")
+	if isPlan9 {
+		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
+		if ipErr != nil {
+			fmt.Fprintf(s, "# Failed to get IP out of %q: %v\n", bc.IPPort(), ipErr)
+			return
+		}
+		cmd = exec.Command("/usr/local/bin/drawterm",
+			"-a", ip, "-c", ip, "-u", "glenda", "-k", "user=glenda")
+	}
+
+	envutil.SetEnv(cmd, "TERM="+ptyReq.Term)
+	f, err := pty.Start(cmd)
+	if err != nil {
+		log.Printf("running ssh client to %s: %v", inst, err)
+		return
+	}
+	defer f.Close()
+	go func() {
+		for win := range winCh {
+			setWinsize(f, win.Width, win.Height)
+		}
+	}()
+	go io.Copy(f, s) // stdin
+	io.Copy(s, f)    // stdout
+	cmd.Process.Kill()
+	cmd.Wait()
+}
+
 // setupRemoteSSHEnv sets up environment variables on the remote system.
 // This makes the new SSH session easier to use for Go testing.
 func (ss *SSHServer) setupRemoteSSHEnv(bconf *dashboard.BuildConfig, workDir string, f io.Writer) {
@@ -330,7 +471,7 @@ func (ss *SSHServer) setupRemoteSSHEnv(bconf *dashboard.BuildConfig, workDir str
 // WriteSSHPrivateKeyToTempFile writes a key to a temporary file on the local file system. It also
 // sets the permissions on the file to what is expected by OpenSSH implementations of SSH.
 func WriteSSHPrivateKeyToTempFile(key []byte) (path string, err error) {
-	tf, err := ioutil.TempFile("", "ssh-priv-key")
+	tf, err := os.CreateTemp("", "ssh-priv-key")
 	if err != nil {
 		return "", err
 	}

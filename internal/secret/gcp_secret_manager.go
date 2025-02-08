@@ -15,8 +15,8 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	gax "github.com/googleapis/gax-go/v2"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 )
 
 const (
@@ -52,6 +52,9 @@ const (
 
 	// NameMaintnerGitHubToken is the secret name for the Maintner GitHub token.
 	NameMaintnerGitHubToken = "maintner-github-token"
+
+	// NameWatchflakesGitHubToken is the secret name for the watchflakes GitHub token.
+	NameWatchflakesGitHubToken = "watchflakes-github-token"
 
 	// NameGitHubWebhookSecret is the secret name for a golang/go GitHub webhook secret.
 	NameGitHubWebhookSecret = "github-webhook-secret"
@@ -90,6 +93,18 @@ const (
 	// The secret value encodes relevant keys and their secrets as
 	// a JSON object that can be unmarshaled into TwitterCredentials.
 	NameStagingTwitterAPISecret = "staging-" + NameTwitterAPISecret
+
+	// NameMastodonAPISecret is the secret name for Mastodon API credentials
+	// for posting to Hachyderm.io/@golang.  The secret value is a JSON
+	// encoding of the MastodonCredentials.
+	NameMastodonAPISecret = "mastodon-api-secret"
+
+	// NameMacServiceAPIKey is the secret name for the MacService API key.
+	NameMacServiceAPIKey = "macservice-api-key"
+
+	// NameVSCodeMarketplacePublishToken is the secret name for VS Code
+	// Marketplace publisher key.
+	NameVSCodeMarketplacePublishToken = "vscode-marketplace-token"
 )
 
 // TwitterCredentials holds Twitter API credentials.
@@ -100,11 +115,31 @@ type TwitterCredentials struct {
 	AccessTokenSecret string
 }
 
+type MastodonCredentials struct {
+	// Log in to <Instance> as your bot account,
+	// navigate to Profile -> Development,
+	// Click on <Application> in the Application column,
+	// and it will reveal Client Key, Client Secret, and Access Token
+	Instance      string // Instance (e.g. "botsin.space")
+	Application   string // Application name (e.g. ""Go benchmarking bot"")
+	ClientKey     string // Client Key
+	ClientSecret  string // Client secret
+	AccessToken   string // Access token
+	TestRecipient string // For testing only, ignored by non-test API
+}
+
 func (t TwitterCredentials) String() string {
 	return fmt.Sprintf("{%s (redacted) %s (redacted)}", t.ConsumerKey, t.AccessTokenKey)
 }
 func (t TwitterCredentials) GoString() string {
 	return fmt.Sprintf("secret.TwitterCredentials{ConsumerKey:%q ConsumerSecret:(redacted) AccessTokenKey:%q AccessTokenSecret:(redacted)}", t.ConsumerKey, t.AccessTokenKey)
+}
+
+func (t MastodonCredentials) String() string {
+	return fmt.Sprintf("{%s %s (redacted) (redacted) (redacted)}", t.Instance, t.Application)
+}
+func (t MastodonCredentials) GoString() string {
+	return fmt.Sprintf("secret.MastodonCredentials{Instance:%q Application:%q ClientKey:(redacted) ClientSecret:(redacted) AccessToken:(redacted)}", t.Instance, t.Application)
 }
 
 type secretClient interface {
@@ -115,7 +150,7 @@ type secretClient interface {
 // Client is used to interact with the GCP Secret Management service.
 type Client struct {
 	client    secretClient
-	projectID string // projectID specifies the ID of the GCP project where secrets are retreived from.
+	projectID string // projectID specifies the ID of the GCP project where secrets are retrieved from.
 }
 
 // NewClient creates a Secret Manager Client
@@ -176,7 +211,7 @@ func buildNamePath(projectID, name, version string) string {
 }
 
 // MustNewClient instantiates an instance of the Secret Manager Client. If there is an error
-// this fuction will exit.
+// this function will exit.
 func MustNewClient() *Client {
 	c, err := NewClient()
 	if err != nil {

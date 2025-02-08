@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.17 AS build
+FROM golang:1.23-bookworm AS build
 LABEL maintainer="golang-dev@googlegroups.com"
 
 RUN mkdir /gocache
@@ -22,7 +22,7 @@ COPY . /go/src/golang.org/x/build/
 RUN go install golang.org/x/build/cmd/gopherbot
 
 
-FROM debian:stretch
+FROM debian:bookworm
 LABEL maintainer="golang-dev@googlegroups.com"
 
 # netbase and ca-certificates are needed for dialing TLS.

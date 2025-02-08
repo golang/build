@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build ignore
-// +build ignore
 
 // The demo command shows and tests usage of the gerrit package.
 package main
@@ -11,7 +10,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,7 +20,7 @@ import (
 )
 
 func main() {
-	gobotPass, err := ioutil.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", "gobot-golang-org.cookie"))
+	gobotPass, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "keys", "gobot-golang-org.cookie"))
 	if err != nil {
 		log.Fatal(err)
 	}

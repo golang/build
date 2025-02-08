@@ -6,6 +6,8 @@ syntax = "proto3";
 
 package protos;
 
+option go_package = "golang.org/x/build/cmd/coordinator/protos";
+
 service Coordinator {
   // ClearResults clears build failures from the coordinator to force them to rebuild.
   rpc ClearResults(ClearResultsRequest) returns (ClearResultsResponse) {}

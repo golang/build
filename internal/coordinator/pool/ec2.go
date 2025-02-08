@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package pool
 
@@ -62,7 +61,7 @@ type awsClient interface {
 	RunningInstances(ctx context.Context) ([]*cloud.Instance, error)
 }
 
-// EC2Opt is optional configuration for the the buildlet.
+// EC2Opt is optional configuration for the buildlet.
 type EC2Opt func(*EC2Buildlet)
 
 // EC2Buildlet manages a pool of AWS EC2 buildlets.
@@ -76,7 +75,7 @@ type EC2Buildlet struct {
 	// hosts provides the host configuration for all hosts. It is passed in to facilitate
 	// testing.
 	hosts map[string]*dashboard.HostConfig
-	// isRemoteBuildletFunc informs the caller is a VM instance is being used as a remote
+	// isRemoteBuildlet informs the caller is a VM instance is being used as a remote
 	// buildlet.
 	//
 	// TODO(golang.org/issues/38337) remove once we find a way to pass in remote buildlet

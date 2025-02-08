@@ -1,4 +1,4 @@
-// Copyright 2022 Go Authors All rights reserved.
+// Copyright 2022 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -103,6 +103,11 @@ type codeResponse struct {
 	VerificationURL string `json:"verification_url"`
 }
 
+const (
+	configSubDir = "gomote"
+	tokenFile    = "iap-refresh-tv-token"
+)
+
 func writeToken(refresh *oauth2.Token) error {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -112,11 +117,22 @@ func writeToken(refresh *oauth2.Token) error {
 	if err != nil {
 		return err
 	}
-	err = os.MkdirAll(filepath.Join(configDir, "gomote"), 0755)
+	err = os.MkdirAll(filepath.Join(configDir, configSubDir), 0755)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(configDir, "gomote/iap-refresh-tv-token"), refreshBytes, 0600)
+	return os.WriteFile(filepath.Join(configDir, configSubDir, tokenFile), refreshBytes, 0600)
+}
+
+func removeToken() error {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(filepath.Join(configDir, configSubDir, tokenFile)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func cachedToken() (*oauth2.Token, error) {
@@ -124,7 +140,7 @@ func cachedToken() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	refreshBytes, err := os.ReadFile(filepath.Join(configDir, "gomote/iap-refresh-tv-token"))
+	refreshBytes, err := os.ReadFile(filepath.Join(configDir, configSubDir, tokenFile))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -135,7 +151,20 @@ func cachedToken() (*oauth2.Token, error) {
 	if err := json.Unmarshal(refreshBytes, &refreshToken); err != nil {
 		return nil, err
 	}
+	if !refreshToken.Valid() {
+		return nil, nil
+	}
 	return &refreshToken, nil
+}
+
+// TokenSourceForceLogin returns a TokenSource that can be used to access Go's
+// IAP-protected sites. It will delete any existing authentication token
+// credentials and prompt for login.
+func TokenSourceForceLogin(ctx context.Context) (oauth2.TokenSource, error) {
+	if err := removeToken(); err != nil {
+		return nil, fmt.Errorf("failed to delete existing token file: %s", err)
+	}
+	return TokenSource(ctx)
 }
 
 // TokenSource returns a TokenSource that can be used to access Go's
@@ -148,7 +177,6 @@ func TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 			return idtoken.NewTokenSource(ctx, audience)
 		}
 	}
-
 	refresh, err := cachedToken()
 	if err != nil {
 		return nil, err
@@ -214,7 +242,15 @@ func (s *jwtTokenSource) Token() (*oauth2.Token, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return nil, fmt.Errorf("IAP token exchange failed: status %v, body %q", resp.Status, body)
+		tokenRespErr := struct {
+			Err         string `json:"error"`
+			Description string `json:"error_description"`
+		}{}
+		err := fmt.Errorf("IAP token exchange failed: status %v, body %q", resp.Status, body)
+		if unmarshErr := json.Unmarshal(body, &tokenRespErr); unmarshErr == nil && tokenRespErr.Err == "invalid_grant" {
+			return nil, AuthenticationError{Err: err, Description: tokenRespErr.Description}
+		}
+		return nil, err
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -233,3 +269,12 @@ func (s *jwtTokenSource) Token() (*oauth2.Token, error) {
 type jwtTokenJSON struct {
 	IDToken string `json:"id_token"`
 }
+
+// AuthenticationError records an authentication error.
+type AuthenticationError struct {
+	Description string
+	Err         error
+}
+
+func (ar AuthenticationError) Error() string { return ar.Description }
+func (ar AuthenticationError) Unwrap() error { return ar.Err }

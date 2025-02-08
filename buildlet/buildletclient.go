@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -60,7 +59,7 @@ func (c *client) SetOnHeartbeatFailure(fn func()) {
 
 var ErrClosed = errors.New("buildlet: Client closed")
 
-// Closes destroys and closes down the buildlet, destroying all state
+// Close destroys and closes down the buildlet, destroying all state
 // immediately.
 func (c *client) Close() error {
 	// TODO(bradfitz): have a Client-wide Done channel we set on
@@ -279,7 +278,7 @@ func (c *client) ProxyTCP(port int) (io.ReadWriteCloser, error) {
 		return nil, err
 	}
 	if res.StatusCode != http.StatusSwitchingProtocols {
-		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		slurp, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 		res.Body.Close()
 		return nil, fmt.Errorf("wanted 101 Switching Protocols; unexpected response: %v, %q", res.Status, slurp)
 	}
@@ -397,7 +396,7 @@ func (c *client) doOK(req *http.Request) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		slurp, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 		return fmt.Errorf("%v; body: %s", res.Status, slurp)
 	}
 	return nil
@@ -459,7 +458,7 @@ func (c *client) GetTar(ctx context.Context, dir string) (io.ReadCloser, error) 
 		return nil, err
 	}
 	if res.StatusCode != http.StatusOK {
-		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		slurp, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 		res.Body.Close()
 		return nil, fmt.Errorf("%v; body: %s", res.Status, slurp)
 	}
@@ -574,7 +573,7 @@ func (c *client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		slurp, _ := ioutil.ReadAll(io.LimitReader(res.Body, 4<<10))
+		slurp, _ := io.ReadAll(io.LimitReader(res.Body, 4<<10))
 		return nil, fmt.Errorf("buildlet: HTTP status %v: %s", res.Status, slurp)
 	}
 	condRun(opts.OnStartExec)
@@ -587,7 +586,7 @@ func (c *client) Exec(ctx context.Context, cmd string, opts ExecOpts) (remoteErr
 		// Stream the output:
 		out := opts.Output
 		if out == nil {
-			out = ioutil.Discard
+			out = io.Discard
 		}
 		if _, err := io.Copy(out, res.Body); err != nil {
 			resc <- errs{execErr: fmt.Errorf("error copying response: %w", err)}
@@ -673,7 +672,7 @@ func (c *client) Status(ctx context.Context) (Status, error) {
 	if resp.StatusCode != http.StatusOK {
 		return Status{}, errors.New(resp.Status)
 	}
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		return Status{}, err
@@ -699,7 +698,7 @@ func (c *client) WorkDir(ctx context.Context) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", errors.New(resp.Status)
 	}
-	b, err := ioutil.ReadAll(resp.Body)
+	b, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		return "", err
@@ -792,7 +791,7 @@ func (c *client) ListDir(ctx context.Context, dir string, opts ListDirOpts, fn f
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		slurp, _ := ioutil.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		slurp, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return fmt.Errorf("%s: %s", resp.Status, slurp)
 	}
 	sc := bufio.NewScanner(resp.Body)
@@ -853,7 +852,7 @@ func (c *client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
 		return nil, fmt.Errorf("reading /connect-ssh response: %v", err)
 	}
 	if res.StatusCode != http.StatusSwitchingProtocols {
-		slurp, _ := ioutil.ReadAll(res.Body)
+		slurp, _ := io.ReadAll(res.Body)
 		conn.Close()
 		return nil, fmt.Errorf("unexpected /connect-ssh response: %v, %s", res.Status, slurp)
 	}

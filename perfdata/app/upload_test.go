@@ -1,9 +1,8 @@
-// Copyright 2016 The Go Authors.  All rights reserved.
+// Copyright 2016 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 //go:build cgo
-// +build cgo
 
 package app
 
@@ -11,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -83,7 +81,7 @@ func (app *testApp) uploadFiles(t *testing.T, f func(*multipart.Writer)) *upload
 	if resp.StatusCode != 200 {
 		t.Fatalf("post /upload: %v", resp.Status)
 	}
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("reading /upload response: %v", err)
 	}

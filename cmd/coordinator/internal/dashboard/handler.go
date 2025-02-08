@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 // Package dashboard contains the implementation of the build dashboard for the Coordinator.
 package dashboard
@@ -17,11 +16,14 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"cloud.google.com/go/datastore"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/internal/migration"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"google.golang.org/grpc"
@@ -45,39 +47,55 @@ type MaintnerClient interface {
 	GetDashboard(ctx context.Context, in *apipb.DashboardRequest, opts ...grpc.CallOption) (*apipb.DashboardResponse, error)
 }
 
+type luciClient interface {
+	PostSubmitSnapshot() lucipoll.Snapshot
+}
+
 type Handler struct {
 	// Datastore is a client used for fetching build status. If nil, it uses in-memory storage of build status.
 	Datastore *datastore.Client
 	// Maintner is a client for Maintner, used for fetching lists of commits.
 	Maintner MaintnerClient
+	// LUCI is a client for LUCI, used for fetching build results from there.
+	LUCI luciClient
 
 	// memoryResults is an in-memory storage of CI results. Used in development and testing for datastore data.
 	memoryResults map[string][]string
 }
 
-func (d *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (d *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	var showLUCI = true
+	if legacyOnly, _ := strconv.ParseBool(req.URL.Query().Get("legacyonly")); legacyOnly {
+		showLUCI = false
+	}
+
+	var luci lucipoll.Snapshot
+	if d.LUCI != nil && showLUCI {
+		luci = d.LUCI.PostSubmitSnapshot()
+	}
+
 	dd := &data{
-		Builders: d.getBuilders(dashboard.Builders),
-		Commits:  d.commits(r.Context()),
+		Builders: d.getBuilders(dashboard.Builders, luci),
+		Commits:  d.commits(req.Context(), luci),
 		Package:  dashPackage{Name: "Go"},
 	}
 
 	var buf bytes.Buffer
 	if err := templ.Execute(&buf, dd); err != nil {
 		log.Printf("handleDashboard: error rendering template: %v", err)
-		http.Error(rw, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
-	buf.WriteTo(rw)
+	buf.WriteTo(w)
 }
 
-func (d *Handler) commits(ctx context.Context) []*commit {
-	var commits []*commit
+func (d *Handler) commits(ctx context.Context, luci lucipoll.Snapshot) []*commit {
 	resp, err := d.Maintner.GetDashboard(ctx, &apipb.DashboardRequest{})
 	if err != nil {
 		log.Printf("handleDashboard: error fetching from maintner: %v", err)
-		return commits
+		return nil
 	}
+	var commits []*commit
 	for _, c := range resp.GetCommits() {
 		commits = append(commits, &commit{
 			Desc: c.Title,
@@ -86,38 +104,69 @@ func (d *Handler) commits(ctx context.Context) []*commit {
 			User: formatGitAuthor(c.AuthorName, c.AuthorEmail),
 		})
 	}
-	d.getResults(ctx, commits)
+	d.getResults(ctx, commits, luci)
 	return commits
 }
 
-// getResults populates result data on commits, fetched from Datastore or in-memory storage.
-func (d *Handler) getResults(ctx context.Context, commits []*commit) {
-	if d.Datastore == nil {
+// getResults populates result data on commits, fetched from Datastore or in-memory storage
+// and, if luci is non-zero, also from LUCI.
+func (d *Handler) getResults(ctx context.Context, commits []*commit, luci lucipoll.Snapshot) {
+	if d.Datastore != nil {
+		getDatastoreResults(ctx, d.Datastore, commits, "go")
+	} else {
 		for _, c := range commits {
 			if result, ok := d.memoryResults[c.Hash]; ok {
 				c.ResultData = result
 			}
 		}
-		return
 	}
-	getDatastoreResults(ctx, d.Datastore, commits, "go")
+	appendLUCIResults(luci, commits, "go")
 }
 
-func (d *Handler) getBuilders(conf map[string]*dashboard.BuildConfig) []*builder {
+func (d *Handler) getBuilders(conf map[string]*dashboard.BuildConfig, luci lucipoll.Snapshot) []*builder {
 	bm := make(map[string]builder)
 	for _, b := range conf {
 		if !b.BuildsRepoPostSubmit("go", "master", "master") {
 			continue
 		}
+		if migration.BuildersPortedToLUCI[b.Name] && len(luci.Builders) > 0 {
+			// Don't display old builders that have been ported
+			// to LUCI if willing to show LUCI builders as well.
+			continue
+		}
 		db := bm[b.GOOS()]
 		db.OS = b.GOOS()
 		db.Archs = append(db.Archs, &arch{
-			Arch: b.GOARCH(),
+			os: b.GOOS(), Arch: b.GOARCH(),
 			Name: b.Name,
-			Tag:  strings.TrimPrefix(b.Name, fmt.Sprintf("%s-%s-", b.GOOS(), b.GOARCH())),
+			// Tag is the part after "os-arch", if any, without leading dash.
+			Tag: strings.TrimPrefix(strings.TrimPrefix(b.Name, fmt.Sprintf("%s-%s", b.GOOS(), b.GOARCH())), "-"),
 		})
 		bm[b.GOOS()] = db
 	}
+
+	for _, b := range luci.Builders {
+		if b.Repo != "go" || b.GoBranch != "master" {
+			continue
+		}
+		db := bm[b.Target.GOOS]
+		db.OS = b.Target.GOOS
+		tagFriendly := b.Name + "-🐇"
+		if after, ok := strings.CutPrefix(tagFriendly, fmt.Sprintf("gotip-%s-%s_", b.Target.GOOS, b.Target.GOARCH)); ok {
+			// Convert os-arch_osversion-mod1-mod2 (an underscore at start of "_osversion")
+			// to have os-arch-osversion-mod1-mod2 (a dash at start of "-osversion") form.
+			// The tag computation below uses this to find both "osversion-mod1" or "mod1".
+			tagFriendly = fmt.Sprintf("gotip-%s-%s-", b.Target.GOOS, b.Target.GOARCH) + after
+		}
+		db.Archs = append(db.Archs, &arch{
+			os: b.Target.GOOS, Arch: b.Target.GOARCH,
+			Name: b.Name,
+			// Tag is the part after "os-arch", if any, without leading dash.
+			Tag: strings.TrimPrefix(strings.TrimPrefix(tagFriendly, fmt.Sprintf("gotip-%s-%s", b.Target.GOOS, b.Target.GOARCH)), "-"),
+		})
+		bm[b.Target.GOOS] = db
+	}
+
 	var builders builderSlice
 	for _, db := range bm {
 		db := db
@@ -129,18 +178,12 @@ func (d *Handler) getBuilders(conf map[string]*dashboard.BuildConfig) []*builder
 }
 
 type arch struct {
-	Arch string
-	Name string
-	Tag  string
+	os, Arch string
+	Name     string
+	Tag      string
 }
 
-func (a arch) FirstClass() bool {
-	segs := strings.SplitN(a.Name, "-", 3)
-	if len(segs) < 2 {
-		return false
-	}
-	return releasetargets.IsFirstClass(segs[0], segs[1])
-}
+func (a arch) FirstClass() bool { return releasetargets.IsFirstClass(a.os, a.Arch) }
 
 type archSlice []*arch
 
@@ -218,14 +261,19 @@ type dashPackage struct {
 }
 
 type commit struct {
-	Desc       string
-	Hash       string
+	Desc string
+	Hash string
+	// ResultData is a copy of the [Commit.ResultData] field from datastore,
+	// with an additional rule that the second '|'-separated value may be "infra_failure"
+	// to indicate a problem with the infrastructure rather than the code being tested.
+	//
+	// It can also have the form of "builder|BuildingURL" for in progress builds.
 	ResultData []string
 	Time       string
 	User       string
 }
 
-// shortUser returns a shortened version of a user string.
+// ShortUser returns a shortened version of a user string.
 func (c *commit) ShortUser() string {
 	user := c.User
 	if i, j := strings.Index(user, "<"), strings.Index(user, ">"); 0 <= i && i < j {
@@ -237,26 +285,41 @@ func (c *commit) ShortUser() string {
 	return user
 }
 
-func (c *commit) ResultForBuilder(builder string) result {
+func (c *commit) ResultForBuilder(builder string) *result {
 	for _, rd := range c.ResultData {
 		segs := strings.Split(rd, "|")
+		if len(segs) == 2 && segs[0] == builder {
+			return &result{
+				BuildingURL: segs[1],
+			}
+		}
 		if len(segs) < 4 {
 			continue
 		}
 		if segs[0] == builder {
-			return result{
+			return &result{
 				OK:      segs[1] == "true",
+				Noise:   segs[1] == "infra_failure",
 				LogHash: segs[2],
 			}
 		}
 	}
-	return result{}
+	return nil
 }
 
 type result struct {
 	BuildingURL string
 	OK          bool
+	Noise       bool
 	LogHash     string
+}
+
+func (r result) LogURL() string {
+	if strings.HasPrefix(r.LogHash, "https://") {
+		return r.LogHash
+	} else {
+		return "https://build.golang.org/log/" + r.LogHash
+	}
 }
 
 // formatGitAuthor formats the git author name and email (as split by

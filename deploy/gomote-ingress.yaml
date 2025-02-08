@@ -1,0 +1,52 @@
+# Copyright 2023 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: prod
+  name: gomoteserver-ingress
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: gomote-web-golang-org
+    networking.gke.io/managed-certificates: gomoteserver-cert
+    kubernetes.io/ingress.class: "gce"
+    networking.gke.io/v1beta1.FrontendConfig: gomoteserver-ingress-frontend
+spec:
+  rules:
+  - host: gomote.golang.org
+    http:
+      paths:
+      - pathType: ImplementationSpecific
+        path: /protos.GomoteService/*
+        backend:
+          service:
+            name: gomoteserver-internal-iap
+            port:
+              number: 444
+      - pathType: ImplementationSpecific
+        path: /*
+        backend:
+          service:
+            name: gomoteserver-internal
+            port:
+              number: 444
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  namespace: prod
+  name: gomoteserver-ingress-frontend
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: FOUND
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  namespace: prod
+  name: gomoteserver-cert
+spec:
+  domains:
+    - gomote.golang.org

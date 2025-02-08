@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -35,7 +34,7 @@ var (
 	keyFile    = flag.String("key", "/etc/gobuild.key", "go build key file")
 	builderEnv = flag.String("env", "", "optional GO_BUILDER_ENV environment variable value to set in the guests")
 	cpu        = flag.Int("cpu", 0, "if non-zero, how many CPUs to assign from the host and pass to docker run --cpuset-cpus")
-	pull       = flag.Bool("pull", false, "whether to pull the the --image before each container starting")
+	pull       = flag.Bool("pull", false, "whether to pull the --image before each container starting")
 )
 
 var (
@@ -105,7 +104,7 @@ func onEC2() bool {
 }
 
 func getBuildKey() []byte {
-	key, err := ioutil.ReadFile(*keyFile)
+	key, err := os.ReadFile(*keyFile)
 	if err != nil {
 		log.Fatalf("error reading build key from --key=%s: %v", *keyFile, err)
 	}
@@ -187,7 +186,7 @@ func checkFix() error {
 		if err := os.MkdirAll(filepath.Dir(keyFile), 0700); err != nil {
 			return err
 		}
-		if err := ioutil.WriteFile(keyFile, buildKey, 0600); err != nil {
+		if err := os.WriteFile(keyFile, buildKey, 0600); err != nil {
 			return err
 		}
 		cmd := exec.Command("docker", "run",

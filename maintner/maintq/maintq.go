@@ -18,10 +18,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 
 var (
@@ -117,7 +117,8 @@ func callTryWork(args []string) error {
 	if err != nil {
 		return err
 	}
-	return printTextProto(res)
+	fmt.Print(prototext.Format(res))
+	return nil
 }
 
 func callListReleases(args []string) error {
@@ -128,7 +129,8 @@ func callListReleases(args []string) error {
 	if err != nil {
 		return err
 	}
-	return printTextProto(res)
+	fmt.Print(prototext.Format(res))
+	return nil
 }
 
 func callGetDashboard(args []string) error {
@@ -151,10 +153,6 @@ func callGetDashboard(args []string) error {
 	if err != nil {
 		return err
 	}
-	return printTextProto(res)
-}
-
-func printTextProto(m proto.Message) error {
-	tm := proto.TextMarshaler{Compact: false}
-	return tm.Marshal(os.Stdout, m)
+	fmt.Print(prototext.Format(res))
+	return nil
 }

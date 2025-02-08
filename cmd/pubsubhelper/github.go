@@ -1,5 +1,5 @@
 // Copyright 2017 The Go Authors. All rights reserved.
-// Use of this source code is governed by the Apache 2.0
+// Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 package main
@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -74,7 +74,7 @@ func handleGithubWebhook(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validate compares the signature in the request header with the body.
+// validateGithubRequest compares the signature in the request header with the body.
 func validateGithubRequest(w http.ResponseWriter, r *http.Request) (body []byte, err error) {
 	// Decode signature header.
 	sigHeader := r.Header.Get("X-Hub-Signature")
@@ -96,7 +96,7 @@ func validateGithubRequest(w http.ResponseWriter, r *http.Request) (body []byte,
 		return nil, err
 	}
 
-	body, err = ioutil.ReadAll(http.MaxBytesReader(w, r.Body, 5<<20))
+	body, err = io.ReadAll(http.MaxBytesReader(w, r.Body, 5<<20))
 	if err != nil {
 		return nil, err
 	}

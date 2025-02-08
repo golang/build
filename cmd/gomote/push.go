@@ -32,7 +32,8 @@ func push(args []string) error {
 	var dryRun bool
 	fs.BoolVar(&dryRun, "dry-run", false, "print what would be done only")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "push usage: gomote push <instance>")
+		log := usageLogger
+		log.Print("push usage: gomote push <instance>")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -59,7 +60,7 @@ func push(args []string) error {
 	for _, inst := range pushSet {
 		inst := inst
 		eg.Go(func() error {
-			fmt.Fprintf(os.Stderr, "# Pushing GOROOT %q to %q...\n", goroot, inst)
+			log.Printf("Pushing GOROOT %q to %q...\n", goroot, inst)
 			return doPush(ctx, inst, goroot, dryRun, detailedProgress)
 		})
 	}
@@ -72,11 +73,10 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 			log.Printf(s, a...)
 		}
 	}
-	haveGo14 := false
 	remote := map[string]buildlet.DirEntry{} // keys like "src/make.bash"
 
 	client := gomoteServerClient(ctx)
-	resp, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
+	stream, err := client.ListDirectoryStreaming(ctx, &protos.ListDirectoryRequest{
 		GomoteId:  name,
 		Directory: ".",
 		Recursive: true,
@@ -89,27 +89,37 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 			// is enough to know whether we have Go 1.4 or
 			// not.
 			"go1.4/src", "go1.4/pkg",
+			// Ignore the cache and tmp directories, these slowly grow, and will
+			// eventually cause the listing to exceed the maximum gRPC message
+			// size.
+			"gocache", "goplscache", "tmp",
 		},
 		Digest: true,
 	})
 	if err != nil {
 		return fmt.Errorf("error listing buildlet's existing files: %w", err)
 	}
-	for _, entry := range resp.GetEntries() {
-		de := buildlet.DirEntry{Line: entry}
-		en := de.Name()
-		if strings.HasPrefix(en, "go1.4/") {
-			haveGo14 = true
-			continue
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF {
+			break
 		}
-		if strings.HasPrefix(en, "go/") {
-			remote[en[len("go/"):]] = de
+		if err != nil {
+			return fmt.Errorf("error listing buildlet's existing files: %w", err)
+		}
+		for _, entry := range resp.GetEntries() {
+			de := buildlet.DirEntry{Line: entry}
+			en := de.Name()
+			if strings.HasPrefix(en, "go/") && en != "go/" {
+				remote[en[len("go/"):]] = de
+			}
 		}
 	}
-	if !haveGo14 {
-		logf("installing go1.4")
+	// TODO(66635) remove once gomotes can no longer be created via the coordinator.
+	if luciDisabled() {
+		logf("installing go-bootstrap version in the working directory")
 		if dryRun {
-			logf("(Dry-run) Would have pushed go1.4")
+			logf("(Dry-run) Would have pushed go-bootstrap")
 		} else {
 			_, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
 				GomoteId: name,
@@ -120,51 +130,20 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		}
 	}
 
-	// Invoke 'git check-ignore' and use it to query whether paths have been gitignored.
-	// If anything goes wrong at any point, fall back to assuming that nothing is gitignored.
-	var isGitIgnored func(string) bool
-	gci := exec.Command("git", "check-ignore", "--stdin", "-n", "-v", "-z")
-	gci.Env = append(os.Environ(), "GIT_FLUSH=1")
-	gciIn, errIn := gci.StdinPipe()
-	defer gciIn.Close() // allow git process to exit
-	gciOut, errOut := gci.StdoutPipe()
-	errStart := gci.Start()
-	if errIn != nil || errOut != nil || errStart != nil {
-		isGitIgnored = func(string) bool { return false }
-	} else {
-		var failed bool
-		br := bufio.NewReader(gciOut)
-		isGitIgnored = func(path string) bool {
-			if failed {
-				return false
-			}
-			fmt.Fprintf(gciIn, "%s\x00", path)
-			// Response is of form "<source> <NULL> <linenum> <NULL> <pattern> <NULL> <pathname> <NULL>"
-			// Read all four and check that the path is correct.
-			// If so, the path is ignored iff the source (reason why ignored) is non-empty.
-			var resp [4][]byte
-			for i := range resp {
-				b, err := br.ReadBytes(0)
-				if err != nil {
-					failed = true
-					return false
-				}
-				resp[i] = b[:len(b)-1] // drop trailing NULL
-			}
-			// Sanity check
-			if string(resp[3]) != path {
-				panic("git check-ignore path did not roundtrip, got " + string(resp[3]) + " sent " + path)
-			}
-			return len(resp[0]) > 0
-		}
-	}
-
 	type fileInfo struct {
 		fi   os.FileInfo
 		sha1 string // if regular file
 	}
 	local := map[string]fileInfo{} // keys like "src/make.bash"
-	if err := filepath.Walk(goroot, func(path string, fi os.FileInfo, err error) error {
+
+	// Ensure that the goroot passed to filepath.Walk ends in a trailing slash,
+	// so that if GOROOT is a symlink we walk the underlying directory.
+	walkRoot := goroot
+	if walkRoot != "" && !os.IsPathSeparator(walkRoot[len(walkRoot)-1]) {
+		walkRoot += string(filepath.Separator)
+	}
+	absToRel := make(map[string]string)
+	if err := filepath.Walk(walkRoot, func(path string, fi os.FileInfo, err error) error {
 		if isEditorBackup(path) {
 			return nil
 		}
@@ -179,19 +158,20 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		if rel == "." {
 			return nil
 		}
+		if rel == ".git" {
+			if fi.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil // .git is a file in `git worktree` checkouts.
+		}
 		if fi.IsDir() {
 			switch rel {
-			case ".git", "pkg", "bin":
+			case "pkg", "bin":
 				return filepath.SkipDir
 			}
 		}
 		inf := fileInfo{fi: fi}
-		if isGitIgnored(path) {
-			if fi.Mode().IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+		absToRel[path] = rel
 		if fi.Mode().IsRegular() {
 			inf.sha1, err = fileSHA1(path)
 			if err != nil {
@@ -202,6 +182,12 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		return nil
 	}); err != nil {
 		return fmt.Errorf("error enumerating local GOROOT files: %w", err)
+	}
+
+	ignored := make(map[string]bool)
+	for _, path := range gitIgnored(goroot, absToRel) {
+		ignored[absToRel[path]] = true
+		delete(local, absToRel[path])
 	}
 
 	var toDel []string
@@ -227,7 +213,7 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 		if isGoToolDistGenerated(rel) {
 			continue
 		}
-		if isGitIgnored(rel) {
+		if ignored[rel] {
 			// Don't delete remote gitignored files; this breaks built toolchains.
 			continue
 		}
@@ -328,7 +314,9 @@ func isGoToolDistGenerated(path string) bool {
 		"src/cmd/internal/objabi/zbootstrap.go",
 		"src/go/build/zcgo.go",
 		"src/internal/buildcfg/zbootstrap.go",
-		"src/runtime/internal/sys/zversion.go":
+		"src/internal/runtime/sys/zversion.go",
+		"src/runtime/internal/sys/zversion.go", // relevant only prior to CL 600436
+		"src/time/tzdata/zzipdata.go":
 		return true
 	}
 	return false
@@ -439,4 +427,45 @@ func getGOROOT() (string, error) {
 func localFileExists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
+}
+
+// gitIgnored checks whether any of the paths listed as keys in absToRel
+// are git ignored in goroot. It returns the list of ignored paths.
+func gitIgnored(goroot string, absToRel map[string]string) []string {
+	var stdin, stdout, stderr bytes.Buffer
+	for abs := range absToRel {
+		stdin.WriteString(abs)
+		stdin.WriteString("\x00")
+	}
+
+	// Invoke 'git check-ignore' and use it to query whether paths have been gitignored.
+	// If anything goes wrong at any point, fall back to assuming that nothing is gitignored.
+	cmd := exec.Command("git", "-C", goroot, "check-ignore", "--stdin", "-z")
+	cmd.Stdin = &stdin
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if e, ok := err.(*exec.ExitError); ok && e.ExitCode() == 1 {
+			// exit 1 means no files are ignored
+			err = nil
+		}
+		if err != nil {
+			log.Printf("exec git check-ignore: %v\n%s", err, stderr.Bytes())
+		}
+	}
+
+	var ignored []string
+	br := bufio.NewReader(&stdout)
+	for {
+		// Response is of the form "<source> <NUL>"
+		f, err := br.ReadBytes('\x00')
+		if err != nil {
+			if err != io.EOF {
+				log.Printf("git check-ignore: unexpected error reading output: %s", err)
+			}
+			break
+		}
+		ignored = append(ignored, string(f[:len(f)-len("\x00")]))
+	}
+	return ignored
 }

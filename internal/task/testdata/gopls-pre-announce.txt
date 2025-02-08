@@ -1,0 +1,12 @@
+Hello gophers,
+
+We have just released Gopls v0.16.2-pre.1, a release candidate for the upcoming gopls release. It is picked from release branch gopls-release-branch.0.16 at commit abc123d.
+
+If you have Go installed already, an easy way to try v0.16.2-pre.1 is by using the go command:
+
+$ go install golang.org/x/tools/gopls@v0.16.2-pre.1
+
+This gopls release is being tracked at https://go.dev/issue/12345.
+
+Cheers,
+The Go Tools Team

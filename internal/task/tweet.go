@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	goversion "go/version"
 	"image"
 	"image/color"
 	"image/draw"
@@ -18,15 +19,16 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"net/http"
-	"net/url"
 	"strings"
 	"text/template"
 	"time"
 
+	"github.com/McKael/madon/v3"
 	"github.com/dghubble/oauth1"
 	"github.com/esimov/stackblur-go"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/opentype"
@@ -35,16 +37,19 @@ import (
 
 // releaseTweet describes a tweet that announces a Go release.
 type releaseTweet struct {
+	// Kind is the kind of release being announced.
+	Kind ReleaseKind
+
 	// Version is the Go version that has been released.
 	//
 	// The version string must use the same format as Go tags. For example:
-	// 	• "go1.17.2" for a minor Go release
-	// 	• "go1.18" for a major Go release
-	// 	• "go1.18beta1" or "go1.18rc1" for a pre-release
+	//   - "go1.21rc2" for a pre-release
+	//   - "go1.21.0" for a major Go release
+	//   - "go1.21.1" for a minor Go release
 	Version string
 	// SecondaryVersion is an older Go version that was also released.
 	// This only applies to minor releases when two releases are made.
-	// For example, "go1.16.10".
+	// For example, "go1.20.9".
 	SecondaryVersion string
 
 	// Security is an optional sentence describing security fixes
@@ -52,10 +57,10 @@ type releaseTweet struct {
 	//
 	// The empty string means there are no security fixes to highlight.
 	// Past examples:
-	// 	• "Includes a security fix for the Wasm port (CVE-2021-38297)."
-	// 	• "Includes a security fix for archive/zip (CVE-2021-39293)."
-	// 	• "Includes a security fix for crypto/tls (CVE-2021-34558)."
-	// 	• "Includes security fixes for archive/zip, net, net/http/httputil, and math/big packages."
+	//   - "Includes a security fix for the Wasm port (CVE-2021-38297)."
+	//   - "Includes a security fix for archive/zip (CVE-2021-39293)."
+	//   - "Includes a security fix for crypto/tls (CVE-2021-34558)."
+	//   - "Includes security fixes for archive/zip, net, net/http/httputil, and math/big packages."
 	Security string
 
 	// Announcement is the announcement URL.
@@ -66,17 +71,20 @@ type releaseTweet struct {
 	Announcement string
 }
 
-// TweetTasks contains tasks related to the release tweet.
-type TweetTasks struct {
+type Poster interface {
+	// PostTweet posts a tweet with the given text and PNG image,
+	// both of which must be non-empty, and returns the tweet URL.
+	//
+	// ErrTweetTooLong error is returned if posting fails
+	// due to the tweet text length exceeding Twitter's limit.
+	PostTweet(text string, imagePNG []byte, altText string) (tweetURL string, _ error)
+}
+
+// SocialMediaTasks contains tasks related to the release tweet.
+type SocialMediaTasks struct {
 	// TwitterClient can be used to post a tweet.
-	TwitterClient interface {
-		// PostTweet posts a tweet with the given text and PNG image,
-		// both of which must be non-empty, and returns the tweet URL.
-		//
-		// ErrTweetTooLong error is returned if posting fails
-		// due to the tweet text length exceeding Twitter's limit.
-		PostTweet(text string, imagePNG []byte) (tweetURL string, _ error)
-	}
+	TwitterClient  Poster
+	MastodonClient Poster
 
 	// RandomSeed is the pseudo-random number generator seed to use for presentational
 	// choices, such as selecting one out of many available emoji or release archives.
@@ -84,20 +92,19 @@ type TweetTasks struct {
 	RandomSeed int64
 }
 
-// TweetRelease posts a tweet announcing a Go release.
-// ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
-func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, versions []string, security string, announcement string) (tweetURL string, _ error) {
-	if err := oneOrTwoGoVersions(versions); err != nil {
-		return "", err
+func (t SocialMediaTasks) textAndImage(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (tweetText string, imagePNG []byte, imageText string, err error) {
+	if len(published) < 1 || len(published) > 2 {
+		return "", nil, "", fmt.Errorf("got %d published Go releases, TweetRelease supports only 1 or 2 at once", len(published))
 	}
 
 	r := releaseTweet{
-		Version:      versions[0],
+		Kind:         kind,
+		Version:      published[0].Version,
 		Security:     security,
 		Announcement: announcement,
 	}
-	if len(versions) == 2 {
-		r.SecondaryVersion = versions[1]
+	if len(published) == 2 {
+		r.SecondaryVersion = published[1].Version
 	}
 
 	seed := t.RandomSeed
@@ -107,31 +114,55 @@ func (t TweetTasks) TweetRelease(ctx *workflow.TaskContext, versions []string, s
 	rnd := rand.New(rand.NewSource(seed))
 
 	// Generate tweet text.
-	tweetText, err := tweetText(r, rnd)
+	tweetText, err = r.tweetText(rnd)
 	if err != nil {
-		return "", err
+		return "", nil, "", err
 	}
 	ctx.Printf("tweet text:\n%s\n", tweetText)
 
 	// Generate tweet image.
-	imagePNG, imageText, err := tweetImage(r.Version, rnd)
+	imagePNG, imageText, err = tweetImage(published[0], rnd)
+	if err != nil {
+		return "", nil, "", err
+	}
+	ctx.Printf("tweet image:\n%s\n", imageText)
+	return tweetText, imagePNG, imageText, nil
+}
+
+// TweetRelease posts a tweet announcing that a Go release has been published.
+// ErrTweetTooLong is returned if the inputs result in a tweet that's too long.
+func (t SocialMediaTasks) TweetRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (_ string, _ error) {
+	tweetText, imagePNG, imageText, err := t.textAndImage(ctx, kind, published, security, announcement)
 	if err != nil {
 		return "", err
 	}
-	ctx.Printf("tweet image:\n%s\n", imageText)
 
 	// Post a tweet via the Twitter API.
 	if t.TwitterClient == nil {
 		return "(dry-run)", nil
 	}
 	ctx.DisableRetries()
-	tweetURL, err = t.TwitterClient.PostTweet(tweetText, imagePNG)
-	return tweetURL, err
+	return t.TwitterClient.PostTweet(tweetText, imagePNG, imageText)
+}
+
+// TrumpetRelease posts a tweet announcing that a Go release has been published.
+func (t SocialMediaTasks) TrumpetRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (_ string, _ error) {
+	tweetText, imagePNG, imageText, err := t.textAndImage(ctx, kind, published, security, announcement)
+	if err != nil {
+		return "", err
+	}
+
+	// Post via the Mastodon API.
+	if t.MastodonClient == nil {
+		return "(dry-run)", nil
+	}
+	ctx.DisableRetries()
+	return t.MastodonClient.PostTweet(tweetText, imagePNG, imageText)
 }
 
 // tweetText generates the text to use in the announcement
 // tweet for release r.
-func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
+func (r *releaseTweet) tweetText(rnd *rand.Rand) (string, error) {
 	// Parse the tweet text template
 	// using rnd for emoji selection.
 	t, err := template.New("").Funcs(template.FuncMap{
@@ -142,69 +173,61 @@ func tweetText(r releaseTweet, rnd *rand.Rand) (string, error) {
 			}
 			return es[rnd.Intn(len(es))], nil
 		},
+
+		// short and helpers below manipulate valid Go version strings
+		// for the current needs of the tweet templates.
+		"short": func(v string) string { return strings.TrimPrefix(v, "go") },
+		// major extracts the major prefix of a valid Go version.
+		// For example, major("go1.18.4") == "1.18".
+		"major": func(v string) (string, error) {
+			x, ok := version.Go1PointX(v)
+			if !ok {
+				return "", fmt.Errorf("internal error: version.Go1PointX(%q) is not ok", v)
+			}
+			return fmt.Sprintf("1.%d", x), nil
+		},
+		// build extracts the pre-release build number of a valid Go version.
+		// For example, build("go1.19beta2") == "2".
+		"build": func(v string) (string, error) {
+			if i := strings.Index(v, "beta"); i != -1 {
+				return v[i+len("beta"):], nil
+			} else if i := strings.Index(v, "rc"); i != -1 {
+				return v[i+len("rc"):], nil
+			}
+			return "", fmt.Errorf("internal error: unhandled pre-release Go version %q", v)
+		},
 	}).Parse(tweetTextTmpl)
 	if err != nil {
 		return "", err
 	}
 
-	// Pick a template name and populate template data
-	// for this type of release.
-	var (
-		name string
-		data interface{}
-	)
-	if i := strings.Index(r.Version, "beta"); i != -1 { // A beta release.
-		name, data = "beta", struct {
-			Maj, Beta string
-			releaseTweet
-		}{
-			Maj:          r.Version[len("go"):i],
-			Beta:         r.Version[i+len("beta"):],
-			releaseTweet: r,
-		}
-	} else if i := strings.Index(r.Version, "rc"); i != -1 { // Release Candidate.
-		name, data = "rc", struct {
-			Maj, RC string
-			releaseTweet
-		}{
-			Maj:          r.Version[len("go"):i],
-			RC:           r.Version[i+len("rc"):],
-			releaseTweet: r,
-		}
-	} else if strings.Count(r.Version, ".") == 1 { // Major release like "go1.X".
-		name, data = "major", struct {
-			Maj string
-			releaseTweet
-		}{
-			Maj:          r.Version[len("go"):],
-			releaseTweet: r,
-		}
-	} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
-		name, data = "minor", struct {
-			Curr, Prev string
-			releaseTweet
-		}{
-			Curr:         r.Version[len("go"):],
-			Prev:         strings.TrimPrefix(r.SecondaryVersion, "go"),
-			releaseTweet: r,
-		}
-	} else {
-		return "", fmt.Errorf("unknown version format: %q", r.Version)
+	// Select the appropriate template name.
+	var name string
+	switch r.Kind {
+	case KindBeta:
+		name = "beta"
+	case KindRC:
+		name = "rc"
+	case KindMajor:
+		name = "major"
+	case KindMinor:
+		name = "minor"
+	default:
+		return "", fmt.Errorf("unknown release kind: %v", r.Kind)
 	}
-
 	if r.SecondaryVersion != "" && name != "minor" {
 		return "", fmt.Errorf("tweet template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
 	}
 
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, name, data); err != nil {
+	if err := t.ExecuteTemplate(&buf, name, r); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
 }
 
 const tweetTextTmpl = `{{define "minor" -}}
-{{emoji "release"}} Go {{.Curr}} {{with .Prev}}and {{.}} are{{else}}is{{end}} released!
+{{emoji "release"}} Go {{.Version|short}} {{with .SecondaryVersion}}and {{.|short}} are{{else}}is{{end}} released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
@@ -216,7 +239,7 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 
 {{define "beta" -}}
-{{emoji "beta-release"}} Go {{.Maj}} Beta {{.Beta}} is released!
+{{emoji "beta-release"}} Go {{.Version|major}} Beta {{.Version|build}} is released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
@@ -230,7 +253,7 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 
 {{define "rc" -}}
-{{emoji "rc-release"}} Go {{.Maj}} Release Candidate {{.RC}} is released!
+{{emoji "rc-release"}} Go {{.Version|major}} Release Candidate {{.Version|build}} is released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
@@ -244,11 +267,11 @@ const tweetTextTmpl = `{{define "minor" -}}
 
 
 {{define "major" -}}
-{{emoji "release"}} Go {{.Maj}} is released!
+{{emoji "release"}} Go {{.Version|short}} is released!
 
 {{with .Security}}{{emoji "security"}} Security: {{.}}{{"\n\n"}}{{end -}}
 
-{{emoji "notes"}} Release notes: https://go.dev/doc/{{.Version}}
+{{emoji "notes"}} Release notes: https://go.dev/doc/go{{.Version|major}}
 
 {{emoji "download"}} Download: https://go.dev/dl/#{{.Version}}
 
@@ -320,21 +343,24 @@ var emoji = map[string][]string{
 }
 
 // tweetImage generates an image to use in the announcement
-// tweet for goVersion. It returns the image encoded as PNG,
+// tweet for published. It returns the image encoded as PNG,
 // and the text displayed in the image.
 //
-// tweetImage makes an HTTP GET request to the go.dev/dl/?mode=json
-// read-only API to select a random release archive to highlight.
-func tweetImage(goVersion string, rnd *rand.Rand) (imagePNG []byte, imageText string, _ error) {
-	a, err := fetchRandomArchive(goVersion, rnd)
+// tweetImage selects a random release archive to highlight.
+func tweetImage(published Published, rnd *rand.Rand) (imagePNG []byte, imageText string, _ error) {
+	a, err := pickRandomArchive(published, rnd)
 	if err != nil {
 		return nil, "", err
 	}
+	goarch := a.GOARCH()
+	if goversion.Compare(a.Version, "go1.23") == -1 && a.OS != "linux" { // TODO: Delete this after Go 1.24.0 is out and this becomes dead code.
+		goarch = strings.TrimSuffix(goarch, "v6l")
+	}
 	var buf bytes.Buffer
 	if err := goCmdTmpl.Execute(&buf, map[string]string{
-		"GoVer":    goVersion,
+		"GoVer":    published.Version,
 		"GOOS":     a.OS,
-		"GOARCH":   a.GOARCH(),
+		"GOARCH":   goarch,
 		"Filename": a.Filename,
 		"ZeroSize": fmt.Sprintf("%*d", digits(a.Size), 0),
 		"HalfSize": fmt.Sprintf("%*d", digits(a.Size), a.Size/2),
@@ -375,57 +401,22 @@ func digits(i int64) int {
 	return n
 }
 
-// fetchRandomArchive downloads all release archives for Go version goVer,
-// and selects a random archive to showcase in the image that displays
-// sample output from the 'go install golang.org/dl/...@latest' command.
-func fetchRandomArchive(goVer string, rnd *rand.Rand) (archive WebsiteFile, _ error) {
-	archives, err := fetchReleaseArchives(goVer)
-	if err != nil {
-		return WebsiteFile{}, err
-	}
-	return archives[rnd.Intn(len(archives))], nil
-}
-
-func fetchReleaseArchives(goVer string) (archives []WebsiteFile, _ error) {
-	url := "https://go.dev/dl/?mode=json"
-	if strings.Contains(goVer, "beta") || strings.Contains(goVer, "rc") ||
-		goVer == "go1.17" || goVer == "go1.17.1" || goVer == "go1.11.1" /* For TestTweetRelease. */ {
-
-		url += "&include=all"
-	}
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("non-200 OK status code: %v", resp.Status)
-	} else if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
-		return nil, fmt.Errorf("got Content-Type %q, want %q", ct, "application/json")
-	}
-	var releases []WebsiteRelease
-	err = json.NewDecoder(resp.Body).Decode(&releases)
-	if err != nil {
-		return nil, err
-	}
-	for _, r := range releases {
-		if r.Version != goVer {
+// pickRandomArchive picks one random release archive
+// to showcase in an image showing sample output from
+// 'go install golang.org/dl/...@latest'.
+func pickRandomArchive(published Published, rnd *rand.Rand) (archive WebsiteFile, _ error) {
+	var archives []WebsiteFile
+	for _, f := range published.Files {
+		if f.Kind != "archive" {
+			// Not an archive type of file, skip. The golang.org/dl commands use archives only.
 			continue
 		}
-		var archives []WebsiteFile
-		for _, f := range r.Files {
-			if f.Kind != "archive" {
-				continue
-			}
-			archives = append(archives, f)
-		}
-		if len(archives) == 0 {
-			return nil, fmt.Errorf("release version %q has 0 archive files", goVer)
-		}
-		// Return archives.
-		return archives, nil
+		archives = append(archives, f)
 	}
-	return nil, fmt.Errorf("release version %q not found", goVer)
+	if len(archives) == 0 {
+		return WebsiteFile{}, fmt.Errorf("release version %q has 0 archive files", published.Version)
+	}
+	return archives[rnd.Intn(len(archives))], nil
 }
 
 // drawTerminal draws an image of a terminal window
@@ -532,8 +523,49 @@ type realTwitterClient struct {
 	twitterAPI *http.Client
 }
 
+type realMastodonClient struct {
+	client        *madon.Client
+	testRecipient string
+}
+
+// PostTweet posts a message to a Mastodon account, with specified text, image, and image alt text.
+// If the "client" includes a non-empty test recipient, direct the message to that recipient in a
+// "direct message", also known as a "private mention".
+func (c realMastodonClient) PostTweet(text string, imagePNG []byte, altText string) (tweetURL string, _ error) {
+	client := c.client
+
+	visibility := "public"
+
+	// For end-to-end hand testing, send a message to a designated recipient
+	if c.testRecipient != "" {
+		text = c.testRecipient + "\n" + text
+		visibility = "direct"
+	}
+
+	// The documentation says that the name parameter can be empty, but at least one
+	// Mastodon server disagrees.  Make the name match the media format, just in case
+	// that matters.
+	att, err := client.UploadMediaReader(bytes.NewReader(imagePNG), "upload.png", altText, "")
+	if err != nil {
+		return "upload failure", err
+	}
+	postParams := madon.PostStatusParams{
+		Text:        text,
+		MediaIDs:    []string{att.ID},
+		Visibility:  visibility,
+		Sensitive:   false,
+		SpoilerText: "",
+	}
+
+	status, err := client.PostStatus(postParams)
+	if err != nil {
+		return "post failure", err
+	}
+	return status.URL, nil
+}
+
 // PostTweet implements the TweetTasks.TwitterClient interface.
-func (c realTwitterClient) PostTweet(text string, imagePNG []byte) (tweetURL string, _ error) {
+func (c realTwitterClient) PostTweet(text string, imagePNG []byte, altText string) (tweetURL string, _ error) {
 	// Make a Twitter API call to upload PNG to upload.twitter.com.
 	// See https://developer.twitter.com/en/docs/twitter-api/v1/media/upload-media/api-reference/post-media-upload.
 	var buf bytes.Buffer
@@ -557,7 +589,7 @@ func (c realTwitterClient) PostTweet(text string, imagePNG []byte) (tweetURL str
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return "", fmt.Errorf("POST media/upload: non-200 OK status code: %v body: %q", resp.Status, body)
+		return "", fmt.Errorf("POST /1.1/media/upload.json: non-200 OK status code: %v body: %q", resp.Status, body)
 	}
 	var media struct {
 		ID string `json:"media_id_string"`
@@ -566,34 +598,43 @@ func (c realTwitterClient) PostTweet(text string, imagePNG []byte) (tweetURL str
 		return "", err
 	}
 
-	// Make a Twitter API call to update status with uploaded image.
-	// See https://developer.twitter.com/en/docs/twitter-api/v1/tweets/post-and-engage/api-reference/post-statuses-update.
-	resp, err = c.twitterAPI.PostForm("https://api.twitter.com/1.1/statuses/update.json", url.Values{
-		"status":    []string{text},
-		"media_ids": []string{media.ID},
-	})
+	// Make a Twitter API call to post a tweet with the uploaded image.
+	// See https://developer.twitter.com/en/docs/twitter-api/tweets/manage-tweets/api-reference/post-tweets.
+	var tweetReq struct {
+		Text  string `json:"text"`
+		Media struct {
+			MediaIDs []string `json:"media_ids"`
+		} `json:"media"`
+	}
+	tweetReq.Text, tweetReq.Media.MediaIDs = text, []string{media.ID}
+	buf.Reset()
+	if err := json.NewEncoder(&buf).Encode(tweetReq); err != nil {
+		return "", err
+	}
+	resp, err = c.twitterAPI.Post("https://api.twitter.com/2/tweets", "application/json", &buf)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusCreated {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 		if isTweetTooLong(resp, body) {
 			// A friendlier error for a common error type.
 			return "", ErrTweetTooLong
 		}
-		return "", fmt.Errorf("POST statuses/update: non-200 OK status code: %v body: %q", resp.Status, body)
+		return "", fmt.Errorf("POST /2/tweets: non-201 Created status code: %v body: %q", resp.Status, body)
 	}
-	var tweet struct {
-		ID   string `json:"id_str"`
-		User struct {
-			ScreenName string `json:"screen_name"`
+	var tweetResp struct {
+		Data struct {
+			ID string
 		}
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&tweet); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&tweetResp); err != nil {
 		return "", err
 	}
-	return "https://twitter.com/" + tweet.User.ScreenName + "/status/" + tweet.ID, nil
+	// Use a generic "username" in the URL since finding it needs another API call.
+	// As long as the URL has this format, it will redirect to the canonical username.
+	return "https://twitter.com/username/status/" + tweetResp.Data.ID, nil
 }
 
 // ErrTweetTooLong is the error when a tweet is too long.
@@ -619,4 +660,31 @@ func NewTwitterClient(t secret.TwitterCredentials) realTwitterClient {
 	config := oauth1.NewConfig(t.ConsumerKey, t.ConsumerSecret)
 	token := oauth1.NewToken(t.AccessTokenKey, t.AccessTokenSecret)
 	return realTwitterClient{twitterAPI: config.Client(context.Background(), token)}
+}
+
+// NewMastodonClient creates a Mastodon API client authenticated
+// to make Mastodon API calls using the provided credentials.
+// The resulting client may have been permission-limited at its creation
+// (e.g., only allowed to upload media and write posts).
+// For tests, use NewTestMastodonClient, which creates private messages
+// instead.
+func NewMastodonClient(config secret.MastodonCredentials) (realMastodonClient, error) {
+	tok := madon.UserToken{AccessToken: config.AccessToken}
+	client, err := madon.RestoreApp(config.Application, config.Instance, config.ClientKey, config.ClientSecret, &tok)
+	if err != nil {
+		return realMastodonClient{}, err
+	}
+	return realMastodonClient{client, ""}, nil
+}
+
+// NewTestMastodonClient creates a client that will DM the announcement to the
+// designated recipient for end-to-end testing. config.TestRecipient cannot be empty;
+// that would result in a public message, which should not happen unintentionally.
+func NewTestMastodonClient(config secret.MastodonCredentials, pmTarget string) (realMastodonClient, error) {
+	if pmTarget == "" {
+		panic("private message target to NewTestMastodonClient cannot be empty")
+	}
+	mc, err := NewMastodonClient(config)
+	mc.testRecipient = pmTarget
+	return mc, err
 }

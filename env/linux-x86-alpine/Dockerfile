@@ -8,7 +8,7 @@
 
 FROM golang/buildlet-stage0 AS stage0
 
-FROM alpine:3.16
+FROM alpine:3.18
 MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 RUN apk add --no-cache \
@@ -21,20 +21,23 @@ RUN apk add --no-cache \
 	gdb \
 	gfortran \
 	git \
+	git-daemon \
 	go \
 	libc-dev \
 	lsof \
 	make \
 	openssh \
 	procps \
-	strace
+	strace \
+	iproute2 \
+	sudo
 
 RUN ssh-keygen -A
 RUN bash -c "(echo ChallengeResponseAuthentication no; echo PasswordAuthentication no; echo PermitRootLogin yes) > /etc/ssh/sshd_config"
 RUN bash -c "passwd -u root || true"  # might already be unlocked
 
-COPY --from=stage0 /go/bin/stage0.static /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/* /usr/local/bin/
 
 ENV GOROOT_BOOTSTRAP=/usr/lib/go
 
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]

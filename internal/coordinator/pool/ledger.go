@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package pool
 
@@ -55,7 +54,7 @@ func newLedger() *ledger {
 }
 
 // ReserveResources attempts to reserve the resources required for an instance to be created.
-// It will attempt to reserve the resourses that an instance type would require. This will
+// It will attempt to reserve the resources that an instance type would require. This will
 // attempt to reserve the resources until the context deadline is reached.
 func (l *ledger) ReserveResources(ctx context.Context, instName, vmType string, si *queue.SchedItem) error {
 	instType, err := l.PrepareReservationRequest(instName, vmType)
@@ -188,7 +187,7 @@ type resources struct {
 	CPULimit int64
 }
 
-// Resources retrives the resource usage and limits for instances in the
+// Resources retrieves the resource usage and limits for instances in the
 // store.
 func (l *ledger) Resources() *resources {
 	l.mu.RLock()

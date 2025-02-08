@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y \
 	procps \
 	lsof \
 	psmisc \
+	sudo \
 	--no-install-recommends \
 	&& rm -rf /var/lib/apt/lists/*
 
@@ -46,8 +47,8 @@ RUN mkdir -p /go1.4-amd64 \
 		/go1.4/test \
 	&& find /go1.4 -type d -name testdata | xargs rm -rf
 
-COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/* /usr/local/bin/
 
 ENV GOROOT_BOOTSTRAP=/go1.4 GOOS=linux GOARCH=s390x CC_FOR_TARGET=s390x-linux-gnu-gcc
 
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]

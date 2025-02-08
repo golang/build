@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package pool
 
@@ -124,7 +123,7 @@ func ForHost(conf *dashboard.HostConfig) Buildlet {
 		panic("nil conf")
 	}
 	switch {
-	case conf.IsEC2():
+	case conf.IsEC2:
 		return EC2BuildetPool()
 	case conf.IsVM(), conf.IsContainer():
 		return NewGCEConfiguration().BuildletPool()

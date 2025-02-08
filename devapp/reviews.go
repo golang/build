@@ -11,7 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -80,28 +80,8 @@ func (s *server) handleReviews(t *template.Template, w http.ResponseWriter, r *h
 	s.cMu.RLock()
 	defer s.cMu.RUnlock()
 
-	ownerFilter := r.FormValue("owner")
-	var (
-		projects     []*project
-		totalChanges int
-	)
-	if len(ownerFilter) > 0 {
-		for _, p := range s.data.reviews.Projects {
-			var cs []*change
-			for _, c := range p.Changes {
-				if o := c.Owner(); o != nil && o.Name() == ownerFilter {
-					cs = append(cs, c)
-					totalChanges++
-				}
-			}
-			if len(cs) > 0 {
-				projects = append(projects, &project{GerritProject: p.GerritProject, Changes: cs})
-			}
-		}
-	} else {
-		projects = s.data.reviews.Projects
-		totalChanges = s.data.reviews.TotalChanges
-	}
+	projects := s.data.reviews.Projects
+	totalChanges := s.data.reviews.TotalChanges
 
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, struct {
@@ -219,8 +199,8 @@ func (s *server) updateReviewsData() error {
 		if err != nil {
 			return err
 		}
-		sort.Slice(proj.Changes, func(i, j int) bool {
-			return proj.Changes[i].LastUpdate.Before(proj.Changes[j].LastUpdate)
+		slices.SortFunc(proj.Changes, func(a, b *change) int {
+			return a.LastUpdate.Compare(b.LastUpdate)
 		})
 		projects = append(projects, proj)
 		return nil
@@ -228,8 +208,8 @@ func (s *server) updateReviewsData() error {
 	if err != nil {
 		return err
 	}
-	sort.Slice(projects, func(i, j int) bool {
-		return projects[i].Project() < projects[j].Project()
+	slices.SortFunc(projects, func(a, b *project) int {
+		return strings.Compare(a.Project(), b.Project())
 	})
 	s.data.reviews.Projects = projects
 	s.data.reviews.TotalChanges = totalChanges

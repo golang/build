@@ -1,0 +1,64 @@
+<!DOCTYPE html><meta charset="utf-8">
+<title>{{template "markersymbol" .Log.Status}} Go Toolchain Rebuild Report {{.Start.UTC.Format "2006-01-02"}}</title>
+<h1>{{template "marker" .Log.Status}} Go Toolchain Rebuild Report {{.Start.UTC.Format "2006-01-02"}}</h1>
+
+<style>
+h4 { margin-block-start: 0; margin-block-end: 0 }
+details { margin-left: 2em; }
+pre { margin-left: 2em; }
+.time { color: #777; }
+</style>
+
+{{define "marker"}}<span style="marker">{{template "markersymbol" .}}</span>{{end}}
+{{define "markersymbol"}}
+{{- if eq . "PASS" -}} ✅
+{{- else if eq . "SKIP" -}} —
+{{- else -}}  ❌
+{{- end -}}
+{{end}}
+
+{{define "log"}}
+<pre>
+{{range .Messages}}<span class="time">{{.Time.Format "15:04:05"}}</span> {{.Text}}
+{{end}}
+</pre>
+{{end}}
+
+{{define "autoopen"}} {{if not (eq . "PASS")}} open {{end}} {{end}}
+
+Gorebuild version {{.Version}}.<br>
+Built with Go version {{.GoVersion}}, {{.GOOS}}-{{.GOARCH}}.<br>
+<br>
+Rebuild started at {{.Start.UTC.Format "2006-01-02 15:04:05"}} UTC.<br>
+Rebuild finished at {{.End.UTC.Format "2006-01-02 15:04:05"}} UTC.<br>
+Elapsed time: {{(.End.Sub .Start).Round 1e9}}.
+
+<h2>Releases</h2>
+
+{{range .Releases}}
+<details {{template "autoopen" .Log.Status}}>
+<summary><b>{{template "marker" .Log.Status}} {{.Version}}</b></summary>
+
+<details>
+<summary>Log</summary>
+{{template "log" .Log}}
+</details>
+
+{{range .Files}}
+<details {{template "autoopen" .Log.Status}}>
+<summary><b>{{template "marker" .Log.Status}} {{.Name}}</b></summary>
+{{template "log" .Log}}
+</details>
+{{end}}
+
+</details>
+{{end}}
+
+<h2>Bootstraps</h2>
+
+{{range .Bootstraps}}
+<details>
+<summary><b>Bootstrap {{.Version}}</b></summary>
+{{template "log" .Log}}
+</details>
+{{end}}

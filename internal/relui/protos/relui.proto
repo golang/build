@@ -42,9 +42,18 @@ message SignArtifactRequest {
   // The type of artifact signing request.
   enum BuildType {
     BUILD_TYPE_UNSPECIFIED = 0;
+
     BUILD_TYPE_MACOS = 1;
     BUILD_TYPE_WINDOWS = 2;
     BUILD_TYPE_GPG = 3;
+
+    BUILD_TYPE_MACOS_CONSTRUCT_INSTALLER_ONLY = 4;
+    BUILD_TYPE_WINDOWS_CONSTRUCT_INSTALLER_ONLY = 5;
+
+    // Sign individual binary application artifacts.
+    // The signing server expects zipped application bundles and signs the files in them.
+    BUILD_TYPE_MACOS_BINARY = 6;
+    BUILD_TYPE_WINDOWS_BINARY = 7;
   }
   BuildType build_type = 1;
 

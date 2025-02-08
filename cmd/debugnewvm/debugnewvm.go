@@ -84,7 +84,7 @@ func main() {
 	if !hconf.IsVM() && !hconf.IsContainer() {
 		log.Fatalf("host type %q is type %q; want a VM or container host type", *hostType, hconf.PoolName())
 	}
-	if hconf.IsEC2() && (*awsKeyID == "" || *awsAccessKey == "") {
+	if hconf.IsEC2 && (*awsKeyID == "" || *awsAccessKey == "") {
 		if !metadata.OnGCE() {
 			log.Fatal("missing -aws-key-id and -aws-access-key params are required for builders on AWS")
 		}
@@ -116,7 +116,7 @@ func main() {
 
 	log.Printf("Creating %s (with VM image %s)", name, vmImageSummary)
 	var bc buildlet.Client
-	if hconf.IsEC2() {
+	if hconf.IsEC2 {
 		region := env.AWSRegion
 		if *awsRegion != "" {
 			region = *awsRegion
@@ -268,7 +268,7 @@ func awsCredentialsFromSecrets() (string, string, error) {
 	}
 	accessKey, err := c.Retrieve(ctx, secret.NameAWSAccessKey)
 	if err != nil {
-		return "", "", fmt.Errorf("unable to retrueve access key: %w", err)
+		return "", "", fmt.Errorf("unable to retrieve access key: %w", err)
 	}
 	return keyID, accessKey, nil
 }

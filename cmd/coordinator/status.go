@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 package main
 
@@ -30,7 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"go.opencensus.io/stats"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/coordinator/pool"
@@ -146,9 +144,6 @@ func addHealthChecker(mux *http.ServeMux, hc *healthChecker) {
 var basePinErr atomic.Value
 
 func addHealthCheckers(ctx context.Context, mux *http.ServeMux, sc *secret.Client) {
-	addHealthChecker(mux, newMacOSARM64Checker())
-	addHealthChecker(mux, newOSUPPC64leChecker())
-	addHealthChecker(mux, newOSUPPC64lePower9Checker())
 	addHealthChecker(mux, newBasepinChecker())
 	addHealthChecker(mux, newGitMirrorChecker())
 	addHealthChecker(mux, newGitHubAPIChecker(ctx, sc))
@@ -316,34 +311,6 @@ func expectedHosts(hostType string) int {
 		panic(fmt.Sprintf("unknown host type %q", hostType))
 	}
 	return hc.ExpectNum
-}
-
-func newOSUPPC64leChecker() *healthChecker {
-	var hosts []string
-	for i := 1; i <= expectedHosts("host-linux-ppc64le-osu"); i++ {
-		name := fmt.Sprintf("host-linux-ppc64le-osu:power_%02d", i)
-		hosts = append(hosts, name)
-	}
-	return &healthChecker{
-		ID:     "osuppc64le",
-		Title:  "OSU linux/ppc64le POWER8 machines",
-		DocURL: "https://github.com/golang/build/tree/master/env/linux-ppc64le/osuosl",
-		Check:  reverseHostChecker(hosts),
-	}
-}
-
-func newOSUPPC64lePower9Checker() *healthChecker {
-	var hosts []string
-	for i := 1; i <= expectedHosts("host-linux-ppc64le-power9-osu"); i++ {
-		name := fmt.Sprintf("host-linux-ppc64le-power9-osu:power_%02d", i)
-		hosts = append(hosts, name)
-	}
-	return &healthChecker{
-		ID:     "osuppc64lepower9",
-		Title:  "OSU linux/ppc64le POWER9 machines",
-		DocURL: "https://github.com/golang/build/tree/master/env/linux-ppc64le/osuosl",
-		Check:  reverseHostChecker(hosts),
-	}
 }
 
 func reverseHostChecker(hosts []string) func(cw *checkWriter) {

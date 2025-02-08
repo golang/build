@@ -1,12 +1,13 @@
+// Copyright 2023 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package task
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"reflect"
 	"runtime"
 	"strings"
@@ -15,10 +16,13 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
-	"golang.org/x/build/dashboard"
+	"go.chromium.org/luci/auth"
+	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
+	"go.chromium.org/luci/grpc/prpc"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
-	"golang.org/x/build/types"
+	wf "golang.org/x/build/internal/workflow"
 )
 
 var flagRunTagXTest = flag.Bool("run-tagx-test", false, "run tag x/ repo test, which is read-only and safe. Must have a Gerrit cookie in gitcookies.")
@@ -47,16 +51,23 @@ func TestSelectReposLive(t *testing.T) {
 }
 
 func TestCycles(t *testing.T) {
+	deps := func(modPaths ...string) []*TagDep {
+		var deps = make([]*TagDep, len(modPaths))
+		for i, p := range modPaths {
+			deps[i] = &TagDep{p, true}
+		}
+		return deps
+	}
 	tests := []struct {
 		repos []TagRepo
 		want  []string
 	}{
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: []string{"tools"}},
-				{Name: "tools", Deps: []string{"text"}},
+				{Name: "text", Deps: deps("tools")},
+				{Name: "tools", Deps: deps("text")},
 				{Name: "sys"},
-				{Name: "net", Deps: []string{"sys"}},
+				{Name: "net", Deps: deps("sys")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -65,9 +76,9 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: []string{"tools"}},
-				{Name: "tools", Deps: []string{"fake"}},
-				{Name: "fake", Deps: []string{"text"}},
+				{Name: "text", Deps: deps("tools")},
+				{Name: "tools", Deps: deps("fake")},
+				{Name: "fake", Deps: deps("text")},
 			},
 			want: []string{
 				"tools,fake,text,tools",
@@ -77,9 +88,9 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: []string{"tools"}},
-				{Name: "tools", Deps: []string{"fake", "text"}},
-				{Name: "fake", Deps: []string{"tools"}},
+				{Name: "text", Deps: deps("tools")},
+				{Name: "tools", Deps: deps("fake", "text")},
+				{Name: "fake", Deps: deps("tools")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -90,10 +101,10 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: []string{"tools"}},
-				{Name: "tools", Deps: []string{"fake", "text"}},
-				{Name: "fake1", Deps: []string{"fake2"}},
-				{Name: "fake2", Deps: []string{"tools"}},
+				{Name: "text", Deps: deps("tools")},
+				{Name: "tools", Deps: deps("fake", "text")},
+				{Name: "fake1", Deps: deps("fake2")},
+				{Name: "fake2", Deps: deps("tools")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -127,294 +138,161 @@ func TestCycles(t *testing.T) {
 	}
 }
 
-var flagRunIsGreenLiveTest = flag.String("run-is-green-test", "", "run greenness test for repo@rev")
+var flagRunFindMissingBuildersLiveTest = flag.String("run-find-missing-builders-test", "", "run greenness test for repo@rev")
+var flagRunMissingBuilds = flag.Bool("run-missing-builds", false, "run missing builds from missing builders test")
 
-func TestIsGreenLive(t *testing.T) {
-	if *flagRunIsGreenLiveTest == "" {
-		t.Skip("no module/rev specified")
+func TestFindMissingBuildersLive(t *testing.T) {
+	if !testing.Verbose() || flag.Lookup("test.run").Value.String() != "^TestFindMissingBuildersLive$" {
+		t.Skip("not running a live test requiring manual verification if not explicitly requested with go test -v -run=^TestFindMissingBuildersLive$")
 	}
-
-	repo, rev, ok := strings.Cut(*flagRunIsGreenLiveTest, "@")
+	repo, commit, ok := strings.Cut(*flagRunFindMissingBuildersLiveTest, "@")
 	if !ok {
-		t.Fatalf("--run-is-green-test must be module@rev: %q", *flagRunIsGreenLiveTest)
+		t.Fatalf("-run-find-missing-builders-test flag must be module@rev: %q", *flagRunFindMissingBuildersLiveTest)
 	}
+
+	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
+	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, chromeinfra.DefaultAuthOptions()).Client()
+	if err != nil {
+		t.Fatal("auth.NewAuthenticator:", err)
+	}
+	buildsClient := buildbucketpb.NewBuildsClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
+	buildersClient := buildbucketpb.NewBuildersClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
 
 	tasks := &TagXReposTasks{
 		Gerrit: &RealGerritClient{
-			Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
+			Client:  gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
+			Gitiles: "https://go.googlesource.com",
 		},
-		DashboardURL: "https://build.golang.org",
+		BuildBucket: &RealBuildBucketClient{
+			BuildsClient:   buildsClient,
+			BuildersClient: buildersClient,
+		},
 	}
-	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
-	greenCommit, ok, err := tasks.findGreen(ctx, TagRepo{Name: repo, ModPath: "golang.org/x/" + repo}, rev, true)
+	builds, err := tasks.findMissingBuilders(ctx, TagRepo{Name: repo}, commit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("module %v green: %v at rev %v", repo, ok, greenCommit)
+	t.Logf("missing builds for %v at %v: %v", repo, commit, builds)
+
+	if !*flagRunMissingBuilds {
+		return
+	}
+
+	t.Logf("build error (if any): %v", tasks.runMissingBuilders(ctx, TagRepo{Name: repo}, commit, builds))
 }
 
-func TestIsGreen(t *testing.T) {
-	type revLine struct {
-		goBranch        string
-		goRev, toolsRev int
-		pass            bool
-	}
+func TestAwaitGreen(t *testing.T) {
 	tests := []struct {
-		name         string
-		rev          string
-		lines        []revLine
-		wantGreenRev string
+		findBuild, passBuild, pass bool
 	}{
-		{
-			name: "simple OK",
-			rev:  "tools-1",
-			lines: []revLine{
-				{"master", 1, 1, true},
-				{"release-branch.go1.19", 1, 1, true},
-				{"release-branch.go1.18", 1, 1, true},
-			},
-			wantGreenRev: "tools-1",
-		},
-		{
-			name: "missing release branch runs",
-			rev:  "tools-1",
-			lines: []revLine{
-				{"master", 3, 3, true},
-				{"master", 2, 2, true},
-				{"release-branch.go1.19", 2, 2, true},
-				{"release-branch.go1.18", 2, 2, true},
-				{"master", 1, 1, true},
-			},
-			wantGreenRev: "tools-2",
-		},
-		{
-			name: "succeed despite failures",
-			rev:  "tools-1",
-			lines: []revLine{
-				{"master", 3, 1, false},
-				{"master", 2, 1, true},
-				{"master", 1, 1, false},
-				{"release-branch.go1.19", 1, 1, true},
-				{"release-branch.go1.18", 1, 1, true},
-			},
-			wantGreenRev: "tools-1",
-		},
-		{
-			name: "not green yet",
-			rev:  "tools-1",
-			lines: []revLine{
-				{"master", 3, 1, true},
-				{"release-branch.go1.19", 1, 1, false},
-				{"release-branch.go1.18", 1, 1, true},
-			},
-			wantGreenRev: "",
-		},
-		{
-			name: "commit not registered on dashboard",
-			rev:  "tools-2",
-			lines: []revLine{
-				{"master", 1, 1, true},
-				{"release-branch.go1.19", 1, 1, true},
-				{"release-branch.go1.18", 1, 1, true},
-			},
-			wantGreenRev: "",
-		},
+		{findBuild: true, pass: true},
+		{findBuild: false, passBuild: true, pass: true},
+		{findBuild: false, passBuild: false, pass: false},
 	}
+
 	for _, tt := range tests {
-
-		fakeDash := func(repo string) *types.BuildStatus {
-			var builders []string
-			for _, b := range dashboard.Builders {
-				builders = append(builders, b.Name)
-			}
-
-			if repo == "" {
-				// For the front page we only read branches.
-				return &types.BuildStatus{
-					Builders: builders,
-					Revisions: []types.BuildRevision{
-						{GoBranch: "master"},
-						{GoBranch: "release-branch.go1.19"},
-						{GoBranch: "release-branch.go1.18"},
-					},
+		t.Run(fmt.Sprintf("find_%v_pass_%v", tt.findBuild, tt.passBuild), func(t *testing.T) {
+			tools := NewFakeRepo(t, "tools")
+			commit := tools.Commit(map[string]string{
+				"gopls.go": "I'm gopls!",
+			})
+			deps := newTagXTestDeps(t, tools)
+			if !tt.findBuild {
+				deps.buildbucket.MissingBuilds = []string{
+					"x_tools-go1.0-linux-amd64",
 				}
 			}
-			st := &types.BuildStatus{
-				Builders: builders,
+			if !tt.passBuild {
+				deps.buildbucket.FailBuilds = []string{"x_tools-go1.0-linux-amd64"}
 			}
-			for _, line := range tt.lines {
-				rev := types.BuildRevision{
-					Repo:       repo,
-					Revision:   fmt.Sprintf("tools-%v", line.toolsRev),
-					GoRevision: fmt.Sprintf("go-%v-%v", line.goBranch, line.goRev),
-					Date:       time.Now().Format(time.RFC3339),
-					Branch:     "master",
-					GoBranch:   line.goBranch,
-				}
-				for _, b := range builders {
-					switch b {
-					case "linux-amd64":
-						if line.pass {
-							rev.Results = append(rev.Results, "ok")
-						} else {
-							rev.Results = append(rev.Results, "")
-						}
-					case "illumos-amd64", "plan9-arm":
-						rev.Results = append(rev.Results, "fail")
-					default:
-						rev.Results = append(rev.Results, "ok")
-					}
-				}
-				st.Revisions = append(st.Revisions, rev)
-			}
-			return st
-		}
-		dashServer := httptest.NewServer(fakeDashboard(fakeDash))
-		t.Cleanup(dashServer.Close)
 
-		commitsInRefs := func(commits, refs []string) map[string][]string {
-			result := map[string][]string{}
-			for _, commit := range commits {
-				for _, ref := range refs {
-					if strings.HasPrefix(commit, "go-"+strings.TrimPrefix(ref, "refs/heads/")) {
-						result[commit] = append(result[commit], ref)
-					}
-				}
+			res, err := deps.tagXTasks.AwaitGreen(deps.ctx, TagRepo{Name: "tools"}, commit)
+			t.Logf("commit, err = %v, %v", res, err)
+			if (err == nil) != tt.pass {
+				t.Fatalf("success = %v (err %v), wanted %v", err == nil, err, tt.pass)
 			}
-			return result
-		}
-
-		tasks := &TagXReposTasks{
-			Gerrit:       &isGreenGerrit{commitsInRefs: commitsInRefs},
-			DashboardURL: dashServer.URL,
-		}
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
-			green, _, err := tasks.findGreen(ctx, TagRepo{
-				Name:    "tools",
-				ModPath: "golang.org/x/tools",
-			}, tt.rev, false)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if green != tt.wantGreenRev {
-				t.Errorf("tools green at %q, wanted %q", green, tt.wantGreenRev)
+			if tt.pass && res != commit {
+				t.Fatalf("green commit = %v, want %v", res, commit)
 			}
 		})
 	}
 }
 
-type isGreenGerrit struct {
-	GerritClient
-	commitsInRefs func(commits, refs []string) map[string][]string
-}
-
-func (g *isGreenGerrit) GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error) {
-	return g.commitsInRefs(commits, refs), nil
-}
-
-const fakeGo = `#!/bin/bash -exu
-
-case "$1" in
-"get")
-  ls go.mod go.sum >/dev/null
-  for i in "${@:2}"; do
-    echo -e "// pretend we've upgraded to $i" >> go.mod
-    echo "$i h1:asdasd" | tr '@' ' ' >> go.sum
-  done
-  ;;
-"mod")
-  ls go.mod go.sum >/dev/null
-  echo "tidied! $*" >> go.mod
-  ;;
-*)
-  echo unexpected command $@
-  exit 1
-  ;;
-esac
-`
-
 type tagXTestDeps struct {
-	ctx       context.Context
-	gerrit    *FakeGerrit
-	tagXTasks *TagXReposTasks
+	ctx         *wf.TaskContext
+	gerrit      *FakeGerrit
+	buildbucket *FakeBuildBucketClient
+	tagXTasks   *TagXReposTasks
 }
 
-func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
+// mustHaveShell skips if the current environment doesn't support shell
+// scripting (/bin/bash).
+func mustHaveShell(t *testing.T) {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
+}
+
+func newTagXTestDeps(t *testing.T, repos ...*FakeRepo) *tagXTestDeps {
+	const fakeGo = `#!/bin/bash -exu
+
+case "$1" in
+"get")
+	ls go.mod go.sum >/dev/null
+	for i in "${@:2}"; do
+		if [ "$i" = "toolchain@none" ]; then
+			echo "// pretend we've dropped toolchain directive" >> go.mod
+		else
+			echo "// pretend we've upgraded to $i" >> go.mod
+			echo "$i h1:asdasd" | tr '@' ' ' >> go.sum
+		fi
+	done
+	;;
+"mod")
+	case "$2" in
+	"tidy")
+		ls go.mod go.sum >/dev/null
+		echo "tidied! $*" >> go.mod
+		;;
+	"edit")
+		echo "edited! $*" >> go.mod
+		;;
+	esac
+	;;
+*)
+	echo unexpected command $@
+	exit 1
+	;;
+esac
+`
+
+	mustHaveShell(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	goServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeTarball("dl/go1.19.linux-amd64.tar.gz", map[string]string{
-			"go/bin/go": fakeGo,
-		}, w, r)
-	}))
-	t.Cleanup(goServer.Close)
-
-	goRepo := NewFakeRepo(t, "go")
-	go1 := goRepo.Commit(map[string]string{
-		"main.go": "I'm the go command or something",
-	})
-	repos = append(repos, goRepo)
-
-	fakeBuildlets := NewFakeBuildlets(t, "", nil)
 	fakeGerrit := NewFakeGerrit(t, repos...)
-	var builders, allOK []string
-	for _, b := range dashboard.Builders {
-		builders = append(builders, b.Name)
-		allOK = append(allOK, "ok")
+	var projects []string
+	for _, r := range repos {
+		projects = append(projects, r.name)
 	}
-	fakeDash := func(repo string) *types.BuildStatus {
-		if repo == "" {
-			// For the front page we only read branches.
-			return &types.BuildStatus{
-				Builders: builders,
-				Revisions: []types.BuildRevision{
-					{GoBranch: "master"},
-				},
-			}
-		}
-		for _, r := range repos {
-			if repo != "golang.org/x/"+r.name {
-				continue
-			}
-			st := &types.BuildStatus{
-				Builders: builders,
-			}
-			for _, commit := range r.history {
-				st.Revisions = append(st.Revisions, types.BuildRevision{
-					Repo:       r.name,
-					Revision:   commit,
-					GoRevision: go1,
-					Date:       time.Now().Format(time.RFC3339),
-					Branch:     "master",
-					GoBranch:   "master",
-					Results:    allOK,
-				})
-			}
-			return st
-		}
-		return nil
-	}
-	dashServer := httptest.NewServer(fakeDashboard(fakeDash))
-	t.Cleanup(dashServer.Close)
+	fakeBuildBucket := NewFakeBuildBucketClient(0, fakeGerrit.GerritURL(), "ci", projects)
 	tasks := &TagXReposTasks{
-		Gerrit:         fakeGerrit,
-		GerritURL:      fakeGerrit.GerritURL(),
-		CreateBuildlet: fakeBuildlets.CreateBuildlet,
-		LatestGoBinaries: func(context.Context) (string, error) {
-			return goServer.URL + "/dl/go1.19.linux-amd64.tar.gz", nil
-		},
-		DashboardURL: dashServer.URL,
+		Gerrit:      fakeGerrit,
+		CloudBuild:  NewFakeCloudBuild(t, fakeGerrit, "project", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
+		BuildBucket: fakeBuildBucket,
 	}
 	return &tagXTestDeps{
-		ctx:       ctx,
-		gerrit:    fakeGerrit,
-		tagXTasks: tasks,
+		ctx:         &wf.TaskContext{Context: ctx, Logger: &testLogger{t: t}},
+		gerrit:      fakeGerrit,
+		buildbucket: fakeBuildBucket,
+		tagXTasks:   tasks,
 	}
 }
 
@@ -436,14 +314,20 @@ func TestTagXRepos(t *testing.T) {
 	mod.Tag("v1.0.0", mod1)
 	tools := NewFakeRepo(t, "tools")
 	tools1 := tools.Commit(map[string]string{
-		"go.mod":       "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18 // tagx:compat 1.16\nrequire golang.org/x/sys v0.1.0\n",
-		"go.sum":       "\n",
-		"gopls/go.mod": "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
-		"gopls/go.sum": "\n",
+		"go.mod":               "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18\nrequire golang.org/x/sys v0.1.0\nrequire golang.org/x/build v0.0.0\n",
+		"go.sum":               "\n",
+		"gopls/go.mod":         "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
+		"gopls/go.sum":         "\n",
+		"withtoolchain/go.mod": "module golang.org/x/tools/withtoolchain\ngo 1.23.1\ntoolchain go1.23.2\n",
 	})
 	tools.Tag("v1.1.5", tools1)
+	build := NewFakeRepo(t, "build")
+	build.Commit(map[string]string{
+		"go.mod": "module golang.org/x/build\ngo 1.18\nrequire golang.org/x/tools v1.0.0\nrequire golang.org/x/sys v0.1.0\n",
+		"go.sum": "\n",
+	})
 
-	deps := newTagXTestDeps(t, sys, mod, tools)
+	deps := newTagXTestDeps(t, sys, mod, tools, build)
 
 	wd := deps.tagXTasks.NewDefinition()
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -452,8 +336,7 @@ func TestTagXRepos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(deps.ctx, time.Minute)
-	defer cancel()
+	ctx := deps.ctx
 	_, err = w.Run(ctx, &verboseListener{t: t})
 	if err != nil {
 		t.Fatal(err)
@@ -489,16 +372,44 @@ func TestTagXRepos(t *testing.T) {
 	if !strings.Contains(string(goMod), "tidied!") {
 		t.Error("tools go.mod should be tidied")
 	}
+	if !strings.Contains(string(goMod), "edited! mod edit -toolchain=none") {
+		t.Error("tools go.mod should be edited with -toolchain=none")
+	}
 	goplsMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "gopls/go.mod")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "1.16") || strings.Contains(string(goplsMod), "upgraded") {
-		t.Error("gopls go.mod should be tidied with -compat 1.16, but not upgraded")
+	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "edited!") || strings.Contains(string(goplsMod), "upgraded") {
+		t.Errorf("gopls go.mod should be tidied+edited and not upgraded:\n%s", goplsMod)
+	}
+	withtoolchainMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "withtoolchain/go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(withtoolchainMod), "tidied!") || strings.Contains(string(withtoolchainMod), "edited!") {
+		t.Errorf("withtoolchain go.mod should be tidied and not edited:\n%s", withtoolchainMod)
+	}
+
+	tags, err = deps.gerrit.ListTags(ctx, "build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tags) != 0 {
+		t.Errorf("build has tags %q, should not have been tagged", tags)
+	}
+	goMod, err = deps.gerrit.ReadFile(ctx, "build", "master", "go.mod")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(goMod), "tools@v1.2.0") || !strings.Contains(string(goMod), "sys@v0.2.0") {
+		t.Errorf("build should use tools v1.2.0 and sys v0.2.0. go.mod: %v", string(goMod))
+	}
+	if !strings.Contains(string(goMod), "tidied!") {
+		t.Error("build go.mod should be tidied")
 	}
 }
 
-func TestTagSingleRepo(t *testing.T) {
+func testTagSingleRepo(t *testing.T, skipPostSubmit bool) {
 	mod := NewFakeRepo(t, "mod")
 	mod1 := mod.Commit(map[string]string{
 		"go.mod": "module golang.org/x/mod\n",
@@ -516,17 +427,25 @@ func TestTagSingleRepo(t *testing.T) {
 	})
 
 	deps := newTagXTestDeps(t, mod, foo)
+	deps.buildbucket.MissingBuilds = []string{"x_foo-gotip-linux-amd64"}
 
-	wd := deps.tagXTasks.NewSingleDefinition()
-	ctx, cancel := context.WithTimeout(deps.ctx, time.Minute)
-	w, err := workflow.Start(wd, map[string]interface{}{
+	args := map[string]interface{}{
 		"Repository name":   "foo",
 		reviewersParam.Name: []string(nil),
-	})
+	}
+	if skipPostSubmit {
+		deps.buildbucket.FailBuilds = []string{"x_foo-gotip-linux-amd64"}
+		args["Skip post submit result (optional)"] = true
+	} else {
+		args["Skip post submit result (optional)"] = false
+	}
+
+	wd := deps.tagXTasks.NewSingleDefinition()
+	w, err := workflow.Start(wd, args)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cancel()
+	ctx := deps.ctx
 	_, err = w.Run(ctx, &verboseListener{t: t})
 	if err != nil {
 		t.Fatal(err)
@@ -545,13 +464,23 @@ func TestTagSingleRepo(t *testing.T) {
 	}
 }
 
+func TestTagSingleRepo(t *testing.T) {
+	t.Run("with post-submit check", func(t *testing.T) { testTagSingleRepo(t, false) })
+	// If skipPostSubmit is false, AwaitGreen should sit an spin for a minute before failing
+	t.Run("without post-submit check", func(t *testing.T) { testTagSingleRepo(t, true) })
+}
+
 type verboseListener struct {
 	t              *testing.T
 	outputListener func(string, interface{})
+	onStall        func()
 }
 
 func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
 	l.t.Logf("workflow %q: stalled", workflowID.String())
+	if l.onStall != nil {
+		l.onStall()
+	}
 	return nil
 }
 
@@ -581,15 +510,4 @@ type testLogger struct {
 
 func (l *testLogger) Printf(format string, v ...interface{}) {
 	l.t.Logf("%v\ttask %-10v: LOG: %s", time.Now(), l.task, fmt.Sprintf(format, v...))
-}
-
-type fakeDashboard func(string) *types.BuildStatus
-
-func (d fakeDashboard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	resp := d(r.URL.Query().Get("repo"))
-	if resp == nil {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	json.NewEncoder(w).Encode(resp)
 }

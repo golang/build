@@ -1,4 +1,4 @@
-// Copyright 2022 Go Authors All rights reserved.
+// Copyright 2022 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -13,7 +13,7 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 )
 
 // FlagResolver contains the dependencies necessary to resolve a Secret flag.
@@ -38,7 +38,7 @@ func (r *FlagResolver) Flag(set *flag.FlagSet, name, usage string) *string {
 func (r *FlagResolver) FlagVar(set *flag.FlagSet, p *string, name, usage string) {
 	suffixedUsage := usage + "\n" + secretSuffix
 	set.Func(name, suffixedUsage, func(flagValue string) error {
-		value, err := r.resolveSecret(flagValue)
+		value, err := r.ResolveSecret(flagValue)
 		if err != nil {
 			return err
 		}
@@ -47,7 +47,8 @@ func (r *FlagResolver) FlagVar(set *flag.FlagSet, p *string, name, usage string)
 	})
 }
 
-func (r *FlagResolver) resolveSecret(flagValue string) (string, error) {
+// ResolveSecret resolves a string value, which need not be a flag.
+func (r *FlagResolver) ResolveSecret(flagValue string) (string, error) {
 	if r.Client == nil || r.Context == nil {
 		return "", fmt.Errorf("secret resolver was not initialized")
 	}
@@ -77,7 +78,7 @@ func (r *FlagResolver) resolveSecret(flagValue string) (string, error) {
 func (r *FlagResolver) JSONVarFlag(set *flag.FlagSet, value interface{}, name, usage string) {
 	suffixedUsage := usage + "\n" + fmt.Sprintf("A JSON representation of a %T.", value) + "\n" + secretSuffix
 	set.Func(name, suffixedUsage, func(flagValue string) error {
-		stringValue, err := r.resolveSecret(flagValue)
+		stringValue, err := r.ResolveSecret(flagValue)
 		if err != nil {
 			return err
 		}

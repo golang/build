@@ -24,8 +24,12 @@ service GomoteService {
   rpc InstanceAlive (InstanceAliveRequest) returns (InstanceAliveResponse) {}
   // ListDirectory lists the contents of a directory on an gomote instance.
   rpc ListDirectory (ListDirectoryRequest) returns (ListDirectoryResponse) {}
+  // ListDirectoryStreaming lists the contents of a directory on an gomote instance.
+  rpc ListDirectoryStreaming (ListDirectoryRequest) returns (stream ListDirectoryResponse) {}
   // ListInstances lists all of the live gomote instances owned by the caller.
   rpc ListInstances (ListInstancesRequest) returns (ListInstancesResponse) {}
+  // ListSwarmingBuilders lists all of the swarming builders for the project.
+  rpc ListSwarmingBuilders (ListSwarmingBuildersRequest) returns (ListSwarmingBuildersResponse) {}
   // ReadTGZToURL tars and zips a directory which exists on the gomote instance and returns a URL where it can be
   // downloaded from.
   rpc ReadTGZToURL (ReadTGZToURLRequest) returns (ReadTGZToURLResponse) {}
@@ -48,11 +52,6 @@ message AuthenticateRequest {}
 // AuthenticateResponse contains authenticated user data.
 message AuthenticateResponse {}
 
-// CreateInstanceRequest specifies the data needed to create a gomote instance.
-message CreateInstanceRequest {
-  string builder_type = 1;
-}
-
 // AddBootstrapRequest specifies the data needed for a request to add the bootstrap version of Go
 // to the instance.
 message AddBootstrapRequest {
@@ -66,6 +65,12 @@ message AddBootstrapResponse {
   // If empty, the bootstrap version is undefined and has probably been included in
   // the instance image.
   string bootstrap_go_url = 1;
+}
+
+// CreateInstanceRequest specifies the data needed to create a gomote instance.
+message CreateInstanceRequest {
+  string builder_type = 1;
+  repeated string experiment_option = 2;
 }
 
 // CreateInstanceResponse contains data about a created gomote instance.
@@ -178,6 +183,14 @@ message ListInstancesRequest {}
 // ListInstancesResponse contains the list of live gomote instances owned by the caller.
 message ListInstancesResponse {
   repeated Instance instances = 1;
+}
+
+// ListSwarmingBuildersRequest specifies the data needed to list all swarming builders.
+message ListSwarmingBuildersRequest {}
+
+// ListSwarmingBuildersResponse contains a list of swarming builders.
+message ListSwarmingBuildersResponse {
+  repeated string builders = 1;
 }
 
 // ReadTGZToURLRequest specifies the data needed to retrieve a tar and zipped directory from a gomote instance.

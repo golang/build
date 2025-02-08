@@ -10,8 +10,9 @@ rcvar=buildlet_enable
 
 procname=/buildlet
 pidfile="/var/run/${name}.pid"
+suppidfile="/var/run/${name}-sup.pid"
 command=/usr/sbin/daemon
-command_args="-r -fc -p ${pidfile}"
+command_args="-r -fc -p ${pidfile} -P ${suppidfile}"
 command_args="${command_args} ${procname}"
 start_precmd="${name}_prestart"
 stop_cmd=":"
@@ -22,18 +23,42 @@ load_rc_config $name
 buildlet_prestart()
 {
 	local buildlet_url
+	local project
+	local gcehost
+	local buildletsh
+	local swarming
 
 	info $(netstat -rn)
 	info $(cat /etc/resolv.conf)
 
-	buildlet_url=$(/usr/local/bin/curl -s -H "Metadata-Flavor: Google" \
-		http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
+	project=$(/usr/local/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
+	info "Found project GCE ${project}."
+	case "$project" in
+	  *luci*)
+		info "Setting up bootstrapswarm..."
 
-	if ! /usr/local/bin/curl -o /buildlet "${buildlet_url}"; then
-		warn "failed to download buildlet from ${buildlet_url}"
-		poweroff
-		return 1
-	fi
+		gcehost=$(/usr/local/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/hostname | cut -d . -f 1)
+		info "Found GCE host ${gcehost}."
+
+		swarming=$(/usr/local/bin/curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/swarming | cut -d . -f 1)
+		swarming="${swarming}.appspot.com"
+		info "Found Swarming host ${swarming}."
+
+		buildletsh="#!/bin/sh\n\nset -x\n\nsu -l swarming -c \"/usr/local/bin/bootstrapswarm --hostname $gcehost --swarming $swarming && kill -s INT \$(cat $suppidfile)\"\n"
+		echo -e $buildletsh >/buildlet
+	  ;;
+	  *)
+		info "Setting up buildlet..."
+		buildlet_url=$(/usr/local/bin/curl -s -H "Metadata-Flavor: Google" \
+			http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
+
+		if ! /usr/local/bin/curl -o /buildlet "${buildlet_url}"; then
+			warn "failed to download buildlet from ${buildlet_url}"
+			poweroff
+			return 1
+		fi
+	  ;;
+	esac
 
 	chmod a+x /buildlet
 }

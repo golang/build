@@ -17,10 +17,11 @@ import (
 func destroy(args []string) error {
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "destroy usage: gomote destroy [instance]")
+		log := usageLogger
+		log.Print("destroy usage: gomote destroy [instance]")
 		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Destroys a single instance, or all instances in a group.")
-		fmt.Fprintln(os.Stderr, "Instance argument is optional with a group.")
+		log.Print("Destroys a single instance, or all instances in a group.")
+		log.Print("Instance argument is optional with a group.")
 		fs.PrintDefaults()
 		if fs.NArg() == 0 {
 			// List buildlets that you might want to destroy.
@@ -54,7 +55,7 @@ func destroy(args []string) error {
 		fs.Usage()
 	}
 	for _, name := range destroySet {
-		fmt.Fprintf(os.Stderr, "# Destroying %s\n", name)
+		log.Printf("Destroying %s\n", name)
 		ctx := context.Background()
 		client := gomoteServerClient(ctx)
 		if _, err := client.DestroyInstance(ctx, &protos.DestroyInstanceRequest{

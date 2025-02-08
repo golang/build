@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 package main
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +18,7 @@ import (
 	"time"
 
 	"golang.org/x/build/buildenv"
+	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/buildgo"
 	"golang.org/x/build/internal/coordinator/pool"
@@ -138,9 +137,9 @@ func TestTryStatusJSON(t *testing.T) {
 				t.Errorf("response status code: got %d; want %d", got, want)
 			}
 			defer resp.Body.Close()
-			b, err := ioutil.ReadAll(resp.Body)
+			b, err := io.ReadAll(resp.Body)
 			if err != nil {
-				t.Fatalf("ioutil.ReadAll: %v", err)
+				t.Fatalf("io.ReadAll: %v", err)
 			}
 			if got, want := string(b), tc.body; got != want {
 				t.Errorf("body: got\n%v\nwant\n%v", got, want)
@@ -159,6 +158,8 @@ func TestStagingClusterBuilders(t *testing.T) {
 // See golang.org/issue/28891.
 func TestIssue28891(t *testing.T) {
 	testingKnobSkipBuilds = true
+	cleanup := dashboard.TestingKnobForceEnableLinuxAMD64()
+	defer func() { testingKnobSkipBuilds = false; cleanup() }()
 
 	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/net CL 258478.
 		Project:   "net",
@@ -186,6 +187,8 @@ func TestIssue28891(t *testing.T) {
 // See golang.org/issue/42127.
 func TestIssue42127(t *testing.T) {
 	testingKnobSkipBuilds = true
+	cleanup := dashboard.TestingKnobForceEnableLinuxAMD64()
+	defer func() { testingKnobSkipBuilds = false; cleanup() }()
 
 	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/net CL 264058.
 		Project:   "net",
@@ -212,6 +215,8 @@ func TestIssue42127(t *testing.T) {
 // "master" and "release-branch.go1.N". See golang.org/issue/37512.
 func TestXRepoBranches(t *testing.T) {
 	testingKnobSkipBuilds = true
+	cleanup := dashboard.TestingKnobForceEnableLinuxAMD64()
+	defer func() { testingKnobSkipBuilds = false; cleanup() }()
 
 	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for x/tools CL 227356.
 		Project:   "tools",
@@ -227,8 +232,8 @@ func TestXRepoBranches(t *testing.T) {
 		v := bs.NameAndBranch()
 		t.Logf("build[%d]: %s", i, v)
 	}
-	if len(ts.builds) < 3 {
-		t.Fatalf("expected at least 3 builders, got %v", len(ts.builds))
+	if len(ts.builds) == 0 {
+		t.Fatal("no builders in try set, want at least 1")
 	}
 }
 
@@ -236,6 +241,7 @@ func TestXRepoBranches(t *testing.T) {
 // the latest request is used. See golang.org/issue/42084.
 func TestIssue42084(t *testing.T) {
 	testingKnobSkipBuilds = true
+	defer func() { testingKnobSkipBuilds = false }()
 
 	work := &apipb.GerritTryWorkItem{ // Based on what maintapi's GoFindTryWork does for CL 324763. TryMessage is set later.
 		Project:   "go",
@@ -266,8 +272,8 @@ func TestIssue42084(t *testing.T) {
 
 	// Next, add try messages, and check that the SlowBot is now included.
 	work.TryMessage = []*apipb.TryVoteMessage{
-		{Message: "TRY=linux", AuthorId: 1234, Version: 1},
-		{Message: "TRY=linux-arm", AuthorId: 1234, Version: 1},
+		{Message: "linux", AuthorId: 1234, Version: 1},
+		{Message: "linux-arm", AuthorId: 1234, Version: 1},
 	}
 	ts = newTrySet(work)
 	hasLinuxArmBuilder = false
@@ -339,14 +345,18 @@ func TestSlowBotsFromComments(t *testing.T) {
 			},
 		},
 	}
-	slowBots := slowBotsFromComments(work)
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
 	var got []string
 	for _, bc := range slowBots {
 		got = append(got, bc.Name)
 	}
-	want := []string{"aix-ppc64", "darwin-amd64-12_0", "linux-arm64"}
+	want := []string{"aix-ppc64", "darwin-amd64-13", "linux-arm64"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+	}
+
+	if len(invalidSlowBots) > 0 {
+		t.Errorf("mismatch invalidSlowBots:\n got: %d\nwant: 0", len(invalidSlowBots))
 	}
 }
 
@@ -431,24 +441,24 @@ func TestBuildStatusFormat(t *testing.T) {
 		{
 			st: &buildStatus{
 				BuilderRev: buildgo.BuilderRev{
-					Name: "darwin-amd64-10_14",
+					Name: "darwin-amd64-13",
 				},
 				commitDetail: commitDetail{
 					RevBranch: "master",
 				},
 			},
-			want: "darwin-amd64-10_14",
+			want: "darwin-amd64-13",
 		},
 		{
 			st: &buildStatus{
 				BuilderRev: buildgo.BuilderRev{
-					Name: "darwin-amd64-10_14",
+					Name: "darwin-amd64-13",
 				},
 				commitDetail: commitDetail{
 					RevBranch: "release-branch.go1.15",
 				},
 			},
-			want: "darwin-amd64-10_14 (Go 1.15.x)",
+			want: "darwin-amd64-13 (Go 1.15.x)",
 		},
 	} {
 		if got := tt.st.NameAndBranch(); got != tt.want {
@@ -489,5 +499,31 @@ func TestListPatchSetThreads(t *testing.T) {
 	}
 	if mostRecentTryBotThread != "aaf7aa39_658707c2" {
 		t.Errorf("wrong most recent TryBot thread: got %s, want %s", mostRecentTryBotThread, "aaf7aa39_658707c2")
+	}
+}
+
+func TestInvalidSlowBots(t *testing.T) {
+	work := &apipb.GerritTryWorkItem{
+		Version: 2,
+		TryMessage: []*apipb.TryVoteMessage{
+			{
+				Version: 1,
+				Message: "aix, linux-mipps, amd64, freeebsd",
+			},
+		},
+	}
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
+	var got []string
+	for _, bc := range slowBots {
+		got = append(got, bc.Name)
+	}
+	want := []string{"aix-ppc64", "linux-amd64"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", got, want)
+	}
+
+	wantInvalid := []string{"linux-mipps", "freeebsd"}
+	if !reflect.DeepEqual(invalidSlowBots, wantInvalid) {
+		t.Errorf("mismatch:\n got: %q\nwant: %q\n", invalidSlowBots, wantInvalid)
 	}
 }

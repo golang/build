@@ -153,6 +153,14 @@ Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/vs_buildtoo
 Write-Host "installing Visual Studio Build Tools"
 & $vs_buildtools --quiet --wait --norestart --nocache --installPath "$dep_dir\vs" --all
 
+# Download and install the root certificate used for crypto/x509 testing
+Write-Host "downloading crypto/x509 test root"
+$test_root = "$builder_dir\test_root.pem"
+Get-FileFromUrl -URL "https://storage.googleapis.com/go-builder-data/platform_root_cert.pem" -Output "$test_root"
+
+Write-Host "installing crypto/x509 test root"
+Import-Certificate -FilePath "$test_root" -CertStoreLocation "Cert:\LocalMachine\Root"
+
 # Create a buildlet user
 Write-Host "creating buildlet user"
 $buildlet_user = "gopher"

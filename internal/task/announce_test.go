@@ -7,6 +7,7 @@ package task
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/mail"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ import (
 func TestAnnounceReleaseShortContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, []string{"go1.18.1", "go1.17.8"}, nil, nil)
+	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, KindMinor, []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, nil, nil)
 	if err == nil {
 		t.Errorf("want non-nil error")
 	} else if !strings.HasPrefix(err.Error(), "insufficient time") {
@@ -40,6 +41,7 @@ func TestAnnouncementMail(t *testing.T) {
 		{
 			name: "announce-minor",
 			in: releaseAnnouncement{
+				Kind:             KindMinor,
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.9",
 				Names:            []string{"Alice", "Bob", "Charlie"},
@@ -49,6 +51,7 @@ func TestAnnouncementMail(t *testing.T) {
 		{
 			name: "announce-minor-with-security",
 			in: releaseAnnouncement{
+				Kind:             KindMinor,
 				Version:          "go1.18.1",
 				SecondaryVersion: "go1.17.9",
 				Security: []string{
@@ -82,6 +85,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 		{
 			name: "announce-minor-solo",
 			in: releaseAnnouncement{
+				Kind:     KindMinor,
 				Version:  "go1.11.1",
 				Security: []string{"abc: security fix 1", "xyz: security fix 2"},
 				Names:    []string{"Alice"},
@@ -91,6 +95,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 		{
 			name: "announce-beta",
 			in: releaseAnnouncement{
+				Kind:    KindBeta,
 				Version: "go1.19beta5",
 			},
 			wantSubject: "Go 1.19 Beta 5 is released",
@@ -98,16 +103,18 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 		{
 			name: "announce-rc",
 			in: releaseAnnouncement{
-				Version: "go1.19rc6",
+				Kind:    KindRC,
+				Version: "go1.23rc1",
 			},
-			wantSubject: "Go 1.19 Release Candidate 6 is released",
+			wantSubject: "Go 1.23 Release Candidate 1 is released",
 		},
 		{
 			name: "announce-major",
 			in: releaseAnnouncement{
-				Version: "go1.19",
+				Kind:    KindMajor,
+				Version: "go1.21.0",
 			},
-			wantSubject: "Go 1.19 is released",
+			wantSubject: "Go 1.21.0 is released",
 		},
 
 		{
@@ -117,6 +124,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 				Version:          "go1.18.4",
 				SecondaryVersion: "go1.17.12",
 				Security:         "the standard library",
+				CVEs:             []string{"cve-1234", "cve-5678"},
 				Names:            []string{"Alice"},
 			},
 			wantSubject: "[security] Go 1.18.4 and Go 1.17.12 pre-announcement",
@@ -127,9 +135,55 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 				Target:   Date{2022, time.July, 12},
 				Version:  "go1.18.4",
 				Security: "the toolchain",
+				CVEs:     []string{"cve-1234", "cve-5678"},
 				Names:    []string{"Alice", "Bob"},
 			},
 			wantSubject: "[security] Go 1.18.4 pre-announcement",
+		},
+		{
+			name: "gopls-pre-announce",
+			in: goplsPrereleaseAnnouncement{
+				Version: "v0.16.2-pre.1",
+				Branch:  "gopls-release-branch.0.16",
+				Commit:  "abc123def456ghi789",
+				Issue:   12345,
+			},
+			wantSubject: "Gopls v0.16.2-pre.1 is released",
+		},
+		{
+			name: "gopls-announce",
+			in: goplsReleaseAnnouncement{
+				Version: "v0.16.2",
+				Branch:  "gopls-release-branch.0.16",
+				Commit:  "abc123def456ghi789",
+			},
+			wantSubject: "Gopls v0.16.2 is released",
+		},
+		{
+			name: "vscode-go-announce",
+			in: vscodeGoReleaseAnnouncement{
+				Version: "v0.44.2",
+			},
+			wantSubject: "VSCode-Go extension v0.44.2 is released",
+		},
+		{
+			name: "vscode-go-pre-announce",
+			in: vscodeGoPrereleaseAnnouncement{
+				Version: "v0.44.2-rc.1",
+				Branch:  "release-v0.44",
+				Commit:  "abc123def456ghi789",
+				Issue:   12345,
+			},
+			wantSubject: "VSCode-Go extension v0.44.2-rc.1 is released",
+		},
+		{
+			name: "vscode-go-insider-announce",
+			in: vscodeGoInsiderAnnouncement{
+				Version:       "v0.43.2",
+				Commit:        "abc123def456ghi789",
+				StableVersion: "v0.44.0",
+			},
+			wantSubject: "VSCode-Go extension v0.43.2 is released",
 		},
 	}
 	for _, tc := range tests {
@@ -185,7 +239,8 @@ func TestAnnounceRelease(t *testing.T) {
 
 	tests := [...]struct {
 		name         string
-		versions     []string
+		kind         ReleaseKind
+		published    []Published
 		security     []string
 		coordinators []string
 		want         SentMail
@@ -193,7 +248,8 @@ func TestAnnounceRelease(t *testing.T) {
 	}{
 		{
 			name:         "minor",
-			versions:     []string{"go1.18.1", "go1.17.8"}, // Intentionally not 1.17.9 so the real email doesn't get in the way.
+			kind:         KindMinor,
+			published:    []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, // Intentionally not 1.17.9 so the real email doesn't get in the way.
 			coordinators: []string{"heschi", "dmitshur"},
 			want:         SentMail{Subject: "Go 1.18.1 and Go 1.17.8 are released"},
 			wantLog: `announcement subject: Go 1.18.1 and Go 1.17.8 are released
@@ -253,8 +309,11 @@ Heschi and Dmitri for the Go team` + "\n",
 			}
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			sentMail, err := tasks.AnnounceRelease(ctx, tc.versions, tc.security, tc.coordinators)
+			sentMail, err := tasks.AnnounceRelease(ctx, tc.kind, tc.published, tc.security, tc.coordinators)
 			if err != nil {
+				if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
+					t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
+				}
 				t.Fatal("task function returned non-nil error:", err)
 			}
 			if diff := cmp.Diff(tc.want, sentMail); diff != "" {
@@ -277,6 +336,7 @@ func TestPreAnnounceRelease(t *testing.T) {
 		versions     []string
 		target       Date
 		security     string
+		cves         []string
 		coordinators []string
 		want         SentMail
 		wantLog      string
@@ -286,6 +346,7 @@ func TestPreAnnounceRelease(t *testing.T) {
 			versions:     []string{"go1.18.4", "go1.17.11"}, // Intentionally not 1.17.12 so the real email doesn't get in the way.
 			target:       Date{2022, time.July, 12},
 			security:     "the standard library",
+			cves:         []string{"cve-2022-1234", "cve-2023-1234"},
 			coordinators: []string{"tatiana"},
 			want:         SentMail{Subject: "[security] Go 1.18.4 and Go 1.17.11 pre-announcement"},
 			wantLog: `pre-announcement subject: [security] Go 1.18.4 and Go 1.17.11 pre-announcement
@@ -293,7 +354,11 @@ func TestPreAnnounceRelease(t *testing.T) {
 pre-announcement body HTML:
 <p>Hello gophers,</p>
 <p>We plan to issue Go 1.18.4 and Go 1.17.11 during US business hours on Tuesday, July 12.</p>
-<p>These minor releases include PRIVATE security fixes to the standard library.</p>
+<p>These minor releases include PRIVATE security fixes to the standard library, covering the following CVEs:</p>
+<ul>
+<li>cve-2022-1234</li>
+<li>cve-2023-1234</li>
+</ul>
 <p>Following our security policy, this is the pre-announcement of those releases.</p>
 <p>Thanks,<br>
 Tatiana for the Go team</p>
@@ -303,7 +368,11 @@ Hello gophers,
 
 We plan to issue Go 1.18.4 and Go 1.17.11 during US business hours on Tuesday, July 12.
 
-These minor releases include PRIVATE security fixes to the standard library.
+These minor releases include PRIVATE security fixes to the standard library, covering the following CVEs:
+
+-	cve-2022-1234
+
+-	cve-2023-1234
 
 Following our security policy, this is the pre-announcement of those releases.
 
@@ -320,8 +389,11 @@ Tatiana for the Go team` + "\n",
 			}
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
-			sentMail, err := tasks.PreAnnounceRelease(ctx, tc.versions, tc.target, tc.security, tc.coordinators)
+			sentMail, err := tasks.PreAnnounceRelease(ctx, tc.versions, tc.target, tc.security, tc.cves, tc.coordinators)
 			if err != nil {
+				if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
+					t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
+				}
 				t.Fatal("task function returned non-nil error:", err)
 			}
 			if diff := cmp.Diff(tc.want, sentMail); diff != "" {
@@ -343,8 +415,9 @@ func TestFindGoogleGroupsThread(t *testing.T) {
 		Context: context.Background(),
 	}, "[security] Go 1.18.3 and Go 1.17.11 are released")
 	if err != nil {
-		// Note: These test failures are only actionable if the error is not
-		// a transient network one.
+		if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
+			t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
+		}
 		t.Fatalf("findGoogleGroupsThread returned a non-nil error: %v", err)
 	}
 	// Just log the threadURL since we can't rely on stable output.
@@ -373,6 +446,20 @@ There may be security fixes following the [security policy](https://go.dev/secur
 
 	Some description of the problem here.
 
+		Regular Code Block
+		Can
+		Be
+		Here
+
+	Another paragraph.
+
+	` + "```" + `
+	Fenced Code Block
+	Can
+	Be
+	Here
+	` + "```" + `
+
 	Markdown allows one to use backslash escapes, like \_underscore\_
 	or \*literal asterisks\*, so we might encounter that.
 
@@ -387,8 +474,11 @@ To builds from source, use
 
 An easy way to try go1.19beta1
 is by using the go command:
+
+` + "```" + `
 $ go install example.org@latest
 $ example download
+` + "```" + `
 
 That's all for now.
 `
@@ -417,6 +507,18 @@ There may be security fixes following the security policy <https://go.dev/securi
 
 	Some description of the problem here.
 
+	Regular Code Block
+	Can
+	Be
+	Here
+
+	Another paragraph.
+
+	Fenced Code Block
+	Can
+	Be
+	Here
+
 	Markdown allows one to use backslash escapes, like \_underscore\_
 	or \*literal asterisks\*, so we might encounter that.
 
@@ -431,6 +533,7 @@ git checkout.
 
 An easy way to try go1.19beta1
 is by using the go command:
+
 $ go install example.org@latest
 $ example download
 

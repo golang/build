@@ -44,8 +44,10 @@ RUN apt-get update && apt-get install -y \
 	mercurial \
 	subversion \
 	iptables \
+	iproute2 \
 	swig \
 	make \
+	sudo \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \
@@ -62,7 +64,7 @@ RUN mkdir -p /go1.4-amd64 \
 		/go1.4/test \
 	&& find /go1.4 -type d -name testdata | xargs rm -rf
 
-COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/* /usr/local/bin/
 COPY --from=delvebuild /go/bin/dlv /usr/local/bin/dlv
 
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]

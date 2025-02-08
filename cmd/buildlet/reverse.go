@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -25,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"go.chromium.org/luci/auth"
+	"golang.org/x/build/internal/rendezvous"
 	"golang.org/x/build/revdial/v2"
 )
 
@@ -37,7 +38,7 @@ func keyForMode(mode string) (string, error) {
 	if v := os.Getenv("GO_BUILD_KEY_PATH"); v != "" {
 		keyPath = v
 	}
-	key, err := ioutil.ReadFile(keyPath)
+	key, err := os.ReadFile(keyPath)
 	if ok, _ := strconv.ParseBool(os.Getenv("GO_BUILD_KEY_DELETE_AFTER_READ")); ok {
 		os.Remove(keyPath)
 	}
@@ -82,7 +83,7 @@ func dialCoordinator() (net.Listener, error) {
 	dial := func(ctx context.Context) (net.Conn, error) {
 		log.Printf("Dialing coordinator %s ...", addr)
 		t0 := time.Now()
-		tcpConn, err := dialCoordinatorTCP(ctx, addr)
+		tcpConn, err := dialServerTCP(ctx, addr)
 		if err != nil {
 			log.Printf("buildlet: reverse dial coordinator (%q) error after %v: %v", addr, time.Since(t0).Round(time.Second/100), err)
 			return nil, err
@@ -149,14 +150,102 @@ func dialCoordinator() (net.Listener, error) {
 	return ln, nil
 }
 
+// dialGomoteServer dials the gomote server to establish a revdial connection
+// where the returned net.Listener can be used to accept connections from the
+// gomote server.
+func dialGomoteServer() (net.Listener, error) {
+	devMode := isDevReverseMode()
+
+	if *hostname == "" {
+		*hostname = os.Getenv("HOSTNAME")
+		if *hostname == "" {
+			*hostname, _ = os.Hostname()
+		}
+		if *hostname == "" {
+			*hostname = "buildlet"
+		}
+	}
+
+	addr := *gomoteServerAddr
+	dial := func(ctx context.Context) (net.Conn, error) {
+		log.Printf("Dialing gomote server %s ...", addr)
+		t0 := time.Now()
+		tcpConn, err := dialServerTCP(ctx, addr)
+		if err != nil {
+			log.Printf("buildlet: reverse dial the gomote server (%q) error after %v: %v", addr, time.Since(t0).Round(time.Second/100), err)
+			return nil, err
+		}
+		log.Printf("Dialed coordinator %s.", addr)
+		serverName := strings.TrimSuffix(addr, ":443")
+		log.Printf("Doing TLS handshake with the gomote server (verifying hostname %q)...", serverName)
+		tcpConn.SetDeadline(time.Now().Add(30 * time.Second))
+		config := &tls.Config{
+			ServerName:         serverName,
+			InsecureSkipVerify: devMode,
+		}
+		conn := tls.Client(tcpConn, config)
+		if err := conn.Handshake(); err != nil {
+			return nil, fmt.Errorf("failed to handshake with the gomote server: %v", err)
+		}
+		tcpConn.SetDeadline(time.Time{})
+		return conn, nil
+	}
+	conn, err := dial(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	bufr := bufio.NewReader(conn)
+	bufw := bufio.NewWriter(conn)
+
+	log.Printf("Registering reverse mode with the gomote server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	success := false
+	location := "/reverse"
+	const maxRedirects = 2
+	for i := 0; i < maxRedirects; i++ {
+		req, err := http.NewRequest("GET", location, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+		req.Header.Set(rendezvous.HeaderID, os.Getenv("GOMOTEID"))
+		req.Header.Set(rendezvous.HeaderToken, mustSwarmingAuthToken(ctx))
+		req.Header.Set(rendezvous.HeaderHostname, *hostname)
+		if err := req.Write(bufw); err != nil {
+			return nil, fmt.Errorf("gomote server /reverse request failed: %v", err)
+		}
+		if err := bufw.Flush(); err != nil {
+			return nil, fmt.Errorf("gomote server /reverse request flush failed: %v", err)
+		}
+		location, err = revdial.ReadProtoSwitchOrRedirect(bufr, req)
+		if err != nil {
+			return nil, fmt.Errorf("gomote server registration failed: %v", err)
+		}
+		if location == "" {
+			success = true
+			break
+		}
+	}
+	if !success {
+		return nil, errors.New("gomote server /reverse: too many redirects")
+	}
+
+	log.Printf("Connected to gomote server; reverse dialing active")
+	ln := revdial.NewListener(conn, dial)
+	return ln, nil
+}
+
 var coordDialer = &net.Dialer{
 	Timeout:   10 * time.Second,
 	KeepAlive: 15 * time.Second,
 }
 
-// dialCoordinatorTCP returns a TCP connection to the coordinator, making
+// dialServerTCP returns a TCP connection to the server, making
 // a CONNECT request to a proxy as a fallback.
-func dialCoordinatorTCP(ctx context.Context, addr string) (net.Conn, error) {
+func dialServerTCP(ctx context.Context, addr string) (net.Conn, error) {
 	tcpConn, err := coordDialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		// If we had problems connecting to the TCP addr
@@ -166,14 +255,14 @@ func dialCoordinatorTCP(ctx context.Context, addr string) (net.Conn, error) {
 		req, _ := http.NewRequest("GET", "https://"+addr, nil)
 		proxyURL, _ := http.ProxyFromEnvironment(req)
 		if proxyURL != nil {
-			return dialCoordinatorViaCONNECT(ctx, addr, proxyURL)
+			return dialServerViaCONNECT(ctx, addr, proxyURL)
 		}
 		return nil, err
 	}
 	return tcpConn, nil
 }
 
-func dialCoordinatorViaCONNECT(ctx context.Context, addr string, proxy *url.URL) (net.Conn, error) {
+func dialServerViaCONNECT(ctx context.Context, addr string, proxy *url.URL) (net.Conn, error) {
 	proxyAddr := proxy.Host
 	if proxy.Port() == "" {
 		proxyAddr = net.JoinHostPort(proxyAddr, "80")
@@ -229,4 +318,21 @@ func homedir() string {
 		return "/root"
 	}
 	return "/"
+}
+
+func mustSwarmingAuthToken(ctx context.Context) string {
+	tok := os.Getenv("GO_BUILDLET_TOKEN")
+	if tok != "" {
+		return tok
+	}
+	a := auth.NewAuthenticator(ctx, auth.SilentLogin, auth.Options{
+		Audience:    "https://gomote.golang.org",
+		Method:      auth.LUCIContextMethod,
+		UseIDTokens: true,
+	})
+	token, err := a.GetAccessToken(15 * time.Second)
+	if err != nil {
+		log.Fatalf("unable to retrieve swarming access token: %s", err)
+	}
+	return token.AccessToken
 }

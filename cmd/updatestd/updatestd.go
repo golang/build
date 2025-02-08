@@ -41,7 +41,7 @@ func main() {
 		flag.PrintDefaults()
 	}
 	goroot := flag.String("goroot", "", "path to a working copy of https://go.googlesource.com/go (required)")
-	branch := flag.String("branch", "", "branch to target, such as master or release-branch.go1.Y (required)")
+	branch := flag.String("branch", "", "branch to target, such as master or internal-branch.go1.Y-vendor (required)")
 	flag.Parse()
 	if flag.NArg() != 0 || *goroot == "" || *branch == "" {
 		flag.Usage()
@@ -70,7 +70,7 @@ func main() {
 	// Fetch latest hashes of Go projects from Gerrit,
 	// using the specified branch name.
 	//
-	// This gives us a consistent snapshot of all golang.org/x module versions
+	// We get a fairly consistent snapshot of all golang.org/x module versions
 	// at a given point in time. This ensures selection of latest available
 	// pseudo-versions is done without being subject to module mirror caching,
 	// and that selected pseudo-versions can be re-used across multiple modules.
@@ -79,18 +79,19 @@ func main() {
 	// commits that are selected and reporting if any of them have a failure.
 	//
 	cl := gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth)
-	projs, err := cl.GetProjects(context.Background(), *branch)
+	projs, err := cl.ListProjects(context.Background())
 	if err != nil {
 		log.Fatalln("failed to get a list of Gerrit projects:", err)
 	}
 	hashes := map[string]string{}
-	for name, p := range projs {
-		if p.State != "ACTIVE" {
+	for _, p := range projs {
+		b, err := cl.GetBranch(context.Background(), p.Name, *branch)
+		if errors.Is(err, gerrit.ErrResourceNotExist) {
 			continue
+		} else if err != nil {
+			log.Fatalf("failed to get the %q branch of Gerrit project %q: %v\n", *branch, p.Name, err)
 		}
-		if hash, ok := p.Branches[*branch]; ok {
-			hashes[name] = hash
-		}
+		hashes[p.Name] = b.Revision
 	}
 
 	w := Work{
@@ -171,11 +172,8 @@ func (w Work) UpdateModule(dir string) error {
 		gerritProj := m.Path[len("golang.org/x/"):]
 		hash, ok := w.ProjectHashes[gerritProj]
 		if !ok {
-			if m.Indirect {
-				log.Printf("skipping %s because branch %s doesn't exist and it's indirect\n", m.Path, w.Branch)
-				continue
-			}
-			return fmt.Errorf("no hash for Gerrit project %q", gerritProj)
+			log.Printf("skipping %s because branch %s doesn't exist\n", m.Path, w.Branch)
+			continue
 		}
 		goGet = append(goGet, m.Path+"@"+hash)
 	}
@@ -200,8 +198,7 @@ func (w Work) UpdateModule(dir string) error {
 // It returns the main module and other modules separately
 // for convenience to the UpdateModule caller.
 //
-// See https://golang.org/cmd/go/#hdr-The_main_module_and_the_build_list
-// and https://golang.org/ref/mod#glos-build-list.
+// See https://go.dev/ref/mod#go-list-m and https://go.dev/ref/mod#glos-build-list.
 func buildList(dir string) (main module, deps []module) {
 	out := runner{dir}.runOut(goCmd, "list", "-mod=readonly", "-m", "-json", "all")
 	for dec := json.NewDecoder(bytes.NewReader(out)); ; {
@@ -222,9 +219,8 @@ func buildList(dir string) (main module, deps []module) {
 }
 
 type module struct {
-	Path     string // Module path.
-	Main     bool   // Is this the main module?
-	Indirect bool   // Is this module only an indirect dependency of main module?
+	Path string // Module path.
+	Main bool   // Is this the main module?
 }
 
 // gorootVersion reads the GOROOT/src/internal/goversion/goversion.go

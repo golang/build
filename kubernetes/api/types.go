@@ -53,7 +53,7 @@ package api
 // IANA_SVC_NAME: This is a string, no more than 15 characters long, that
 //      conforms to the definition of IANA service name in RFC 6335.
 //      It must contains at least one letter [a-z] and it must contains only [a-z0-9-].
-//      Hypens ('-') cannot be leading or trailing character of the string
+//      Hyphens ('-') cannot be leading or trailing character of the string
 //      and cannot be adjacent to other hyphens.
 
 // TypeMeta describes an individual object in an API response or request
@@ -370,7 +370,7 @@ type PersistentVolumeSpec struct {
 	ClaimRef *ObjectReference `json:"claimRef,omitempty"`
 	// What happens to a persistent volume when released from its claim.
 	// Valid options are Retain (default) and Recycle.
-	// Recyling must be supported by the volume plugin underlying this persistent volume.
+	// Recycling must be supported by the volume plugin underlying this persistent volume.
 	// More info: http://releases.k8s.io/HEAD/docs/user-guide/persistent-volumes.md#recycling-policy
 	PersistentVolumeReclaimPolicy PersistentVolumeReclaimPolicy `json:"persistentVolumeReclaimPolicy,omitempty"`
 }
@@ -1370,7 +1370,7 @@ type ReplicationControllerSpec struct {
 // ReplicationControllerStatus represents the current status of a replication
 // controller.
 type ReplicationControllerStatus struct {
-	// Replicas is the most recently oberved number of replicas.
+	// Replicas is the most recently observed number of replicas.
 	// More info: http://releases.k8s.io/HEAD/docs/user-guide/replication-controller.md#what-is-a-replication-controller
 	Replicas int `json:"replicas"`
 
@@ -1739,7 +1739,7 @@ type NodeStatus struct {
 	// Queried from cloud provider, if available.
 	// More info: http://releases.k8s.io/HEAD/docs/admin/node.md#node-addresses
 	Addresses []NodeAddress `json:"addresses,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
-	// NodeSystemInfo is a set of ids/uuids to uniquely identify the node.
+	// NodeInfo is a set of ids/uuids to uniquely identify the node.
 	// More info: http://releases.k8s.io/HEAD/docs/admin/node.md#node-info
 	NodeInfo NodeSystemInfo `json:"nodeInfo,omitempty"`
 }

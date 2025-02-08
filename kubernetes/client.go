@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -28,7 +27,7 @@ import (
 type Client struct {
 	httpClient *http.Client
 
-	// endPointURL is the Kubernetes master URL ending in
+	// endpointURL is the Kubernetes master URL ending in
 	// "/api/v1".
 	endpointURL string
 
@@ -70,7 +69,7 @@ func (c *Client) nsEndpoint() string {
 
 // RunLongLivedPod creates a new pod resource in the default pod namespace with
 // the given pod API specification. It assumes the pod runs a
-// long-lived server (i.e. if the container exit quickly quickly, even
+// long-lived server (i.e. if the container exit quickly, even
 // with success, then that is an error).
 //
 // It returns the pod status once it has entered the Running phase.
@@ -90,7 +89,7 @@ func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodSta
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: POST %q: %v", postURL, err)
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request body for POST %q: %v", postURL, err)
@@ -142,7 +141,7 @@ func (c *Client) do(ctx context.Context, method, urlStr string, dst interface{})
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		body, _ := ioutil.ReadAll(res.Body)
+		body, _ := io.ReadAll(res.Body)
 		return fmt.Errorf("%v %s: %v, %s", method, urlStr, res.Status, body)
 	}
 	if dst != nil {
@@ -212,7 +211,7 @@ func (c *Client) GetPods(ctx context.Context) ([]api.Pod, error) {
 	return list.Items, nil
 }
 
-// PodDelete deletes the specified Kubernetes pod.
+// DeletePod deletes the specified Kubernetes pod.
 func (c *Client) DeletePod(ctx context.Context, podName string) error {
 	url := c.nsEndpoint() + "pods/" + podName
 	req, err := http.NewRequest("DELETE", url, strings.NewReader(`{"gracePeriodSeconds":0}`))
@@ -223,7 +222,7 @@ func (c *Client) DeletePod(ctx context.Context, podName string) error {
 	if err != nil {
 		return fmt.Errorf("failed to make request: DELETE %q: %v", url, err)
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return fmt.Errorf("failed to read response body: DELETE %q: %v", url, err)
@@ -335,7 +334,7 @@ func (c *Client) _WatchPod(ctx context.Context, podName, podResourceVersion stri
 
 		// bufio.Reader.ReadBytes is blocking, so we watch for
 		// context timeout or cancellation in a goroutine
-		// and close the response body when see see it. The
+		// and close the response body when see it. The
 		// response body is also closed via defer when the
 		// request is made, but closing twice is OK.
 		go func() {
@@ -389,7 +388,7 @@ func (c *Client) PodStatus(ctx context.Context, podName string) (*api.PodStatus,
 		return nil, fmt.Errorf("failed to make request: GET %q: %v", getURL, err)
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read request body for GET %q: %v", getURL, err)
@@ -418,7 +417,7 @@ func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to make request: GET %q: %v", url, err)
 	}
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return "", fmt.Errorf("failed to read response body: GET %q: %v", url, err)
@@ -429,7 +428,7 @@ func (c *Client) PodLog(ctx context.Context, podName string) (string, error) {
 	return string(body), nil
 }
 
-// PodNodes returns the list of nodes that comprise the Kubernetes cluster
+// GetNodes returns the list of nodes that comprise the Kubernetes cluster
 func (c *Client) GetNodes(ctx context.Context) ([]api.Node, error) {
 	var list api.NodeList
 	if err := c.do(ctx, "GET", c.endpointURL+"/nodes", &list); err != nil {

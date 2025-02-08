@@ -1,0 +1,39 @@
+# Copyright 2023 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: makemac-deployment
+spec:
+  selector:
+    matchLabels:
+      app: makemac
+  template:
+    metadata:
+      labels:
+        app: makemac
+    spec:
+      serviceAccountName: makemac
+      containers:
+      - name: makemac
+        image: gcr.io/symbolic-datum-552/makemac:latest
+        imagePullPolicy: Always
+        command: ["/makemac", "-macservice-api-key=secret:macservice-api-key"]
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: prod
+  name: makemac
+  annotations:
+    iam.gke.io/gcp-service-account: makemac@symbolic-datum-552.iam.gserviceaccount.com

@@ -11,9 +11,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -35,10 +35,6 @@ import (
 	"golang.org/x/build/maintner/godata"
 	repospkg "golang.org/x/build/repos"
 	"golang.org/x/sync/errgroup"
-)
-
-const (
-	goBase = "https://go.googlesource.com/"
 )
 
 var (
@@ -71,7 +67,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("creating cache dir: %v", err)
 	}
-	credsDir, err := ioutil.TempDir("", "gitmirror-credentials")
+	credsDir, err := os.MkdirTemp("", "gitmirror-credentials")
 	if err != nil {
 		log.Fatalf("creating credentials dir: %v", err)
 	}
@@ -82,6 +78,7 @@ func main() {
 		repos:        map[string]*repo{},
 		cacheDir:     cacheDir,
 		homeDir:      credsDir,
+		goBase:       "https://go.googlesource.com/",
 		gerritClient: gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
 		mirrorGitHub: *flagMirrorGitHub,
 		mirrorCSR:    *flagMirrorCSR,
@@ -138,7 +135,7 @@ func writeCredentials(home string) error {
 			return fmt.Errorf("reading github key from secret manager: %v", err)
 		}
 		privKeyPath := filepath.Join(home, secret.NameGitHubSSHKey)
-		if err := ioutil.WriteFile(privKeyPath, []byte(privKey+"\n"), 0600); err != nil {
+		if err := os.WriteFile(privKeyPath, []byte(privKey+"\n"), 0600); err != nil {
 			return err
 		}
 		fmt.Fprintf(sshConfig, "Host github.com\n  IdentityFile %v\n", privKeyPath)
@@ -149,10 +146,10 @@ func writeCredentials(home string) error {
 		fmt.Fprintf(gitConfig, "[credential \"https://source.developers.google.com\"]\n  helper=gcloud.sh\n")
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(home, ".gitconfig"), gitConfig.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), gitConfig.Bytes(), 0600); err != nil {
 		return err
 	}
-	if err := ioutil.WriteFile(sshConfigPath, sshConfig.Bytes(), 0600); err != nil {
+	if err := os.WriteFile(sshConfigPath, sshConfig.Bytes(), 0600); err != nil {
 		return err
 	}
 
@@ -161,7 +158,7 @@ func writeCredentials(home string) error {
 
 func retrieveSecret(ctx context.Context, name string) (string, error) {
 	if *flagSecretsDir != "" {
-		secret, err := ioutil.ReadFile(filepath.Join(*flagSecretsDir, name))
+		secret, err := os.ReadFile(filepath.Join(*flagSecretsDir, name))
 		return string(secret), err
 	}
 	sc := secret.MustNewClient()
@@ -171,7 +168,7 @@ func retrieveSecret(ctx context.Context, name string) (string, error) {
 
 func createCacheDir() (string, error) {
 	if *flagCacheDir == "" {
-		dir, err := ioutil.TempDir("", "gitmirror")
+		dir, err := os.MkdirTemp("", "gitmirror")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -203,6 +200,7 @@ type gitMirror struct {
 	cacheDir string
 	// homeDir is used as $HOME for all commands, allowing easy configuration overrides.
 	homeDir                 string
+	goBase                  string // Base URL/path for Go upstream repos.
 	gerritClient            *gerrit.Client
 	mirrorGitHub, mirrorCSR bool
 	timeoutScale            int
@@ -212,7 +210,7 @@ func (m *gitMirror) addRepo(meta *repospkg.Repo) *repo {
 	name := meta.GoGerritProject
 	r := &repo{
 		name:    name,
-		url:     goBase + name,
+		url:     m.goBase + name,
 		meta:    meta,
 		root:    filepath.Join(m.cacheDir, name),
 		changed: make(chan bool, 1),
@@ -228,12 +226,14 @@ func (m *gitMirror) addRepo(meta *repospkg.Repo) *repo {
 func (m *gitMirror) addMirrors() error {
 	for _, repo := range m.repos {
 		if m.mirrorGitHub && repo.meta.MirrorToGitHub {
-			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git"); err != nil {
+			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git", ""); err != nil {
 				return fmt.Errorf("adding GitHub remote: %v", err)
 			}
 		}
 		if m.mirrorCSR && repo.meta.MirrorToCSRProject != "" {
-			if err := repo.addRemote("csr", "https://source.developers.google.com/p/"+repo.meta.MirrorToCSRProject+"/r/"+repo.name); err != nil {
+			// Option "nokeycheck" skips Cloud Source Repositories' private
+			// key checking. We have dummy keys checked in as test data.
+			if err := repo.addRemote("csr", "https://source.developers.google.com/p/"+repo.meta.MirrorToCSRProject+"/r/"+repo.name, "nokeycheck"); err != nil {
 				return fmt.Errorf("adding CSR remote: %v", err)
 			}
 		}
@@ -320,15 +320,20 @@ func (r *statusRing) foreachDesc(fn func(statusEntry)) {
 	}
 }
 
+type remote struct {
+	name       string // name as configured in the repo.
+	pushOption string // optional extra push option (--push-option).
+}
+
 // repo represents a repository to be watched.
 type repo struct {
 	name    string
 	url     string
-	root    string // on-disk location of the git repo, *cacheDir/name
+	root    string // on-disk location of the bare git repo, *cacheDir/name
 	meta    *repospkg.Repo
 	changed chan bool // sent to when a change comes in
 	status  statusRing
-	dests   []string // destination remotes to mirror to
+	dests   []remote // destination remotes to mirror to
 	mirror  *gitMirror
 
 	mu        sync.Mutex
@@ -339,7 +344,8 @@ type repo struct {
 	lastGood  time.Time
 }
 
-// init sets up the repo, cloning the repository to the local root.
+// init sets up the repo, cloning the remote repository from r.url
+// to a local --mirror (which implies --bare) repository at r.root.
 func (r *repo) init() error {
 	canReuse := true
 	if _, err := os.Stat(filepath.Join(r.root, "FETCH_HEAD")); err != nil {
@@ -389,6 +395,7 @@ func (r *repo) runGitQuiet(args ...string) ([]byte, []byte, error) {
 		envutil.SetDir(cmd, "/")
 	} else {
 		envutil.SetDir(cmd, r.root)
+		envutil.SetEnv(cmd, "GIT_DIR="+r.root)
 	}
 	envutil.SetEnv(cmd, "HOME="+r.mirror.homeDir)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
@@ -446,8 +453,11 @@ func (r *repo) setStatus(status string) {
 	r.status.add(status)
 }
 
-func (r *repo) addRemote(name, url string) error {
-	r.dests = append(r.dests, name)
+func (r *repo) addRemote(name, url, pushOption string) error {
+	r.dests = append(r.dests, remote{
+		name:       name,
+		pushOption: pushOption,
+	})
 	if err := os.MkdirAll(filepath.Join(r.root, "remotes"), 0777); err != nil {
 		return err
 	}
@@ -458,7 +468,7 @@ func (r *repo) addRemote(name, url string) error {
 	remote := "URL: " + url + "\n" +
 		"Push: +refs/heads/*:refs/heads/*\n" +
 		"Push: +refs/tags/*:refs/tags/*\n"
-	return ioutil.WriteFile(filepath.Join(r.root, "remotes", name), []byte(remote), 0777)
+	return os.WriteFile(filepath.Join(r.root, "remotes", name), []byte(remote), 0777)
 }
 
 // loop continuously runs "git fetch" in the repo, checks for new
@@ -526,18 +536,23 @@ func (r *repo) fetch() error {
 
 // push runs "git push -f --mirror dest" in the repository root.
 // It tries three times, just in case it failed because of a transient error.
-func (r *repo) push(dest string) error {
+func (r *repo) push(dest remote) error {
 	err := r.try(3, func(attempt int) error {
 		r.setStatus(fmt.Sprintf("syncing to %v, attempt %d", dest, attempt))
-		if _, stderr, err := r.runGitLogged("push", "-f", "--mirror", dest); err != nil {
+		args := []string{"push", "-f", "--mirror"}
+		if dest.pushOption != "" {
+			args = append(args, "--push-option", dest.pushOption)
+		}
+		args = append(args, dest.name)
+		if _, stderr, err := r.runGitLogged(args...); err != nil {
 			return fmt.Errorf("%v\n\n%s", err, stderr)
 		}
 		return nil
 	})
 	if err != nil {
-		r.setStatus("sync to " + dest + " failed")
+		r.setStatus("sync to " + dest.name + " failed")
 	} else {
-		r.setStatus("did sync to " + dest)
+		r.setStatus("did sync to " + dest.name)
 	}
 	return err
 }
@@ -683,15 +698,19 @@ func (m *gitMirror) subscribeToMaintnerAndTickle() error {
 func (m *gitMirror) gerritMetaMap() (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	meta, err := m.gerritClient.GetProjects(ctx, "master")
+	projs, err := m.gerritClient.ListProjects(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("gerritClient.GetProjects: %v", err)
+		return nil, fmt.Errorf("gerritClient.ListProjects: %v", err)
 	}
 	result := map[string]string{}
-	for repo, v := range meta {
-		if master, ok := v.Branches["master"]; ok {
-			result[repo] = master
+	for _, p := range projs {
+		b, err := m.gerritClient.GetBranch(ctx, p.Name, "master")
+		if errors.Is(err, gerrit.ErrResourceNotExist) {
+			continue
+		} else if err != nil {
+			return nil, fmt.Errorf(`gerritClient.GetBranch(ctx, %q, "master"): %v`, p.Name, err)
 		}
+		result[p.Name] = b.Revision
 	}
 	return result, nil
 }
@@ -715,7 +734,7 @@ func handleDebugEnv(w http.ResponseWriter, r *http.Request) {
 // See runCmdContextLinux.
 var runCmdContext = runCmdContextDefault
 
-// runCommandContextDefault runs cmd controlled by ctx.
+// runCmdContextDefault runs cmd controlled by ctx.
 func runCmdContextDefault(ctx context.Context, cmd *exec.Cmd) error {
 	if err := cmd.Start(); err != nil {
 		return err

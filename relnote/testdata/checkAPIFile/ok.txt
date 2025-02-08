@@ -1,0 +1,9 @@
+-- api.txt --
+pkg foo, type T #123
+pkg bar, type T #123
+-- stdlib/minor/foo/123.md --
+TODO
+-- stdlib/minor/bar/123.md --
+A sentence.
+-- want --
+

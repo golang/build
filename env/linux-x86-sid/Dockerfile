@@ -42,6 +42,8 @@ RUN apt-get update && apt-get install -y \
 	netbase \
 	openssh-server \
 	make \
+	sudo \
+	iproute2 \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Otherwise we get "Missing privilege separation directory: /run/sshd" ...
@@ -61,6 +63,6 @@ RUN mkdir -p /go1.4-amd64 \
 		/go1.4/test \
 	&& find /go1.4 -type d -name testdata | xargs rm -rf
 
-COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/* /usr/local/bin/
 
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]

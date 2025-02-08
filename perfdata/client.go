@@ -1,4 +1,4 @@
-// Copyright 2017 The Go Authors.  All rights reserved.
+// Copyright 2017 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,15 +6,14 @@
 package perfdata
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 
-	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
 	"golang.org/x/perf/storage/benchfmt"
 )
@@ -54,7 +53,7 @@ func (c *Client) Query(ctx context.Context, q string) (io.ReadCloser, error) {
 	}
 	if resp.StatusCode != 200 {
 		defer resp.Body.Close()
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +94,7 @@ func (c *Client) ListUploads(ctx context.Context, q string, extraLabels []string
 		return &UploadList{err: err}
 	}
 	if resp.StatusCode != 200 {
-		body, err := ioutil.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return &UploadList{err: err}
 		}
@@ -187,7 +186,7 @@ func (c *Client) NewUpload(ctx context.Context) *Upload {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != 200 {
-			body, _ := ioutil.ReadAll(resp.Body)
+			body, _ := io.ReadAll(resp.Body)
 			errCh <- fmt.Errorf("upload failed: %v\n%s", resp.Status, body)
 			return
 		}

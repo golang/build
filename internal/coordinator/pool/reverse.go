@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package pool
 
@@ -476,7 +475,7 @@ type reverseBuildlet struct {
 	// It is the key into the dashboard.Hosts map.
 	hostType string
 
-	// inUseAs signifies that the buildlet is in use.
+	// inUse signifies that the buildlet is in use.
 	// inUseTime is when it entered that state.
 	// inHealthCheck is whether it's inUse due to a health check.
 	// All three are guarded by the mutex on ReverseBuildletPool.
@@ -620,7 +619,7 @@ func (s byTypeThenHostname) Less(i, j int) bool {
 	return ti < tj
 }
 
-// builderrKey generates the builder key used by reverse builders
+// builderKey generates the builder key used by reverse builders
 // to authenticate with the coordinator.
 func builderKey(builder string) string {
 	if len(builderMasterKey) == 0 {

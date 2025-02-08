@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build ignore
-// +build ignore
 
 // The update-readmes.go tool creates or updates README.md files in
 // the golang.org/x/build tree. It only updates files if they are
@@ -19,7 +18,6 @@ import (
 	"bytes"
 	"fmt"
 	"go/build"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -61,7 +59,7 @@ func main() {
 			return nil
 		}
 		readmePath := filepath.Join(pkg.Dir, "README.md")
-		exist, err := ioutil.ReadFile(readmePath)
+		exist, err := os.ReadFile(readmePath)
 		if err != nil && !os.IsNotExist(err) {
 			// A real error.
 			return err
@@ -85,7 +83,7 @@ func main() {
 		if bytes.Equal(exist, newContents) {
 			return nil
 		}
-		if err := ioutil.WriteFile(readmePath, newContents, 0644); err != nil {
+		if err := os.WriteFile(readmePath, newContents, 0644); err != nil {
 			return err
 		}
 		log.Printf("Wrote %s", readmePath)

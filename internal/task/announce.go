@@ -7,7 +7,9 @@ package task
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
+	goversion "go/version"
 	"io"
 	"mime"
 	"net/http"
@@ -32,16 +34,19 @@ import (
 )
 
 type releaseAnnouncement struct {
+	// Kind is the kind of release being announced.
+	Kind ReleaseKind
+
 	// Version is the Go version that has been released.
 	//
 	// The version string must use the same format as Go tags. For example:
-	// 	• "go1.17.2" for a minor Go release
-	// 	• "go1.18" for a major Go release
-	// 	• "go1.18beta1" or "go1.18rc1" for a pre-release
+	//   - "go1.21rc2" for a pre-release
+	//   - "go1.21.0" for a major Go release
+	//   - "go1.21.1" for a minor Go release
 	Version string
 	// SecondaryVersion is an older Go version that was also released.
 	// This only applies to minor releases when two releases are made.
-	// For example, "go1.16.10".
+	// For example, "go1.20.9".
 	SecondaryVersion string
 
 	// Security is a list of descriptions, one for each distinct
@@ -74,6 +79,10 @@ type releasePreAnnouncement struct {
 	// release pre-announcement. It should not reveal details
 	// beyond what's allowed by the security policy.
 	Security string
+
+	// CVEs is the list of CVEs for PRIVATE track fixes to
+	// be included in the release pre-announcement.
+	CVEs []string
 
 	// Names is an optional list of release coordinator names to
 	// include in the sign-off message.
@@ -123,13 +132,14 @@ type SentMail struct {
 	Subject string // Subject of the email. Expected to be unique so it can be used to identify the email.
 }
 
-// AnnounceRelease sends an email announcing a Go release to Google Groups.
-func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions []string, security []string, users []string) (SentMail, error) {
+// AnnounceRelease sends an email to Google Groups
+// announcing that a Go release has been published.
+func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security []string, users []string) (SentMail, error) {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for announce release task; a minimum of a minute left on context is required")
 	}
-	if err := oneOrTwoGoVersions(versions); err != nil {
-		return SentMail{}, err
+	if len(published) < 1 || len(published) > 2 {
+		return SentMail{}, fmt.Errorf("got %d published Go releases, AnnounceRelease supports only 1 or 2 at once", len(published))
 	}
 	names, err := coordinatorFirstNames(users)
 	if err != nil {
@@ -137,12 +147,13 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions [
 	}
 
 	r := releaseAnnouncement{
-		Version:  versions[0],
+		Kind:     kind,
+		Version:  published[0].Version,
 		Security: security,
 		Names:    names,
 	}
-	if len(versions) == 2 {
-		r.SecondaryVersion = versions[1]
+	if len(published) == 2 {
+		r.SecondaryVersion = published[1].Version
 	}
 
 	// Generate the announcement email.
@@ -157,7 +168,7 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions [
 	// Before sending, check to see if this announcement already exists.
 	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
 		// Proceeding would risk sending a duplicate email, so error out instead.
-		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %v", err)
+		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %w", err)
 	} else if threadURL != "" {
 		// This should never happen since this task runs once per release.
 		// It can happen under unusual circumstances, for example if the task crashes after
@@ -185,12 +196,12 @@ func (t AnnounceMailTasks) AnnounceRelease(ctx *workflow.TaskContext, versions [
 
 // PreAnnounceRelease sends an email pre-announcing a Go release
 // containing PRIVATE track security fixes planned for the target date.
-func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, versions []string, target Date, security string, users []string) (SentMail, error) {
+func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, versions []string, target Date, security string, cves []string, users []string) (SentMail, error) {
 	if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < time.Minute {
 		return SentMail{}, fmt.Errorf("insufficient time for pre-announce release task; a minimum of a minute left on context is required")
 	}
-	if err := oneOrTwoGoVersions(versions); err != nil {
-		return SentMail{}, err
+	if len(versions) < 1 || len(versions) > 2 {
+		return SentMail{}, fmt.Errorf("got %d planned Go releases, PreAnnounceRelease supports only 1 or 2 at once", len(versions))
 	}
 	now := time.Now().UTC()
 	if t.testHookNow != nil {
@@ -202,6 +213,9 @@ func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, version
 	if security == "" {
 		return SentMail{}, fmt.Errorf("security content is not specified")
 	}
+	if len(cves) == 0 {
+		return SentMail{}, errors.New("CVEs are not specified")
+	}
 	names, err := coordinatorFirstNames(users)
 	if err != nil {
 		return SentMail{}, err
@@ -211,6 +225,7 @@ func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, version
 		Target:   target,
 		Version:  versions[0],
 		Security: security,
+		CVEs:     cves,
 		Names:    names,
 	}
 	if len(versions) == 2 {
@@ -228,7 +243,7 @@ func (t AnnounceMailTasks) PreAnnounceRelease(ctx *workflow.TaskContext, version
 
 	// Before sending, check to see if this pre-announcement already exists.
 	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
-		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %v", err)
+		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %w", err)
 	} else if threadURL != "" {
 		ctx.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
 		return SentMail{m.Subject}, nil
@@ -263,16 +278,45 @@ func coordinatorEmails(users []string) ([]string, error) {
 func mapCoordinators(users []string, f func(*gophers.Person) string) ([]string, error) {
 	var outs []string
 	for _, user := range users {
-		person := gophers.GetPerson(user + "@golang.org")
-		if person == nil {
-			person = gophers.GetPerson(user + "@google.com")
-		}
-		if person == nil {
-			return nil, fmt.Errorf("unknown username %q: no @golang or @google account", user)
+		person, err := lookupCoordinator(user)
+		if err != nil {
+			return nil, err
 		}
 		outs = append(outs, f(person))
 	}
 	return outs, nil
+}
+
+// CheckCoordinators checks that all users are known
+// and have required information (name, Gerrit email, GitHub user name).
+func CheckCoordinators(users []string) error {
+	var report strings.Builder
+	for _, user := range users {
+		if _, err := lookupCoordinator(user); err != nil {
+			fmt.Fprintln(&report, err)
+		}
+	}
+	if report.Len() != 0 {
+		return errors.New(report.String())
+	}
+	return nil
+}
+
+func lookupCoordinator(user string) (*gophers.Person, error) {
+	person := gophers.GetPerson(user + "@golang.org")
+	if person == nil {
+		person = gophers.GetPerson(user + "@google.com")
+	}
+	if person == nil {
+		return nil, fmt.Errorf("unknown username %q: no @golang or @google account", user)
+	}
+	if person.Name == "" {
+		return nil, fmt.Errorf("release coordinator %q is missing a name", person.Gerrit)
+	}
+	if person.GitHub == "" {
+		return nil, fmt.Errorf("release coordinator %q is missing github user name", person.Gerrit)
+	}
+	return person, nil
 }
 
 // A MailHeader is an email header.
@@ -293,23 +337,24 @@ type MailContent struct {
 // which must be one of these types:
 //   - releaseAnnouncement for a release announcement
 //   - releasePreAnnouncement for a release pre-announcement
+//   - goplsPrereleaseAnnouncement for a gopls pre-announcement
 func announcementMail(data any) (MailContent, error) {
 	// Select the appropriate template name.
 	var name string
 	switch r := data.(type) {
 	case releaseAnnouncement:
-		if i := strings.Index(r.Version, "beta"); i != -1 { // A beta release.
+		switch r.Kind {
+		case KindBeta:
 			name = "announce-beta.md"
-		} else if i := strings.Index(r.Version, "rc"); i != -1 { // Release Candidate.
+		case KindRC:
 			name = "announce-rc.md"
-		} else if strings.Count(r.Version, ".") == 1 { // Major release like "go1.X".
+		case KindMajor:
 			name = "announce-major.md"
-		} else if strings.Count(r.Version, ".") == 2 { // Minor release like "go1.X.Y".
+		case KindMinor:
 			name = "announce-minor.md"
-		} else {
-			return MailContent{}, fmt.Errorf("unknown version format: %q", r.Version)
+		default:
+			return MailContent{}, fmt.Errorf("unknown release kind: %v", r.Kind)
 		}
-
 		if len(r.Security) > 0 && name != "announce-minor.md" {
 			// The Security field isn't supported in templates other than minor,
 			// so report an error instead of silently dropping it.
@@ -323,6 +368,16 @@ func announcementMail(data any) (MailContent, error) {
 		}
 	case releasePreAnnouncement:
 		name = "pre-announce-minor.md"
+	case goplsReleaseAnnouncement:
+		name = "gopls-announce.md"
+	case goplsPrereleaseAnnouncement:
+		name = "gopls-pre-announce.md"
+	case vscodeGoReleaseAnnouncement:
+		name = "vscode-go-announce.md"
+	case vscodeGoPrereleaseAnnouncement:
+		name = "vscode-go-pre-announce.md"
+	case vscodeGoInsiderAnnouncement:
+		name = "vscode-go-insider-announce.md"
 	default:
 		return MailContent{}, fmt.Errorf("unknown template data type %T", data)
 	}
@@ -390,10 +445,18 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 	},
 
+	// shortcommit is used to shorten git commit hashes.
+	"shortcommit": func(v string) string {
+		if len(v) > 7 {
+			return v[:7]
+		}
+		return v
+	},
+
 	// short and helpers below manipulate valid Go version strings
 	// for the current needs of the announcement templates.
 	"short": func(v string) string { return strings.TrimPrefix(v, "go") },
-	// major extracts the major part of a valid Go version.
+	// major extracts the major prefix of a valid Go version.
 	// For example, major("go1.18.4") == "1.18".
 	"major": func(v string) (string, error) {
 		x, ok := version.Go1PointX(v)
@@ -401,6 +464,10 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 			return "", fmt.Errorf("internal error: version.Go1PointX(%q) is not ok", v)
 		}
 		return fmt.Sprintf("1.%d", x), nil
+	},
+	// atLeast reports whether v1 >= v2.
+	"atLeast": func(v1, v2 string) bool {
+		return goversion.Compare(v1, v2) >= 0
 	},
 	// build extracts the pre-release build number of a valid Go version.
 	// For example, build("go1.19beta2") == "2".
@@ -412,7 +479,17 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 		return "", fmt.Errorf("internal error: unhandled pre-release Go version %q", v)
 	},
-}).ParseFS(tmplDir, "template/announce-*.md", "template/pre-announce-minor.md"))
+}).ParseFS(tmplDir,
+	"template/announce-*.md",
+	"template/pre-announce-minor.md",
+	// Gopls release announcements.
+	"template/gopls-announce.md",
+	"template/gopls-pre-announce.md",
+	// VSCode Go release announcements.
+	"template/vscode-go-pre-announce.md",
+	"template/vscode-go-insider-announce.md",
+	"template/vscode-go-announce.md",
+))
 
 //go:embed template
 var tmplDir embed.FS
@@ -473,6 +550,10 @@ func (t AnnounceMailTasks) AwaitAnnounceMail(ctx *workflow.TaskContext, m SentMa
 // findGoogleGroupsThread fetches the first page of threads from the golang-announce
 // Google Groups mailing list, and looks for a thread with the matching subject line.
 // It returns its URL if found or the empty string if not found.
+//
+// findGoogleGroupsThread returns an error that matches fetchError with
+// PossiblyRetryable set to true when it has signal that repeating the
+// same call after some time may succeed.
 func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadURL string, _ error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://groups.google.com/g/golang-announce", nil)
 	if err != nil {
@@ -480,12 +561,13 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", fetchError{Err: err, PossiblyRetryable: true}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		possiblyRetryable := resp.StatusCode/100 == 5 // Consider a 5xx server response to possibly succeed later.
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		return "", fmt.Errorf("did not get acceptable status code: %v body: %q", resp.Status, body)
+		return "", fetchError{fmt.Errorf("did not get acceptable status code: %v body: %q", resp.Status, body), possiblyRetryable}
 	}
 	if ct, want := resp.Header.Get("Content-Type"), "text/html; charset=utf-8"; ct != want {
 		ctx.Printf("findGoogleGroupsThread: got response with non-'text/html; charset=utf-8' Content-Type header %q\n", ct)
@@ -495,7 +577,7 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 			return "", fmt.Errorf("got media type %q, want %q", mediaType, "text/html")
 		}
 	}
-	doc, err := html.Parse(io.LimitReader(resp.Body, 5<<20))
+	doc, err := html.Parse(retryableReader{io.LimitReader(resp.Body, 5<<20)})
 	if err != nil {
 		return "", err
 	}
@@ -547,6 +629,31 @@ func href(n *html.Node) string {
 	return ""
 }
 
+// retryableReader annotates errors from
+// RetryableReader as possibly retryable.
+type retryableReader struct{ RetryableReader io.Reader }
+
+func (r retryableReader) Read(p []byte) (n int, err error) {
+	n, err = r.RetryableReader.Read(p)
+	if err != nil && err != io.EOF {
+		err = fetchError{Err: err, PossiblyRetryable: true}
+	}
+	return n, err
+}
+
+// fetchError records an error during a fetch operation over an unreliable network.
+type fetchError struct {
+	Err error // Non-nil.
+
+	// PossiblyRetryable indicates whether Err is believed to be possibly caused by a
+	// non-terminal network error, such that the caller can expect it may not happen
+	// again if it simply tries the same fetch operation again after waiting a bit.
+	PossiblyRetryable bool
+}
+
+func (e fetchError) Error() string { return e.Err.Error() }
+func (e fetchError) Unwrap() error { return e.Err }
+
 // renderMarkdown parses Markdown source
 // and renders it to HTML and plain text.
 //
@@ -588,8 +695,8 @@ func renderMarkdown(r io.Reader) (html, text string, _ error) {
 // of our test data, since without a browser plain text is more readable than HTML.)
 //
 // The output is mostly plain text that doesn't preserve Markdown syntax (for example,
-// `code` is rendered without backticks), though there is very lightweight formatting
-// applied (links are written as "text <URL>").
+// `code` is rendered without backticks, code blocks aren't indented, and so on),
+// though there is very lightweight formatting applied (links are written as "text <URL>").
 //
 // We can in theory choose to delete this renderer at any time if its maintenance costs
 // start to outweight its benefits, since Markdown by definition is designed to be human
@@ -612,7 +719,7 @@ func (markdownToTextRenderer) Render(w io.Writer, source []byte, n ast.Node) err
 				switch n.PreviousSibling().Kind() {
 				default:
 					fmt.Fprint(w, "\n\n")
-				case ast.KindCodeBlock:
+				case ast.KindCodeBlock, ast.KindFencedCodeBlock:
 					// A code block always ends with a newline, so only need one more.
 					fmt.Fprintln(w)
 				}
@@ -634,11 +741,15 @@ func (markdownToTextRenderer) Render(w io.Writer, source []byte, n ast.Node) err
 					// If we're in a list, indent accordingly.
 					fmt.Fprint(w, strings.Repeat("\t", len(markers)))
 				}
-			case *ast.CodeBlock:
-				indent := strings.Repeat("\t", len(markers)+1) // Indent if in a list, plus one more since it's a code block.
+			case *ast.CodeBlock, *ast.FencedCodeBlock:
+				// Code blocks are printed as is in plain text.
 				for i := 0; i < n.Lines().Len(); i++ {
 					s := n.Lines().At(i)
-					fmt.Fprint(w, indent, string(source[s.Start:s.Stop]))
+					if i != 0 {
+						// If we're in a list, indent inner lines accordingly.
+						fmt.Fprint(w, strings.Repeat("\t", len(markers)))
+					}
+					fmt.Fprint(w, string(source[s.Start:s.Stop]))
 				}
 			case *ast.AutoLink:
 				// Auto-links are printed as is in plain text.

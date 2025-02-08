@@ -1,0 +1,8 @@
+Check the error when the *stdlib/*minor directory is missing.
+
+-- api.txt --
+pkg foo, type T #123
+pkg bar, type T #123
+-- want --
+No directory matches *stdlib/*minor.
+This shouldn't happen; please file a bug at https://go.dev/issues/new.

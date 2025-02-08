@@ -59,9 +59,16 @@ type BuildType int
 
 const (
 	BuildUnspecified BuildType = iota
+
 	BuildMacOS
 	BuildWindows
 	BuildGPG
+
+	BuildMacOSConstructInstallerOnly
+	BuildWindowsConstructInstallerOnly
+
+	BuildMacOSBinary
+	BuildWindowsBinary
 )
 
 // proto is the corresponding protobuf definition for the signing request build type.
@@ -73,6 +80,14 @@ func (bt BuildType) proto() protos.SignArtifactRequest_BuildType {
 		return protos.SignArtifactRequest_BUILD_TYPE_WINDOWS
 	case BuildGPG:
 		return protos.SignArtifactRequest_BUILD_TYPE_GPG
+	case BuildMacOSConstructInstallerOnly:
+		return protos.SignArtifactRequest_BUILD_TYPE_MACOS_CONSTRUCT_INSTALLER_ONLY
+	case BuildWindowsConstructInstallerOnly:
+		return protos.SignArtifactRequest_BUILD_TYPE_WINDOWS_CONSTRUCT_INSTALLER_ONLY
+	case BuildMacOSBinary:
+		return protos.SignArtifactRequest_BUILD_TYPE_MACOS_BINARY
+	case BuildWindowsBinary:
+		return protos.SignArtifactRequest_BUILD_TYPE_WINDOWS_BINARY
 	default:
 		return protos.SignArtifactRequest_BUILD_TYPE_UNSPECIFIED
 	}
@@ -86,6 +101,14 @@ func (bt BuildType) String() string {
 		return "Windows"
 	case BuildGPG:
 		return "GPG"
+	case BuildMacOSConstructInstallerOnly:
+		return "macOS (construct installer only)"
+	case BuildWindowsConstructInstallerOnly:
+		return "Windows (construct installer only)"
+	case BuildMacOSBinary:
+		return "macOS (binary)"
+	case BuildWindowsBinary:
+		return "Windows (binary)"
 	default:
 		return "unspecified"
 	}

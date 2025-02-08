@@ -21,23 +21,6 @@ $ gcloud auth configure-docker
 
 Install the App Engine Go SDK: [instructions](https://cloud.google.com/sdk/docs/quickstart-debian-ubuntu)
 
-<!--
-### Staging
-
-First, configure `gcloud`:
-
-```sh
-$ gcloud config set project go-dashboard-dev
-$ gcloud container clusters get-credentials --zone=us-central1-f go
-```
-
-Then to deploy, run:
-
-```sh
-$ make deploy-staging
-```
--->
-
 ### Prod
 
 First, configure `gcloud`:

@@ -1,12 +1,20 @@
+// Copyright 2023 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package task
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"net/url"
 	"sort"
 	"strings"
+	"time"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/shurcooL/githubv4"
 	wf "golang.org/x/build/internal/workflow"
 	goversion "golang.org/x/build/maintner/maintnerd/maintapi/version"
@@ -27,12 +35,32 @@ const (
 	KindBeta
 	KindRC
 	KindMajor
-	KindCurrentMinor
-	KindPrevMinor
+	KindMinor
 )
 
+func (k ReleaseKind) GoString() string {
+	switch k {
+	case KindUnknown:
+		return "KindUnknown"
+	case KindBeta:
+		return "KindBeta"
+	case KindRC:
+		return "KindRC"
+	case KindMajor:
+		return "KindMajor"
+	case KindMinor:
+		return "KindMinor"
+	default:
+		return fmt.Sprintf("ReleaseKind(%d)", k)
+	}
+}
+
 type ReleaseMilestones struct {
-	Current, Next int
+	// Current is the GitHub milestone number for the current Go release.
+	// For example, 279 for the "Go1.21" milestone (https://github.com/golang/go/milestone/279).
+	Current int
+	// Next is the GitHub milestone number for the next Go release of the same kind.
+	Next int
 }
 
 // FetchMilestones returns the milestone numbers for the version currently being
@@ -46,8 +74,8 @@ func (m *MilestoneTasks) FetchMilestones(ctx *wf.TaskContext, currentVersion str
 	}
 	majorVersion := fmt.Sprintf("go1.%d", x)
 
-	// RCs and betas use the major version's milestone.
-	if kind == KindRC || kind == KindBeta {
+	// Betas, RCs, and major releases use the major version's milestone.
+	if kind == KindBeta || kind == KindRC || kind == KindMajor {
 		currentVersion = majorVersion
 	}
 
@@ -117,9 +145,11 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 	if err != nil {
 		return err
 	}
+	ctx.Printf("Processing %d open issues in milestone %d.", len(issues), milestones.Current)
 	for issueNumber, labels := range issues {
 		var newLabels *[]string
 		var newMilestone *int
+		var actions []string // A short description of actions taken, for the log line.
 		removeLabel := func(name string) {
 			if !labels[name] {
 				return
@@ -131,13 +161,19 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 				}
 				*newLabels = append(*newLabels, label)
 			}
+			actions = append(actions, fmt.Sprintf("removed label %q", name))
 		}
 		if kind == KindBeta && strings.HasSuffix(version, "beta1") {
 			removeLabel("okay-after-beta1")
 		} else if kind == KindRC && strings.HasSuffix(version, "rc1") {
 			removeLabel("okay-after-rc1")
-		} else if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
+		} else if kind == KindMajor || kind == KindMinor {
 			newMilestone = &milestones.Next
+			actions = append(actions, fmt.Sprintf("pushed to milestone %d", milestones.Next))
+		}
+		if newMilestone == nil && newLabels == nil {
+			ctx.Printf("Nothing to do for issue %d.", issueNumber)
+			continue
 		}
 		_, _, err := m.Client.EditIssue(ctx, m.RepoOwner, m.RepoName, issueNumber, &github.IssueRequest{
 			Milestone: newMilestone,
@@ -146,34 +182,157 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 		if err != nil {
 			return err
 		}
+		ctx.Printf("Updated issue %d: %s.", issueNumber, strings.Join(actions, ", "))
 	}
-	if kind == KindMajor || kind == KindCurrentMinor || kind == KindPrevMinor {
+	if kind == KindMajor || kind == KindMinor {
 		_, _, err := m.Client.EditMilestone(ctx, m.RepoOwner, m.RepoName, milestones.Current, &github.Milestone{
 			State: github.String("closed"),
 		})
 		if err != nil {
 			return err
 		}
+		ctx.Printf("Closed milestone %d.", milestones.Current)
 	}
 	return nil
+}
+
+// PingEarlyIssues pings early-in-cycle issues in the development major release milestone.
+// This is done once at the opening of a release cycle, currently via a standalone workflow.
+//
+// develVersion is a value like 22 representing that Go 1.22 is the major version whose
+// development has recently started, and whose early-in-cycle issues are to be pinged.
+func (m *MilestoneTasks) PingEarlyIssues(ctx *wf.TaskContext, develVersion int, openTreeURL string) (result struct{}, _ error) {
+	milestoneName := fmt.Sprintf("Go1.%d", develVersion)
+
+	gh, ok := m.Client.(*GitHubClient)
+	if !ok || gh.V4 == nil {
+		// TODO(go.dev/issue/58856): Decide if it's worth moving the GraphQL query/mutation
+		// into GitHubClientInterface. That kinda harms readability because GraphQL code is
+		// basically a flexible API call, so it's most readable when close to where they're
+		// used. This also depends on what kind of tests we'll want to use for this.
+		return struct{}{}, fmt.Errorf("no GitHub API v4 client")
+	}
+
+	// Find all open early-in-cycle issues in the development major release milestone.
+	type issue struct {
+		ID     githubv4.ID
+		Number int
+		Title  string
+
+		TimelineItems struct {
+			Nodes []struct {
+				IssueComment struct {
+					Author struct{ Login string }
+					Body   string
+				} `graphql:"...on IssueComment"`
+			}
+		} `graphql:"timelineItems(since: $avoidDupSince, itemTypes: ISSUE_COMMENT, last: 100)"`
+	}
+	var earlyIssues []issue
+	milestoneNumber, err := m.Client.FetchMilestone(ctx, m.RepoOwner, m.RepoName, milestoneName, false)
+	if err != nil {
+		return struct{}{}, err
+	}
+	variables := map[string]interface{}{
+		"repoOwner":       githubv4.String(m.RepoOwner),
+		"repoName":        githubv4.String(m.RepoName),
+		"avoidDupSince":   githubv4.DateTime{Time: time.Now().Add(-30 * 24 * time.Hour)},
+		"milestoneNumber": githubv4.String(fmt.Sprint(milestoneNumber)), // For some reason GitHub API v4 uses string type for milestone numbers.
+		"issueCursor":     (*githubv4.String)(nil),
+	}
+	for {
+		var q struct {
+			Repository struct {
+				Issues struct {
+					Nodes    []issue
+					PageInfo struct {
+						EndCursor   githubv4.String
+						HasNextPage bool
+					}
+				} `graphql:"issues(first: 100, after: $issueCursor, filterBy: {states: OPEN, labels: \"early-in-cycle\", milestoneNumber: $milestoneNumber}, orderBy: {field: CREATED_AT, direction: ASC})"`
+			} `graphql:"repository(owner: $repoOwner, name: $repoName)"`
+		}
+		err := gh.V4.Query(ctx, &q, variables)
+		if err != nil {
+			return struct{}{}, err
+		}
+		earlyIssues = append(earlyIssues, q.Repository.Issues.Nodes...)
+		if !q.Repository.Issues.PageInfo.HasNextPage {
+			break
+		}
+		variables["issueCursor"] = githubv4.NewString(q.Repository.Issues.PageInfo.EndCursor)
+	}
+
+	// Ping them.
+	ctx.Printf("Processing %d early-in-cycle issues in %s milestone (milestone number %d).", len(earlyIssues), milestoneName, milestoneNumber)
+EarlyIssuesLoop:
+	for _, i := range earlyIssues {
+		for _, n := range i.TimelineItems.Nodes {
+			if n.IssueComment.Author.Login == "gopherbot" && strings.Contains(n.IssueComment.Body, "friendly reminder") {
+				ctx.Printf("Skipping issue %d, it was already pinged.", i.Number)
+				continue EarlyIssuesLoop
+			}
+		}
+
+		// Post a comment.
+		const dryRun = false
+		if dryRun {
+			ctx.Printf("[dry run] Would've pinged issue %d (%.32s…).", i.Number, i.Title)
+			continue
+		}
+		err := m.Client.PostComment(ctx, i.ID, fmt.Sprintf("This issue is currently labeled as early-in-cycle for Go 1.%d.\n"+
+			"That [time is now](%s), so a friendly reminder to look at it again.", develVersion, openTreeURL))
+		if err != nil {
+			return struct{}{}, err
+		}
+		ctx.Printf("Pinged issue %d (%.32s…).", i.Number, i.Title)
+		time.Sleep(3 * time.Second) // Take a moment between pinging issues to avoid a high rate of addComment mutations.
+	}
+
+	return struct{}{}, nil
 }
 
 // GitHubClientInterface is a wrapper around the GitHub v3 and v4 APIs, for
 // testing and dry-run support.
 type GitHubClientInterface interface {
-	// FetchMilestone returns the number of the requested milestone. If create is true,
-	// and the milestone doesn't exist, it will be created.
+	// FetchMilestone returns the number of the GitHub milestone with the specified name.
+	// If create is true, and the milestone doesn't exist, it will be created.
 	FetchMilestone(ctx context.Context, owner, repo, name string, create bool) (int, error)
 
 	// FetchMilestoneIssues returns all the open issues in the specified milestone
 	// and their labels.
 	FetchMilestoneIssues(ctx context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error)
 
-	// See github.Client.Issues.Edit.
-	EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
+	// See github.Client.Issues.Create.
+	CreateIssue(ctx context.Context, owner, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
 
-	// See github.Client.Issues.EditMilestone
-	EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error)
+	// See github.Client.Issues.Edit.
+	EditIssue(ctx context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error)
+
+	// See github.Client.Issues.Get.
+	GetIssue(ctx context.Context, owner, repo string, number int) (*github.Issue, *github.Response, error)
+
+	// See github.Client.Issues.EditMilestone.
+	EditMilestone(ctx context.Context, owner, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error)
+
+	// PostComment creates a comment on a GitHub issue or pull request
+	// identified by the given GitHub Node ID.
+	PostComment(_ context.Context, id githubv4.ID, body string) error
+
+	// See github.Client.Repositories.CreateRelease.
+	CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error)
+
+	// UploadReleaseAsset uploads an fs.File to a GitHub release as a release
+	// asset.
+	// It uses NewUploadRequest as github.Client.Repositories.UploadReleaseAsset
+	// only supports uploading from an os.File.
+	// Parameters:
+	//   - owner:     The account owner of the repository.
+	//   - repo:      The name of the repository.
+	//   - releaseID: The ID of the github release.
+	//   - fileName:  The name of the asset as it will appear in the release.
+	//   - file:      The content of the file to upload.
+	UploadReleaseAsset(ctx context.Context, owner, repo string, releaseID int64, fileName string, file fs.File) (*github.ReleaseAsset, error)
 }
 
 type GitHubClient struct {
@@ -198,6 +357,36 @@ func (c *GitHubClient) FetchMilestone(ctx context.Context, owner, repo, name str
 		return 0, fmt.Errorf("could not find an open milestone named %q and creating it failed: %v", name, createErr)
 	}
 	return *m.Number, nil
+}
+
+func (c *GitHubClient) UploadReleaseAsset(ctx context.Context, owner, repo string, releaseID int64, fileName string, file fs.File) (*github.ReleaseAsset, error) {
+	// Query parameter "name" is used to determine the asset name.
+	// See details https://docs.github.com/en/rest/releases/assets?apiVersion=2022-11-28#upload-a-release-asset
+	u := fmt.Sprintf("repos/%s/%s/releases/%d/assets?name=%s", owner, repo, releaseID, url.QueryEscape(fileName))
+
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if stat.IsDir() {
+		return nil, errors.New("the asset to upload can't be a directory")
+	}
+
+	req, err := c.V3.NewUploadRequest(u, file, stat.Size(), "")
+	if err != nil {
+		return nil, err
+	}
+
+	asset := new(github.ReleaseAsset)
+	if _, err = c.V3.Do(ctx, req, asset); err != nil {
+		return nil, err
+	}
+	return asset, nil
+}
+
+func (c *GitHubClient) CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
+	release, _, err := c.V3.Repositories.CreateRelease(ctx, owner, repo, release)
+	return release, err
 }
 
 func findMilestone(ctx context.Context, client *githubv4.Client, owner, repo, name string) (int, bool, error) {
@@ -305,10 +494,29 @@ more:
 	return issues, nil
 }
 
-func (c *GitHubClient) EditIssue(ctx context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+func (c *GitHubClient) EditIssue(ctx context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
 	return c.V3.Issues.Edit(ctx, owner, repo, number, issue)
 }
 
-func (c *GitHubClient) EditMilestone(ctx context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
+func (c *GitHubClient) CreateIssue(ctx context.Context, owner, repo string, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	return c.V3.Issues.Create(ctx, owner, repo, issue)
+}
+
+func (c *GitHubClient) GetIssue(ctx context.Context, owner, repo string, number int) (*github.Issue, *github.Response, error) {
+	return c.V3.Issues.Get(ctx, owner, repo, number)
+}
+
+func (c *GitHubClient) EditMilestone(ctx context.Context, owner, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
 	return c.V3.Issues.EditMilestone(ctx, owner, repo, number, milestone)
+}
+
+func (c *GitHubClient) PostComment(ctx context.Context, id githubv4.ID, body string) error {
+	return c.V4.Mutate(ctx, new(struct {
+		AddComment struct {
+			ClientMutationID string // Unused; GraphQL doesn't allow for mutations to return nothing.
+		} `graphql:"addComment(input: $input)"`
+	}), githubv4.AddCommentInput{
+		SubjectID: id,
+		Body:      githubv4.String(body),
+	}, nil)
 }

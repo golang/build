@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 // The coordinator runs the majority of the Go build system.
 //
@@ -27,7 +25,6 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -40,10 +37,15 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	"cloud.google.com/go/storage"
+	"go.chromium.org/luci/auth"
+	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
+	"go.chromium.org/luci/grpc/prpc"
+	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	builddash "golang.org/x/build/cmd/coordinator/internal/dashboard"
 	"golang.org/x/build/cmd/coordinator/internal/legacydash"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/cmd/coordinator/protos"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/gerrit"
@@ -59,12 +61,14 @@ import (
 	gomoteprotos "golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/metrics"
+	"golang.org/x/build/internal/migration"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/kubernetes/gke"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
+	"golang.org/x/exp/slices"
 	"golang.org/x/time/rate"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
@@ -176,13 +180,28 @@ func hostPathHandler(h http.Handler) http.Handler {
 
 // A linkRewriter is a ResponseWriter that rewrites links in HTML output.
 // It rewrites relative links /foo to be /host/foo, and it rewrites any link
-// https://h/foo, where h is in validHosts, to be /h/foo. This corrects the
-// links to have the right form for the test server.
+// https://h/foo or //h/foo, where h is in validHosts, to be /h/foo.
+// This corrects the links to have the right form for the local development mode.
 type linkRewriter struct {
 	http.ResponseWriter
 	host string
 	buf  []byte
 	ct   string // content-type
+}
+
+func (r *linkRewriter) WriteHeader(code int) {
+	if l := r.Header().Get("Location"); l != "" {
+		if u, err := url.Parse(l); err == nil {
+			if u.Host == "" {
+				u.Path = "/" + r.host + u.Path
+			} else if validHosts[u.Host] {
+				u.Path = "/" + u.Host + u.Path
+				u.Scheme, u.Host = "", ""
+			}
+			r.Header().Set("Location", u.String())
+		}
+	}
+	r.ResponseWriter.WriteHeader(code)
 }
 
 func (r *linkRewriter) Write(data []byte) (int, error) {
@@ -202,12 +221,12 @@ func (r *linkRewriter) Write(data []byte) (int, error) {
 }
 
 func (r *linkRewriter) Flush() {
-	repl := []string{
-		`href="/`, `href="/` + r.host + `/`,
-	}
+	var repl []string
 	for host := range validHosts {
 		repl = append(repl, `href="https://`+host, `href="/`+host)
+		repl = append(repl, `href="//`+host, `href="/`+host) // Handle scheme-less URLs.
 	}
+	repl = append(repl, `href="/`, `href="/`+r.host+`/`)
 	strings.NewReplacer(repl...).WriteString(r.ResponseWriter, string(r.buf))
 	r.buf = nil
 }
@@ -249,22 +268,26 @@ func main() {
 
 	gce := pool.NewGCEConfiguration()
 
-	goKubeClient, err := gke.NewClient(context.Background(),
-		gce.BuildEnv().KubeServices.Name,
-		gce.BuildEnv().KubeServices.Location(),
-		gke.OptNamespace(gce.BuildEnv().KubeServices.Namespace),
-		gke.OptProject(gce.BuildEnv().ProjectName),
-		gke.OptTokenSource(gce.GCPCredentials().TokenSource))
-	if err != nil {
-		log.Fatalf("connecting to GKE failed: %v", err)
+	if gce.BuildEnv().KubeServices.Name != "" {
+		goKubeClient, err := gke.NewClient(context.Background(),
+			gce.BuildEnv().KubeServices.Name,
+			gce.BuildEnv().KubeServices.Location(),
+			gke.OptNamespace(gce.BuildEnv().KubeServices.Namespace),
+			gke.OptProject(gce.BuildEnv().ProjectName),
+			gke.OptTokenSource(gce.GCPCredentials().TokenSource))
+		if err != nil {
+			log.Fatalf("connecting to GKE failed: %v", err)
+		}
+		go monitorGitMirror(goKubeClient)
+	} else {
+		log.Println("Kubernetes services disabled due to empty KubeServices.Name")
 	}
-	go monitorGitMirror(goKubeClient)
 
 	if *mode == "prod" || (*mode == "dev" && *devEnableEC2) {
 		// TODO(golang.org/issues/38337) the coordinator will use a package scoped pool
 		// until the coordinator is refactored to not require them.
-		ec2Pool := mustCreateEC2BuildletPool(sc, sp.IsSession)
-		defer ec2Pool.Close()
+		ec2PoolClose := mustCreateEC2BuildletPool(sc, sp.IsSession)
+		defer ec2PoolClose()
 	}
 
 	if *mode == "dev" {
@@ -343,8 +366,32 @@ func main() {
 	// grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
 	grpcServer := grpc.NewServer(opts...)
 
-	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, string(masterKey()), grpcServer)
-	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient}
+	var luciHTTPClient *http.Client
+	switch *mode {
+	case "prod":
+		var err error
+		luciHTTPClient, err = auth.NewAuthenticator(context.Background(), auth.SilentLogin, auth.Options{GCEAllowAsDefault: true}).Client()
+		if err != nil {
+			log.Fatalln("luci/auth.NewAuthenticator:", err)
+		}
+	case "dev":
+		var err error
+		luciHTTPClient, err = auth.NewAuthenticator(context.Background(), auth.SilentLogin, chromeinfra.DefaultAuthOptions()).Client()
+		if err != nil {
+			log.Fatalln("luci/auth.NewAuthenticator:", err)
+		}
+	}
+	buildersCl := buildbucketpb.NewBuildersClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
+	buildsCl := buildbucketpb.NewBuildsClient(&prpc.Client{
+		C:    luciHTTPClient,
+		Host: "cr-buildbucket.appspot.com",
+	})
+	luciPoll := lucipoll.NewService(maintnerClient, buildersCl, buildsCl)
+	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, luciPoll, string(masterKey()), grpcServer)
+	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient, LUCI: luciPoll}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
 	setSessionPool(sp)
 	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient())
@@ -366,7 +413,9 @@ func main() {
 	if *mode == "dev" {
 		// TODO(crawshaw): do more in dev mode
 		gce.BuildletPool().SetEnabled(*devEnableGCE)
-		go findWorkLoop()
+		if *devEnableGCE || *devEnableEC2 {
+			go findWorkLoop()
+		}
 	} else {
 		go gce.BuildletPool().CleanUpOldVMs()
 
@@ -481,7 +530,7 @@ func stagingClusterBuilders() map[string]*dashboard.BuildConfig {
 		"linux-amd64",
 		"linux-amd64-sid",
 		"linux-amd64-clang",
-		"js-wasm",
+		"js-wasm-node18",
 	} {
 		if c, ok := dashboard.Builders[name]; ok {
 			m[name] = c
@@ -1194,11 +1243,11 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 		subBranch = work.Branch
 	}
 	tryBots := dashboard.TryBuildersForProject(work.Project, work.Branch, goBranch)
-	slowBots := slowBotsFromComments(work)
+	slowBots, invalidSlowBots := slowBotsFromComments(work)
 	builders := joinBuilders(tryBots, slowBots)
 
 	key := tryWorkItemKey(work)
-	log.Printf("Starting new trybot set for %v", key)
+	log.Printf("Starting new trybot set for %v (ignored invalid terms = %q)", key, invalidSlowBots)
 	ts := &trySet{
 		tryKey: key,
 		tryID:  "T" + randHex(9),
@@ -1248,7 +1297,7 @@ func newTrySet(work *apipb.GerritTryWorkItem) *trySet {
 	// Start the main TryBot build using the selected builders.
 	// There may be additional builds, those are handled below.
 	if !testingKnobSkipBuilds {
-		go ts.notifyStarting()
+		go ts.notifyStarting(invalidSlowBots)
 	}
 	for _, bconf := range builders {
 		goVersion := types.MajorMinor{Major: int(work.GoVersion[0].Major), Minor: int(work.GoVersion[0].Minor)}
@@ -1478,12 +1527,16 @@ func (ts *trySet) statusPage() string {
 
 // notifyStarting runs in its own goroutine and posts to Gerrit that
 // the trybots have started on the user's CL with a link of where to watch.
-func (ts *trySet) notifyStarting() {
+func (ts *trySet) notifyStarting(invalidSlowBots []string) {
 	name := "TryBots"
 	if len(ts.slowBots) > 0 {
 		name = "SlowBots"
 	}
 	msg := name + " beginning. Status page: " + ts.statusPage() + "\n"
+
+	if len(invalidSlowBots) > 0 {
+		msg += fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s.\n", strings.Join(invalidSlowBots, ", "))
+	}
 
 	// If any of the requested SlowBot builders
 	// have a known issue, give users a warning.
@@ -1586,7 +1639,7 @@ func (ts *trySet) awaitTryBuild(idx int, bs *buildStatus, brev buildgo.BuilderRe
 
 // wanted reports whether this trySet is still active.
 //
-// If the commmit has been submitted, or change abandoned, or the
+// If the commit has been submitted, or change abandoned, or the
 // checkbox unchecked, wanted returns false.
 func (ts *trySet) wanted() bool {
 	statusMu.Lock()
@@ -1842,8 +1895,8 @@ func (s *testSet) initInOrder() {
 	names := make([]string, len(s.items))
 	namedItem := map[string]*testItem{}
 	for i, ti := range s.items {
-		names[i] = ti.name
-		namedItem[ti.name] = ti
+		names[i] = ti.name.Old
+		namedItem[ti.name.Old] = ti
 	}
 
 	// First do the go_test:* ones. partitionGoTests
@@ -1860,7 +1913,7 @@ func (s *testSet) initInOrder() {
 	// Then do the misc tests, which are always by themselves.
 	// (No benefit to merging them)
 	for _, ti := range s.items {
-		if !strings.HasPrefix(ti.name, "go_test:") {
+		if !strings.HasPrefix(ti.name.Old, "go_test:") {
 			s.inOrder = append(s.inOrder, []*testItem{ti})
 		}
 	}
@@ -1915,7 +1968,7 @@ func (s *testSet) initBiggestFirst() {
 
 type testItem struct {
 	set      *testSet
-	name     string        // "go_test:sort"
+	name     distTestName
 	duration time.Duration // optional approximate size
 
 	take chan token // buffered size 1: sending takes ownership of rest of fields:
@@ -1957,6 +2010,12 @@ func (ti *testItem) failf(format string, args ...interface{}) {
 	ti.output = []byte(msg)
 	ti.remoteErr = errors.New(msg)
 	close(ti.done)
+}
+
+// distTestName is the name of a dist test as discovered from 'go tool dist test -list'.
+type distTestName struct {
+	Old string // Old is dist test name converted to Go 1.20 format, like "go_test:sort" or "reboot".
+	Raw string // Raw is unmodified name from dist, suitable as an argument back to 'go tool dist test'.
 }
 
 type byTestDuration []*testItem
@@ -2006,7 +2065,7 @@ func newBuildLogBlob(objName string) (obj io.WriteCloser, url_ string) {
 			io.Closer
 		}{
 			os.Stderr,
-			ioutil.NopCloser(nil),
+			io.NopCloser(nil),
 		}, "devmode://build-log/" + objName
 	}
 	if pool.NewGCEConfiguration().StorageClient() == nil {
@@ -2053,12 +2112,18 @@ func importPathOfRepo(repo string) string {
 
 // slowBotsFromComments looks at the Gerrit comments in work,
 // and returns all build configurations that were explicitly
-// requested to be tested as SlowBots via the TRY= syntax.
-func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.BuildConfig) {
+// requested to be tested as SlowBots via the TRY= syntax. It
+// also returns any build terms that are not a valid builder
+// or alias.
+func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.BuildConfig, invalidTryTerms []string) {
 	tryTerms := latestTryTerms(work)
+	invalidTryTerms = slices.Clone(tryTerms)
 	for _, bc := range dashboard.Builders {
 		for _, term := range tryTerms {
 			if bc.MatchesSlowBotTerm(term) {
+				invalidTryTerms = slices.DeleteFunc(invalidTryTerms, func(e string) bool {
+					return e == term
+				})
 				builders = append(builders, bc)
 				break
 			}
@@ -2067,7 +2132,7 @@ func slowBotsFromComments(work *apipb.GerritTryWorkItem) (builders []*dashboard.
 	sort.Slice(builders, func(i, j int) bool {
 		return builders[i].Name < builders[j].Name
 	})
-	return builders
+	return builders, invalidTryTerms
 }
 
 type xRepoAndBuilder struct {
@@ -2139,7 +2204,7 @@ func latestTryMessage(work *apipb.GerritTryWorkItem) string {
 	return ""
 }
 
-// handlePostSubmitActiveJSON serves JSON with the the info for which builds
+// handlePostSubmitActiveJSON serves JSON with the info for which builds
 // are currently building. The build.golang.org dashboard renders these as little
 // blue gophers that link to the each build's status.
 // TODO: this a transitional step on our way towards merging build.golang.org into
@@ -2184,7 +2249,12 @@ func mustCreateSecretClientOnGCE() *secret.Client {
 	return secret.MustNewClient()
 }
 
-func mustCreateEC2BuildletPool(sc *secret.Client, isRemoteBuildlet func(instName string) bool) *pool.EC2Buildlet {
+func mustCreateEC2BuildletPool(sc *secret.Client, isRemoteBuildlet func(instName string) bool) (close func()) {
+	if migration.StopEC2BuildletPool {
+		log.Println("not creating EC2 buildlet pool")
+		return func() {}
+	}
+
 	awsKeyID, err := sc.Retrieve(context.Background(), secret.NameAWSKeyID)
 	if err != nil {
 		log.Fatalf("unable to retrieve secret %q: %s", secret.NameAWSKeyID, err)
@@ -2204,7 +2274,7 @@ func mustCreateEC2BuildletPool(sc *secret.Client, isRemoteBuildlet func(instName
 	if err != nil {
 		log.Fatalf("unable to create EC2 buildlet pool: %s", err)
 	}
-	return ec2Pool
+	return ec2Pool.Close
 }
 
 func mustRetrieveSSHCertificateAuthority() (privateKey []byte) {

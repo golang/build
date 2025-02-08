@@ -1,0 +1,33 @@
+# Copyright 2023 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+# build locally from debian-sid.sh
+FROM murp/debian:sid-ppc64
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get update && \
+    apt-get install --yes \
+          gcc curl strace \
+          ca-certificates netbase \
+          procps lsof psmisc \
+          libc6-dev gdb bzip2 \
+          openssh-server
+
+# A ppc64 bootstrap toolchain provided locally until the minimum bootstrap
+# toolchain is >= 1.20 for GOPPC64=power10 support.
+COPY go-linux-ppc64-bootstrap.tbz /tmp/go-linux-ppc64-bootstrap.tbz
+
+RUN mkdir /usr/local/go-bootstrap && \
+    tar -xf /tmp/go-linux-ppc64-bootstrap.tbz --strip-components=1 -C /usr/local/go-bootstrap && \
+    rm /tmp/go-linux-ppc64-bootstrap.tbz && \
+    curl -o  /usr/local/bin/stage0 https://storage.googleapis.com/go-builder-data/buildlet-stage0.linux-ppc64 && \
+    chmod +x /usr/local/bin/stage0
+
+ENV GO_BUILDER_ENV host-linux-ppc64-sid-power10
+ENV GOROOT_BOOTSTRAP /usr/local/go-bootstrap
+ENV GO_BUILD_KEY_DELETE_AFTER_READ true
+ENV GO_BUILD_KEY_PATH /buildkey/gobuildkey
+
+CMD ["/usr/local/bin/stage0"]

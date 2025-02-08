@@ -58,7 +58,7 @@ RUN rm -rf /arm/root/go1.4/api /arm/root/go1.4/blog /arm/root/go1.4/doc /arm/roo
 RUN find /arm/root/go1.4 -type d -name testdata | xargs rm -rf
 
 # Install e2fsimage to prepare a root disk without running any
-# "privilaged" docker operations (i.e. mount).
+# "privileged" docker operations (i.e. mount).
 # Building from source because there aren't any Debian packages.
 ENV IMG_SIZE 1000000 # in KB
 RUN curl -L -O http://sourceforge.net/projects/e2fsimage/files/e2fsimage/0.2.2/e2fsimage-0.2.2.tar.gz

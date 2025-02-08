@@ -4,7 +4,6 @@
 
 // Same requirements as internal/coordinator/pool/reverse.go.
 //go:build linux || darwin
-// +build linux darwin
 
 package main
 
@@ -50,7 +49,7 @@ func coordinatorServer() (*http.Server, net.Listener, error) {
 	return srv, ln, nil
 }
 
-// testReverseDial verfies that a revdial connection can be established and
+// testReverseDial verifies that a revdial connection can be established and
 // registered in the coordinator reverse pool at coordAddr.
 func testReverseDial(t *testing.T, coordAddr, hostType string) {
 	t.Helper()
@@ -112,7 +111,7 @@ func testReverseDial(t *testing.T, coordAddr, hostType string) {
 	}
 }
 
-// TestReverseDial verfies that a revdial connection can be established and
+// TestReverseDial verifies that a revdial connection can be established and
 // registered in the coordinator reverse pool.
 func TestReverseDial(t *testing.T) {
 	pool.SetBuilderMasterKey([]byte(devMasterKey))
@@ -128,7 +127,7 @@ func TestReverseDial(t *testing.T) {
 	testReverseDial(t, srv.Addr, hostType)
 }
 
-// TestReverseDialRedirect verfies that a revdial connection works with a 307
+// TestReverseDialRedirect verifies that a revdial connection works with a 307
 // redirect to the endpoints. The coordinator will do this in dev mode.
 func TestReverseDialRedirect(t *testing.T) {
 	pool.SetBuilderMasterKey([]byte(devMasterKey))

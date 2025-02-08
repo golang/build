@@ -1,0 +1,23 @@
+-- f1.md --
+First.
+
+Second.
+
+[a]: u1
+[b]: u2
+-- f2.md --
+Third.
+
+[c]: u3
+[d]: u4
+-- want --
+First.
+
+Second.
+
+Third.
+
+[a]: u1
+[b]: u2
+[c]: u3
+[d]: u4

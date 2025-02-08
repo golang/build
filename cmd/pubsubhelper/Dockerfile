@@ -2,8 +2,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.17 AS build
-LABEL maintainer "golang-dev@googlegroups.com"
+FROM golang:1.23-bookworm AS build
+LABEL maintainer="golang-dev@googlegroups.com"
 
 RUN mkdir /gocache
 ENV GOCACHE /gocache
@@ -26,8 +26,8 @@ COPY . /go/src/golang.org/x/build/
 # Install binary to /go/bin:
 RUN go install golang.org/x/build/cmd/pubsubhelper
 
-FROM debian:stretch
-LABEL maintainer "golang-dev@googlegroups.com"
+FROM debian:bookworm
+LABEL maintainer="golang-dev@googlegroups.com"
 
 # netbase and ca-certificates are needed for dialing TLS.
 # The rest are useful for debugging if somebody needs to exec into the container.

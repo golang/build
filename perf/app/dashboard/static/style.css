@@ -83,6 +83,19 @@ nav .left-separator {
   padding-top: 10px;
   padding-bottom: 10px;
 }
+nav .alt-nav-button {
+  background: none;
+  border: 2px solid #375eab;
+  border-radius: 5px;
+  color: #375eab;
+  display: inline-block;
+  font-size: 16px;
+  margin: 0;
+  margin-right: 5px;
+  padding: 10px;
+  text-decoration: none;
+  cursor: pointer;
+}
 
 #dashboard {
   display: flex;
@@ -169,6 +182,12 @@ input[type=number] {
 .Dashboard-table {
   padding: 16px;
   width: 100%;
+  border: none;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+.Dashboard-table tr {
+  border: none;
 }
 .Dashboard-table tr:nth-child(2n+1) {
   background: #f4f4f4;
@@ -185,13 +204,16 @@ input[type=number] {
   text-align: center;
 }
 .Dashboard-table td {
-  padding: 8px;
+  padding: 0;
   text-align: center;
+  border: none;
 }
 .Dashboard-table-commit {
   font-family: monospace;
 }
-.Dashboard-table-range {
+.Dashboard-table-range svg {
+  display: block;
+  margin: 0 auto;
 }
 .Dashboard-regression-description {
   display: inline-block;

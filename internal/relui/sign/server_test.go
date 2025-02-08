@@ -8,10 +8,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/build/internal/access"
@@ -26,15 +24,17 @@ import (
 func TestUpdateSigningStatus(t *testing.T) {
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	client, server := setupSigningTest(t, ctx)
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	go fakeSigningServerClient(t, ctx, client)
-	wg := &sync.WaitGroup{}
-	wg.Add(3)
-	go signRequestSeries(t, ctx, "request-1", server, BuildGPG, wg)
-	go signRequestSeries(t, ctx, "request-2", server, BuildMacOS, wg)
-	go signRequestSeries(t, ctx, "request-3", server, BuildWindows, wg)
-	wg.Wait()
+	var wg1, wg2 sync.WaitGroup
+	wg1.Add(1)
+	wg2.Add(3)
+	clientContext, cancel := context.WithCancel(ctx)
+	go fakeSigningServerClient(t, clientContext, client, &wg1)
+	go signRequestSeries(t, ctx, "request-1", server, BuildGPG, &wg2)
+	go signRequestSeries(t, ctx, "request-2", server, BuildMacOS, &wg2)
+	go signRequestSeries(t, ctx, "request-3", server, BuildWindows, &wg2)
+	wg2.Wait()
+	cancel()
+	wg1.Wait()
 }
 
 func TestUpdateSigningStatusError(t *testing.T) {
@@ -43,7 +43,7 @@ func TestUpdateSigningStatusError(t *testing.T) {
 		client, _ := setupSigningTest(t, ctx)
 		stream, err := client.UpdateSigningStatus(context.Background())
 		if err != nil {
-			t.Fatalf("client.UpdateSigningStatus(ctx) = %v,  %s; want no error", stream, err)
+			t.Fatalf("client.UpdateSigningStatus() = %v, %s; want no error", stream, err)
 		}
 		wantCode := codes.Unauthenticated
 		if _, err = stream.Recv(); status.Code(err) != wantCode {
@@ -51,16 +51,20 @@ func TestUpdateSigningStatusError(t *testing.T) {
 		}
 	})
 	t.Run("non-existent signing request", func(t *testing.T) {
-		// skipping due to go.dev/issue/54654
-		t.Skip("skipping flaky test. see go.dev/issue/54654")
-
 		ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 		client, server := setupSigningTest(t, ctx)
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		go fakeSigningServerClient(t, ctx, client)
-		if _, _, _, err := server.ArtifactSigningStatus(ctx, "not-exist"); err == nil {
-			t.Fatalf("ArtifactSigningStatus(ctx, %q) = _, _, nil; want error", "not-exist")
+		var wg sync.WaitGroup
+		wg.Add(1)
+		clientContext, cancel := context.WithCancel(ctx)
+		go fakeSigningServerClient(t, clientContext, client, &wg)
+		defer func() {
+			cancel()
+			wg.Wait()
+		}()
+		if status, _, _, err := server.ArtifactSigningStatus(ctx, "not-exist"); err != nil {
+			t.Fatalf("ArtifactSigningStatus(%q) failed: %v", "not-exist", err)
+		} else if status != StatusNotFound {
+			t.Fatalf("ArtifactSigningStatus(%q) returned status %v, want StatusNotFound", "not-exist", status)
 		}
 	})
 }
@@ -70,25 +74,29 @@ func signRequestSeries(t *testing.T, ctx context.Context, id string, server *Sig
 	const uri = "gs://foo/bar.tar.gz"
 	jobID, err := server.SignArtifact(ctx, buildT, []string{uri})
 	if err != nil {
-		t.Fatalf("SignArtifact(ctx, %q, %v, %q = %s; want no error", id, buildT, uri, err)
+		t.Errorf("SignArtifact(%q, %v, %q) = %s; want no error", id, buildT, uri, err)
+		return
 	}
 	_, _, _, err = server.ArtifactSigningStatus(ctx, jobID)
 	if err != nil {
-		t.Fatalf("ArtifactSigningStatus(%q) = %s; want no error", id, err)
+		t.Errorf("ArtifactSigningStatus(%q) = %s; want no error", id, err)
+		return
 	}
 	_, _, _, err = server.ArtifactSigningStatus(ctx, jobID)
 	if err != nil {
-		t.Fatalf("ArtifactSigningStatus(%q) = %s; want no error", id, err)
+		t.Errorf("ArtifactSigningStatus(%q) = %s; want no error", id, err)
 	}
 }
 
 // fakeSigningServerClient is a simple implementation of how we expect the client side to perform.
-// A signing request initiates a signing job. The first status update should return return a status of
+// A signing request initiates a signing job. The first status update should return a status of
 // running. The second status request will return a status of Completed.
-func fakeSigningServerClient(t *testing.T, ctx context.Context, client protos.ReleaseServiceClient) {
+func fakeSigningServerClient(t *testing.T, ctx context.Context, client protos.ReleaseServiceClient, wg *sync.WaitGroup) {
+	defer wg.Done()
 	stream, err := client.UpdateSigningStatus(ctx)
 	if err != nil {
-		t.Fatalf("client.UpdateSigningStatus(ctx) = %v,  %s; want no error", stream, err)
+		t.Errorf("client.UpdateSigningStatus() = %v, %s; want no error", stream, err)
+		return
 	}
 	requests := make(chan *protos.SigningRequest, 10)
 	go func() {
@@ -141,7 +149,8 @@ func fakeSigningServerClient(t *testing.T, ctx context.Context, client protos.Re
 			}
 		}
 		if err := stream.Send(resp); err != nil {
-			log.Fatalf("client.stream.Send(%v) = %s, want no error", resp, err)
+			t.Errorf("client.stream.Send(%v) = %s, want no error", resp, err)
+			return
 		}
 	}
 	stream.CloseSend()
@@ -150,7 +159,7 @@ func fakeSigningServerClient(t *testing.T, ctx context.Context, client protos.Re
 func setupSigningTest(t *testing.T, ctx context.Context) (protos.ReleaseServiceClient, *SigningServer) {
 	lis, err := nettest.NewLocalListener("tcp")
 	if err != nil {
-		t.Fatalf("nettest.NewLocalListener(\"tcp\") =  %s; want no error", err)
+		t.Fatalf(`nettest.NewLocalListener("tcp") = %s; want no error`, err)
 	}
 	sopts := access.FakeIAPAuthInterceptorOptions()
 	s := grpc.NewServer(sopts...)
@@ -162,8 +171,6 @@ func setupSigningTest(t *testing.T, ctx context.Context) (protos.ReleaseServiceC
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
 	conn, err := grpc.DialContext(ctx, lis.Addr().String(), copts...)
 	if err != nil {
 		lis.Close()

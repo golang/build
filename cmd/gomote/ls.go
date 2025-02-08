@@ -8,6 +8,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -17,9 +19,10 @@ import (
 func ls(args []string) error {
 	fs := flag.NewFlagSet("ls", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "ls usage: gomote ls [ls-opts] [instance] [dir]")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
+		log := usageLogger
+		log.Print("ls usage: gomote ls [ls-opts] [instance] [dir]")
+		log.Print("")
+		log.Print("Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -38,7 +41,7 @@ func ls(args []string) error {
 	case 0:
 		// With no arguments, we need an active group to do anything useful.
 		if activeGroup == nil {
-			fmt.Fprintln(os.Stderr, "error: no group specified")
+			log.Print("error: no group specified")
 			fs.Usage()
 		}
 		for _, inst := range activeGroup.Instances {
@@ -64,12 +67,12 @@ func ls(args []string) error {
 		lsSet = []string{fs.Arg(0)}
 		dir = fs.Arg(1)
 	default:
-		fmt.Fprintln(os.Stderr, "error: too many arguments")
+		log.Print("error: too many arguments")
 		fs.Usage()
 	}
 	for _, inst := range lsSet {
 		client := gomoteServerClient(ctx)
-		resp, err := client.ListDirectory(ctx, &protos.ListDirectoryRequest{
+		stream, err := client.ListDirectoryStreaming(ctx, &protos.ListDirectoryRequest{
 			GomoteId:  inst,
 			Directory: dir,
 			Recursive: recursive,
@@ -82,8 +85,17 @@ func ls(args []string) error {
 		if len(lsSet) > 1 {
 			fmt.Fprintf(os.Stdout, "# %s\n", inst)
 		}
-		for _, entry := range resp.GetEntries() {
-			fmt.Fprintf(os.Stdout, "%s\n", entry)
+		for {
+			resp, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("unable to ls: %w", err)
+			}
+			for _, entry := range resp.GetEntries() {
+				fmt.Fprintf(os.Stdout, "%s\n", entry)
+			}
 		}
 		if len(lsSet) > 1 {
 			fmt.Fprintln(os.Stdout)

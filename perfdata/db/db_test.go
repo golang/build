@@ -1,14 +1,14 @@
-// Copyright 2017 The Go Authors.  All rights reserved.
+// Copyright 2017 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 //go:build cgo
-// +build cgo
 
 package db_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -20,7 +20,6 @@ import (
 	"golang.org/x/build/internal/diff"
 	. "golang.org/x/build/perfdata/db"
 	"golang.org/x/build/perfdata/db/dbtest"
-	"golang.org/x/net/context"
 	"golang.org/x/perf/storage/benchfmt"
 )
 

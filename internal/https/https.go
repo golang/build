@@ -13,8 +13,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"math/big"
 	"net/http"
 	"strings"
@@ -22,14 +24,23 @@ import (
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/autocertcache"
+	"golang.org/x/build/internal/secret"
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 )
 
 type Options struct {
+	// Specifies the ACME directory to use to retrieve certificates.
+	AutocertDirectory string
+	// Specifies the ACME external account binding token to use. This should be
+	// a JSON-encoded acme.ExternalAccountBinding struct.
+	AutocertEAB string
 	// Specifies the GCS bucket to use with AutocertAddr.
 	AutocertBucket string
-	// If non-empty, listen on this address and serve HTTPS using a Let's Encrypt cert stored in AutocertBucket.
+	// If non-empty, listen on this address and serve HTTPS using a cert stored in AutocertBucket.
 	AutocertAddr string
+	// Specifies the email address to use when creating an ACME account.
+	AutocertEmail string
 	// If non-empty, listen on this address and serve HTTPS using a self-signed cert.
 	SelfSignedAddr string
 	// If non-empty, listen on this address and serve HTTP.
@@ -45,11 +56,24 @@ var DefaultOptions = &Options{}
 // Typical usage is to call RegisterFlags at the beginning of main, then
 // ListenAndServe at the end.
 func RegisterFlags(set *flag.FlagSet) {
+	// This is slightly hacky, but necessary since some callers may have already
+	// called secret.InitFlagSupport, and others may not have, and there is not
+	// a perfect way to know (and calling it twice would stomp on already defined
+	// secret flags).
+	if secret.DefaultResolver.Context == nil {
+		if err := secret.InitFlagSupport(context.Background()); err != nil {
+			log.Fatalln(err)
+		}
+	}
+	secret.DefaultResolver.FlagVar(set, &DefaultOptions.AutocertEAB, "autocert-eab", "specifies the ACME external account binding to use")
+
+	set.StringVar(&DefaultOptions.AutocertDirectory, "autocert-directory", "", "specifies the ACME directory to use")
 	set.StringVar(&DefaultOptions.AutocertBucket, "autocert-bucket", "", "specifies the GCS bucket to use with autocert-addr")
-	set.StringVar(&DefaultOptions.AutocertAddr, "listen-https-autocert", "", "if non-empty, listen on this address and serve HTTPS using a Let's Encrypt cert stored in autocert-bucket")
+	set.StringVar(&DefaultOptions.AutocertAddr, "listen-https-autocert", "", "if non-empty, listen on this address and serve HTTPS using a cert stored in autocert-bucket")
 	set.StringVar(&DefaultOptions.SelfSignedAddr, "listen-https-selfsigned", "", "if non-empty, listen on this address and serve HTTPS using a self-signed cert")
 	set.StringVar(&DefaultOptions.HTTPAddr, "listen-http", "", "if non-empty, listen on this address and serve HTTP")
 	set.StringVar(&DefaultOptions.HealthPath, "health-path", "/healthz", "if non-empty, respond unconditionally with 200 OK to requests on this path")
+	set.StringVar(&DefaultOptions.AutocertEmail, "autocert-email", "", "specifies the contact email to use when creating an ACME account")
 }
 
 // ListenAndServe runs the servers configured by DefaultOptions. It always
@@ -85,7 +109,7 @@ func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options
 		if opts.AutocertBucket == "" {
 			return fmt.Errorf("must specify autocert-bucket with listen-https-autocert")
 		}
-		server, err := autocertServer(ctx, opts.AutocertBucket, opts.AutocertAddr, handler)
+		server, err := autocertServer(ctx, opts, handler)
 		if err != nil {
 			return err
 		}
@@ -105,10 +129,9 @@ func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options
 	return <-errc
 }
 
-// autocertServer returns an http.Server that is configured to serve
-// HTTPS on addr using a Let's Encrypt certificate cached in the GCS
-// bucket specified by bucket.
-func autocertServer(ctx context.Context, bucket, addr string, handler http.Handler) (*http.Server, error) {
+// autocertServer returns an http.Server that is configured to serve HTTPS on
+// addr using a certificate cached in the GCS bucket specified by bucket.
+func autocertServer(ctx context.Context, opts *Options, handler http.Handler) (*http.Server, error) {
 	sc, err := storage.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("storage.NewClient: %v", err)
@@ -123,10 +146,22 @@ func autocertServer(ctx context.Context, bucket, addr string, handler http.Handl
 			}
 			return nil
 		},
-		Cache: autocertcache.NewGoogleCloudStorageCache(sc, bucket),
+		Cache: autocertcache.NewGoogleCloudStorageCache(sc, opts.AutocertBucket),
+		Email: opts.AutocertEmail,
+	}
+	if opts.AutocertDirectory != "" {
+		m.Client = new(acme.Client)
+		m.Client.DirectoryURL = opts.AutocertDirectory
+	}
+	if opts.AutocertEAB != "" {
+		var eab acme.ExternalAccountBinding
+		if err := json.Unmarshal([]byte(opts.AutocertEAB), &eab); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal -autocert-eab: %s", err)
+		}
+		m.ExternalAccountBinding = &eab
 	}
 	server := &http.Server{
-		Addr:      addr,
+		Addr:      opts.AutocertAddr,
 		Handler:   handler,
 		TLSConfig: m.TLSConfig(),
 	}

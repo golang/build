@@ -56,13 +56,15 @@ var ByGerritProject = map[string]*Repo{ /* initialized below */ }
 var ByImportPath = map[string]*Repo{ /* initialized below */ }
 
 func init() {
-	addMirrored("go", coordinatorCanBuild, noDash, enableCSR("golang-org"))
 	addMirrored("dl", importPath("golang.org/dl"), coordinatorCanBuild)
 	addMirrored("gddo", importPath("github.com/golang/gddo"), archivedOnGitHub)
+	addMirrored("go", coordinatorCanBuild, noDash, enableCSR("golang-org"))
 	addMirrored("gofrontend")
+	addMirrored("govulncheck-action")
 	addMirrored("proposal")
 	addMirrored("sublime-build")
 	addMirrored("sublime-config")
+	addMirrored("wiki")
 
 	x("arch")
 	x("benchmarks", desc("benchmarks to measure Go as it is developed"))
@@ -78,14 +80,17 @@ func init() {
 	x("mod")
 	x("net", desc("additional networking packages"))
 	x("oauth2")
+	x("oscar", desc("open source contributor agent architecture"))
 	x("perf", desc("packages and tools for performance measurement, storage, and analysis"))
-	x("pkgsite", desc("home of the pkg.go.dev website"), noBuildAndNoDash, enableCSR("go-discovery"))
-	x("playground", noDash, enableCSR("golang-org"))
+	x("pkgsite", desc("home of the pkg.go.dev website"), enableCSR("go-discovery"))
+	x("pkgsite-metrics", desc("code for serving pkg.go.dev/metrics"), enableCSR("go-ecosystem"))
+	x("playground", enableCSR("golang-org"))
 	x("review", desc("a tool for working with Gerrit code reviews"))
 	x("scratch", noDash)
 	x("sync", desc("additional concurrency primitives"))
 	x("sys", desc("packages for making system calls"))
 	x("talks", noDash)
+	x("telemetry", desc("telemetry server code and libraries"), enableCSR("go-telemetry"))
 	x("term")
 	x("text", desc("packages for working with text"))
 	x("time", desc("additional time packages"))
@@ -99,6 +104,13 @@ func init() {
 
 	add(&Repo{GoGerritProject: "gollvm"})
 	add(&Repo{GoGerritProject: "grpc-review"})
+
+	add(&Repo{
+		GoGerritProject: "open2opaque",
+		MirrorToGitHub:  true,
+		ImportPath:      "google.golang.org/open2opaque",
+		GitHubRepo:      "golang/open2opaque",
+	})
 
 	add(&Repo{
 		GoGerritProject: "protobuf",
@@ -121,8 +133,6 @@ type modifyRepo func(*Repo)
 // noDash is an option to the x func that marks the repo as hidden on
 // the https://build.golang.org/ dashboard.
 func noDash(r *Repo) { r.showOnDashboard = false }
-
-func noBuildAndNoDash(r *Repo) { r.CoordinatorCanBuild, r.showOnDashboard = false, false }
 
 func coordinatorCanBuild(r *Repo) { r.CoordinatorCanBuild = true }
 

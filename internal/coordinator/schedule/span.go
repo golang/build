@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package schedule
 
@@ -42,7 +41,7 @@ func (s *Span) OptText() string {
 	return s.optText
 }
 
-// Start is the start time for the span..
+// Start is the start time for the span.
 func (s *Span) Start() time.Time {
 	return s.start
 }

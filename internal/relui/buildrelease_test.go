@@ -1,4 +1,4 @@
-// Copyright 2022 Go Authors All rights reserved.
+// Copyright 2022 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,31 +21,33 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/google/go-github/github"
 	"github.com/google/uuid"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal"
 	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/releasetargets"
-	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
 
 func TestRelease(t *testing.T) {
+	t.Run("minor", func(t *testing.T) {
+		testRelease(t, "go1.22", 22, "go1.22.1", task.KindMinor)
+	})
 	t.Run("beta", func(t *testing.T) {
-		testRelease(t, "go1.18beta1", task.KindBeta)
+		testRelease(t, "go1.22", 23, "go1.23beta1", task.KindBeta)
 	})
 	t.Run("rc", func(t *testing.T) {
-		testRelease(t, "go1.18rc1", task.KindRC)
+		testRelease(t, "go1.22", 23, "go1.23rc1", task.KindRC)
 	})
 	t.Run("major", func(t *testing.T) {
-		testRelease(t, "go1.18", task.KindMajor)
+		testRelease(t, "go1.22", 23, "go1.23.0", task.KindMajor)
 	})
 }
 
@@ -74,8 +75,8 @@ case "$1" in
   echo "tidied!" >> go.mod
   ;;
 "generate")
-  mkdir -p internal/imports
-  cd internal/imports && echo "package imports" >> zstdlib.go
+  mkdir -p internal/stdlib
+  cd internal/stdlib && echo "package stdlib" >> manifest.go
   ;;
 *)
   echo unexpected command $@
@@ -87,16 +88,16 @@ esac
 type releaseTestDeps struct {
 	ctx            context.Context
 	cancel         context.CancelFunc
-	buildlets      *task.FakeBuildlets
+	buildBucket    *task.FakeBuildBucketClient
 	goRepo         *task.FakeRepo
 	gerrit         *reviewerCheckGerrit
 	versionTasks   *task.VersionTasks
 	buildTasks     *BuildReleaseTasks
 	milestoneTasks *task.MilestoneTasks
-	publishedFiles map[string]*task.WebsiteFile
+	publishedFiles map[string]task.WebsiteFile
 }
 
-func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
+func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion string) *releaseTestDeps {
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
@@ -107,47 +108,6 @@ func newReleaseTestDeps(t *testing.T, wantVersion string) *releaseTestDeps {
 	// Set up a server that will be used to serve inputs to the build.
 	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
 	t.Cleanup(bootstrapServer.Close)
-	fakeBuildlets := task.NewFakeBuildlets(t, bootstrapServer.URL, map[string]string{
-		"pkgbuild": `#!/bin/bash -eu
-case "$@" in
-"--identifier=org.golang.go --version ` + wantVersion + ` --scripts=pkg-scripts --root=pkg-root pkg-intermediate/org.golang.go.pkg")
-	# We're doing an intermediate step in building a PKG.
-	ls pkg-intermediate >/dev/null
-	echo "I'm a intermediate PKG!" > "$6"
-	;;
-*)
-	echo "unexpected command $@"
-	exit 1
-	;;
-esac
-`,
-		"productbuild": `#!/bin/bash -eu
-case "$@" in
-"--distribution=pkg-distribution --resources=pkg-resources --package-path=pkg-intermediate pkg-out/` + wantVersion + `.pkg")
-	# We're building a PKG.
-	ls pkg-distribution pkg-resources/bg-light.png pkg-resources/bg-dark.png >/dev/null
-	cat pkg-intermediate/* | sed "s/intermediate //" > "$4"
-	;;
-*)
-	echo "unexpected command $@"
-	exit 1
-	;;
-esac
-`,
-		"pkgutil": `#!/bin/bash -eu
-case "$@" in
-"--expand-full go.pkg pkg-expanded")
-	# We're expanding a PKG.
-	grep "I'm a PKG!" < "$2"
-	mkdir -p "$3/org.golang.go.pkg/Payload/usr/local/go"
-	;;
-*)
-	echo "unexpected command $@"
-	exit 1
-	;;
-esac
-`,
-	})
 
 	// Set up the fake CDN publishing process.
 	servingDir := t.TempDir()
@@ -158,8 +118,8 @@ esac
 
 	// Set up the fake website to publish to.
 	var filesMu sync.Mutex
-	files := map[string]*task.WebsiteFile{}
-	publishFile := func(f *task.WebsiteFile) error {
+	files := map[string]task.WebsiteFile{}
+	publishFile := func(f task.WebsiteFile) error {
 		filesMu.Lock()
 		defer filesMu.Unlock()
 		files[strings.TrimPrefix(f.Filename, wantVersion+".")] = f
@@ -168,7 +128,8 @@ esac
 
 	goRepo := task.NewFakeRepo(t, "go")
 	base := goRepo.Commit(goFiles)
-	goRepo.Tag("go1.17", base)
+	goRepo.Tag(previousTag, base)
+	goRepo.Branch(fmt.Sprintf("release-branch.go1.%d", major), base)
 	dlRepo := task.NewFakeRepo(t, "dl")
 	toolsRepo := task.NewFakeRepo(t, "tools")
 	toolsRepo1 := toolsRepo.Commit(map[string]string{
@@ -180,41 +141,45 @@ esac
 	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo, toolsRepo)
 
 	gerrit := &reviewerCheckGerrit{FakeGerrit: fakeGerrit}
-	goServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		task.ServeTarball("dl/go1.19.linux-amd64.tar.gz", map[string]string{
-			"go/bin/go": fakeGo,
-		}, w, r)
-	}))
-	t.Cleanup(goServer.Close)
 	versionTasks := &task.VersionTasks{
-		Gerrit:         gerrit,
-		GerritURL:      fakeGerrit.GerritURL(),
-		GoProject:      "go",
-		CreateBuildlet: fakeBuildlets.CreateBuildlet,
-		LatestGoBinaries: func(context.Context) (string, error) {
-			return goServer.URL + "/dl/go1.19.linux-amd64.tar.gz", nil
-		},
+		Gerrit:     gerrit,
+		CloudBuild: task.NewFakeCloudBuild(t, fakeGerrit, "", nil, task.FakeBinary{Name: "go", Implementation: fakeGo}),
+		GoProject:  "go",
 	}
 	milestoneTasks := &task.MilestoneTasks{
-		Client:    fakeGitHub{},
+		Client: &task.FakeGitHub{
+			Milestones:       map[int]string{0: "Go1.18", 1: "Go1.23", 2: "Go1.22.1"},
+			DisallowComments: true,
+		},
 		RepoOwner: "golang",
 		RepoName:  "go",
 		ApproveAction: func(ctx *workflow.TaskContext) error {
 			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 		},
 	}
+	buildBucket := task.NewFakeBuildBucketClient(major, fakeGerrit.GerritURL(), "security-try", []string{"go"})
+
+	const dockerProject, dockerTrigger = "docker-build-project", "docker-build-trigger"
+
+	scratchDir := t.TempDir()
 
 	buildTasks := &BuildReleaseTasks{
-		GerritClient:     gerrit,
-		GerritHTTPClient: http.DefaultClient,
-		GerritURL:        fakeGerrit.GerritURL() + "/go",
-		GCSClient:        nil,
-		ScratchURL:       "file://" + filepath.ToSlash(t.TempDir()),
-		ServingURL:       "file://" + filepath.ToSlash(servingDir),
-		CreateBuildlet:   fakeBuildlets.CreateBuildlet,
-		SignService:      &fakeSignService{t: t, completedJobs: make(map[string][]string)},
-		DownloadURL:      dlServer.URL,
-		PublishFile:      publishFile,
+		GerritClient:             gerrit,
+		GerritProject:            "go",
+		GerritHTTPClient:         http.DefaultClient,
+		GCSClient:                nil,
+		ScratchFS:                &task.ScratchFS{BaseURL: "file://" + scratchDir},
+		SignedURL:                "file://" + scratchDir + "/signed/outputs",
+		ServingURL:               "file://" + filepath.ToSlash(servingDir),
+		SignService:              task.NewFakeSignService(t, scratchDir+"/signed/outputs"),
+		DownloadURL:              dlServer.URL,
+		ProxyPrefix:              dlServer.URL,
+		PublishFile:              publishFile,
+		GoogleDockerBuildProject: dockerProject,
+		GoogleDockerBuildTrigger: dockerTrigger,
+		BuildBucketClient:        buildBucket,
+		CloudBuildClient:         task.NewFakeCloudBuild(t, fakeGerrit, dockerProject, map[string]map[string]string{dockerTrigger: {"_GO_VERSION": wantVersion[2:]}}),
+		SwarmingClient:           task.NewFakeSwarmingClient(t, fakeGo),
 		ApproveAction: func(ctx *workflow.TaskContext) error {
 			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
 				return nil
@@ -228,7 +193,7 @@ esac
 	return &releaseTestDeps{
 		ctx:            ctx,
 		cancel:         cancel,
-		buildlets:      fakeBuildlets,
+		buildBucket:    buildBucket,
 		goRepo:         goRepo,
 		gerrit:         gerrit,
 		versionTasks:   versionTasks,
@@ -238,22 +203,27 @@ esac
 	}
 }
 
-func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
-	deps := newReleaseTestDeps(t, wantVersion)
-	wd := workflow.New()
+func testRelease(t *testing.T, prevTag string, major int, wantVersion string, kind task.ReleaseKind) {
+	deps := newReleaseTestDeps(t, prevTag, major, wantVersion)
+	wd := workflow.New(workflow.ACL{})
 
 	deps.gerrit.wantReviewers = []string{"heschi", "dmitshur"}
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, kind, workflow.Const(deps.gerrit.wantReviewers))
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, major, kind, workflow.Const(deps.gerrit.wantReviewers))
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
+		"Targets to skip testing (or 'all') (optional)": []string{
+			// allScript is intentionally hardcoded to fail on GOOS=js
+			// and we confirm here that it's possible to skip that.
+			"js-wasm-node18", // Builder used on 1.21 and newer.
+			"js-wasm",        // Builder used on 1.20 and older.
+		},
 		"Ref from the private repository to build from (optional)": "",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.Run(deps.ctx, &verboseListener{t: t, onStall: deps.cancel})
+	outputs, err := w.Run(deps.ctx, &verboseListener{t: t, onStall: deps.cancel})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +232,7 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	wantPublishedFiles := map[string]string{
 		wantVersion + ".src.tar.gz": "source",
 	}
-	for _, t := range releasetargets.TargetsForGo1Point(18) {
+	for _, t := range releasetargets.TargetsForGo1Point(major) {
 		switch t.GOOS {
 		case "darwin":
 			wantPublishedFiles[wantVersion+"."+t.Name+".tar.gz"] = "archive"
@@ -305,49 +275,74 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 	if len(wantPublishedFiles) != 0 {
 		t.Errorf("missing %d published files: %v", len(wantPublishedFiles), wantPublishedFiles)
 	}
-	checkTGZ(t, dlURL, files, "src.tar.gz", &task.WebsiteFile{
+	versionFile := outputs["VERSION file"].(string)
+	if !strings.Contains(versionFile, wantVersion) {
+		t.Errorf("version file should contain %q, got %q", wantVersion, versionFile)
+	}
+	checkTGZ(t, dlURL, files, "src.tar.gz", task.WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
 	}, map[string]string{
-		"go/VERSION":       wantVersion,
+		"go/VERSION":       versionFile,
 		"go/src/make.bash": makeScript,
 	})
-	checkContents(t, dlURL, files, "windows-amd64.msi", &task.WebsiteFile{
+	checkContents(t, dlURL, files, "windows-amd64.msi", task.WebsiteFile{
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "installer",
 	}, "I'm an MSI!\n-signed <Windows>")
-	checkTGZ(t, dlURL, files, "linux-amd64.tar.gz", &task.WebsiteFile{
+	checkTGZ(t, dlURL, files, "linux-amd64.tar.gz", task.WebsiteFile{
 		OS:   "linux",
 		Arch: "amd64",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        wantVersion,
+		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
-		"go/pkg/something_orother/race.a":   "",
 	})
-	checkZip(t, dlURL, files, "windows-amd64.zip", &task.WebsiteFile{
+	checkZip(t, dlURL, files, "windows-amd64.zip", task.WebsiteFile{
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        wantVersion,
+		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
-	checkTGZ(t, dlURL, files, "linux-armv6l.tar.gz", &task.WebsiteFile{
+	checkTGZ(t, dlURL, files, "linux-armv6l.tar.gz", task.WebsiteFile{
 		OS:   "linux",
 		Arch: "armv6l",
 		Kind: "archive",
 	}, map[string]string{
-		"go/VERSION":                        wantVersion,
+		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
-	checkContents(t, dlURL, files, "darwin-amd64.pkg", &task.WebsiteFile{
+	checkTGZ(t, dlURL, files, "netbsd-arm.tar.gz", task.WebsiteFile{
+		OS:   "netbsd",
+		Arch: "arm" + map[int]string{21: "v6l", 22: "v6l"}[major],
+		Kind: "archive",
+	}, map[string]string{
+		"go/VERSION":                        versionFile,
+		"go/tool/something_orother/compile": "",
+	})
+	checkTGZ(t, dlURL, files, "darwin-amd64.tar.gz", task.WebsiteFile{
+		OS:   "darwin",
+		Arch: "amd64",
+		Kind: "archive",
+	}, map[string]string{
+		"go/VERSION": versionFile,
+		"go/bin/go":  "-signed <macOS>",
+	})
+	checkContents(t, dlURL, files, "darwin-amd64.pkg", task.WebsiteFile{
 		OS:   "darwin",
 		Arch: "amd64",
 		Kind: "installer",
-	}, "I'm a PKG!\n-signed <macOS>")
+	}, "I'm a PKG! -signed <macOS>")
+	modVer := "v0.0.1-" + wantVersion + ".darwin-amd64"
+	checkContents(t, dlURL, nil, modVer+".mod", task.WebsiteFile{}, "module golang.org/toolchain")
+	checkContents(t, dlURL, nil, modVer+".info", task.WebsiteFile{}, fmt.Sprintf(`"Version":"%v"`, modVer))
+	checkZip(t, dlURL, nil, modVer+".zip", task.WebsiteFile{}, map[string]string{
+		"golang.org/toolchain@" + modVer + "/bin/go": "-signed <macOS>",
+	})
 
 	head, err := deps.gerrit.ReadBranchHead(deps.ctx, "dl", "master")
 	if err != nil {
@@ -371,14 +366,14 @@ func testRelease(t *testing.T, wantVersion string, kind task.ReleaseKind) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if string(version) != wantVersion {
-			t.Errorf("VERSION file is %q, expected %q", version, wantVersion)
+		if string(version) != versionFile {
+			t.Errorf("VERSION file is %q, expected %q", version, versionFile)
 		}
 	}
 }
 
 func testSecurity(t *testing.T, mergeFixes bool) {
-	deps := newReleaseTestDeps(t, "go1.18rc1")
+	deps := newReleaseTestDeps(t, "go1.17", 18, "go1.18rc1")
 
 	// Set up the fake merge process. Once we stop to ask for approval, commit
 	// the fix to the public server.
@@ -387,18 +382,21 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	securityFix := map[string]string{"security.txt": "This file makes us secure"}
 	privateRef := privateRepo.Commit(securityFix)
 	privateGerrit := task.NewFakeGerrit(t, privateRepo)
-	deps.buildTasks.PrivateGerritURL = privateGerrit.GerritURL() + "/go-private"
+	deps.buildBucket.GerritURL = privateGerrit.GerritURL()
+	deps.buildBucket.Projects = []string{"go-private"}
+	deps.buildTasks.PrivateGerritClient = privateGerrit
+	deps.buildTasks.PrivateGerritProject = "go-private"
 
 	defaultApprove := deps.buildTasks.ApproveAction
 	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext) error {
 		if mergeFixes {
-			deps.goRepo.Commit(securityFix)
+			deps.goRepo.CommitOnBranch("release-branch.go1.18", securityFix)
 		}
 		return defaultApprove(tc)
 	}
 
 	// Run the release.
-	wd := workflow.New()
+	wd := workflow.New(workflow.ACL{})
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
@@ -419,7 +417,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 		runToFailure(t, deps.ctx, w, "Check branch state matches source archive", &verboseListener{t: t})
 		return
 	}
-	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", &task.WebsiteFile{
+	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", task.WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
@@ -428,20 +426,21 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	})
 }
 
-func TestAdvisoryTrybotFail(t *testing.T) {
-	deps := newReleaseTestDeps(t, "go1.18rc1")
+func TestAdvisoryTestsFail(t *testing.T) {
+	deps := newReleaseTestDeps(t, "go1.17", 18, "go1.18rc1")
+	deps.buildBucket.FailBuilds = append(deps.buildBucket.FailBuilds, "linux-amd64-longtest")
 	defaultApprove := deps.buildTasks.ApproveAction
-	approvedTrybots := false
+	var testApprovals atomic.Int32
 	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "TryBot failures") {
-			approvedTrybots = true
+		if strings.Contains(ctx.TaskName, "Run advisory") {
+			testApprovals.Add(1)
 			return nil
 		}
 		return defaultApprove(ctx)
 	}
 
 	// Run the release.
-	wd := workflow.New()
+	wd := workflow.New(workflow.ACL{})
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
@@ -455,31 +454,40 @@ func TestAdvisoryTrybotFail(t *testing.T) {
 	if _, err := w.Run(deps.ctx, &verboseListener{t: t}); err != nil {
 		t.Fatal(err)
 	}
-	if !approvedTrybots {
-		t.Errorf("advisory trybots didn't need approval")
+	if testApprovals.Load() != 1 {
+		t.Errorf("failed advisory builder didn't need approval")
 	}
 }
 
 // makeScript pretends to be make.bash. It creates a fake go command that
 // knows how to fake the commands the release process runs.
-const makeScript = `#!/bin/bash
+const makeScript = `#!/bin/bash -eu
 
 GO=../
+VERSION=$(head -n 1 $GO/VERSION)
+
+if [[ $# >0 && $1 == "-distpack" ]]; then
+	mkdir -p $GO/pkg/distpack
+	tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).tar
+	(cd $GO/.. && find . | xargs touch -t 202301010000 && find . | xargs chmod 0777 && tar cf $tmp go)
+	# On macOS, tar -czf puts a timestamp in the gzip header. Do it ourselves with --no-name to suppress it.
+	gzip --no-name $tmp
+	mv $tmp.gz $GO/pkg/distpack/$VERSION.src.tar.gz
+fi
+
 mkdir -p $GO/bin
 
 cat <<'EOF' >$GO/bin/go
 #!/bin/bash -eu
-case "$1 $2" in
-"run releaselet.go")
-    # We're building an MSI. The command should be run in the gomote work dir.
-	ls go/src/make.bash >/dev/null
-	mkdir msi
-	echo "I'm an MSI!" > msi/thisisanmsi.msi
-	;;
+case "$@" in
 "install -race")
 	# Installing the race mode stdlib. Doesn't matter where it's run.
 	mkdir -p $(dirname $0)/../pkg/something_orother/
 	touch $(dirname $0)/../pkg/something_orother/race.a
+	;;
+"tool dist test -compile-only")
+	# Testing with -compile-only flag set.
+	exit 0
 	;;
 *)
 	echo "unexpected command $@"
@@ -489,22 +497,59 @@ esac
 EOF
 chmod 0755 $GO/bin/go
 
-cp $GO/bin/go $GO/bin/go.exe
 # We don't know what GOOS_GOARCH we're "building" for, write some junk for
 # versimilitude.
 mkdir -p $GO/tool/something_orother/
 touch $GO/tool/something_orother/compile
+
+if [[ $# >0 && $1 == "-distpack" ]]; then
+	case $GOOS in
+	"windows")
+		tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).zip
+		# The zip command isn't installed on our buildlets. Python is.
+		(cd $GO/.. && find . | xargs touch -t 202301010000 && find . | xargs chmod 0777 && python3 -m zipfile -c $tmp go/)
+		mv $tmp $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.zip
+		;;
+	*)
+		tmp=$(mktemp $TMPDIR/buildrel.XXXXXXXX).tar
+		(cd $GO/.. && find . | xargs touch -t 202301010000 && find . | xargs chmod 0777 && tar cf $tmp go)
+		# On macOS, tar -czf puts a timestamp in the gzip header. Do it ourselves with --no-name to suppress it.
+		gzip --no-name $tmp
+		mv $tmp.gz $GO/pkg/distpack/$VERSION-$GOOS-$GOARCH.tar.gz
+		;;
+	esac
+
+	MODVER=v0.0.1-$VERSION.$GOOS-$GOARCH
+	echo "module golang.org/toolchain" > $GO/pkg/distpack/$MODVER.mod
+	echo -e "{\"Version\":\"$MODVER\", \"Timestamp\":\"fake timestamp\"}" > $GO/pkg/distpack/$MODVER.info
+	MODTMP=$(mktemp -d $TMPDIR/buildrel.XXXXXXXX)
+	MODDIR=$MODTMP/golang.org/toolchain@$MODVER
+	mkdir -p $MODDIR
+	cp -r $GO $MODDIR
+	tmp=$(mktemp -d $TMPDIR/buildrel.XXXXXXXX).zip
+	(cd $MODTMP && find . | xargs touch -t 202301010000 && find . | xargs chmod 0777 && python3 -m zipfile -c $tmp .)
+	mv $tmp $GO/pkg/distpack/$MODVER.zip
+fi
 `
 
-// allScript pretends to be all.bash. It is hardcoded to pass.
+// allScript pretends to be all.bash. It's hardcoded
+// to fail on GOOS=js and pass on all other builders.
 const allScript = `#!/bin/bash -eu
 
 echo "I'm a test! :D"
 
-if [[ $GO_BUILDER_NAME =~ "js-wasm" ]]; then
-  echo "Oh no, WASM is broken"
+if [[ ${GOOS:-} = "js" ]]; then
+  echo "Oh no, JavaScript is broken."
   exit 1
 fi
+
+exit 0
+`
+
+// raceScript pretends to be race.bash.
+const raceScript = `#!/bin/bash -eu
+
+echo "I'm a race test. Zoom zoom!"
 
 exit 0
 `
@@ -514,26 +559,30 @@ var goFiles = map[string]string{
 	"src/make.bat":  makeScript,
 	"src/all.bash":  allScript,
 	"src/all.bat":   allScript,
-	"src/race.bash": allScript,
-	"src/race.bat":  allScript,
+	"src/race.bash": raceScript,
+	"src/race.bat":  raceScript,
 }
 
 func serveBootstrap(w http.ResponseWriter, r *http.Request) {
 	task.ServeTarball("go-builder-data/go", map[string]string{
-		"bin/go": "I'm a dummy bootstrap go command!",
+		"bin/go": fakeGo,
 	}, w, r)
 }
 
-func checkFile(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, check func(*testing.T, []byte)) {
+func checkFile(t *testing.T, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, check func(*testing.T, []byte)) {
 	t.Run(filename, func(t *testing.T) {
-		f, ok := files[filename]
-		if !ok {
-			t.Fatalf("file %q not published", filename)
+		resolvedName := filename
+		if files != nil {
+			f, ok := files[filename]
+			if !ok {
+				t.Fatalf("file %q not published", filename)
+			}
+			if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(task.WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
+				t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
+			}
+			resolvedName = f.Filename
 		}
-		if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(task.WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
-			t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
-		}
-		body := fetch(t, dlURL+"/"+f.Filename)
+		body := fetch(t, dlURL+"/"+resolvedName)
 		check(t, body)
 	})
 }
@@ -553,15 +602,15 @@ func fetch(t *testing.T, url string) []byte {
 	return b
 }
 
-func checkContents(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, contents string) {
+func checkContents(t *testing.T, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents string) {
 	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
-		if got, want := string(b), contents; got != want {
+		if got, want := string(b), contents; !strings.Contains(got, want) {
 			t.Errorf("%v contains %q, want %q", filename, got, want)
 		}
 	})
 }
 
-func checkTGZ(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, contents map[string]string) {
+func checkTGZ(t *testing.T, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents map[string]string) {
 	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		gzr, err := gzip.NewReader(bytes.NewReader(b))
 		if err != nil {
@@ -580,13 +629,13 @@ func checkTGZ(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, fi
 			if !ok {
 				continue
 			}
-			b, err := ioutil.ReadAll(tr)
+			b, err := io.ReadAll(tr)
 			if err != nil {
 				t.Fatal(err)
 			}
 			delete(contents, h.Name)
-			if string(b) != want {
-				t.Errorf("contents of %v were %q, want %q", h.Name, string(b), want)
+			if got := string(b); !strings.Contains(got, want) {
+				t.Errorf("%v contains %q, want %q", filename, got, want)
 			}
 		}
 		if len(contents) != 0 {
@@ -595,7 +644,7 @@ func checkTGZ(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, fi
 	})
 }
 
-func checkZip(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, filename string, meta *task.WebsiteFile, contents map[string]string) {
+func checkZip(t *testing.T, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents map[string]string) {
 	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
 		if err != nil {
@@ -610,13 +659,13 @@ func checkZip(t *testing.T, dlURL string, files map[string]*task.WebsiteFile, fi
 			if err != nil {
 				t.Fatal(err)
 			}
-			b, err := ioutil.ReadAll(r)
+			b, err := io.ReadAll(r)
 			if err != nil {
 				t.Fatal(err)
 			}
 			delete(contents, f.Name)
-			if string(b) != want {
-				t.Errorf("contents of %v were %q, want %q", f.Name, string(b), want)
+			if got := string(b); !strings.Contains(got, want) {
+				t.Errorf("%v contains %q, want %q", filename, got, want)
 			}
 		}
 		if len(contents) != 0 {
@@ -630,29 +679,11 @@ type reviewerCheckGerrit struct {
 	*task.FakeGerrit
 }
 
-func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx context.Context, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
+func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx *workflow.TaskContext, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
 	if diff := cmp.Diff(g.wantReviewers, reviewers, cmpopts.EquateEmpty()); diff != "" {
 		return "", fmt.Errorf("unexpected reviewers for CL: %v", diff)
 	}
 	return g.FakeGerrit.CreateAutoSubmitChange(ctx, input, reviewers, contents)
-}
-
-type fakeGitHub struct{}
-
-func (fakeGitHub) FetchMilestone(_ context.Context, owner, repo, name string, create bool) (int, error) {
-	return 0, nil
-}
-
-func (fakeGitHub) FetchMilestoneIssues(_ context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error) {
-	return nil, nil
-}
-
-func (fakeGitHub) EditIssue(_ context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
-	return nil, nil, nil
-}
-
-func (fakeGitHub) EditMilestone(_ context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
-	return nil, nil, nil
 }
 
 type verboseListener struct {
@@ -725,75 +756,6 @@ func (l *errorListener) TaskStateChanged(id uuid.UUID, taskID string, st *workfl
 	}
 	l.Listener.TaskStateChanged(id, taskID, st)
 	return nil
-}
-
-type fakeSignService struct {
-	t             *testing.T
-	mu            sync.Mutex
-	completedJobs map[string][]string // Job ID → output objectURIs.
-}
-
-func (s *fakeSignService) SignArtifact(_ context.Context, bt sign.BuildType, in []string) (jobID string, _ error) {
-	s.t.Logf("fakeSignService: doing %s signing of %q", bt, in)
-	var out []string
-	switch bt {
-	case sign.BuildMacOS, sign.BuildWindows:
-		if len(in) != 1 {
-			return "", fmt.Errorf("got %d inputs, want 1", len(in))
-		}
-		out = []string{fakeSignFile(in[0], fmt.Sprintf("-signed <%s>", bt))}
-	case sign.BuildGPG:
-		if len(in) == 0 {
-			return "", fmt.Errorf("got 0 inputs, want 1 or more")
-		}
-		for _, f := range in {
-			out = append(out, fakeGPGFile(f))
-		}
-	default:
-		return "", fmt.Errorf("SignArtifact: not implemented for %v", bt)
-	}
-	jobID = uuid.NewString()
-	s.mu.Lock()
-	s.completedJobs[jobID] = out
-	s.mu.Unlock()
-	return jobID, nil
-}
-func (s *fakeSignService) ArtifactSigningStatus(_ context.Context, jobID string) (_ sign.Status, desc string, out []string, _ error) {
-	s.mu.Lock()
-	out, ok := s.completedJobs[jobID]
-	s.mu.Unlock()
-	if !ok {
-		return sign.StatusNotFound, fmt.Sprintf("job %q not found", jobID), nil, nil
-	}
-	return sign.StatusCompleted, "", out, nil
-}
-func (s *fakeSignService) CancelSigning(_ context.Context, jobID string) error {
-	s.t.Errorf("CancelSigning was called unexpectedly")
-	return fmt.Errorf("intentional fake error")
-}
-func fakeSignFile(f, msg string) string {
-	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
-	if err != nil {
-		panic(fmt.Errorf("fakeSignFile: os.ReadFile: %v", err))
-	}
-	b = append(b, []byte(msg)...)
-	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".signed", b, 0600)
-	if err != nil {
-		panic(fmt.Errorf("fakeSignFile: os.WriteFile: %v", err))
-	}
-	return f + ".signed"
-}
-func fakeGPGFile(f string) string {
-	b, err := os.ReadFile(strings.TrimPrefix(f, "file://"))
-	if err != nil {
-		panic(fmt.Errorf("fakeGPGFile: os.ReadFile: %v", err))
-	}
-	gpg := fmt.Sprintf("I'm a GPG signature for %x!", sha256.Sum256(b))
-	err = os.WriteFile(strings.TrimPrefix(f, "file://")+".asc", []byte(gpg), 0600)
-	if err != nil {
-		panic(fmt.Errorf("fakeGPGFile: os.WriteFile: %v", err))
-	}
-	return f + ".asc"
 }
 
 func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {

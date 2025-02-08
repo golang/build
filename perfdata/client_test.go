@@ -1,4 +1,4 @@
-// Copyright 2017 The Go Authors.  All rights reserved.
+// Copyright 2017 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,16 +6,15 @@ package perfdata
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 
 	"golang.org/x/build/internal/diff"
-	"golang.org/x/net/context"
 	"golang.org/x/perf/storage/benchfmt"
 )
 
@@ -119,7 +118,7 @@ func TestNewUpload(t *testing.T) {
 			if have, want := p.FileName(), fmt.Sprintf("want%d.txt", i); have != want {
 				t.Errorf("file name = %q, want %q", have, want)
 			}
-			content, _ := ioutil.ReadAll(p)
+			content, _ := io.ReadAll(p)
 			if have, want := string(content), "content"; have != want {
 				t.Errorf("unexpected content %q, want %q", have, want)
 			}
@@ -177,7 +176,7 @@ func TestNewUploadAbort(t *testing.T) {
 			if have, want := p.FileName(), fmt.Sprintf("want%d.txt", i); have != want {
 				t.Errorf("file name = %q, want %q", have, want)
 			}
-			content, _ := ioutil.ReadAll(p)
+			content, _ := io.ReadAll(p)
 			if have, want := string(content), "content"; have != want {
 				t.Errorf("unexpected content %q, want %q", have, want)
 			}

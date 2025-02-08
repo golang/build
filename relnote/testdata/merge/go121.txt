@@ -1,0 +1,467 @@
+-- 00-preface.md --
+<!--
+NOTE: In this document and others in this directory, the convention is to
+set fixed-width phrases with non-fixed-width spaces, as in
+`hello` `world`.
+Do not send CLs removing the interior tags from such phrases.
+-->
+
+<style>
+  main ul li { margin: 0.5em 0; }
+</style>
+-- 1-intro.md --
+## Introduction to Go 1.21 {#introduction}
+
+The latest Go release, version 1.21, arrives six months after [Go 1.20](/doc/go1.20).
+
+-- 2-language/-heading.md --
+## Changes to the language {#language}
+-- 2-language/1-built-ins.md --
+Go 1.21 adds three new built-ins to the language.
+
+-- 2-language/2-init.md --
+<!-- https://go.dev/issue/57411 -->
+Package initialization order is now specified more precisely. The
+new algorithm is:
+
+- Sort all packages by import path.
+- Repeat until the list of packages is empty:
+  - Find the first package in the list for which all imports are
+    already initialized.
+  - Initialize that package and remove it from the list.
+
+-- 2-language/3-inference.md --
+Multiple improvements that increase the power and precision of type inference have been made.
+
+-- 2-language/4-loopvar.md --
+Go 1.21 includes a preview of a language change we are considering for a future version of Go:
+making for loop variables per-iteration instead of per-loop, to avoid accidental sharing bugs.
+
+-- 3-tools/-heading.md --
+## Tools {#tools}
+-- 3-tools/1-compat.md --
+Go 1.21 adds improved support for backwards compatibility and forwards compatibility
+in the Go toolchain.
+
+-- 3-tools/2-go-cmd/-heading.md --
+### Go command {#go-command}
+
+-- 3-tools/2-go-cmd/c.md --
+The `-C` `dir` flag must now be the first
+flag on the command-line when used.
+
+-- 3-tools/2-go-cmd/fullpath.md --
+<!-- https://go.dev/issue/37708, CL 463837 -->
+The new `go` `test` option
+`-fullpath` prints full path names in test log messages,
+rather than just base names.
+
+-- 3-tools/3-cgo.md --
+### Cgo {#cgo}
+
+<!-- CL 490819 -->
+In files that `import "C"`, the Go toolchain now
+correctly reports errors for attempts to declare Go methods on C types.
+
+-- 4-runtime/-heading.md --
+## Runtime {#runtime-changes}
+-- 4-runtime/misc.md --
+<!-- https://go.dev/issue/7181 -->
+When printing very deep stacks, the runtime now prints the first 50
+(innermost) frames followed by the bottom 50 (outermost) frames,
+rather than just printing the first 100 frames. This makes it easier
+to see how deeply recursive stacks started, and is especially
+valuable for debugging stack overflows.
+
+-- 5-compiler.md --
+## Compiler {#compiler}
+
+Profile-guide optimization (PGO), added as a preview in Go 1.20, is now ready
+for general use.
+
+-- 6-assembler.md --
+## Assembler {#assembler}
+
+
+<!-- https://go.dev/issue/58378 -->
+
+On amd64, frameless nosplit assembly functions are no longer automatically marked as `NOFRAME`.
+Instead, the `NOFRAME` attribute must be explicitly specified if desired,
+which is already the behavior on other architectures supporting frame pointers.
+With this, the runtime now maintains the frame pointers for stack transitions.
+
+-- 7-stdlib/-heading.md --
+## Core library {#library}
+-- 7-stdlib/1-slog.md --
+### New log/slog package {#slog}
+
+The new [log/slog](/pkg/log/slog) package provides structured logging with levels.
+
+### New testing/slogtest package {#slogtest}
+
+The new [testing/slogtest](/pkg/testing/slogtest) package can help
+to validate [slog.Handler](/pkg/log/slog#Handler) implementations.
+
+-- 7-stdlib/2-slices.md --
+### New slices package {#slices}
+
+The new [slices](/pkg/slices) package provides many common
+operations on slices, using generic functions that work with slices
+of any element type.
+
+-- 7-stdlib/99-minor/-heading.md --
+### Minor changes to the library {#minor_library_changes}
+
+As always, there are various minor changes and updates to the library,
+made with the Go 1 [promise of compatibility](/doc/go1compat)
+in mind.
+There are also various performance improvements, not enumerated here.
+
+-- 7-stdlib/99-minor/archive/tar/54451.md --
+
+<!-- https://go.dev/issue/54451, CL 491175 -->
+The implementation of the
+[`io/fs.FileInfo`](/pkg/io/fs/#FileInfo)
+interface returned by
+[`Header.FileInfo`](/pkg/archive/tar/#Header.FileInfo)
+now implements a `String` method that calls
+[`io/fs.FormatFileInfo`](/pkg/io/fs/#FormatFileInfo).
+
+-- 7-stdlib/99-minor/archive/zip/54451.md --
+
+<!-- https://go.dev/issue/54451, CL 491175 -->
+The implementation of the
+[`io/fs.FileInfo`](/pkg/io/fs/#FileInfo)
+interface returned by
+[`FileHeader.FileInfo`](/pkg/archive/zip/#FileHeader.FileInfo)
+now implements a `String` method that calls
+[`io/fs.FormatFileInfo`](/pkg/io/fs/#FormatFileInfo).
+
+-- 7-stdlib/99-minor/bytes/53685.md --
+
+<!-- https://go.dev/issue/53685, CL 474635 -->
+The [`Buffer`](/pkg/bytes/#Buffer) type
+has two new methods:
+[`Available`](/pkg/bytes/#Buffer.Available)
+and [`AvailableBuffer`](/pkg/bytes/#Buffer.AvailableBuffer).
+These may be used along with the
+[`Write`](/pkg/bytes/#Buffer.Write)
+method to append directly to the `Buffer`.
+ways different. 
+
+-- 7-stdlib/99-minor/debug/elf/56887.md --
+
+<!-- https://go.dev/issue/56887, CL 452496 -->
+The constant flags permitted in a `DT_FLAGS_1`
+dynamic tag are now defined with type
+[`DynFlag1`](/pkg/debug/elf/#DynFlag1). These
+tags have names starting with `DF_1`.
+
+<!-- CL 473256 -->
+The package now defines the constant
+[`COMPRESS_ZSTD`](/pkg/debug/elf/#COMPRESS_ZSTD).
+
+-- 7-stdlib/99-minor/debug/elf/56892.md --
+
+<!-- https://go.dev/issue/56892, CL 452617 -->
+The new
+[`File.DynValue`](/pkg/debug/elf/#File.DynValue)
+method may be used to retrieve the numeric values listed with a
+given dynamic tag.
+
+-- 7-stdlib/99-minor/debug/elf/60348.md --
+
+<!-- https://go.dev/issue/60348, CL 496918 -->
+The package now defines the constant
+[`R_PPC64_REL24_P9NOTOC`](/pkg/debug/elf/#R_PPC64_REL24_P9NOTOC).
+
+
+-- 7-stdlib/99-minor/net/59166.md --
+
+<!-- https://go.dev/issue/59166, https://go.dev/issue/56539 -->
+<!-- CL 471136, CL 471137, CL 471140 -->
+On Linux, the [net](/pkg/net/) package can now use
+Multipath TCP when the kernel supports it.
+
+-- 7-stdlib/99-minor/net/http/123.md --
+
+
+<!-- CL 472636 -->
+The new [`ResponseController.EnableFullDuplex`](/pkg/net/http#ResponseController.EnableFullDuplex)
+method allows server handlers to concurrently read from an HTTP/1
+request body while writing the response. Normally, the HTTP/1 server
+automatically consumes any remaining request body before starting to
+write the response, to avoid deadlocking clients which attempt to
+write a complete request before reading the response. The
+`EnableFullDuplex` method disables this behavior.
+
+-- 8-ports/-heading.md --
+## Ports {#ports}
+-- 8-ports/darwin.md --
+
+### Darwin {#darwin}
+
+<!-- https://go.dev/issue/57125 -->
+As [announced](go1.20#darwin) in the Go 1.20 release notes,
+Go 1.21 requires macOS 10.15 Catalina or later;
+support for previous versions has been discontinued.
+-- 8-ports/windows.md --
+### Windows {#windows}
+
+<!-- https://go.dev/issue/57003, https://go.dev/issue/57004 -->
+As [announced](go1.20#windows) in the Go 1.20 release notes,
+Go 1.21 requires at least Windows 10 or Windows Server 2016;
+support for previous versions has been discontinued.
+
+<!-- CL 470695 -->
+
+<!-- cmd/dist: default to GOARM=7 on all non-arm systems -->
+-- 8-ports/wasm.md --
+### WebAssembly {#wasm}
+
+<!-- https://go.dev/issue/38248, https://go.dev/issue/59149, CL 489255 -->
+The new `go:wasmimport` directive can now be used in Go programs
+to import functions from the WebAssembly host.
+
+<!-- https://go.dev/issue/56100 -->
+
+The Go scheduler now interacts much more efficiently with the
+JavaScript event loop, especially in applications that block
+frequently on asynchronous events.
+
+### WebAssembly System Interface {#wasip1}
+
+<!-- https://go.dev/issue/58141 -->
+Go 1.21 adds an experimental port to the [
+WebAssembly System Interface (WASI)](https://wasi.dev/), Preview 1
+(`GOOS=wasip1`, `GOARCH=wasm`).
+
+As a result of the addition of the new `GOOS` value
+"`wasip1`", Go files named `*_wasip1.go`
+will now be [ignored
+by Go tools](/pkg/go/build/#hdr-Build_Constraints) except when that `GOOS` value is being
+used.
+If you have existing filenames matching that pattern, you will
+need to rename them.
+-- want --
+<!--
+NOTE: In this document and others in this directory, the convention is to
+set fixed-width phrases with non-fixed-width spaces, as in
+`hello` `world`.
+Do not send CLs removing the interior tags from such phrases.
+-->
+
+<style>
+  main ul li { margin: 0.5em 0; }
+</style>
+
+## Introduction to Go 1.21 {#introduction}
+
+The latest Go release, version 1.21, arrives six months after [Go 1.20](/doc/go1.20).
+
+## Changes to the language {#language}
+
+Go 1.21 adds three new built-ins to the language.
+
+<!-- https://go.dev/issue/57411 -->
+Package initialization order is now specified more precisely. The
+new algorithm is:
+
+- Sort all packages by import path.
+- Repeat until the list of packages is empty:
+  - Find the first package in the list for which all imports are
+    already initialized.
+  - Initialize that package and remove it from the list.
+
+Multiple improvements that increase the power and precision of type inference have been made.
+
+Go 1.21 includes a preview of a language change we are considering for a future version of Go:
+making for loop variables per-iteration instead of per-loop, to avoid accidental sharing bugs.
+
+## Tools {#tools}
+
+Go 1.21 adds improved support for backwards compatibility and forwards compatibility
+in the Go toolchain.
+
+### Go command {#go-command}
+
+The `-C` `dir` flag must now be the first
+flag on the command-line when used.
+
+<!-- https://go.dev/issue/37708, CL 463837 -->
+The new `go` `test` option
+`-fullpath` prints full path names in test log messages,
+rather than just base names.
+
+### Cgo {#cgo}
+
+<!-- CL 490819 -->
+In files that `import "C"`, the Go toolchain now
+correctly reports errors for attempts to declare Go methods on C types.
+
+## Runtime {#runtime-changes}
+
+<!-- https://go.dev/issue/7181 -->
+When printing very deep stacks, the runtime now prints the first 50
+(innermost) frames followed by the bottom 50 (outermost) frames,
+rather than just printing the first 100 frames. This makes it easier
+to see how deeply recursive stacks started, and is especially
+valuable for debugging stack overflows.
+
+## Compiler {#compiler}
+
+Profile-guide optimization (PGO), added as a preview in Go 1.20, is now ready
+for general use.
+
+## Assembler {#assembler}
+
+
+<!-- https://go.dev/issue/58378 -->
+
+On amd64, frameless nosplit assembly functions are no longer automatically marked as `NOFRAME`.
+Instead, the `NOFRAME` attribute must be explicitly specified if desired,
+which is already the behavior on other architectures supporting frame pointers.
+With this, the runtime now maintains the frame pointers for stack transitions.
+
+## Core library {#library}
+
+### New log/slog package {#slog}
+
+The new [log/slog](/pkg/log/slog) package provides structured logging with levels.
+
+### New testing/slogtest package {#slogtest}
+
+The new [testing/slogtest](/pkg/testing/slogtest) package can help
+to validate [slog.Handler](/pkg/log/slog#Handler) implementations.
+
+### New slices package {#slices}
+
+The new [slices](/pkg/slices) package provides many common
+operations on slices, using generic functions that work with slices
+of any element type.
+
+### Minor changes to the library {#minor_library_changes}
+
+As always, there are various minor changes and updates to the library,
+made with the Go 1 [promise of compatibility](/doc/go1compat)
+in mind.
+There are also various performance improvements, not enumerated here.
+
+#### [`archive/tar`](/pkg/archive/tar/)
+
+<!-- https://go.dev/issue/54451, CL 491175 -->
+The implementation of the
+[`io/fs.FileInfo`](/pkg/io/fs/#FileInfo)
+interface returned by
+[`Header.FileInfo`](/pkg/archive/tar/#Header.FileInfo)
+now implements a `String` method that calls
+[`io/fs.FormatFileInfo`](/pkg/io/fs/#FormatFileInfo).
+
+#### [`archive/zip`](/pkg/archive/zip/)
+
+<!-- https://go.dev/issue/54451, CL 491175 -->
+The implementation of the
+[`io/fs.FileInfo`](/pkg/io/fs/#FileInfo)
+interface returned by
+[`FileHeader.FileInfo`](/pkg/archive/zip/#FileHeader.FileInfo)
+now implements a `String` method that calls
+[`io/fs.FormatFileInfo`](/pkg/io/fs/#FormatFileInfo).
+
+#### [`bytes`](/pkg/bytes/)
+
+<!-- https://go.dev/issue/53685, CL 474635 -->
+The [`Buffer`](/pkg/bytes/#Buffer) type
+has two new methods:
+[`Available`](/pkg/bytes/#Buffer.Available)
+and [`AvailableBuffer`](/pkg/bytes/#Buffer.AvailableBuffer).
+These may be used along with the
+[`Write`](/pkg/bytes/#Buffer.Write)
+method to append directly to the `Buffer`.
+ways different.
+
+#### [`debug/elf`](/pkg/debug/elf/)
+
+<!-- https://go.dev/issue/56887, CL 452496 -->
+The constant flags permitted in a `DT_FLAGS_1`
+dynamic tag are now defined with type
+[`DynFlag1`](/pkg/debug/elf/#DynFlag1). These
+tags have names starting with `DF_1`.
+
+<!-- CL 473256 -->
+The package now defines the constant
+[`COMPRESS_ZSTD`](/pkg/debug/elf/#COMPRESS_ZSTD).
+
+<!-- https://go.dev/issue/56892, CL 452617 -->
+The new
+[`File.DynValue`](/pkg/debug/elf/#File.DynValue)
+method may be used to retrieve the numeric values listed with a
+given dynamic tag.
+
+<!-- https://go.dev/issue/60348, CL 496918 -->
+The package now defines the constant
+[`R_PPC64_REL24_P9NOTOC`](/pkg/debug/elf/#R_PPC64_REL24_P9NOTOC).
+
+#### [`net`](/pkg/net/)
+
+<!-- https://go.dev/issue/59166, https://go.dev/issue/56539 -->
+<!-- CL 471136, CL 471137, CL 471140 -->
+On Linux, the [net](/pkg/net/) package can now use
+Multipath TCP when the kernel supports it.
+
+#### [`net/http`](/pkg/net/http/)
+
+<!-- CL 472636 -->
+The new [`ResponseController.EnableFullDuplex`](/pkg/net/http#ResponseController.EnableFullDuplex)
+method allows server handlers to concurrently read from an HTTP/1
+request body while writing the response. Normally, the HTTP/1 server
+automatically consumes any remaining request body before starting to
+write the response, to avoid deadlocking clients which attempt to
+write a complete request before reading the response. The
+`EnableFullDuplex` method disables this behavior.
+
+## Ports {#ports}
+
+### Darwin {#darwin}
+
+<!-- https://go.dev/issue/57125 -->
+As [announced](go1.20#darwin) in the Go 1.20 release notes,
+Go 1.21 requires macOS 10.15 Catalina or later;
+support for previous versions has been discontinued.
+
+### WebAssembly {#wasm}
+
+<!-- https://go.dev/issue/38248, https://go.dev/issue/59149, CL 489255 -->
+The new `go:wasmimport` directive can now be used in Go programs
+to import functions from the WebAssembly host.
+
+<!-- https://go.dev/issue/56100 -->
+
+The Go scheduler now interacts much more efficiently with the
+JavaScript event loop, especially in applications that block
+frequently on asynchronous events.
+
+### WebAssembly System Interface {#wasip1}
+
+<!-- https://go.dev/issue/58141 -->
+Go 1.21 adds an experimental port to the [
+WebAssembly System Interface (WASI)](https://wasi.dev/), Preview 1
+(`GOOS=wasip1`, `GOARCH=wasm`).
+
+As a result of the addition of the new `GOOS` value
+"`wasip1`", Go files named `*_wasip1.go`
+will now be [ignored
+by Go tools](/pkg/go/build/#hdr-Build_Constraints) except when that `GOOS` value is being
+used.
+If you have existing filenames matching that pattern, you will
+need to rename them.
+
+### Windows {#windows}
+
+<!-- https://go.dev/issue/57003, https://go.dev/issue/57004 -->
+As [announced](go1.20#windows) in the Go 1.20 release notes,
+Go 1.21 requires at least Windows 10 or Windows Server 2016;
+support for previous versions has been discontinued.
+
+<!-- CL 470695 -->
+
+<!-- cmd/dist: default to GOARM=7 on all non-arm systems -->

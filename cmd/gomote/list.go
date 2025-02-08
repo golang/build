@@ -18,7 +18,7 @@ import (
 func list(args []string) error {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "list usage: gomote list")
+		usageLogger.Print("list usage: gomote list")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}

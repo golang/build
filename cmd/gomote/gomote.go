@@ -27,6 +27,7 @@ To list the subcommands, run "gomote" without arguments:
 	  destroy    destroy a buildlet
 	  gettar     extract a tar.gz from a buildlet
 	  list       list active buildlets
+	  login      create authentication credentials for the gomote services
 	  ls         list the contents of a directory on a buildlet
 	  ping       test whether a buildlet is alive and reachable
 	  push       sync your GOROOT directory to the buildlet
@@ -35,6 +36,7 @@ To list the subcommands, run "gomote" without arguments:
 	  puttar     extract a tar.gz to a buildlet
 	  rm         delete files or directories
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
+	  repro      reproduce a build by LUCI build ID
 	  run        run a command on a buildlet
 	  ssh        ssh to a buildlet
 
@@ -138,6 +140,11 @@ to reproduce a rare failure, like so:
 	$ export GOMOTE_GROUP=debug
 	$ GOROOT=/path/to/goroot gomote create -setup -count=10 linux-amd64
 	$ gomote run -until='unexpected return pc' -collect go/bin/go run -run="MyFlakyTest" -count=100 runtime
+
+# Legacy Infrastructure
+
+Setting the GOMOTEDISABLELUCI environmental variable equal to true will set the gomote client to communicate with
+the coordinator instead of the gomote server.
 */
 package main
 
@@ -145,9 +152,10 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
+	"log"
 	"os"
 	"sort"
+	"strconv"
 
 	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
@@ -160,6 +168,7 @@ import (
 var (
 	buildEnv    *buildenv.Environment
 	activeGroup *groupData
+	usageLogger *log.Logger = log.New(os.Stderr, "", 0)
 )
 
 type command struct {
@@ -180,14 +189,14 @@ func sortedCommands() []string {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `Usage of gomote: gomote [global-flags] <cmd> [cmd-flags]
+	usageLogger.Printf(`Usage of gomote: gomote [global-flags] <cmd> [cmd-flags]
 
 Global flags:
 `)
 	flag.PrintDefaults()
-	fmt.Fprintf(os.Stderr, "Commands:\n\n")
+	usageLogger.Printf("Commands:\n\n")
 	for _, name := range sortedCommands() {
-		fmt.Fprintf(os.Stderr, "  %-13s %s\n", name, commands[name].des)
+		usageLogger.Printf("  %-13s %s\n", name, commands[name].des)
 	}
 	os.Exit(1)
 }
@@ -208,13 +217,15 @@ func registerCommands() {
 	registerCommand("destroy", "destroy a buildlet", destroy)
 	registerCommand("gettar", "extract a tar.gz from a buildlet", getTar)
 	registerCommand("group", "manage groups of instances", group)
-	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
 	registerCommand("list", "list active buildlets", list)
+	registerCommand("login", "authenticate with the gomote service", login)
+	registerCommand("ls", "list the contents of a directory on a buildlet", ls)
 	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
 	registerCommand("push", "sync your GOROOT directory to the buildlet", push)
 	registerCommand("put", "put files on a buildlet", put)
 	registerCommand("putbootstrap", "put bootstrap toolchain in place", putBootstrap)
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
+	registerCommand("repro", "reproduce a build environment in a new buildlet", repro)
 	registerCommand("rdp", "Unimplimented: RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
 	registerCommand("rm", "delete files or directories", rm)
 	registerCommand("run", "run a command on a buildlet", run)
@@ -222,10 +233,13 @@ func registerCommands() {
 }
 
 var (
-	serverAddr = flag.String("server", "build.golang.org:443", "Address for GRPC server")
+	serverAddr = flag.String("server", "gomote.golang.org:443", "Address for GRPC server")
 )
 
 func main() {
+	log.SetFlags(0)
+	log.SetPrefix("# ")
+
 	// Set up and parse global flags.
 	groupName := flag.String("group", os.Getenv("GOMOTE_GROUP"), "name of the gomote group to apply commands to (default is $GOMOTE_GROUP)")
 	buildlet.RegisterFlags()
@@ -236,7 +250,9 @@ func main() {
 	if len(args) == 0 {
 		usage()
 	}
-
+	if luciDisabled() {
+		*serverAddr = "build.golang.org:443"
+	}
 	// Set up globals.
 	buildEnv = buildenv.FromFlags()
 	if *groupName != "" {
@@ -245,7 +261,7 @@ func main() {
 		if os.Getenv("GOMOTE_GROUP") != *groupName {
 			// Only fail hard since it was specified by the flag.
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failure: %v\n", err)
+				log.Printf("Failure: %v\n", err)
 				usage()
 			}
 		} else {
@@ -254,7 +270,7 @@ func main() {
 			// ahead with it. We don't need this with the flag
 			// because it's explicit.
 			if err == nil {
-				fmt.Fprintf(os.Stderr, "# Using group %q from GOMOTE_GROUP\n", *groupName)
+				log.Printf("Using group %q from GOMOTE_GROUP\n", *groupName)
 			}
 			// Note that an invalid group in GOMOTE_GROUP is OK.
 		}
@@ -263,7 +279,7 @@ func main() {
 	cmdName := args[0]
 	cmd, ok := commands[cmdName]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Unknown command %q\n", cmdName)
+		log.Printf("Unknown command %q\n", cmdName)
 		usage()
 	}
 	if err := cmd.run(args[1:]); err != nil {
@@ -276,14 +292,18 @@ func main() {
 func gomoteServerClient(ctx context.Context) protos.GomoteServiceClient {
 	grpcClient, err := iapclient.GRPCClient(ctx, *serverAddr)
 	if err != nil {
-		logAndExitf("dialing the server=%s failed with: %s", *serverAddr, err)
+		var authErr iapclient.AuthenticationError
+		if errors.As(err, &authErr) {
+			logAndExitf("Authentication error: %s\n\tLogin via: gomote login\n", err)
+		}
+		logAndExitf("dialing the server=%s failed with: %s\n", *serverAddr, err)
 	}
 	return protos.NewGomoteServiceClient(grpcClient)
 }
 
 // logAndExitf is equivalent to Printf to Stderr followed by a call to os.Exit(1).
 func logAndExitf(format string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, v...)
+	log.Printf(format, v...)
 	os.Exit(1)
 }
 
@@ -295,4 +315,9 @@ func instanceDoesNotExist(err error) bool {
 		err = errors.Unwrap(err)
 	}
 	return false
+}
+
+func luciDisabled() bool {
+	on, _ := strconv.ParseBool(os.Getenv("GOMOTEDISABLELUCI"))
+	return on
 }

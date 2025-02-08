@@ -8,7 +8,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -53,12 +53,12 @@ type VMOpts struct {
 	// after the instance operation succeeds.
 	OnInstanceCreated func()
 
-	// OnInstanceCreated optionally specifies a hook to run synchronously
+	// OnGotInstanceInfo optionally specifies a hook to run synchronously
 	// after the computeService.Instances.Get call.
 	// Only valid for GCE resources.
 	OnGotInstanceInfo func(*compute.Instance)
 
-	// OnInstanceCreated optionally specifies a hook to run synchronously
+	// OnGotEC2InstanceInfo optionally specifies a hook to run synchronously
 	// after the EC2 instance information is retrieved.
 	// Only valid for EC2 resources.
 	OnGotEC2InstanceInfo func(*cloud.Instance)
@@ -139,7 +139,7 @@ func probeBuildlet(ctx context.Context, buildletURL string, opts *VMOpts) error 
 	if err != nil {
 		return fmt.Errorf("error probe buildlet %s: %w", buildletURL, err)
 	}
-	ioutil.ReadAll(res.Body)
+	io.ReadAll(res.Body)
 	res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("buildlet returned HTTP status code %d for %s", res.StatusCode, buildletURL)

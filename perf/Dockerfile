@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.18 AS builder
+FROM golang:1.23-bookworm AS build
 
 COPY go.mod /app/go.mod
 COPY go.sum /app/go.sum
@@ -14,7 +14,7 @@ RUN go mod download
 COPY . /app
 RUN go build -o perf golang.org/x/build/perf
 
-FROM debian:bullseye
+FROM debian:bookworm
 
 # netbase and ca-certificates are needed for dialing TLS.
 RUN apt-get update && apt-get install -y \
@@ -23,5 +23,5 @@ RUN apt-get update && apt-get install -y \
 	ca-certificates \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/perf /
+COPY --from=build /app/perf /
 ENTRYPOINT ["/perf"]

@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-// +build go1.16
-
 package main
 
 import (
@@ -50,7 +47,7 @@ func darwinCmd(base string) *exec.Cmd {
 	args := []string{
 		// Discard disk changes on exit.
 		"-snapshot",
-		"-m", "4096",
+		"-m", "10240",
 		"-cpu", "host",
 		"-machine", "q35",
 		"-usb",

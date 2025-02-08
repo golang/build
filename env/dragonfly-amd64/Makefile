@@ -7,8 +7,11 @@ MD5_600=252fc700803dbadce1de928432373bbb
 ISO_622=dfly-x86_64-6.2.2_REL.iso
 MD5_622=b391a29c8e9c1cc33f2441ff1f0d98a0
 
+ISO_640=dfly-x86_64-6.4.0_REL.iso
+MD5_640=5dbf894d9120664a675030c475f25040
+
 # Default version when invoking make. Can override on command line: make V=600
-V=622
+V=640
 
 ISO=$(ISO_$V)
 MD5=$(MD5_$V)

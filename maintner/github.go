@@ -15,20 +15,19 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/gregjones/httpcache"
-
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/oauth2"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // xFromCache is the synthetic response header added by the httpcache
@@ -116,7 +115,7 @@ type GitHubRepo struct {
 
 func (gr *GitHubRepo) ID() GitHubRepoID { return gr.id }
 
-// Issue returns the the provided issue number, or nil if it's not known.
+// Issue returns the provided issue number, or nil if it's not known.
 func (gr *GitHubRepo) Issue(n int32) *GitHubIssue { return gr.issues[n] }
 
 // ForeachLabel calls fn for each label in the repo, in unsorted order.
@@ -525,9 +524,7 @@ func (e *GitHubReview) Proto() *maintpb.GithubReview {
 		p.OtherJson = []byte(e.OtherJSON)
 	}
 	if !e.Created.IsZero() {
-		if tp, err := ptypes.TimestampProto(e.Created); err == nil {
-			p.Created = tp
-		}
+		p.Created = timestamppb.New(e.Created)
 	}
 	if e.Actor != nil {
 		p.ActorId = e.Actor.ID
@@ -549,7 +546,7 @@ func (r *GitHubRepo) newGithubReview(p *maintpb.GithubReview) *GitHubReview {
 	}
 
 	if p.Created != nil {
-		e.Created, _ = ptypes.Timestamp(p.Created)
+		e.Created = p.Created.AsTime()
 	}
 	if len(p.OtherJson) > 0 {
 		// TODO: parse it and see if we've since learned how
@@ -571,7 +568,7 @@ type GitHubComment struct {
 	Body    string
 }
 
-// GitHubDismissedReview is the contents of a dismissed review event. For more
+// GitHubDismissedReviewEvent is the contents of a dismissed review event. For more
 // details, see https://developer.github.com/v3/issues/events/.
 type GitHubDismissedReviewEvent struct {
 	ReviewID         int64
@@ -636,9 +633,7 @@ func (e *GitHubIssueEvent) Proto() *maintpb.GithubIssueEvent {
 		p.OtherJson = []byte(e.OtherJSON)
 	}
 	if !e.Created.IsZero() {
-		if tp, err := ptypes.TimestampProto(e.Created); err == nil {
-			p.Created = tp
-		}
+		p.Created = timestamppb.New(e.Created)
 	}
 	if e.Actor != nil {
 		p.ActorId = e.Actor.ID
@@ -703,7 +698,7 @@ func (r *GitHubRepo) newGithubEvent(p *maintpb.GithubIssueEvent) *GitHubIssueEve
 		To:              p.RenameTo,
 	}
 	if p.Created != nil {
-		e.Created, _ = ptypes.Timestamp(p.Created)
+		e.Created = p.Created.AsTime()
 	}
 	if len(p.OtherJson) > 0 {
 		// TODO: parse it and see if we've since learned how
@@ -776,7 +771,7 @@ func (c *Corpus) initGithub() {
 	}
 }
 
-// GitHubLimiter sets a limiter that controls the rate of requests made
+// SetGitHubLimiter sets a limiter that controls the rate of requests made
 // to GitHub APIs. If nil, requests are not limited. Only valid in leader mode.
 // The limiter must only be set before Sync or SyncLoop is called.
 func (c *Corpus) SetGitHubLimiter(l *rate.Limiter) {
@@ -967,20 +962,11 @@ func (g *GitHub) setAssigneesFromProto(existing []*GitHubUser, new []*maintpb.Gi
 			existing = append(existing, g.getUser(u))
 		}
 	}
-	// IDs to delete, in descending order
-	idxsToDelete := []int{}
 	// this is quadratic but the number of assignees is very unlikely to exceed,
 	// say, 5.
-	for _, id := range toDelete {
-		for i, u := range existing {
-			if u.ID == id {
-				idxsToDelete = append([]int{i}, idxsToDelete...)
-			}
-		}
-	}
-	for _, idx := range idxsToDelete {
-		existing = append(existing[:idx], existing[idx+1:]...)
-	}
+	existing = slices.DeleteFunc(existing, func(u *GitHubUser) bool {
+		return slices.Contains(toDelete, u.ID)
+	})
 	return existing
 }
 
@@ -1048,15 +1034,11 @@ func (d githubIssueDiffer) diffClosedAt(m *maintpb.GithubIssueMutation) bool {
 	return d.diffTimeField(&m.ClosedAt, d.a.getClosedAt(), d.b.GetClosedAt())
 }
 
-func (d githubIssueDiffer) diffTimeField(dst **timestamp.Timestamp, memTime, githubTime time.Time) bool {
+func (d githubIssueDiffer) diffTimeField(dst **timestamppb.Timestamp, memTime, githubTime time.Time) bool {
 	if githubTime.IsZero() || memTime.Equal(githubTime) {
 		return false
 	}
-	tproto, err := ptypes.TimestampProto(githubTime)
-	if err != nil {
-		panic(err)
-	}
-	*dst = tproto
+	*dst = timestamppb.New(githubTime)
 	return true
 }
 
@@ -1289,11 +1271,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 			return
 		}
 
-		var err error
-		gi.Created, err = ptypes.Timestamp(m.Created)
-		if err != nil {
-			panic(err)
-		}
+		gi.Created = m.Created.AsTime()
 	}
 	if m.NotExist != gi.NotExist {
 		gi.NotExist = m.NotExist
@@ -1306,18 +1284,10 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 	// Mutation is stale
 	// (ignoring Created since it *should* never update)
 	if m.Updated != nil {
-		t, err := ptypes.Timestamp(m.Updated)
-		if err != nil {
-			panic(err)
-		}
-		gi.Updated = t
+		gi.Updated = m.Updated.AsTime()
 	}
 	if m.ClosedAt != nil {
-		t, err := ptypes.Timestamp(m.ClosedAt)
-		if err != nil {
-			panic(err)
-		}
-		gi.ClosedAt = t
+		gi.ClosedAt = m.ClosedAt.AsTime()
 	}
 	if m.User != nil {
 		gi.User = c.github.getUser(m.User)
@@ -1388,21 +1358,17 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 			gc.User = c.github.getUser(cmut.User)
 		}
 		if cmut.Created != nil {
-			gc.Created, _ = ptypes.Timestamp(cmut.Created)
-			gc.Created = gc.Created.UTC()
+			gc.Created = cmut.Created.AsTime().UTC()
 		}
 		if cmut.Updated != nil {
-			gc.Updated, _ = ptypes.Timestamp(cmut.Updated)
-			gc.Updated = gc.Updated.UTC()
+			gc.Updated = cmut.Updated.AsTime().UTC()
 		}
 		if cmut.Body != "" {
 			gc.Body = cmut.Body
 		}
 	}
 	if m.CommentStatus != nil && m.CommentStatus.ServerDate != nil {
-		if serverDate, err := ptypes.Timestamp(m.CommentStatus.ServerDate); err == nil {
-			gi.commentsSyncedAsOf = serverDate.UTC()
-		}
+		gi.commentsSyncedAsOf = m.CommentStatus.ServerDate.AsTime().UTC()
 	}
 
 	for _, emut := range m.Event {
@@ -1420,9 +1386,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		}
 	}
 	if m.EventStatus != nil && m.EventStatus.ServerDate != nil {
-		if serverDate, err := ptypes.Timestamp(m.EventStatus.ServerDate); err == nil {
-			gi.eventsSyncedAsOf = serverDate.UTC()
-		}
+		gi.eventsSyncedAsOf = m.EventStatus.ServerDate.AsTime().UTC()
 	}
 
 	for _, rmut := range m.Review {
@@ -1440,9 +1404,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		}
 	}
 	if m.ReviewStatus != nil && m.ReviewStatus.ServerDate != nil {
-		if serverDate, err := ptypes.Timestamp(m.ReviewStatus.ServerDate); err == nil {
-			gi.reviewsSyncedAsOf = serverDate.UTC()
-		}
+		gi.reviewsSyncedAsOf = m.ReviewStatus.ServerDate.AsTime().UTC()
 	}
 }
 
@@ -1693,7 +1655,7 @@ func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]interf
 	return its, res, err
 }
 
-// foreach walks over all pages of items from getPage and calls fn for each item.
+// foreachItem walks over all pages of items from getPage and calls fn for each item.
 // If the first page's response was cached, fn is never called.
 func (p *githubRepoPoller) foreachItem(
 	ctx context.Context,
@@ -1931,12 +1893,15 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 	owner, repo := p.gr.id.Owner, p.gr.id.Repo
 	morePages := true // at least try the first. might be empty.
 	for morePages {
-		ics, res, err := p.githubDirect.Issues.ListComments(ctx, owner, repo, int(issueNum), &github.IssueListCommentsOptions{
-			Since:       since,
-			Direction:   "asc",
-			Sort:        "updated",
+		opt := &github.IssueListCommentsOptions{
+			Direction:   github.String("asc"),
+			Sort:        github.String("updated"),
 			ListOptions: github.ListOptions{PerPage: 100},
-		})
+		}
+		if !since.IsZero() {
+			opt.Since = &since
+		}
+		ics, res, err := p.githubDirect.Issues.ListComments(ctx, owner, repo, int(issueNum), opt)
 		if canRetry(ctx, err) {
 			continue
 		} else if ge, ok := err.(*github.ErrorResponse); ok && (ge.Response.StatusCode == http.StatusNotFound || ge.Response.StatusCode == http.StatusGone) {
@@ -1976,14 +1941,8 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 				p.logf("bogus comment: %v", ic)
 				continue
 			}
-			created, err := ptypes.TimestampProto(*ic.CreatedAt)
-			if err != nil {
-				continue
-			}
-			updated, err := ptypes.TimestampProto(*ic.UpdatedAt)
-			if err != nil {
-				continue
-			}
+			created := timestamppb.New(*ic.CreatedAt)
+			updated := timestamppb.New(*ic.UpdatedAt)
 			since = *ic.UpdatedAt // for next round
 
 			id := int64(*ic.ID)
@@ -2020,8 +1979,9 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 		p.c.mu.RUnlock()
 
 		if res.NextPage == 0 {
-			sdp, _ := ptypes.TimestampProto(serverDate)
-			mut.GithubIssue.CommentStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
+			mut.GithubIssue.CommentStatus = &maintpb.GithubIssueSyncStatus{
+				ServerDate: timestamppb.New(serverDate),
+			}
 			morePages = false
 		}
 
@@ -2120,8 +2080,9 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			if err != nil {
 				return nil, nil, fmt.Errorf("invalid server Date response: %v", err)
 			}
-			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
-			mut.GithubIssue.EventStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
+			mut.GithubIssue.EventStatus = &maintpb.GithubIssueSyncStatus{
+				ServerDate: timestamppb.New(serverDate.UTC()),
+			}
 
 			return is, ghResp, err
 		},
@@ -2364,8 +2325,9 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 			if err != nil {
 				return nil, nil, fmt.Errorf("invalid server Date response: %v", err)
 			}
-			sdp, _ := ptypes.TimestampProto(serverDate.UTC())
-			mut.GithubIssue.ReviewStatus = &maintpb.GithubIssueSyncStatus{ServerDate: sdp}
+			mut.GithubIssue.ReviewStatus = &maintpb.GithubIssueSyncStatus{
+				ServerDate: timestamppb.New(serverDate.UTC()),
+			}
 
 			return is, ghResp, err
 		},

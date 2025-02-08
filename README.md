@@ -14,10 +14,12 @@ promise nor the [Release Policy](https://go.dev/doc/devel/release#policy).
 ## Report Issues / Send Patches
 
 This repository uses Gerrit for code changes. To contribute, see
-https://golang.org/doc/contribute.html.
+https://go.dev/doc/contribute.
 
-The main issue tracker for the blog is located at
-https://github.com/golang/go/issues. Prefix your issue with
+The git repository is https://go.googlesource.com/build.
+
+The main issue tracker for the build repository is located at
+https://go.dev/issues. Prefix your issue with
 "`x/build/DIR: `" in the subject line.
 
 ## Overview

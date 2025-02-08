@@ -20,9 +20,10 @@ RUN go install cloud.google.com/go/compute/metadata
 COPY . /go/src/golang.org/x/build/
 
 # Install binary to /go/bin/stage0
+ENV CGO_ENABLED=0
 RUN go install golang.org/x/build/cmd/buildlet/stage0
-RUN CGO_ENABLED=0 go build -o /go/bin/stage0.static golang.org/x/build/cmd/buildlet/stage0
+RUN go install golang.org/x/build/cmd/bootstrapswarm
 
 FROM golang:1.19
-COPY --from=build /go/bin/stage0 /go/bin/stage0
-COPY --from=build /go/bin/stage0.static /go/bin/stage0.static
+COPY --from=build /go/bin/* /go/bin/
+COPY cmd/buildlet/stage0/run-worker.sh /go/bin

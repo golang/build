@@ -160,6 +160,8 @@ func main() {
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-ppc64-sid":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
+	case "host-linux-ppc64-sid-power10":
+		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-linux-amd64-wsl", "host-linux-riscv64-unmatched":
 		cmd.Args = append(cmd.Args, reverseHostTypeArgs(buildEnv)...)
 	case "host-freebsd-riscv64-unmatched":

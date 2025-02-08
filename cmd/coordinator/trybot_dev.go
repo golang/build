@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package main
 
@@ -29,14 +28,14 @@ func initTryDev(mux *http.ServeMux) {
 			failed: []string{"failed-build"},
 			remain: 1,
 			builds: []*buildStatus{
-				&buildStatus{
+				{
 					BuilderRev: buildgo.BuilderRev{
 						Name: "linux-amd64-race",
 						Rev:  "555cfa3ee5e9f3df4b10c96af487424bfde19125",
 					},
 					startTime: time.Now(),
 				},
-				&buildStatus{
+				{
 					BuilderRev: buildgo.BuilderRev{
 						Name: "darwin-amd64-race",
 						Rev:  "555cfa3ee5e9f3df4b10c96af487424bfde19125",

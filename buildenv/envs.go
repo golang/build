@@ -294,6 +294,13 @@ var Production = &Environment{
 	GomoteTransferBucket: "gomote-transfer",
 }
 
+var LUCIProduction = &Environment{
+	ProjectName:          "golang-ci-luci",
+	ProjectNumber:        257595674695,
+	IsProd:               true,
+	GomoteTransferBucket: "gomote-luci-transfer",
+}
+
 var Development = &Environment{
 	GoProjectName: "golang-org",
 	IsProd:        false,
@@ -306,6 +313,7 @@ var possibleEnvs = map[string]*Environment{
 	"dev":                Development,
 	"symbolic-datum-552": Production,
 	"go-dashboard-dev":   Staging,
+	"golang-ci-luci":     LUCIProduction,
 }
 
 var (

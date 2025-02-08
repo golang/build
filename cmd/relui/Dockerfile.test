@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.18 AS build
+FROM golang:1.20 AS build
 
 COPY go.mod /app/go.mod
 COPY go.sum /app/go.sum

@@ -2,13 +2,11 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-// +build go1.16
+//go:build linux || darwin
 
 package legacydash
 
 import (
-	"context"
 	"crypto/hmac"
 	"crypto/md5"
 	"encoding/json"
@@ -33,7 +31,7 @@ const (
 // creates a new Result entity, and creates or updates the relevant Commit entity.
 // If the Log field is not empty, resultHandler creates a new Log entity
 // and updates the LogHash field before putting the Commit entity.
-func resultHandler(r *http.Request) (interface{}, error) {
+func (h handler) resultHandler(r *http.Request) (interface{}, error) {
 	if r.Method != "POST" {
 		return nil, errBadMethod(r.Method)
 	}
@@ -55,7 +53,7 @@ func resultHandler(r *http.Request) (interface{}, error) {
 	}
 	// store the Log text if supplied
 	if len(res.Log) > 0 {
-		hash, err := PutLog(ctx, res.Log)
+		hash, err := h.putLog(ctx, res.Log)
 		if err != nil {
 			return nil, fmt.Errorf("putting Log: %v", err)
 		}
@@ -76,23 +74,27 @@ func resultHandler(r *http.Request) (interface{}, error) {
 		}
 		return nil
 	}
-	_, err := datastoreClient.RunInTransaction(ctx, tx)
+	_, err := h.datastoreCl.RunInTransaction(ctx, tx)
 	return nil, err
 }
 
 // logHandler displays log text for a given hash.
 // It handles paths like "/log/hash".
-func logHandler(w http.ResponseWriter, r *http.Request) {
+func (h handler) logHandler(w http.ResponseWriter, r *http.Request) {
+	if h.datastoreCl == nil {
+		http.Error(w, "no datastore client", http.StatusNotFound)
+		return
+	}
 	c := r.Context()
 	hash := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
 	key := dsKey("Log", hash, nil)
 	l := new(Log)
-	if err := datastoreClient.Get(c, key, l); err != nil {
+	if err := h.datastoreCl.Get(c, key, l); err != nil {
 		if err == datastore.ErrNoSuchEntity {
 			// Fall back to default namespace;
 			// maybe this was on the old dashboard.
 			key.Namespace = ""
-			err = datastoreClient.Get(c, key, l)
+			err = h.datastoreCl.Get(c, key, l)
 		}
 		if err != nil {
 			log.Printf("Error: %v", err)
@@ -112,7 +114,7 @@ func logHandler(w http.ResponseWriter, r *http.Request) {
 
 // clearResultsHandler purge a single build failure from the dashboard.
 // It currently only supports the main Go repo.
-func clearResultsHandler(r *http.Request) (interface{}, error) {
+func (h handler) clearResultsHandler(r *http.Request) (interface{}, error) {
 	if r.Method != "POST" {
 		return nil, errBadMethod(r.Method)
 	}
@@ -127,7 +129,7 @@ func clearResultsHandler(r *http.Request) (interface{}, error) {
 
 	ctx := r.Context()
 
-	_, err := datastoreClient.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
+	_, err := h.datastoreCl.RunInTransaction(ctx, func(tx *datastore.Transaction) error {
 		c := &Commit{
 			PackagePath: "", // TODO(adg): support clearing sub-repos
 			Hash:        hash,
@@ -187,12 +189,15 @@ func builderKeyRevoked(builder string) bool {
 	return false
 }
 
-// AuthHandler wraps a http.HandlerFunc with a handler that validates the
-// supplied key and builder query parameters.
-func AuthHandler(h dashHandler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c := r.Context()
+// authHandler wraps an http.HandlerFunc with a handler that validates the
+// supplied key and builder query parameters with the provided key checker.
+type authHandler struct {
+	kc keyCheck
+	h  dashHandler
+}
 
+func (a authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	{ // Block to improve diff readability. Can be unnested later.
 		// Put the URL Query values into r.Form to avoid parsing the
 		// request body when calling r.FormValue.
 		r.Form = r.URL.Query()
@@ -203,13 +208,13 @@ func AuthHandler(h dashHandler) http.Handler {
 		// Validate key query parameter for POST requests only.
 		key := r.FormValue("key")
 		builder := r.FormValue("builder")
-		if r.Method == "POST" && !validKey(c, key, builder) {
+		if r.Method == "POST" && !a.kc.ValidKey(key, builder) {
 			err = fmt.Errorf("invalid key %q for builder %q", key, builder)
 		}
 
 		// Call the original HandlerFunc and return the response.
 		if err == nil {
-			resp, err = h(r)
+			resp, err = a.h(r)
 		}
 
 		// Write JSON response.
@@ -222,7 +227,7 @@ func AuthHandler(h dashHandler) http.Handler {
 		if err = json.NewEncoder(w).Encode(dashResp); err != nil {
 			log.Printf("encoding response: %v", err)
 		}
-	})
+	}
 }
 
 // validHash reports whether hash looks like a valid git commit hash.
@@ -232,22 +237,27 @@ func validHash(hash string) bool {
 	return hash != ""
 }
 
-func validKey(c context.Context, key, builder string) bool {
-	if isMasterKey(c, key) {
+type keyCheck struct {
+	// The builder master key.
+	masterKey string
+}
+
+func (kc keyCheck) ValidKey(key, builder string) bool {
+	if kc.isMasterKey(key) {
 		return true
 	}
 	if builderKeyRevoked(builder) {
 		return false
 	}
-	return key == builderKey(c, builder)
+	return key == kc.builderKey(builder)
 }
 
-func isMasterKey(ctx context.Context, k string) bool {
-	return k == masterKey
+func (kc keyCheck) isMasterKey(k string) bool {
+	return k == kc.masterKey
 }
 
-func builderKey(ctx context.Context, builder string) string {
-	h := hmac.New(md5.New, []byte(masterKey))
+func (kc keyCheck) builderKey(builder string) string {
+	h := hmac.New(md5.New, []byte(kc.masterKey))
 	h.Write([]byte(builder))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }

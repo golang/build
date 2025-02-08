@@ -8,12 +8,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"reflect"
 	"testing"
 
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	gax "github.com/googleapis/gax-go/v2"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -167,7 +167,7 @@ func TestFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.flagVal, func(t *testing.T) {
 			fs := flag.NewFlagSet("", flag.ContinueOnError)
-			fs.SetOutput(ioutil.Discard)
+			fs.SetOutput(io.Discard)
 			flagVal := r.Flag(fs, "testflag", "usage")
 			err := fs.Parse([]string{"--testflag", tt.flagVal})
 			if tt.wantErr {
@@ -214,7 +214,7 @@ func TestJSONFlag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.flagVal, func(t *testing.T) {
 			fs := flag.NewFlagSet("", flag.ContinueOnError)
-			fs.SetOutput(ioutil.Discard)
+			fs.SetOutput(io.Discard)
 			value := &jsonValue{}
 			r.JSONVarFlag(fs, value, "testflag", "usage")
 			err := fs.Parse([]string{"--testflag", tt.flagVal})

@@ -1,4 +1,4 @@
-// Copyright 2016 The Go Authors.  All rights reserved.
+// Copyright 2016 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -8,6 +8,7 @@ package db
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -20,7 +21,6 @@ import (
 
 	"golang.org/x/build/perfdata"
 	"golang.org/x/build/perfdata/query"
-	"golang.org/x/net/context"
 	"golang.org/x/perf/storage/benchfmt"
 )
 

@@ -1,153 +1,281 @@
-Targets for release 1.18
+Targets for release 1.22
 ================================================================================
-darwin-amd64    darwin     amd64      darwin-amd64-12_0
-	Race enabled
-	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
-	Running on reverse builder: AWS macOS Monterey (12) VM under QEMU
+aix-ppc64       aix        ppc64      (cross-compiled via distpack)
 
-darwin-arm64    darwin     arm64      darwin-arm64-12
-	Race enabled
-	Running on reverse builder: macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office
+darwin-amd64    darwin     amd64      (cross-compiled via distpack)
+	First class port, Minimum macOS version is 10.15
 
-freebsd-386     freebsd    386        freebsd-386-12_3
-	Running on GCP
+darwin-arm64    darwin     arm64      (cross-compiled via distpack)
+	First class port, Minimum macOS version is 11
 
-freebsd-amd64   freebsd    amd64      freebsd-amd64-12_3
-	Race enabled
-	Running on GCP
+dragonfly-amd64 dragonfly  amd64      (cross-compiled via distpack)
 
-linux-386       linux      386        linux-386-stretch
-	Long tests on linux-386-longtest
-	Running on GCP
+freebsd-386     freebsd    386        (cross-compiled via distpack)
 
-linux-amd64     linux      amd64      linux-amd64-stretch
-	Race enabled, Long tests on linux-amd64-longtest
-	Running on GCP
+freebsd-amd64   freebsd    amd64      (cross-compiled via distpack)
 
-linux-arm64     linux      arm64      linux-arm64
-	Running on GCP
+freebsd-arm     freebsd    arm        (cross-compiled via distpack)
 
-linux-armv6l    linux      arm        linux-arm-aws
-	Running on AWS
+freebsd-arm64   freebsd    arm64      (cross-compiled via distpack)
 
-linux-ppc64le   linux      ppc64le    linux-ppc64le-buildlet
-	Build only
-	Running on reverse builder: Ubuntu 20.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl
+freebsd-riscv64 freebsd    riscv64    (cross-compiled via distpack)
 
-linux-s390x     linux      s390x      linux-s390x-crosscompile
-	Build only
-	Running on GCP
+illumos-amd64   illumos    amd64      (cross-compiled via distpack)
 
-windows-386     windows    386        windows-386-2008-oldcc
-	Running on GCP
+linux-386       linux      386        (cross-compiled via distpack)
+	First class port
 
-windows-amd64   windows    amd64      windows-amd64-2008-oldcc
-	Race enabled, Long tests on windows-amd64-longtest-oldcc
-	Running on GCP
+linux-amd64     linux      amd64      (cross-compiled via distpack)
+	First class port
 
-windows-arm64   windows    arm64      windows-arm64-11
-	Running on reverse builder: Azure windows 11 arm64 VMs
+linux-arm64     linux      arm64      (cross-compiled via distpack)
+	First class port
+
+linux-armv6l    linux      arm        (cross-compiled via distpack)
+	First class port
+	Extra env: ["GOARM=6"]
+
+linux-loong64   linux      loong64    (cross-compiled via distpack)
+
+linux-mips      linux      mips       (cross-compiled via distpack)
+
+linux-mips64    linux      mips64     (cross-compiled via distpack)
+
+linux-mips64le  linux      mips64le   (cross-compiled via distpack)
+
+linux-mipsle    linux      mipsle     (cross-compiled via distpack)
+
+linux-ppc64     linux      ppc64      (cross-compiled via distpack)
+
+linux-ppc64le   linux      ppc64le    (cross-compiled via distpack)
+
+linux-riscv64   linux      riscv64    (cross-compiled via distpack)
+
+linux-s390x     linux      s390x      (cross-compiled via distpack)
+
+netbsd-386      netbsd     386        (cross-compiled via distpack)
+
+netbsd-amd64    netbsd     amd64      (cross-compiled via distpack)
+
+netbsd-arm      netbsd     arm        (cross-compiled via distpack)
+
+netbsd-arm64    netbsd     arm64      (cross-compiled via distpack)
+
+openbsd-386     openbsd    386        (cross-compiled via distpack)
+
+openbsd-amd64   openbsd    amd64      (cross-compiled via distpack)
+
+openbsd-arm     openbsd    arm        (cross-compiled via distpack)
+
+openbsd-arm64   openbsd    arm64      (cross-compiled via distpack)
+
+openbsd-ppc64   openbsd    ppc64      (cross-compiled via distpack)
+
+plan9-386       plan9      386        (cross-compiled via distpack)
+
+plan9-amd64     plan9      amd64      (cross-compiled via distpack)
+
+plan9-arm       plan9      arm        (cross-compiled via distpack)
+
+solaris-amd64   solaris    amd64      (cross-compiled via distpack)
+
+windows-386     windows    386        (cross-compiled via distpack)
+	First class port
+
+windows-amd64   windows    amd64      (cross-compiled via distpack)
+	First class port
+
+windows-arm     windows    arm        (cross-compiled via distpack)
+
+windows-arm64   windows    arm64      (cross-compiled via distpack)
 
 
 
-Targets for release 1.19
+Targets for release 1.23
 ================================================================================
-darwin-amd64    darwin     amd64      darwin-amd64-12_0
-	Race enabled
-	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
-	Running on reverse builder: AWS macOS Monterey (12) VM under QEMU
+aix-ppc64       aix        ppc64      (cross-compiled via distpack)
 
-darwin-arm64    darwin     arm64      darwin-arm64-12
-	Race enabled
-	Running on reverse builder: macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office
+darwin-amd64    darwin     amd64      (cross-compiled via distpack)
+	First class port, Minimum macOS version is 11
 
-freebsd-386     freebsd    386        freebsd-386-12_3
-	Running on GCP
+darwin-arm64    darwin     arm64      (cross-compiled via distpack)
+	First class port, Minimum macOS version is 11
 
-freebsd-amd64   freebsd    amd64      freebsd-amd64-12_3
-	Race enabled
-	Running on GCP
+dragonfly-amd64 dragonfly  amd64      (cross-compiled via distpack)
 
-linux-386       linux      386        linux-386-buster
-	Long tests on linux-386-longtest
-	Running on GCP
+freebsd-386     freebsd    386        (cross-compiled via distpack)
 
-linux-amd64     linux      amd64      linux-amd64-buster
-	Race enabled, Long tests on linux-amd64-longtest
-	Running on GCP
+freebsd-amd64   freebsd    amd64      (cross-compiled via distpack)
 
-linux-arm64     linux      arm64      linux-arm64
-	Running on GCP
+freebsd-arm     freebsd    arm        (cross-compiled via distpack)
 
-linux-armv6l    linux      arm        linux-arm-aws
-	Running on AWS
+freebsd-arm64   freebsd    arm64      (cross-compiled via distpack)
 
-linux-ppc64le   linux      ppc64le    linux-ppc64le-buildlet
-	Build only
-	Running on reverse builder: Ubuntu 20.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl
+freebsd-riscv64 freebsd    riscv64    (cross-compiled via distpack)
 
-linux-s390x     linux      s390x      linux-s390x-crosscompile
-	Build only
-	Running on GCP
+illumos-amd64   illumos    amd64      (cross-compiled via distpack)
 
-windows-386     windows    386        windows-386-2008-oldcc
-	Running on GCP
+linux-386       linux      386        (cross-compiled via distpack)
+	First class port
 
-windows-amd64   windows    amd64      windows-amd64-2008-oldcc
-	Race enabled, Long tests on windows-amd64-longtest-oldcc
-	Running on GCP
+linux-amd64     linux      amd64      (cross-compiled via distpack)
+	First class port
 
-windows-arm64   windows    arm64      windows-arm64-11
-	Running on reverse builder: Azure windows 11 arm64 VMs
+linux-arm64     linux      arm64      (cross-compiled via distpack)
+	First class port
+
+linux-armv6l    linux      arm        (cross-compiled via distpack)
+	First class port
+	Extra env: ["GOARM=6"]
+
+linux-loong64   linux      loong64    (cross-compiled via distpack)
+
+linux-mips      linux      mips       (cross-compiled via distpack)
+
+linux-mips64    linux      mips64     (cross-compiled via distpack)
+
+linux-mips64le  linux      mips64le   (cross-compiled via distpack)
+
+linux-mipsle    linux      mipsle     (cross-compiled via distpack)
+
+linux-ppc64     linux      ppc64      (cross-compiled via distpack)
+
+linux-ppc64le   linux      ppc64le    (cross-compiled via distpack)
+
+linux-riscv64   linux      riscv64    (cross-compiled via distpack)
+
+linux-s390x     linux      s390x      (cross-compiled via distpack)
+
+netbsd-386      netbsd     386        (cross-compiled via distpack)
+
+netbsd-amd64    netbsd     amd64      (cross-compiled via distpack)
+
+netbsd-arm      netbsd     arm        (cross-compiled via distpack)
+
+netbsd-arm64    netbsd     arm64      (cross-compiled via distpack)
+
+openbsd-386     openbsd    386        (cross-compiled via distpack)
+
+openbsd-amd64   openbsd    amd64      (cross-compiled via distpack)
+
+openbsd-arm     openbsd    arm        (cross-compiled via distpack)
+
+openbsd-arm64   openbsd    arm64      (cross-compiled via distpack)
+
+openbsd-ppc64   openbsd    ppc64      (cross-compiled via distpack)
+
+openbsd-riscv64 openbsd    riscv64    (cross-compiled via distpack)
+
+plan9-386       plan9      386        (cross-compiled via distpack)
+
+plan9-amd64     plan9      amd64      (cross-compiled via distpack)
+
+plan9-arm       plan9      arm        (cross-compiled via distpack)
+
+solaris-amd64   solaris    amd64      (cross-compiled via distpack)
+
+windows-386     windows    386        (cross-compiled via distpack)
+	First class port
+
+windows-amd64   windows    amd64      (cross-compiled via distpack)
+	First class port
+
+windows-arm     windows    arm        (cross-compiled via distpack)
+
+windows-arm64   windows    arm64      (cross-compiled via distpack)
 
 
 
-Targets for release 1.20
+Targets for release 1.24
 ================================================================================
-darwin-amd64    darwin     amd64      darwin-amd64-13
-	Extra env: ["CGO_CFLAGS=-mmacosx-version-min=10.13"]
-	Running on reverse builder: AWS macOS Ventura (13) VM under QEMU
+aix-ppc64       aix        ppc64      (cross-compiled via distpack)
 
-darwin-arm64    darwin     arm64      darwin-arm64-12
-	Running on reverse builder: macOS Monterey (12) ARM64 (M1) on Mac minis in a Google office
+darwin-amd64    darwin     amd64      (cross-compiled via distpack)
+	First class port, Minimum macOS version is 11
 
-freebsd-386     freebsd    386        freebsd-386-13_0
-	Running on GCP
+darwin-arm64    darwin     arm64      (cross-compiled via distpack)
+	First class port, Minimum macOS version is 11
 
-freebsd-amd64   freebsd    amd64      freebsd-amd64-13_0
-	Running on GCP
+dragonfly-amd64 dragonfly  amd64      (cross-compiled via distpack)
 
-linux-386       linux      386        linux-386-bullseye
-	Long tests on linux-386-longtest
-	Running on GCP
+freebsd-386     freebsd    386        (cross-compiled via distpack)
 
-linux-amd64     linux      amd64      linux-amd64-bullseye
-	Long tests on linux-amd64-longtest
-	Running on GCP
+freebsd-amd64   freebsd    amd64      (cross-compiled via distpack)
 
-linux-arm64     linux      arm64      linux-arm64
-	Running on GCP
+freebsd-arm     freebsd    arm        (cross-compiled via distpack)
 
-linux-armv6l    linux      arm        linux-arm-aws
-	Running on AWS
+freebsd-arm64   freebsd    arm64      (cross-compiled via distpack)
 
-linux-ppc64le   linux      ppc64le    linux-ppc64le-buildlet
-	Build only
-	Running on reverse builder: Ubuntu 20.04; run by Go team on osuosl.org; see x/build/env/linux-ppc64le/osuosl
+freebsd-riscv64 freebsd    riscv64    (cross-compiled via distpack)
 
-linux-s390x     linux      s390x      linux-s390x-crosscompile
-	Build only
-	Running on GCP
+illumos-amd64   illumos    amd64      (cross-compiled via distpack)
 
-windows-386     windows    386        windows-386-2008
-	Running on GCP
+linux-386       linux      386        (cross-compiled via distpack)
+	First class port
 
-windows-amd64   windows    amd64      windows-amd64-2008
-	Long tests on windows-amd64-longtest
-	Running on GCP
+linux-amd64     linux      amd64      (cross-compiled via distpack)
+	First class port
 
-windows-arm64   windows    arm64      windows-arm64-11
-	Running on reverse builder: Azure windows 11 arm64 VMs
+linux-arm64     linux      arm64      (cross-compiled via distpack)
+	First class port
+
+linux-armv6l    linux      arm        (cross-compiled via distpack)
+	First class port
+	Extra env: ["GOARM=6"]
+
+linux-loong64   linux      loong64    (cross-compiled via distpack)
+
+linux-mips      linux      mips       (cross-compiled via distpack)
+
+linux-mips64    linux      mips64     (cross-compiled via distpack)
+
+linux-mips64le  linux      mips64le   (cross-compiled via distpack)
+
+linux-mipsle    linux      mipsle     (cross-compiled via distpack)
+
+linux-ppc64     linux      ppc64      (cross-compiled via distpack)
+
+linux-ppc64le   linux      ppc64le    (cross-compiled via distpack)
+
+linux-riscv64   linux      riscv64    (cross-compiled via distpack)
+
+linux-s390x     linux      s390x      (cross-compiled via distpack)
+
+netbsd-386      netbsd     386        (cross-compiled via distpack)
+
+netbsd-amd64    netbsd     amd64      (cross-compiled via distpack)
+
+netbsd-arm      netbsd     arm        (cross-compiled via distpack)
+
+netbsd-arm64    netbsd     arm64      (cross-compiled via distpack)
+
+openbsd-386     openbsd    386        (cross-compiled via distpack)
+
+openbsd-amd64   openbsd    amd64      (cross-compiled via distpack)
+
+openbsd-arm     openbsd    arm        (cross-compiled via distpack)
+
+openbsd-arm64   openbsd    arm64      (cross-compiled via distpack)
+
+openbsd-ppc64   openbsd    ppc64      (cross-compiled via distpack)
+
+openbsd-riscv64 openbsd    riscv64    (cross-compiled via distpack)
+
+plan9-386       plan9      386        (cross-compiled via distpack)
+
+plan9-amd64     plan9      amd64      (cross-compiled via distpack)
+
+plan9-arm       plan9      arm        (cross-compiled via distpack)
+
+solaris-amd64   solaris    amd64      (cross-compiled via distpack)
+
+windows-386     windows    386        (cross-compiled via distpack)
+	First class port
+
+windows-amd64   windows    amd64      (cross-compiled via distpack)
+	First class port
+
+windows-arm64   windows    arm64      (cross-compiled via distpack)
 
 
 

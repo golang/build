@@ -8,9 +8,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -18,11 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/timestamp"
-	"github.com/google/go-github/github"
-
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/maintner/maintpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestParseGithubEvents(t *testing.T) {
@@ -568,7 +567,7 @@ func TestParseGithubEvents(t *testing.T) {
 }
 
 func TestParseMultipleGithubEvents(t *testing.T) {
-	content, err := ioutil.ReadFile(filepath.Join("testdata", "TestParseMultipleGithubEvents.json"))
+	content, err := os.ReadFile(filepath.Join("testdata", "TestParseMultipleGithubEvents.json"))
 	if err != nil {
 		t.Errorf("error while loading testdata: %s\n", err.Error())
 	}
@@ -626,13 +625,13 @@ func (c *ClientMock) Do(req *http.Request) (*http.Response, error) {
 		c.testdata = "TestParseMultipleGithubEvents.json"
 	}
 	timesDoWasCalled++
-	content, _ := ioutil.ReadFile(filepath.Join("testdata", c.testdata))
+	content, _ := os.ReadFile(filepath.Join("testdata", c.testdata))
 	headers := make(http.Header, 0)
 	t := time.Now()
 	var b []byte
 	headers["Date"] = []string{string(t.AppendFormat(b, "Mon Jan _2 15:04:05 2006"))}
 	return &http.Response{
-		Body:       ioutil.NopCloser(bytes.NewReader(content)),
+		Body:       io.NopCloser(bytes.NewReader(content)),
 		Status:     c.status,
 		StatusCode: c.statusCode,
 		Header:     headers,
@@ -1058,12 +1057,8 @@ func t3339(s string) time.Time {
 	return t.UTC()
 }
 
-func p3339(s string) *timestamp.Timestamp {
-	tp, err := ptypes.TimestampProto(t3339(s))
-	if err != nil {
-		panic(err)
-	}
-	return tp
+func p3339(s string) *timestamppb.Timestamp {
+	return timestamppb.New(t3339(s))
 }
 
 func TestParseGithubRefs(t *testing.T) {

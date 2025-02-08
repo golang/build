@@ -61,7 +61,7 @@ type EC2VMConfiguration struct {
 	// ImageID is the ID of the image used to launch the instance. It is a required field.
 	ImageID string
 	// Name is a user defined name for the instance. It is displayed on the AWS UI. It is
-	// is an optional field.
+	// an optional field.
 	Name string
 	// SSHKeyID is the name of the SSH key pair to use for access. It is a required field.
 	SSHKeyID string
@@ -96,7 +96,7 @@ type Instance struct {
 	IPAddressInternal string
 	// ImageID is The ID of the AMI(image)  used to launch the instance.
 	ImageID string
-	// Name is a user defined name for the instance instance.
+	// Name is a user defined name for the instance.
 	Name string
 	// SSHKeyID is the name of the SSH key pair to use for access. It is a required field.
 	SSHKeyID string
@@ -170,7 +170,7 @@ func (ac *AWSClient) RunningInstances(ctx context.Context) ([]*Instance, error) 
 	}
 	err := ac.ec2Client.DescribeInstancesPagesWithContext(ctx, &ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
-			&ec2.Filter{
+			{
 				Name:   aws.String("instance-state-name"),
 				Values: []*string{aws.String(ec2.InstanceStateNameRunning), aws.String(ec2.InstanceStateNamePending)},
 			},
@@ -212,7 +212,7 @@ func (ac *AWSClient) DestroyInstances(ctx context.Context, instIDs ...string) er
 // WaitUntilInstanceRunning waits until a stopping condition is met. The stopping conditions are:
 // - The requested instance state is `running`.
 // - The passed in context is cancelled or the deadline expires.
-// - 40 requests are made made with a 15 second delay between each request.
+// - 40 requests are made with a 15 second delay between each request.
 func (ac *AWSClient) WaitUntilInstanceRunning(ctx context.Context, instID string) error {
 	err := ac.ec2Client.WaitUntilInstanceRunningWithContext(ctx, &ec2.DescribeInstancesInput{
 		InstanceIds: []*string{aws.String(instID)},
@@ -325,14 +325,14 @@ func vmConfig(config *EC2VMConfiguration) *ec2.RunInstancesInput {
 		KeyName:                           aws.String(config.SSHKeyID),
 		InstanceInitiatedShutdownBehavior: aws.String(ec2.ShutdownBehaviorTerminate),
 		TagSpecifications: []*ec2.TagSpecification{
-			&ec2.TagSpecification{
+			{
 				ResourceType: aws.String("instance"),
 				Tags: []*ec2.Tag{
-					&ec2.Tag{
+					{
 						Key:   aws.String(tagName),
 						Value: aws.String(config.Name),
 					},
-					&ec2.Tag{
+					{
 						Key:   aws.String(tagDescription),
 						Value: aws.String(config.Description),
 					},

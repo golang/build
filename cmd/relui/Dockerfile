@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.18 AS build
+FROM golang:1.23-bookworm AS build
 
 COPY go.mod /app/go.mod
 COPY go.sum /app/go.sum
@@ -15,11 +15,11 @@ COPY . /app
 
 RUN go build golang.org/x/build/cmd/relui
 
-FROM marketplace.gcr.io/google/debian11:latest
+FROM debian:bookworm
 
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
-	tini
+	tini ca-certificates git
 
 ARG PORT=8080
 ENV PORT=${PORT}

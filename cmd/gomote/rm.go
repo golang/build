@@ -8,6 +8,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"golang.org/x/build/internal/gomote/protos"
@@ -17,10 +18,11 @@ import (
 func rm(args []string) error {
 	fs := flag.NewFlagSet("rm", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "rm usage: gomote rm [instance] <file-or-dir>+")
-		fmt.Fprintln(os.Stderr, "          gomote rm [instance] .  (to delete everything)")
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
+		log := usageLogger
+		log.Print("rm usage: gomote rm [instance] <file-or-dir>+")
+		log.Print("          gomote rm [instance] .  (to delete everything)")
+		log.Print()
+		log.Print("Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -40,14 +42,14 @@ func rm(args []string) error {
 			rmSet = append(rmSet, inst)
 		}
 		if fs.NArg() == 0 {
-			fmt.Fprintln(os.Stderr, "error: not enough arguments")
+			log.Print("error: not enough arguments")
 			fs.Usage()
 		}
 		paths = fs.Args()
 	} else if err == nil {
 		rmSet = append(rmSet, fs.Arg(0))
 		if fs.NArg() == 1 {
-			fmt.Fprintln(os.Stderr, "error: not enough arguments")
+			log.Print("error: not enough arguments")
 			fs.Usage()
 		}
 		paths = fs.Args()[1:]

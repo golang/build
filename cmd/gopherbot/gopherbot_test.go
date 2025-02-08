@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"golang.org/x/build/devapp/owners"
 	"golang.org/x/build/maintner"
 )
@@ -183,7 +183,7 @@ type fakeIssuesService struct {
 	labels map[int][]string
 }
 
-func (f *fakeIssuesService) ListLabelsByIssue(ctx context.Context, owner string, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error) {
+func (f *fakeIssuesService) ListLabelsByIssue(ctx context.Context, owner, repo string, number int, opt *github.ListOptions) ([]*github.Label, *github.Response, error) {
 	var labels []*github.Label
 	if ls, ok := f.labels[number]; ok {
 		for _, l := range ls {
@@ -194,7 +194,7 @@ func (f *fakeIssuesService) ListLabelsByIssue(ctx context.Context, owner string,
 	return labels, nil, nil
 }
 
-func (f *fakeIssuesService) AddLabelsToIssue(ctx context.Context, owner string, repo string, number int, labels []string) ([]*github.Label, *github.Response, error) {
+func (f *fakeIssuesService) AddLabelsToIssue(ctx context.Context, owner, repo string, number int, labels []string) ([]*github.Label, *github.Response, error) {
 	if f.labels == nil {
 		f.labels = map[int][]string{number: labels}
 		return nil, nil, nil
@@ -219,7 +219,7 @@ func (f *fakeIssuesService) AddLabelsToIssue(ctx context.Context, owner string, 
 	return nil, nil, nil
 }
 
-func (f *fakeIssuesService) RemoveLabelForIssue(ctx context.Context, owner string, repo string, number int, label string) (*github.Response, error) {
+func (f *fakeIssuesService) RemoveLabelForIssue(ctx context.Context, owner, repo string, number int, label string) (*github.Response, error) {
 	if ls, ok := f.labels[number]; ok {
 		for i, l := range ls {
 			if l == label {
@@ -353,11 +353,10 @@ func TestRemoveLabels(t *testing.T) {
 	}
 }
 
-func TestHumanReviewersInMetas(t *testing.T) {
+func TestReviewersInMetas(t *testing.T) {
 	testCases := []struct {
 		desc      string
 		commitMsg string
-		hasHuman  bool
 		wantIDs   []string
 	}{
 		{
@@ -365,16 +364,14 @@ func TestHumanReviewersInMetas(t *testing.T) {
 			commitMsg: `Patch-set: 6
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			hasHuman: true,
-			wantIDs:  []string{"22285"},
+			wantIDs: []string{"22285"},
 		},
 		{
 			desc: "one human CC",
 			commitMsg: `Patch-set: 6
 CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			hasHuman: true,
-			wantIDs:  []string{"22285"},
+			wantIDs: []string{"22285"},
 		},
 		{
 			desc: "gobot reviewer",
@@ -389,8 +386,7 @@ Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			hasHuman: true,
-			wantIDs:  []string{"5976", "22285"},
+			wantIDs: []string{"5976", "22285"},
 		},
 		{
 			desc: "gobot reviewer and human reviewer",
@@ -398,8 +394,7 @@ CC: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 `,
-			hasHuman: true,
-			wantIDs:  []string{"5976", "22285"},
+			wantIDs: []string{"5976", "22285"},
 		},
 		{
 			desc: "gobot reviewer and two human reviewers",
@@ -408,18 +403,27 @@ Reviewer: Gobot Gobot <5976@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Andrew Bonventre <22285@62eb7196-b449-3ce5-99f1-c037f21e1705>
 Reviewer: Rebecca Stambler <16140@62eb7196-b449-3ce5-99f1-c037f21e1705>
 				`,
-			hasHuman: true,
-			wantIDs:  []string{"5976", "22285", "16140"},
+			wantIDs: []string{"5976", "22285", "16140"},
+		},
+		{
+			desc: "reviewersInMetas should not return duplicate IDs", // Happened in go.dev/cl/534975.
+			commitMsg: `Reviewer: Gerrit User 5190 <5190@62eb7196-b449-3ce5-99f1-c037f21e1705>
+CC: Gerrit User 60063 <60063@62eb7196-b449-3ce5-99f1-c037f21e1705>
+Reviewer: Gerrit User 60063 <60063@62eb7196-b449-3ce5-99f1-c037f21e1705>`,
+			wantIDs: []string{"5190", "60063"},
 		},
 	}
 
+	cmpFn := func(a, b string) bool {
+		return a < b
+	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			metas := []*maintner.GerritMeta{
 				{Commit: &maintner.GitCommit{Msg: tc.commitMsg}},
 			}
 			ids := reviewersInMetas(metas)
-			if diff := cmp.Diff(tc.wantIDs, ids); diff != "" {
+			if diff := cmp.Diff(tc.wantIDs, ids, cmpopts.SortSlices(cmpFn)); diff != "" {
 				t.Fatalf("reviewersInMetas() mismatch (-want +got):\n%s", diff)
 			}
 		})
@@ -626,7 +630,7 @@ func TestFilterGerritOwners(t *testing.T) {
 }
 
 func TestForeachIssue(t *testing.T) {
-	if testing.Short() || flag.Lookup("test.run").Value.(flag.Getter).Get().(string) != "^TestForeachIssue$" {
+	if testing.Short() || flag.Lookup("test.run").Value.String() != "^TestForeachIssue$" {
 		t.Skip("not running test requiring large Go corpus download in short mode and if not explicitly requested with go test -run=^TestForeachIssue$")
 	}
 

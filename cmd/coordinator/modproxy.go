@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 package main
 
@@ -12,9 +10,15 @@ import (
 	"io"
 	"log"
 	"net/http"
+
+	"golang.org/x/build/internal/migration"
 )
 
 func listenAndServeInternalModuleProxy() {
+	if migration.StopInternalModuleProxy {
+		log.Println("not running internal module proxy")
+		return
+	}
 	err := http.ListenAndServe(":8123", http.HandlerFunc(proxyModuleCache))
 	log.Fatalf("error running internal module proxy: %v", err)
 }

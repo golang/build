@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -49,7 +48,7 @@ func Init() error {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "go.googlesource.com\tFALSE\t/\tTRUE\t2147483647\to\tgit-gobot.gmail.com=%s\n", slurp)
 	fmt.Fprintf(&buf, "go-review.googlesource.com\tFALSE\t/\tTRUE\t2147483647\to\tgit-gobot.gmail.com=%s\n", slurp)
-	return ioutil.WriteFile(cookieFile, buf.Bytes(), 0644)
+	return os.WriteFile(cookieFile, buf.Bytes(), 0644)
 }
 
 func homeDir() string {

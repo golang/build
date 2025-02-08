@@ -1,6 +1,6 @@
 A remote buildlet is a buildlet created or assigned by the
 coordinator, on request of a client (such as cmd/gomote or
-cmd/release). The client must occasionally refresh the buildlet to
+cmd/relui). The client must occasionally refresh the buildlet to
 keep it alive, and the coordinator proxies all requests to it.
 Currently, if the coordinator dies or restarts, all buildlets are lost.
 
@@ -12,7 +12,7 @@ HTTP Basic authentication.
 
 Flow:
 
-*) Client (e.g. pkg buildlet, via cmd/gomote or cmd/release) makes a
+*) Client (e.g. pkg buildlet, via cmd/gomote or cmd/relui) makes a
    POST request over key-pinned TLS to the well-known TLS cert of
    farmer.golang.org
 

@@ -50,6 +50,7 @@ RUN apt-get update && apt-get install -y \
 	openjdk-8-jdk \
 	python \
 	lib32z1 \
+	sudo \
 	&& rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /go1.4-amd64 \
@@ -87,6 +88,6 @@ RUN echo no | /android/sdk/tools/bin/avdmanager create avd --force --name androi
 RUN mkdir /android/openal-headers
 RUN cp -a /usr/include/AL /android/openal-headers/
 
-COPY --from=stage0 /go/bin/stage0 /usr/local/bin/stage0
+COPY --from=stage0 /go/bin/* /usr/local/bin/
 
-CMD ["/usr/local/bin/stage0"]
+CMD ["/usr/local/bin/run-worker.sh"]

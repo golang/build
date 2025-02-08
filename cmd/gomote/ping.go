@@ -8,6 +8,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"golang.org/x/build/internal/gomote/protos"
@@ -16,9 +17,10 @@ import (
 func ping(args []string) error {
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "ping usage: gomote ping [instance]")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Instance name is optional if a group is specified.")
+		log := usageLogger
+		log.Print("ping usage: gomote ping [instance]")
+		log.Print("")
+		log.Print("Instance name is optional if a group is specified.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -38,9 +40,9 @@ func ping(args []string) error {
 	ctx := context.Background()
 	for _, inst := range pingSet {
 		if err := doPing(ctx, inst); err != nil {
-			fmt.Fprintf(os.Stderr, "%s: %v\n", inst, err)
+			log.Printf("%s: %v\n", inst, err)
 		} else {
-			fmt.Fprintf(os.Stderr, "%s: alive\n", inst)
+			log.Printf("%s: alive\n", inst)
 		}
 	}
 	return nil

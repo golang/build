@@ -1,35 +1,50 @@
+// Copyright 2023 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package task
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strconv"
 	"strings"
 	"time"
 
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
-	"golang.org/x/net/context"
 )
 
 // VersionTasks contains tasks related to versioning the release.
 type VersionTasks struct {
-	Gerrit           GerritClient
-	GerritURL        string
-	GoProject        string
-	CreateBuildlet   func(context.Context, string) (buildlet.RemoteClient, error)
-	LatestGoBinaries func(context.Context) (string, error)
+	Gerrit     GerritClient
+	CloudBuild CloudBuildClient
+	GoProject  string
+	UpdateProxyTestRepoTasks
 }
 
-func (t *VersionTasks) GetCurrentMajor(ctx context.Context) (int, error) {
-	_, currentMajor, err := t.tagInfo(ctx)
-	return currentMajor, err
+// GetCurrentMajor returns the most recent major Go version, and the time at
+// which its tag was created.
+func (t *VersionTasks) GetCurrentMajor(ctx context.Context) (int, time.Time, error) {
+	_, currentMajor, currentMajorTag, err := t.tagInfo(ctx)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	info, err := t.Gerrit.GetTag(ctx, t.GoProject, currentMajorTag)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	return currentMajor, info.Created.Time(), nil
 }
 
-func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, currentMajor int, _ error) {
+func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, currentMajor int, currentMajorTag string, _ error) {
 	tagList, err := t.Gerrit.ListTags(ctx, t.GoProject)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, "", err
 	}
 	tags = map[string]bool{}
 	for _, tag := range tagList {
@@ -37,20 +52,24 @@ func (t *VersionTasks) tagInfo(ctx context.Context) (tags map[string]bool, curre
 	}
 	// Find the most recently released major version.
 	// Going down from a high number is convenient for testing.
-	currentMajor = 100
-	for ; ; currentMajor-- {
-		if tags[fmt.Sprintf("go1.%d", currentMajor)] {
-			break
+	for currentMajor := 100; currentMajor > 0; currentMajor-- {
+		base := fmt.Sprintf("go1.%d", currentMajor)
+		// Handle either go1.20 or go1.21.0.
+		for _, tag := range []string{base, base + ".0"} {
+			if tags[tag] {
+				return tags, currentMajor, tag, nil
+			}
 		}
 	}
-	return tags, currentMajor, nil
+	return nil, 0, "", fmt.Errorf("couldn't find the most recently released major version out of %d tags", len(tagList))
 }
 
-// GetNextVersions returns the next for each of the given types of release.
-func (t *VersionTasks) GetNextVersions(ctx context.Context, kinds []ReleaseKind) ([]string, error) {
+// GetNextMinorVersions returns the next minor for each of the given major series.
+// It uses the same format as Go tags (for example, "go1.23.4").
+func (t *VersionTasks) GetNextMinorVersions(ctx context.Context, majors []int) ([]string, error) {
 	var next []string
-	for _, k := range kinds {
-		n, err := t.GetNextVersion(ctx, k)
+	for _, major := range majors {
+		n, err := t.GetNextVersion(ctx, major, KindMinor)
 		if err != nil {
 			return nil, err
 		}
@@ -59,9 +78,10 @@ func (t *VersionTasks) GetNextVersions(ctx context.Context, kinds []ReleaseKind)
 	return next, nil
 }
 
-// GetNextVersion returns the next for the given type of release.
-func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (string, error) {
-	tags, currentMajor, err := t.tagInfo(ctx)
+// GetNextVersion returns the next for the given major series and kind of release.
+// It uses the same format as Go tags (for example, "go1.23.4").
+func (t *VersionTasks) GetNextVersion(ctx context.Context, major int, kind ReleaseKind) (string, error) {
+	tags, _, _, err := t.tagInfo(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -77,18 +97,66 @@ func (t *VersionTasks) GetNextVersion(ctx context.Context, kind ReleaseKind) (st
 		}
 	}
 	switch kind {
-	case KindCurrentMinor:
-		return findUnused(fmt.Sprintf("go1.%d.1", currentMajor))
-	case KindPrevMinor:
-		return findUnused(fmt.Sprintf("go1.%d.1", currentMajor-1))
+	case KindMinor:
+		return findUnused(fmt.Sprintf("go1.%d.1", major))
 	case KindBeta:
-		return findUnused(fmt.Sprintf("go1.%dbeta1", currentMajor+1))
+		return findUnused(fmt.Sprintf("go1.%dbeta1", major))
 	case KindRC:
-		return findUnused(fmt.Sprintf("go1.%drc1", currentMajor+1))
+		return findUnused(fmt.Sprintf("go1.%drc1", major))
 	case KindMajor:
-		return fmt.Sprintf("go1.%d", currentMajor+1), nil
+		return fmt.Sprintf("go1.%d.0", major), nil
+	default:
+		return "", fmt.Errorf("unknown release kind %v", kind)
 	}
-	return "", fmt.Errorf("unknown release kind %v", kind)
+}
+
+// GetDevelVersion returns the current major Go 1.x version in development.
+//
+// This value is determined by reading the value of the Version constant in
+// the internal/goversion package of the main Go repository at HEAD commit.
+func (t *VersionTasks) GetDevelVersion(ctx context.Context) (int, error) {
+	mainBranch, err := t.Gerrit.ReadBranchHead(ctx, t.GoProject, "HEAD")
+	if err != nil {
+		return 0, err
+	}
+	tipCommit, err := t.Gerrit.ReadBranchHead(ctx, t.GoProject, mainBranch)
+	if err != nil {
+		return 0, err
+	}
+	// Fetch the goversion.go file, extract the declaration from the parsed AST.
+	//
+	// This is a pragmatic approach that relies on the trajectory of the
+	// internal/goversion package being predictable and unlikely to change.
+	// If that stops being true, this implementation is easy to re-write.
+	const goversionPath = "src/internal/goversion/goversion.go"
+	b, err := t.Gerrit.ReadFile(ctx, t.GoProject, tipCommit, goversionPath)
+	if errors.Is(err, gerrit.ErrResourceNotExist) {
+		return 0, fmt.Errorf("did not find goversion.go file (%v); possibly the internal/goversion package changed (as it's permitted to)", err)
+	} else if err != nil {
+		return 0, err
+	}
+	f, err := parser.ParseFile(token.NewFileSet(), goversionPath, b, 0)
+	if err != nil {
+		return 0, err
+	}
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, s := range g.Specs {
+			v, ok := s.(*ast.ValueSpec)
+			if !ok || len(v.Names) != 1 || v.Names[0].String() != "Version" || len(v.Values) != 1 {
+				continue
+			}
+			l, ok := v.Values[0].(*ast.BasicLit)
+			if !ok || l.Kind != token.INT {
+				continue
+			}
+			return strconv.Atoi(l.Value)
+		}
+	}
+	return 0, fmt.Errorf("did not find Version declaration in %s; possibly the internal/goversion package changed (as it's permitted to)", goversionPath)
 }
 
 func nextVersion(version string) (string, error) {
@@ -105,14 +173,18 @@ func nextVersion(version string) (string, error) {
 	return fmt.Sprintf("%s%d", version[:lastNonDigit+1], n+1), nil
 }
 
-// CreateAutoSubmitVersionCL mails an auto-submit change to update VERSION on branch.
-func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch string, reviewers []string, version string) (string, error) {
+func (t *VersionTasks) GenerateVersionFile(_ *workflow.TaskContext, version string, timestamp time.Time) (string, error) {
+	return fmt.Sprintf("%v\ntime %v\n", version, timestamp.Format(time.RFC3339)), nil
+}
+
+// CreateAutoSubmitVersionCL mails an auto-submit change to update VERSION file on branch.
+func (t *VersionTasks) CreateAutoSubmitVersionCL(ctx *workflow.TaskContext, branch, version string, reviewers []string, versionFile string) (string, error) {
 	return t.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: t.GoProject,
 		Branch:  branch,
 		Subject: fmt.Sprintf("[%v] %v", branch, version),
 	}, reviewers, map[string]string{
-		"VERSION": version,
+		"VERSION": versionFile,
 	})
 }
 
@@ -143,56 +215,20 @@ func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit str
 	return t.Gerrit.Tag(ctx, t.GoProject, version, commit)
 }
 
-func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, branch string, reviewers []string, version string) (string, error) {
-	var files = make(map[string]string) // Map key is relative path, and map value is file content.
+func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, reviewers []string, version string) (string, error) {
+	build, err := t.CloudBuild.RunScript(ctx, "go generate ./internal/stdlib", "tools", []string{"internal/stdlib/manifest.go"})
+	if err != nil {
+		return "", err
+	}
 
-	binaries, err := t.LatestGoBinaries(ctx)
+	files, err := buildToOutputs(ctx, t.CloudBuild, build)
 	if err != nil {
 		return "", err
 	}
-	bc, err := t.CreateBuildlet(ctx, "linux-amd64-longtest")
-	if err != nil {
-		return "", err
-	}
-	defer bc.Close()
-	if err := bc.PutTarFromURL(ctx, binaries, ""); err != nil {
-		return "", err
-	}
-	toolsTarURL := fmt.Sprintf("%s/%s/+archive/%s.tar.gz", t.GerritURL, "tools", "master")
-	if err := bc.PutTarFromURL(ctx, toolsTarURL, "tools"); err != nil {
-		return "", err
-	}
-	writer := &LogWriter{Logger: ctx}
-	go writer.Run(ctx)
-	remoteErr, execErr := bc.Exec(ctx, "go/bin/go", buildlet.ExecOpts{
-		Dir:    "tools",
-		Args:   []string{"generate", "./internal/imports"},
-		Output: writer,
-	})
-	if execErr != nil {
-		return "", fmt.Errorf("Exec failed: %v", execErr)
-	}
-	if remoteErr != nil {
-		return "", fmt.Errorf("Command failed: %v", remoteErr)
-	}
-	tgz, err := bc.GetTar(context.Background(), "tools/internal/imports")
-	if err != nil {
-		return "", err
-	}
-	defer tgz.Close()
-	tools, err := tgzToMap(tgz)
-	if err != nil {
-		return "", err
-	}
-	files["internal/imports/zstdlib.go"] = tools["zstdlib.go"]
 
-	major, err := t.GetCurrentMajor(ctx)
-	if err != nil {
-		return "", err
-	}
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",
-		Subject: fmt.Sprintf("internal/imports: update stdlib index for %v", major),
+		Subject: fmt.Sprintf("internal/stdlib: update stdlib index for %s\n\nFor golang/go#38706.", strings.Replace(version, "go", "Go ", 1)),
 		Branch:  "master",
 	}
 	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)

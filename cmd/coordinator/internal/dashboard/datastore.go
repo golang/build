@@ -3,19 +3,21 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package dashboard
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 
 	"cloud.google.com/go/datastore"
+	bbpb "go.chromium.org/luci/buildbucket/proto"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 )
 
-// getDatastoreResults populates result data on commits, fetched from Datastore.
+// getDatastoreResults populates result data fetched from Datastore into commits.
 func getDatastoreResults(ctx context.Context, cl *datastore.Client, commits []*commit, pkg string) {
 	var keys []*datastore.Key
 	for _, c := range commits {
@@ -28,7 +30,7 @@ func getDatastoreResults(ctx context.Context, cl *datastore.Client, commits []*c
 	out := make([]*Commit, len(keys))
 	// datastore.ErrNoSuchEntity is returned when we ask for a commit that we do not yet have test data.
 	if err := cl.GetMulti(ctx, keys, out); err != nil && filterMultiError(err, ignoreNoSuchEntity) != nil {
-		log.Printf("getResults: error fetching %d results: %v", len(keys), err)
+		log.Printf("getDatastoreResults: error fetching %d results: %v", len(keys), err)
 		return
 	}
 	hashOut := make(map[string]*Commit)
@@ -42,7 +44,48 @@ func getDatastoreResults(ctx context.Context, cl *datastore.Client, commits []*c
 			c.ResultData = result.ResultData
 		}
 	}
-	return
+}
+
+// appendLUCIResults appends result data polled from LUCI to commits.
+func appendLUCIResults(luci lucipoll.Snapshot, commits []*commit, repo string) {
+	commitBuilds, ok := luci.RepoCommitBuilds[repo]
+	if !ok {
+		return
+	}
+	for _, c := range commits {
+		builds, ok := commitBuilds[c.Hash]
+		if !ok {
+			// No builds for this commit.
+			continue
+		}
+		for _, b := range builds {
+			switch b.Status {
+			case bbpb.Status_STARTED:
+				c.ResultData = append(c.ResultData, fmt.Sprintf("%s|%s",
+					b.BuilderName,
+					buildURL(b.ID),
+				))
+			case bbpb.Status_SUCCESS, bbpb.Status_FAILURE:
+				c.ResultData = append(c.ResultData, fmt.Sprintf("%s|%t|%s|%s",
+					b.BuilderName,
+					b.Status == bbpb.Status_SUCCESS,
+					buildURL(b.ID),
+					c.Hash,
+				))
+			case bbpb.Status_INFRA_FAILURE:
+				c.ResultData = append(c.ResultData, fmt.Sprintf("%s|%s|%s|%s",
+					b.BuilderName,
+					"infra_failure",
+					buildURL(b.ID),
+					c.Hash,
+				))
+			}
+		}
+	}
+}
+
+func buildURL(buildID int64) string {
+	return fmt.Sprintf("https://ci.chromium.org/b/%d", buildID)
 }
 
 type ignoreFunc func(err error) error

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
- Copyright 2022 The Go Authors All rights reserved.
+ Copyright 2022 The Go Authors. All rights reserved.
  Use of this source code is governed by a BSD-style
  license that can be found in the LICENSE file.
 -->
@@ -9,6 +9,8 @@
 <head><link rel="stylesheet" href="/style.css"/><title>Go Farmer</title></head>
 <body>
 {{template "build-header"}}
+
+<div class="page">
 
 <h2>Running</h2>
 <p>{{printf "%d" .Total}} total builds; {{printf "%d" .ActiveBuilds}} active ({{.ActiveReverse}} reverse). Uptime {{printf "%s" .Uptime}}. Version {{.Version}}.
@@ -80,6 +82,8 @@
 
 <h2 id=fd>File Descriptors <a href='#fd'>¶</a></h2>
 <p>{{.NumFD}}</p>
+
+</div>
 
 </body>
 </html>

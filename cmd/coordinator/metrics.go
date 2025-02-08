@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 package main
 
@@ -110,7 +108,7 @@ func recordSSHPublicKeyAuthHandler(fn ssh.PublicKeyHandler) ssh.PublicKeyHandler
 	}
 }
 
-// recordRDPCount records the use of the gomote RDP functionality and sends it
+// recordGomoteRDPUsage records the use of the gomote RDP functionality and sends it
 // to the configured metrics backend.
 func recordGomoteRDPUsage(ctx context.Context) {
 	stats.Record(ctx, mGomoteRDPCount.M(1))

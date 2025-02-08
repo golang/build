@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -21,13 +22,14 @@ import (
 func getTar(args []string) error {
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "gettar usage: gomote gettar [get-opts] [buildlet-name]")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Writes tarball into the current working directory.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Buildlet name is optional if a group is selected, in which case")
-		fmt.Fprintln(os.Stderr, "tarballs from all buildlets in the group are downloaded into the")
-		fmt.Fprintln(os.Stderr, "current working directory.")
+		log := usageLogger
+		log.Print("gettar usage: gomote gettar [get-opts] [buildlet-name]")
+		log.Print("")
+		log.Print("Writes tarball into the current working directory.")
+		log.Print("")
+		log.Print("Buildlet name is optional if a group is selected, in which case")
+		log.Print("tarballs from all buildlets in the group are downloaded into the")
+		log.Print("current working directory.")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -53,11 +55,11 @@ func getTar(args []string) error {
 		eg.Go(func() error {
 			f, err := os.Create(fmt.Sprintf("%s.tar.gz", inst))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "failed to create file to write instance tarball: %v", err)
+				log.Printf("failed to create file to write instance tarball: %v", err)
 				return nil
 			}
 			defer f.Close()
-			fmt.Fprintf(os.Stderr, "# Downloading tarball for %q to %q...\n", inst, f.Name())
+			log.Printf("Downloading tarball for %q to %q...\n", inst, f.Name())
 			return doGetTar(ctx, inst, dir, f)
 		})
 	}

@@ -11,13 +11,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/build/internal/criadb"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/workflow"
@@ -51,7 +52,7 @@ func TestFileServerHandler(t *testing.T) {
 			desc:     "sets headers and returns file",
 			path:     "/testing/test.css",
 			wantCode: http.StatusOK,
-			wantBody: "/**\n * Copyright 2022 Go Authors All rights reserved.\n " +
+			wantBody: "/**\n * Copyright 2022 The Go Authors. All rights reserved.\n " +
 				"* Use of this source code is governed by a BSD-style\n " +
 				"* license that can be found in the LICENSE file.\n */\n\n.Header { font-size: 10rem; }\n",
 			wantHeaders: map[string]string{
@@ -83,7 +84,7 @@ func TestFileServerHandler(t *testing.T) {
 			if resp.StatusCode != c.wantCode {
 				t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, c.wantCode)
 			}
-			b, err := ioutil.ReadAll(resp.Body)
+			b, err := io.ReadAll(resp.Body)
 			if err != nil {
 				t.Errorf("resp.Body = _, %v, wanted no error", err)
 			}
@@ -121,7 +122,7 @@ func TestServerHomeHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
 
-	s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil)
+	s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil, nil)
 
 	s.homeHandler(w, req)
 	resp := w.Result()
@@ -161,7 +162,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, u.String(), nil)
 			w := httptest.NewRecorder()
 
-			s := NewServer(testDB(ctx, t), NewWorker(NewDefinitionHolder(), nil, nil), nil, SiteHeader{}, nil)
+			s := NewServer(testDB(ctx, t), NewWorker(NewDefinitionHolder(), nil, nil), nil, SiteHeader{}, nil, nil)
 			s.newWorkflowHandler(w, req)
 			resp := w.Result()
 
@@ -293,7 +294,7 @@ func TestServerCreateWorkflowHandler(t *testing.T) {
 			rec := httptest.NewRecorder()
 			q := db.New(p)
 
-			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil)
+			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil, nil)
 			s.createWorkflowHandler(rec, req)
 			resp := rec.Result()
 
@@ -627,7 +628,7 @@ func TestServerApproveTaskHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", c.params["id"], "tasks", url.PathEscape(c.params["name"]), "approve"), nil)
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			rec := httptest.NewRecorder()
-			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil)
+			s := NewServer(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}), nil, SiteHeader{}, nil, nil)
 
 			s.m.ServeHTTP(rec, req)
 			resp := rec.Result()
@@ -701,12 +702,23 @@ func TestServerStopWorkflow(t *testing.T) {
 			rec := httptest.NewRecorder()
 			worker := NewWorker(NewDefinitionHolder(), nil, nil)
 
-			wf := &workflow.Workflow{ID: wfID}
-			if err := worker.markRunning(wf, cancel); err != nil {
-				t.Fatalf("worker.markRunning(%v, %v) = %v, wanted no error", wf, cancel, err)
+			p := testDB(ctx, t)
+			q := db.New(p)
+			wf := db.CreateWorkflowParams{
+				ID:        wfID,
+				Params:    nullString(`{"farewell": "bye", "greeting": "hello"}`),
+				Name:      nullString("echo"),
+				CreatedAt: time.Now().Add(-1 * time.Hour),
+				UpdatedAt: time.Now().Add(-1 * time.Hour),
+			}
+			if _, err := q.CreateWorkflow(ctx, wf); err != nil {
+				t.Fatalf("CreateWorkflow(%v) = %v, wanted no error", wf, err)
+			}
+			if err := worker.markRunning(&workflow.Workflow{ID: wfID}, cancel); err != nil {
+				t.Fatalf("worker.markRunning(%q) = %v, wanted no error", wfID, err)
 			}
 
-			s := NewServer(testDB(ctx, t), worker, nil, SiteHeader{}, nil)
+			s := NewServer(p, worker, nil, SiteHeader{}, nil, nil)
 			s.m.ServeHTTP(rec, req)
 			resp := rec.Result()
 
@@ -803,4 +815,207 @@ func TestResultDetail(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	expectedStatus := http.StatusForbidden
+	if wantSucceed {
+		expectedStatus = http.StatusSeeOther
+	}
+
+	p := testDB(ctx, t)
+	worker := NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p})
+	var acl workflow.ACL
+	if acld {
+		acl.Groups = []string{"mdb/testing"}
+	}
+	wd := workflow.New(acl)
+	workflow.Output(wd, "beep", workflow.Task1(wd, "beep", echo, workflow.Param(wd, workflow.ParamDef[string]{Name: "beep"})))
+	worker.dh.RegisterDefinition("acltest", wd)
+
+	var memberships [][2]string
+	if authorized {
+		memberships = [][2]string{{"user:test@google.com", "mdb/testing"}}
+	} else {
+		memberships = [][2]string{{"user:test@google.com", "mdb/other"}}
+	}
+	s := NewServer(p, worker, nil, SiteHeader{}, nil, criadb.NewTestDatabase(memberships))
+
+	hourAgo := time.Now().Add(-1 * time.Hour)
+	q := db.New(p)
+
+	t.Run("create", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/workflows/create", strings.NewReader(url.Values{
+			"workflow.name":        []string{"acltest"},
+			"workflow.params.beep": []string{"beep"},
+			"workflow.schedule":    []string{string(ScheduleImmediate)},
+		}.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		rec := httptest.NewRecorder()
+
+		s.createWorkflowHandler(rec, req)
+		resp := rec.Result()
+
+		if resp.StatusCode != expectedStatus {
+			t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, expectedStatus)
+			if resp.StatusCode == http.StatusBadRequest {
+				b, _ := io.ReadAll(resp.Body)
+				t.Logf("resp.Body: \n%v", string(b))
+			}
+		}
+	})
+
+	t.Run("retry", func(t *testing.T) {
+		wfID := uuid.New()
+		wf := db.CreateWorkflowParams{
+			ID:        wfID,
+			Params:    nullString(`{"beep": "boop"}`),
+			Name:      nullString("acltest"),
+			CreatedAt: hourAgo,
+			UpdatedAt: hourAgo,
+		}
+		if _, err := q.CreateWorkflow(ctx, wf); err != nil {
+			t.Fatalf("CreateWorkflow(_, %v) = _, %v, wanted no error", wf, err)
+		}
+		fail := db.FailUnfinishedTasksParams{
+			WorkflowID: wf.ID,
+			UpdatedAt:  hourAgo,
+		}
+		if err := q.FailUnfinishedTasks(ctx, fail); err != nil {
+			t.Fatalf("FailUnfinishedTasks(_, %v) = _, %v, wanted no error", fail, err)
+		}
+
+		params := httprouter.Params{{Key: "id", Value: wfID.String()}, {Key: "name", Value: "beep"}}
+		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "tasks", "beep", "retry"), nil)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		rec := httptest.NewRecorder()
+
+		s.retryTaskHandler(rec, req, params)
+		resp := rec.Result()
+
+		if resp.StatusCode != expectedStatus {
+			t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, expectedStatus)
+			if resp.StatusCode == http.StatusBadRequest {
+				b, _ := io.ReadAll(resp.Body)
+				t.Logf("resp.Body: \n%v", string(b))
+			}
+		}
+	})
+
+	t.Run("approve", func(t *testing.T) {
+		wfID := uuid.New()
+		wf := db.CreateWorkflowParams{
+			ID:        wfID,
+			Params:    nullString(`{"beep": "boop"}`),
+			Name:      nullString("acltest"),
+			CreatedAt: hourAgo,
+			UpdatedAt: hourAgo,
+		}
+		if _, err := q.CreateWorkflow(ctx, wf); err != nil {
+			t.Fatalf("CreateWorkflow(_, %v) = _, %v, wanted no error", wf, err)
+		}
+		gtg := db.CreateTaskParams{
+			WorkflowID: wf.ID,
+			Name:       "approve",
+			Finished:   false,
+			CreatedAt:  hourAgo,
+			UpdatedAt:  hourAgo,
+		}
+		if _, err := q.CreateTask(ctx, gtg); err != nil {
+			t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", gtg, err)
+		}
+
+		params := httprouter.Params{{Key: "id", Value: wfID.String()}, {Key: "name", Value: "approve"}}
+		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "tasks", "approve", "approve"), nil)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		rec := httptest.NewRecorder()
+
+		s.approveTaskHandler(rec, req, params)
+		resp := rec.Result()
+
+		if resp.StatusCode != expectedStatus {
+			t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, expectedStatus)
+			if resp.StatusCode == http.StatusBadRequest {
+				b, _ := io.ReadAll(resp.Body)
+				t.Logf("resp.Body: \n%v", string(b))
+			}
+		}
+	})
+
+	t.Run("stop", func(t *testing.T) {
+		wfID := uuid.New()
+		wf := db.CreateWorkflowParams{
+			ID:        wfID,
+			Params:    nullString(`{"beep":"boop"}`),
+			Name:      nullString("acltest"),
+			CreatedAt: hourAgo,
+			UpdatedAt: hourAgo,
+		}
+		if _, err := q.CreateWorkflow(ctx, wf); err != nil {
+			t.Fatalf("CreateWorkflow(_, %v) = _, %v, wanted no error", wf, err)
+		}
+		s.w.markRunning(&workflow.Workflow{ID: wfID}, func() {})
+
+		params := httprouter.Params{{Key: "id", Value: wfID.String()}}
+		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "stop"), nil)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		rec := httptest.NewRecorder()
+
+		s.stopWorkflowHandler(rec, req, params)
+		resp := rec.Result()
+
+		if resp.StatusCode != expectedStatus {
+			t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, expectedStatus)
+			if resp.StatusCode == http.StatusBadRequest {
+				b, _ := io.ReadAll(resp.Body)
+				t.Logf("resp.Body: \n%v", string(b))
+			}
+		}
+	})
+
+	t.Run("deleted scheduled", func(t *testing.T) {
+		sched, err := s.scheduler.Create(ctx, Schedule{Type: ScheduleOnce, Once: time.Now().Add(time.Hour)}, "acltest", map[string]any{"beep": "boop"})
+		if err != nil {
+			t.Fatalf("Scheduler.Create() = _, %v, wanted no error", err)
+		}
+
+		params := httprouter.Params{{Key: "id", Value: strconv.Itoa(int(sched.ID))}}
+		req := httptest.NewRequest(http.MethodPost, path.Join("/schedules/", strconv.Itoa(int(sched.ID)), "delete"), nil)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		rec := httptest.NewRecorder()
+
+		s.deleteScheduleHandler(rec, req, params)
+		resp := rec.Result()
+
+		if resp.StatusCode != expectedStatus {
+			t.Errorf("rep.StatusCode = %d, wanted %d", resp.StatusCode, expectedStatus)
+			if resp.StatusCode == http.StatusBadRequest {
+				b, _ := io.ReadAll(resp.Body)
+				t.Logf("resp.Body: \n%v", string(b))
+			}
+		}
+	})
+}
+
+func TestWorkflowACL(t *testing.T) {
+	for _, c := range []struct {
+		name       string
+		authorized bool
+	}{
+		{"authorized", true},
+		{"unauthorized", false},
+	} {
+		t.Run(fmt.Sprintf("acld workflow/%s", c.name), func(t *testing.T) {
+			testWorkflowACL(t, true, c.authorized, c.authorized)
+		})
+	}
+	t.Run("unacld workflow", func(t *testing.T) { testWorkflowACL(t, true, false, false) })
 }

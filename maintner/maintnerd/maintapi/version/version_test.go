@@ -18,6 +18,7 @@ func TestParseTag(t *testing.T) {
 	}{
 		{"go1", 1, 0, 0, true},
 		{"go1.2", 1, 2, 0, true},
+		{"go1.2.0", 1, 2, 0, true},
 		{"go1.2.3", 1, 2, 3, true},
 		{"go23.45.67", 23, 45, 67, true},
 		{"not-go", 0, 0, 0, false},
@@ -38,9 +39,6 @@ func TestParseTag(t *testing.T) {
 		{"go01", 0, 0, 0, false},
 		{"go001", 0, 0, 0, false},
 		{"go1000", 0, 0, 0, false},
-		{"go1.0", 0, 0, 0, false},
-		{"go1.0.0", 0, 0, 0, false},
-		{"go1.2.0", 0, 0, 0, false},
 		{"go00", 0, 0, 0, false},
 		{"go00.2", 0, 0, 0, false},
 		{"go00.2.3", 0, 0, 0, false},

@@ -1,0 +1,24 @@
+-- a.md --
+File a.
+-- b.md --
+File b.
+-- sub/x.md --
+File sub/x
+-- sub/y.md --
+File sub/y
+-- f.md --
+File f
+-- d/z.md --
+File d/z
+-- want --
+File a.
+
+File b.
+
+File d/z
+
+File f
+
+File sub/x
+
+File sub/y

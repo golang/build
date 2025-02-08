@@ -35,8 +35,8 @@
 // definition rather than producing an output. Unlike Actions and Tasks, they
 // execute multiple times and must produce exactly the same workflow
 // modifications each time. As such, they should be pure functions of their
-// inputs. Producing different modifications, or running multiple expansions
-// concurrently, is an error that will corrupt the workflow's state.
+// inputs. Producing different modifications is an error that will corrupt
+// the workflow's state. A workflow will run at most one expansion at a time.
 //
 // Once a Definition is complete, call Start to set its parameters and
 // instantiate it into a Workflow. Call Run to execute the workflow until
@@ -54,12 +54,19 @@ import (
 	"github.com/google/uuid"
 )
 
+type ACL struct {
+	// In order to interact with a workflow, the user must be a member
+	// of one of any of the following groups.
+	Groups []string
+}
+
 // New creates a new workflow definition.
-func New() *Definition {
+func New(acl ACL) *Definition {
 	return &Definition{
 		definitionState: &definitionState{
 			tasks:   make(map[string]*taskDefinition),
-			outputs: make(map[string]*taskDefinition),
+			outputs: make(map[string]metaValue),
+			acl:     acl,
 		},
 	}
 }
@@ -82,7 +89,8 @@ func (d *Definition) name(name string) string {
 }
 
 func (d *Definition) shallowClone() *Definition {
-	clone := New()
+	clone := New(d.acl)
+	clone.namePrefix = d.namePrefix
 	clone.parameters = append([]MetaParameter(nil), d.parameters...)
 	for k, v := range d.tasks {
 		clone.tasks[k] = v
@@ -93,10 +101,20 @@ func (d *Definition) shallowClone() *Definition {
 	return clone
 }
 
+// AuthorizedGroups returns the list of groups which are authorized to create,
+// approve, stop, and retry this workflow. If any user can preform these
+// actions, a nil slice is returned.
+func (d *Definition) AuthorizedGroups() []string {
+	return d.acl.Groups
+}
+
 type definitionState struct {
 	parameters []MetaParameter // Ordered according to registration, unique parameter names.
 	tasks      map[string]*taskDefinition
-	outputs    map[string]*taskDefinition
+	outputs    map[string]metaValue
+	// list of groups that are allowed to interact with the associated
+	// definition.
+	acl ACL
 }
 
 // A TaskOption affects the execution of a task but is not an argument to its function.
@@ -122,6 +140,13 @@ type metaValue interface {
 type MetaParameter interface {
 	// RequireNonZero reports whether parameter p is required to have a non-zero value.
 	RequireNonZero() bool
+	// Valid reports whether the given parameter value is valid.
+	//
+	// A value is considered to be valid if:
+	//   - the type of v is the parameter type
+	//   - if RequireNonZero is true, the value v is non-zero
+	//   - if Check is set, it reports value v to be okay
+	Valid(v any) error
 	Name() string
 	Type() reflect.Type
 	HTMLElement() string
@@ -139,6 +164,9 @@ type ParamDef[T any] struct {
 	ParamType[T]        // Parameter type. For strings, defaults to BasicString if not specified.
 	Doc          string // Doc documents the parameter. Optional.
 	Example      string // Example is an example value. Optional.
+
+	// Check reports whether the given parameter value is okay. Optional.
+	Check func(T) error
 }
 
 // parameter adds Value methods to ParamDef, so that users can't accidentally
@@ -157,6 +185,19 @@ func (p parameter[T]) Example() string             { return p.d.Example }
 func (p parameter[T]) RequireNonZero() bool {
 	return !strings.HasSuffix(p.d.Name, " (optional)")
 }
+func (p parameter[T]) Valid(v any) error {
+	vv, ok := v.(T)
+	if !ok {
+		var zero T
+		return fmt.Errorf("parameter %q must have a value of type %T, value %[3]v type is %[3]T", p.d.Name, zero, v)
+	} else if p.RequireNonZero() && reflect.ValueOf(vv).IsZero() {
+		return fmt.Errorf("parameter %q must have non-zero value", p.d.Name)
+	}
+	if p.d.Check == nil {
+		return nil
+	}
+	return p.d.Check(vv)
+}
 
 func (p parameter[T]) valueType(T) {}
 func (p parameter[T]) typ() reflect.Type {
@@ -164,7 +205,7 @@ func (p parameter[T]) typ() reflect.Type {
 	return reflect.TypeOf(zero)
 }
 func (p parameter[T]) value(w *Workflow) reflect.Value { return reflect.ValueOf(w.params[p.d.Name]) }
-func (p parameter[T]) dependencies() []*taskDefinition { return nil }
+func (p parameter[T]) ready(w *Workflow) bool          { return true }
 
 // ParamType defines the type of a workflow parameter.
 //
@@ -192,6 +233,9 @@ var (
 		HTMLElement:   "input",
 		HTMLInputType: "url",
 	}
+	LongString = ParamType[string]{
+		HTMLElement: "textarea",
+	}
 
 	// Slice of string parameter types.
 	SliceShort = ParamType[[]string]{
@@ -199,6 +243,12 @@ var (
 	}
 	SliceLong = ParamType[[]string]{
 		HTMLElement: "textarea",
+	}
+
+	// Checkbox bool parameter
+	Bool = ParamType[bool]{
+		HTMLElement:   "input",
+		HTMLInputType: "checkbox",
 	}
 )
 
@@ -218,6 +268,12 @@ func Param[T any](d *Definition, p ParamDef[T]) Value[T] {
 			p.HTMLElement = "input"
 		default:
 			panic(fmt.Errorf("must specify ParamType for %T", zero))
+		}
+	}
+	if !(parameter[T]{p}).RequireNonZero() && p.Check != nil {
+		var zero T
+		if err := p.Check(zero); err != nil {
+			panic(fmt.Errorf("parameter %q is optional yet its check on zero value reports a non-nil error: %v", p.Name, err))
 		}
 	}
 	for _, old := range d.parameters {
@@ -250,7 +306,7 @@ func (c *constant[T]) typ() reflect.Type {
 	return reflect.TypeOf(zero)
 }
 func (c *constant[T]) value(_ *Workflow) reflect.Value { return reflect.ValueOf(c.v) }
-func (c *constant[T]) dependencies() []*taskDefinition { return nil }
+func (c *constant[T]) ready(_ *Workflow) bool          { return true }
 
 // Slice combines multiple Values of the same type into a Value containing
 // a slice of that type.
@@ -277,41 +333,34 @@ func (s *slice[T]) value(w *Workflow) reflect.Value {
 	return value
 }
 
-func (s *slice[T]) dependencies() []*taskDefinition {
-	var result []*taskDefinition
-	for _, v := range s.vals {
-		result = append(result, v.dependencies()...)
+func (s *slice[T]) ready(w *Workflow) bool {
+	for _, val := range s.vals {
+		if !val.ready(w) {
+			return false
+		}
 	}
-	return result
+	return true
 }
 
 // Output registers a Value as a workflow output which will be returned when
 // the workflow finishes.
 func Output[T any](d *Definition, name string, v Value[T]) {
-	tr, ok := v.(*taskResult[T])
-	if !ok {
-		panic(fmt.Errorf("output must be a task result, is %T", v))
-	}
-	d.outputs[d.name(name)] = tr.task
+	d.outputs[d.name(name)] = v
 }
 
 // A Dependency represents a dependency on a prior task.
 type Dependency interface {
-	dependencies() []*taskDefinition
+	ready(*Workflow) bool
 }
 
 // After represents an ordering dependency on another Task or Action. It can be
 // passed in addition to any arguments to the task's function.
 func After(afters ...Dependency) TaskOption {
-	var deps []*taskDefinition
-	for _, a := range afters {
-		deps = append(deps, a.dependencies()...)
-	}
-	return &after{deps}
+	return &after{afters}
 }
 
 type after struct {
-	deps []*taskDefinition
+	deps []Dependency
 }
 
 func (a *after) taskOption() {}
@@ -351,7 +400,7 @@ func addFunc(d *Definition, name string, f interface{}, inputs []metaValue, opts
 	name = d.name(name)
 	td := &taskDefinition{name: name, f: f, args: inputs}
 	for _, input := range inputs {
-		td.deps = append(td.deps, input.dependencies()...)
+		td.deps = append(td.deps, input)
 	}
 	for _, opt := range opts {
 		td.deps = append(td.deps, opt.(*after).deps...)
@@ -370,9 +419,32 @@ func addAction(d *Definition, name string, f interface{}, inputs []metaValue, op
 	return &dependency{td}
 }
 
-func addExpansion(d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) {
+func addExpansion[O1 any](d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *expansionResult[O1] {
 	td := addFunc(d, name, f, inputs, opts)
 	td.isExpansion = true
+	// Also record the workflow name prefix at the time the expansion is added.
+	// It'll be accessed later, when starting to run this expansion.
+	td.namePrefix = d.namePrefix
+	return &expansionResult[O1]{td}
+}
+
+type expansionResult[T any] struct {
+	td *taskDefinition
+}
+
+func (er *expansionResult[T]) valueType(T) {}
+
+func (er *expansionResult[T]) typ() reflect.Type {
+	var zero []T
+	return reflect.TypeOf(zero)
+}
+
+func (er *expansionResult[T]) value(w *Workflow) reflect.Value {
+	return w.tasks[er.td].resultValue.value(w)
+}
+
+func (er *expansionResult[T]) ready(w *Workflow) bool {
+	return w.taskReady(er.td) && w.tasks[er.td].resultValue.ready(w)
 }
 
 // ActionN adds an Action to the workflow definition. Its behavior and
@@ -406,8 +478,8 @@ type dependency struct {
 	task *taskDefinition
 }
 
-func (d *dependency) dependencies() []*taskDefinition {
-	return []*taskDefinition{d.task}
+func (d *dependency) ready(w *Workflow) bool {
+	return w.taskReady(d.task)
 }
 
 // ExpandN adds a workflow expansion task to the workflow definition.
@@ -417,30 +489,29 @@ func (d *dependency) dependencies() []*taskDefinition {
 // Unlike normal tasks, expansions may run multiple times and must produce
 // the exact same changes to the definition each time.
 //
-// Running more than one expansion concurrently is an error and will corrupt
-// the workflow.
-func Expand0(d *Definition, name string, f func(*Definition) error, opts ...TaskOption) {
-	addExpansion(d, name, f, nil, opts)
+// A workflow will run at most one expansion at a time.
+func Expand0[O1 any](d *Definition, name string, f func(*Definition) (Value[O1], error), opts ...TaskOption) Value[O1] {
+	return addExpansion[O1](d, name, f, nil, opts)
 }
 
-func Expand1[I1 any](d *Definition, name string, f func(*Definition, I1) error, i1 Value[I1], opts ...TaskOption) {
-	addExpansion(d, name, f, []metaValue{i1}, opts)
+func Expand1[I1, O1 any](d *Definition, name string, f func(*Definition, I1) (Value[O1], error), i1 Value[I1], opts ...TaskOption) Value[O1] {
+	return addExpansion[O1](d, name, f, []metaValue{i1}, opts)
 }
 
-func Expand2[I1, I2 any](d *Definition, name string, f func(*Definition, I1, I2) error, i1 Value[I1], i2 Value[I2], opts ...TaskOption) {
-	addExpansion(d, name, f, []metaValue{i1, i2}, opts)
+func Expand2[I1, I2, O1 any](d *Definition, name string, f func(*Definition, I1, I2) (Value[O1], error), i1 Value[I1], i2 Value[I2], opts ...TaskOption) Value[O1] {
+	return addExpansion[O1](d, name, f, []metaValue{i1, i2}, opts)
 }
 
-func Expand3[I1, I2, I3 any](d *Definition, name string, f func(*Definition, I1, I2, I3) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], opts ...TaskOption) {
-	addExpansion(d, name, f, []metaValue{i1, i2, i3}, opts)
+func Expand3[I1, I2, I3, O1 any](d *Definition, name string, f func(*Definition, I1, I2, I3) (Value[O1], error), i1 Value[I1], i2 Value[I2], i3 Value[I3], opts ...TaskOption) Value[O1] {
+	return addExpansion[O1](d, name, f, []metaValue{i1, i2, i3}, opts)
 }
 
-func Expand4[I1, I2, I3, I4 any](d *Definition, name string, f func(*Definition, I1, I2, I3, I4) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], opts ...TaskOption) {
-	addExpansion(d, name, f, []metaValue{i1, i2, i3, i4}, opts)
+func Expand4[I1, I2, I3, I4, O1 any](d *Definition, name string, f func(*Definition, I1, I2, I3, I4) (Value[O1], error), i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], opts ...TaskOption) Value[O1] {
+	return addExpansion[O1](d, name, f, []metaValue{i1, i2, i3, i4}, opts)
 }
 
-func Expand5[I1, I2, I3, I4, I5 any](d *Definition, name string, f func(*Definition, I1, I2, I3, I4, I5) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], opts ...TaskOption) {
-	addExpansion(d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
+func Expand5[I1, I2, I3, I4, I5, O1 any](d *Definition, name string, f func(*Definition, I1, I2, I3, I4, I5) (Value[O1], error), i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], opts ...TaskOption) Value[O1] {
+	return addExpansion[O1](d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
 }
 
 // A TaskContext is a context.Context, plus workflow-related features.
@@ -452,9 +523,13 @@ type TaskContext struct {
 	WorkflowID uuid.UUID
 
 	watchdogTimer *time.Timer
+	watchdogScale int
 }
 
 func (c *TaskContext) Printf(format string, v ...interface{}) {
+	if false {
+		_ = fmt.Sprintf(format, v...) // enable printf checker
+	}
 	c.ResetWatchdog()
 	c.Logger.Printf(format, v...)
 }
@@ -464,11 +539,30 @@ func (c *TaskContext) DisableRetries() {
 }
 
 func (c *TaskContext) ResetWatchdog() {
+	c.resetWatchdog(WatchdogDelay * time.Duration(c.watchdogScale))
+}
+
+// SetWatchdogScale sets the watchdog delay scale factor to max(v, 1),
+// and resets the watchdog with the new scale.
+func (c *TaskContext) SetWatchdogScale(v int) {
+	if v < 1 {
+		v = 1
+	}
+	c.watchdogScale = v
+	c.ResetWatchdog()
+}
+
+func (c *TaskContext) DisableWatchdog() {
+	// Resetting with a very long delay is easier than canceling the timer.
+	c.resetWatchdog(365 * 24 * time.Hour)
+}
+
+func (c *TaskContext) resetWatchdog(d time.Duration) {
 	// Should only occur in tests.
 	if c.watchdogTimer == nil {
 		return
 	}
-	c.watchdogTimer.Reset(WatchdogDelay)
+	c.watchdogTimer.Reset(d)
 }
 
 // A Listener is used to notify the workflow host of state changes, for display
@@ -509,8 +603,9 @@ type Logger interface {
 type taskDefinition struct {
 	name        string
 	isExpansion bool
+	namePrefix  string // Workflow name prefix; applies only when isExpansion is true.
 	args        []metaValue
-	deps        []*taskDefinition
+	deps        []Dependency
 	f           interface{}
 }
 
@@ -529,8 +624,8 @@ func (tr *taskResult[T]) value(w *Workflow) reflect.Value {
 	return reflect.ValueOf(w.tasks[tr.task].result)
 }
 
-func (tr *taskResult[T]) dependencies() []*taskDefinition {
-	return []*taskDefinition{tr.task}
+func (tr *taskResult[T]) ready(w *Workflow) bool {
+	return w.taskReady(tr.task)
 }
 
 // A Workflow is an instantiated workflow instance, ready to run.
@@ -551,6 +646,11 @@ type Workflow struct {
 	pendingStates map[string]*TaskState
 }
 
+func (w *Workflow) taskReady(td *taskDefinition) bool {
+	state := w.tasks[td]
+	return state.finished && state.err == nil
+}
+
 type taskState struct {
 	def      *taskDefinition
 	created  bool
@@ -564,7 +664,8 @@ type taskState struct {
 	retryCount       int
 
 	// workflow expansion
-	expanded *Definition
+	expanded    *Definition
+	resultValue metaValue
 }
 
 func (t *taskState) toExported() *TaskState {
@@ -601,22 +702,6 @@ func Start(def *Definition, params map[string]interface{}) (*Workflow, error) {
 }
 
 func (w *Workflow) validate() error {
-	// Validate tasks.
-	used := map[*taskDefinition]bool{}
-	for _, taskDef := range w.def.tasks {
-		for _, dep := range taskDef.deps {
-			used[dep] = true
-		}
-	}
-	for _, output := range w.def.outputs {
-		used[output] = true
-	}
-	for _, task := range w.def.tasks {
-		if !used[task] && !task.isExpansion {
-			return fmt.Errorf("task %v is not referenced and should be deleted", task.name)
-		}
-	}
-
 	// Validate parameters.
 	if got, want := len(w.params), len(w.def.parameters); got != want {
 		return fmt.Errorf("parameter count mismatch: workflow instance has %d, but definition has %d", got, want)
@@ -725,6 +810,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 	doneOnce := ctx.Done()
 	for {
 		running := 0
+		runningExpansion := false // Whether an expansion is running, and hasn't completed yet.
 		allDone := true
 		for _, task := range w.tasks {
 			if !task.created {
@@ -752,12 +838,18 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 				if !ready {
 					continue
 				}
+				if task.def.isExpansion && runningExpansion {
+					// Don't start a new expansion until the currently running one completes.
+					continue
+				}
 				task.started = true
 				running++
 				listener.TaskStateChanged(w.ID, task.def.name, task.toExported())
 				taskCopy := *task
 				if task.def.isExpansion {
+					runningExpansion = true
 					defCopy := w.def.shallowClone()
+					defCopy.namePrefix = task.def.namePrefix
 					go func() { stateChan <- runExpansion(defCopy, taskCopy, args) }()
 				} else {
 					go func() { stateChan <- runTask(ctx, w.ID, listener, taskCopy, args) }()
@@ -779,6 +871,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 		case state := <-stateChan:
 			if state.def.isExpansion && state.finished && state.err == nil {
 				state.err = w.expand(state.expanded)
+				runningExpansion = false
 			}
 			listener.TaskStateChanged(w.ID, state.def.name, state.toExported())
 			w.tasks[state.def] = &state
@@ -805,14 +898,14 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 
 	outs := map[string]interface{}{}
 	for name, def := range w.def.outputs {
-		outs[name] = w.tasks[def].result
+		outs[name] = def.value(w).Interface()
 	}
 	return outs, nil
 }
 
 func (w *Workflow) taskArgs(def *taskDefinition) ([]reflect.Value, bool) {
 	for _, dep := range def.deps {
-		if depState, ok := w.tasks[dep]; !ok || !depState.finished || depState.err != nil {
+		if !dep.ready(w) {
 			return nil, false
 		}
 	}
@@ -826,7 +919,7 @@ func (w *Workflow) taskArgs(def *taskDefinition) ([]reflect.Value, bool) {
 // Maximum number of retries. This could be a workflow property.
 var MaxRetries = 3
 
-var WatchdogDelay = 10 * time.Minute
+var WatchdogDelay = 11 * time.Minute // A little over go test -timeout's default value of 10 minutes.
 
 func runTask(ctx context.Context, workflowID uuid.UUID, listener Listener, state taskState, args []reflect.Value) taskState {
 	ctx, cancel := context.WithCancel(ctx)
@@ -838,6 +931,7 @@ func runTask(ctx context.Context, workflowID uuid.UUID, listener Listener, state
 		TaskName:      state.def.name,
 		WorkflowID:    workflowID,
 		watchdogTimer: time.AfterFunc(WatchdogDelay, cancel),
+		watchdogScale: 1,
 	}
 
 	in := append([]reflect.Value{reflect.ValueOf(tctx)}, args...)
@@ -876,10 +970,11 @@ func runExpansion(d *Definition, state taskState, args []reflect.Value) taskStat
 	fv := reflect.ValueOf(state.def.f)
 	out := fv.Call(in)
 	state.finished = true
-	if out[0].IsNil() {
+	if out[1].IsNil() {
 		state.expanded = d
+		state.resultValue = out[0].Interface().(metaValue)
 	} else {
-		state.err = out[0].Interface().(error)
+		state.err = out[1].Interface().(error)
 	}
 	return state
 }

@@ -169,7 +169,7 @@ func TestPGListenerWorkflowStalledNotification(t *testing.T) {
 				}
 				schedID = int(sched.ID)
 			}
-			wd := workflow.New()
+			wd := workflow.New(workflow.ACL{})
 			complete := workflow.Task0(wd, "complete", func(ctx context.Context) (string, error) {
 				if c.taskErr {
 					return "", fmt.Errorf("c.taskErr: %t", c.taskErr)

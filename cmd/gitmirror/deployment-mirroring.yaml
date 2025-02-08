@@ -1,4 +1,4 @@
-# Copyright 2022 Go Authors All rights reserved.
+# Copyright 2022 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
@@ -41,13 +41,13 @@ spec:
           httpGet:
             path: /healthz
             port: 8585
-          initialDelaySeconds: 300
+          initialDelaySeconds: 600
           failureThreshold: 60
           periodSeconds: 10
         resources:
           requests:
-            cpu: "2"
-            memory: "5Gi"
+            cpu: "4"
+            memory: "10Gi"
           limits:
-            cpu: "3"
-            memory: "6Gi"
+            cpu: "6"
+            memory: "12Gi"

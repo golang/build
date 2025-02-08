@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 // Code interacting with build.golang.org ("the dashboard").
 
@@ -19,10 +17,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -139,7 +137,7 @@ var (
 // mustInitMasterKeyCache populates the masterKeyCache
 // with the master key. If no master key is found it will
 // log an error and exit. If `masterKey()` is called before
-// the key is initialzed then it will log an error and exit.
+// the key is initialized then it will log an error and exit.
 func mustInitMasterKeyCache(sc *secret.Client) {
 	keyOnce.Do(func() { loadKey(sc) })
 }
@@ -163,7 +161,7 @@ func builderKey(builder string) string {
 
 func loadKey(sc *secret.Client) {
 	if *masterKeyFile != "" {
-		b, err := ioutil.ReadFile(*masterKeyFile)
+		b, err := os.ReadFile(*masterKeyFile)
 		if err != nil {
 			log.Fatal(err)
 		}

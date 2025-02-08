@@ -16,6 +16,12 @@ license that can be found in the LICENSE file.
 </head>
 
 <body class="Dashboard">
+<!-- header class="Dashboard-topbar" style="background: antiquewhite;">
+	<div>
+		A banner isn't actively displayed at this time. This serves as a placeholder
+		that can be used if a banner does need to be displayed.
+	</div>
+</header -->
 <header class="Dashboard-topbar">
 	<h1>
 		<a href="https://farmer.golang.org/">Go Build Coordinator</a>
@@ -25,6 +31,11 @@ license that can be found in the LICENSE file.
 			<li><a href="https://build.golang.org/">Build Dashboard</a></li>
 			<li><a href="/dashboard">Performance Dashboard</a></li>
 			<li><a href="https://farmer.golang.org/builders">Builders</a></li>
+			<span class="left-separator"></span>
+			<li><a class="alt-nav-button" href="?repository=tools&benchmark=all&branch=latest-release">x/tools Dashboard</a>
+			<li><a class="alt-nav-button" href="?benchmark=regressions&platform=linux/amd64">linux/amd64 Regressions</a>
+			<li><a class="alt-nav-button" href="?benchmark=regressions&platform=linux/arm64">linux/arm64 Regressions</a>
+			<li><a class="alt-nav-button" href="?repository=tools&benchmark=regressions&branch=latest-release">x/tools Regressions</a>
 		</ul>
 	</nav>
 </header>
@@ -39,10 +50,9 @@ license that can be found in the LICENSE file.
 				<div class="Dashboard-search-unit">
 					<input id="unit-input" type="text" name="unit" placeholder="Unit (optional)" />
 				</div>
-				<input type="submit" />
+				<input type="button" class="alt-nav-button" onclick="setBenchmarkInput('all')" value="All">
+				<input type="button" class="alt-nav-button" onclick="setBenchmarkInput('regressions')" value="Regressions first">
 			</li>
-			<li><a href="?benchmark=all">All benchmarks</a></li>
-			<li><a href="?benchmark=regressions">Regressions first</a></li>
 			<span class="left-separator"></span>
 			<li>
 				Repository:
@@ -50,13 +60,13 @@ license that can be found in the LICENSE file.
 					<option>go</option>
 					<option>tools</option>
 				</select>
-				Branch:
-				<select id="branch-select" name="branch">
-					<option>master</option>
-					<option>release-branch.go1.17</option>
-					<option>release-branch.go1.18</option>
-					<option>release-branch.go1.19</option>
-					<option>release-branch.go1.20</option>
+				Go branch:
+				<select id="branch-select" name="branch"></select>
+				Platform:
+				<select id="platform-select" name="platform">
+					<option>all</option>
+					<option>linux/amd64</option>
+					<option>linux/arm64</option>
 				</select>
 				Duration (days):
 				<div class="Dashboard-duration">
@@ -80,20 +90,27 @@ license that can be found in the LICENSE file.
 	<p>
 		Note that some commits are not tested, so there could be
 		multiple commits (not shown) between two points on the graph.
-		See the <code>linux-amd64-perf</code> column on the
-		<a href="https://build.golang.org/?repo=golang.org%2fx%2fbenchmarks">x/benchmarks build dashboard</a>
-		for tested ("ok") / untested (empty) commits.
+		See the <code>gotip-linux-amd64_debian12-perf_vs_release</code>
+		column on the
+		<a href="https://ci.chromium.org/p/golang/g/go-gotip/console">build dashboard</a>.
+		Individually tested commits have their own green box. A single
+		box that covers multiple commits indicates that only the latest
+		commit in the range was tested.
 	</p>
 	<p>
-		The 'branch' selection above is the Go branch that benchmarking
-		ran against on <a href=https://build.golang.org>the build dashboard</a>,
-		not the subrepo branch.
+		The 'Go branch' selection above is the Go branch that benchmarking
+		ran against on
+		<a href="https://ci.chromium.org/ui/p/golang">the build dashboard</a>.
 	</p>
 	<p>
 		Using the 'unit' search box above leads to a page that shows much
 		more detail about each individual point in the selected time range.
 		Another way of reaching this page is to click the unit name that acts
 		as each graph's title, i.e. "sec/op".
+	</p>
+	<p>
+		Further documentation is available on the
+		<a href=https://go.dev/wiki/PerformanceMonitoring>wiki</a>.
 	</p>
 </div>
 
@@ -112,36 +129,55 @@ license that can be found in the LICENSE file.
 // This constant exists because allowing the axis' range to be arbitrarily
 // small produces results that are really noisy visually, even though they
 // represent virtually no change. For instance, a relatively low-noise
-// series of benchmark results, with a min delta of -0.05% and and +0.05%
+// series of benchmark results, with a min delta of -0.05% and +0.05%
 // might appear really noisy if we "zoom" in too far, when in actuality
 // the amount of noise is incredibly low.
 const minViewDeltaPercent = 0.025;
+
+// HTML to inject when there's no data found.
+const noDataHTML = `
+<grid class="Dashboard-section Dashboard-section-expand">
+	<h2 class="Dashboard-title">No data</h2>
+	<p class="Dashboard-documentation">
+		Found no data. Consider trying a different time range. Note also that subrepositories like tools have
+		no data against the Go master branch, in which case, try picking a release branch.
+	</p>
+</grid>
+`
 
 function removeLoadingMessage() {
 	let loading = document.getElementById("loading");
 	loading.parentNode.removeChild(loading);
 }
 
-function addCharts(benchmarks, repository) {
+function setBenchmarkInput(benchmark) {
+	let input = document.getElementById('benchmark-input');
+	input.value = benchmark;
+}
+
+function addCharts(benchmarks, repository, goBranch, commits) {
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
 
 	let prevName = "";
+	let prevPlatform = "";
 	let grid = null;
+	let addedChart = false;
 	for (const b in benchmarks) {
 		const bench = benchmarks[b];
 
-		if (bench.Name != prevName) {
+		if (bench.Name != prevName || bench.Platform != prevPlatform) {
 			prevName = bench.Name;
+			prevPlatform = bench.Platform;
 
 			let section = document.createElement("grid");
 			section.classList.add("Dashboard-section");
 			dashboard.appendChild(section);
 
 			let link = document.createElement("a");
-			link.href = "?benchmark=" + bench.Name;
-			link.textContent = bench.Name;
+			link.href = "?benchmark=" + bench.Name + "&platform=" + bench.Platform + "&repository=" + repository + "&branch=" + goBranch;
+			link.textContent = bench.Name + " (" + bench.Platform + ")";
 
 			let title = document.createElement("h2");
 			title.classList.add("Dashboard-title");
@@ -165,16 +201,25 @@ function addCharts(benchmarks, repository) {
 				const regression = (Math.abs(r.Change)*100).toFixed(2);
 				const shortCommit = rd.CommitHash.slice(0, 7);
 				let diffText = "regression";
-				if ((bench.HigherIsBetter && r.Change < 0) || (bench.HigherIsBetter && r.Change > 0)) {
+				let isRegression = true;
+				if (r.Change < 0) {
+					// Note: r.Change already has its sign flipped for HigherIsBetter.
+					// Positive always means regression, negative always means improvement.
 					diffText = "improvement";
+					isRegression = false;
 				}
-				p.innerHTML = `${regression}% ${diffText}, ${(r.Delta*100).toFixed(2)}%-point change at <a href="?benchmark=${bench.Name}&unit=${bench.Unit}#${rd.CommitHash}">${shortCommit}</a>.`;
+				p.innerHTML = `${regression}% ${diffText}, ${(r.Delta*100).toFixed(2)}%-point change at <a href="?benchmark=${bench.Name}&unit=${bench.Unit}&platform=${bench.Platform}#${commitToId(rd.CommitHash)}">${shortCommit}</a>.`;
 
 				// Add a link to file a bug.
-				const title = `affected/package: ${regression}% regression in ${bench.Name} ${bench.Unit} at ${shortCommit}`;
-				const body = `Discovered a regression in ${bench.Unit} of ${regression}% for benchmark ${bench.Name} at ${shortCommit}.\n\n<ADD MORE DETAILS>.`
-				let query = `?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=Performance`;
-				p.innerHTML += ` <a href="https://github.com/golang/go/issues/new${query}">File an issue</a>.`;
+				if (isRegression) {
+					const title = `affected/package: ${regression}% regression in ${bench.Name} ${bench.Unit} on ${bench.Platform} at ${shortCommit}`;
+					const body = `Discovered a regression in ${bench.Unit} of ${regression}% for benchmark ${bench.Name} at ${shortCommit}.\n\n<ADD MORE DETAILS>.`
+					let query = `?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}&labels=Performance`;
+					p.innerHTML += ` <a href="https://github.com/golang/go/issues/new${query}">File an issue</a>.`;
+				} else {
+					// Include a grinning emoji if it's an improvement.
+					p.innerHTML += ` <span style="font-style: normal;">&#128513;</span>`;
+				}
 			} else {
 				p.textContext = `Not ranked because ${r.IgnoredBecause}.`;
 			}
@@ -183,16 +228,33 @@ function addCharts(benchmarks, repository) {
 		item.appendChild(BandChart(bench.Values, {
 			benchmark: bench.Name,
 			unit: bench.Unit,
+			platform: bench.Platform,
 			repository: repository,
 			minViewDeltaPercent: minViewDeltaPercent,
 			higherIsBetter: bench.HigherIsBetter,
+			history: commits,
 		}));
 		grid.appendChild(item);
+		addedChart = true;
+	}
+	if (!addedChart) {
+		dashboard.innerHTML = noDataHTML;
 	}
 }
 
-function addTable(bench, unit, repository) {
-	const commitSelected = window.location.hash;
+function commitToId(commitHash) {
+	return "commit" + commitHash;
+}
+
+function idToCommit(id) {
+	if (id && id.startsWith("commit")) {
+		return id.slice(6);
+	}
+	return null;
+}
+
+function addTable(bench, unit, platform, repository, goBranch, commits) {
+	let commitSelected = idToCommit(window.location.hash.slice(1));
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
@@ -203,8 +265,8 @@ function addTable(bench, unit, repository) {
 	dashboard.appendChild(section);
 
 	let link = document.createElement("a");
-	link.href = "?benchmark=" + bench.Name + "&unit=" + unit;
-	link.textContent = bench.Name + " (" + unit + ")";
+	link.href = "?benchmark=" + bench.Name + "&unit=" + unit + "&platform=" + platform + "&repository=" + repository + "&branch=" + goBranch;
+	link.textContent = bench.Name + " (" + unit + ", " + platform + ")";
 
 	let title = document.createElement("h2");
 	title.classList.add("Dashboard-title");
@@ -225,11 +287,23 @@ function addTable(bench, unit, repository) {
 		return elem;
 	}
 
+	const createCommitCell = function(commit, repository) {
+		const commitHash = createCell("", false);
+		const commitLink = document.createElement("a");
+		commitLink.href = "https://go.googlesource.com/" + repository + "/+show/" + commit;
+		commitLink.textContent = commit.slice(0, 7);
+		commitHash.appendChild(commitLink);
+		commitHash.classList.add("Dashboard-table-commit");
+		return commitHash;
+	}
+
 	// Create the header.
 	const header = document.createElement("tr");
 	header.appendChild(createCell("Date", true));
-	header.appendChild(createCell("Commit", true));
+	header.appendChild(createCell("Experiment commit", true));
 	header.appendChild(createCell("Delta", true));
+	header.appendChild(createCell("Baseline commit", true));
+	header.appendChild(createCell("x/benchmarks commit", true));
 	table.appendChild(header);
 
 	// Find the min and max.
@@ -257,13 +331,19 @@ function addTable(bench, unit, repository) {
 		min -= amt;
 	}
 
+	// Create a map of hashes to values.
+	let valuesByCommit = new Map();
+	for (let i = 0; i < bench.Values.length; i++) {
+		valuesByCommit.set(bench.Values[i].CommitHash, bench.Values[i])
+	}
+
 	// Iterate backwards, showing the most recent first.
-	for (let i = bench.Values.length-1; i >= 0; i--) {
-		const v = bench.Values[i];
+	for (let i = commits.length-1; i >= 0; i--) {
+		const c = commits[i];
 
 		// Create a row per value.
 		const row = document.createElement("tr");
-		if (commitSelected && commitSelected.slice(1) === v.CommitHash) {
+		if (commitSelected && commitSelected === c.Hash) {
 			row.classList.add("selected");
 		}
 
@@ -271,23 +351,42 @@ function addTable(bench, unit, repository) {
 		row.appendChild(createCell(Intl.DateTimeFormat([], {
 			dateStyle: "long",
 			timeStyle: "short",
-		}).format(v.CommitDate), false));
+		}).format(c.Date), false));
 
 		// Commit hash.
-		const commitHash = createCell("", false);
-		const commitLink = document.createElement("a");
-		commitLink.href = "https://go.googlesource.com/" + repository + "/+show/" + v.CommitHash;
-		commitLink.id = v.CommitHash;
-		commitLink.textContent = v.CommitHash.slice(0, 7);
-		commitHash.appendChild(commitLink);
-		commitHash.classList.add("Dashboard-table-commit")
-		row.appendChild(commitHash);
+		const commitCell = createCommitCell(c.Hash, repository);
+		commitCell.id = commitToId(c.Hash);
+		row.appendChild(commitCell);
 
-		// Range visualization.
-		const range = createCell("", false);
-		range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 32, bench.Unit, bench.HigherIsBetter));
-		range.classList.add("Dashboard-table-range")
-		row.appendChild(range);
+		if (valuesByCommit.has(c.Hash)) {
+			const v = valuesByCommit.get(c.Hash);
+
+			// Range visualization.
+			const range = createCell("", false);
+			range.appendChild(Range(v.Low, v.Center, v.High, min, max, 640, 48, bench.Unit, bench.HigherIsBetter));
+			range.classList.add("Dashboard-table-range")
+			row.appendChild(range);
+
+			// Baseline commit hash.
+			row.appendChild(createCommitCell(v.BaselineCommitHash, repository));
+
+			// Benchmarks commit hash.
+			row.appendChild(createCommitCell(v.BenchmarksCommitHash, "benchmarks"));
+		} else {
+			// Row without info.
+			const range = createCell("", false);
+			range.appendChild(NoDataRange(min, max, 640, 48));
+			range.classList.add("Dashboard-table-range");
+			row.appendChild(range);
+
+			const baselineNA = createCell("N/A", false);
+			baselineNA.classList.add("Dashboard-table-commit");
+			row.appendChild(baselineNA);
+
+			const benchmarksNA = createCell("N/A", false);
+			benchmarksNA.classList.add("Dashboard-table-commit");
+			row.appendChild(benchmarksNA);
+		}
 
 		table.appendChild(row);
 	}
@@ -296,9 +395,9 @@ function addTable(bench, unit, repository) {
 		// Now that we've generated anchors for every commit, let's scroll to the
 		// right one. The browser won't do this automatically because the anchors
 		// don't exist when the page is loaded.
-		const anchor = document.querySelector(commitSelected);
+		const anchor = document.querySelector("#" + commitToId(commitSelected));
 		window.scrollTo({
-			top: anchor.getBoundingClientRect().top + window.pageYOffset,
+			top: anchor.getBoundingClientRect().top + window.pageYOffset - 20,
 		})
 	}
 }
@@ -321,8 +420,10 @@ function failure(name, response) {
 	dashboard.appendChild(message);
 }
 
+let now = new Date();
+
 // Fill search boxes from query params.
-function prefillSearch() {
+function prefillSearch(formFields) {
 	let params = new URLSearchParams(window.location.search);
 
 	let benchmark = params.get('benchmark');
@@ -343,10 +444,20 @@ function prefillSearch() {
 		select.value = repository;
 	}
 
+	let platform = params.get('platform');
+	if (platform) {
+		let select = document.getElementById('platform-select');
+		select.value = platform;
+	}
+
 	let branch = params.get('branch');
 	if (branch) {
 		let select = document.getElementById('branch-select');
-		select.value = branch;
+		if (branch === "latest-release") {
+			select.value = formFields.LatestReleaseBranch;
+		} else {
+			select.value = branch;
+		}
 	}
 
 	let days = params.get('days');
@@ -360,9 +471,6 @@ function prefillSearch() {
 	if (end) {
 		input.value = end;
 	} else {
-		// Default to now.
-		let now = new Date();
-
 		// toISOString always uses UTC, then we just chop off the end
 		// of string to get the datetime-local format of
 		// 2000-12-31T15:00.
@@ -371,16 +479,41 @@ function prefillSearch() {
 		input.value = now.toISOString().slice(0, 16);
 	}
 }
-prefillSearch()
+fetch('./formfields.json')
+	.then(response => {
+		if (!response.ok) {
+			throw new Error("Form fields fetch failed");
+		}
+		return response.json();
+	})
+	.then(function(formFields) {
+		let select = document.getElementById('branch-select');
+		for (const i in formFields.Branches) {
+			var opt = document.createElement('option');
+			opt.value = formFields.Branches[i];
+			opt.innerText = formFields.Branches[i];
+			select.appendChild(opt);
+		}
+		var opt = document.createElement('option');
+		opt.value = "latest-release";
+		opt.innerText = "Latest release branch";
+		select.appendChild(opt);
+		prefillSearch(formFields);
+	});
+
 
 // Grab the repository so we can plumb it into UI elements.
-// prefillSearch set this up for us just now.
-const repository = document.getElementById('repository-select').value;
+let repository = (new URLSearchParams(window.location.search)).get('repository');
+if (!repository) {
+	repository = "go";
+}
 
 // Fetch content.
 let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
 let unit = (new URLSearchParams(window.location.search)).get('unit');
-let dataURL = './data.json' + window.location.search;  // Pass through all URL params.
+let platform = (new URLSearchParams(window.location.search)).get('platform');
+let goBranch = (new URLSearchParams(window.location.search)).get('branch');
+let dataURL = './data.json' + window.location.search; // Pass through all URL params.
 fetch(dataURL)
 	.then(response => {
 		if (!response.ok) {
@@ -389,23 +522,31 @@ fetch(dataURL)
 		}
 		return response.json();
 	})
-	.then(function(benchmarks) {
-		// Convert CommitDate to a proper date.
+	.then(function(data) {
+		let benchmarks = data.Benchmarks;
+		let commits = data.Commits;
+
+		// Convert CommitDate and Date to a proper dates.
 		benchmarks.forEach(function(b) {
 			b.Values.forEach(function(v) {
 				v.CommitDate = new Date(v.CommitDate);
 			});
 		});
+		commits.forEach(function(c) {
+			c.Date = new Date(c.Date);
+		})
+
+		// Figure out the date range we care about.
 
 		// If we have an explicit unit, then there should be just one result.
-		if (unit) {
+		if (unit && platform && platform != "all") {
 			if (benchmarks.length !== 1) {
 				failure(benchmark, "got more that one benchmark when a unit was specified");
 				throw new Error("Data fetch failed");
 			}
-			addTable(benchmarks[0], unit, repository);
+			addTable(benchmarks[0], unit, platform, repository, goBranch, commits);
 		} else {
-			addCharts(benchmarks, repository);
+			addCharts(benchmarks, repository, goBranch, commits);
 		}
 	});
 </script>

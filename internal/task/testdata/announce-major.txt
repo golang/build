@@ -1,20 +1,21 @@
 Hello gophers,
 
-We have just released Go 1.19.
+We have just released Go 1.21.0.
 
-To find out what has changed in Go 1.19, read the release notes:
-https://go.dev/doc/go1.19
+To find out what has changed in Go 1.21, read the release notes:
+https://go.dev/doc/go1.21
 
 You can download binary and source distributions from our download page:
-https://go.dev/dl/#go1.19
+https://go.dev/dl/#go1.21.0
 
-If you have Go installed already, an easy way to try go1.19
+If you have Go installed already, an easy way to try go1.21.0
 is by using the go command:
-$ go install golang.org/dl/go1.19@latest
-$ go1.19 download
+
+$ go install golang.org/dl/go1.21.0@latest
+$ go1.21.0 download
 
 To compile from source using a Git clone, update to the release with
-git checkout go1.19 and build as usual.
+git checkout go1.21.0 and build as usual.
 
 Thanks to everyone who contributed to the release!
 

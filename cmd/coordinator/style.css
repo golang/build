@@ -1,5 +1,5 @@
 /**
- * Copyright 2022 Go Authors All rights reserved.
+ * Copyright 2022 The Go Authors. All rights reserved.
  * Use of this source code is governed by a BSD-style
  * license that can be found in the LICENSE file.
  */
@@ -10,7 +10,6 @@ body {
   color: #222;
   font-family: sans-serif;
   margin: 0;
-  padding: 10px;
 }
 h1,
 h2,
@@ -45,7 +44,6 @@ pre {
 }
 header {
   background: #e0ebf5;
-  margin: -10px -10px 0;
   padding: 10px;
 }
 header h1 {
@@ -79,6 +77,9 @@ header nav a {
   margin-right: 5px;
   padding: 10px;
   text-decoration: none;
+}
+div.page {
+  padding: 10px;
 }
 table {
   border-collapse: collapse;
@@ -173,6 +174,13 @@ table.Build tbody tr.commit:hover {
   font-size: 0.6875rem;
   color: #000;
   text-decoration: none;
+}
+.Build-resultFail {
+  color: #C00;
+}
+.Build-resultNoise {
+  text-decoration: none;
+  color: #888;
 }
 .QueueStats-body {
   background-color: #f8f8f8;

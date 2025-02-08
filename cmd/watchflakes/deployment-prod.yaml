@@ -1,0 +1,40 @@
+# Copyright 2024 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: watchflakes-deployment
+spec:
+  replicas: 1 # more than 1 might cause duplicate GitHub comments
+  selector:
+    matchLabels:
+      app: watchflakes
+  template:
+    metadata:
+      labels:
+        app: watchflakes
+    spec:
+      serviceAccountName: watchflakes
+      containers:
+      - name: watchflakes
+        image: gcr.io/symbolic-datum-552/watchflakes:latest
+        imagePullPolicy: Always
+        command: ["/watchflakes", "-use-secret-manager", "-repeat=1h", "-post"]
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: prod
+  name: watchflakes
+  annotations:
+    iam.gke.io/gcp-service-account: watchflakes@symbolic-datum-552.iam.gserviceaccount.com

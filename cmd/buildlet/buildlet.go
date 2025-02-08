@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -44,6 +43,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/gliderlabs/ssh"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/cloud"
 	"golang.org/x/build/internal/envutil"
@@ -51,14 +51,17 @@ import (
 )
 
 var (
-	haltEntireOS = flag.Bool("halt", true, "halt OS in /halt handler. If false, the buildlet process just ends.")
-	rebootOnHalt = flag.Bool("reboot", false, "reboot system in /halt handler.")
-	workDir      = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
-	listenAddr   = flag.String("listen", "AUTO", "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
-	reverseType  = flag.String("reverse-type", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is the dashboard/builders.go Hosts map key, naming a HostConfig. This buildlet will receive work for any BuildConfig specifying this named HostConfig.")
-	coordinator  = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
-	hostname     = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
-	healthAddr   = flag.String("health-addr", "0.0.0.0:8080", "For reverse buildlets, address to listen for /healthz requests separately from the reverse dialer to the coordinator.")
+	haltEntireOS     = flag.Bool("halt", true, "halt OS in /halt handler. If false, the buildlet process just ends.")
+	rebootOnHalt     = flag.Bool("reboot", false, "reboot system in /halt handler.")
+	workDir          = flag.String("workdir", "", "Temporary directory to use. The contents of this directory may be deleted at any time. If empty, TempDir is used to create one.")
+	listenAddr       = flag.String("listen", "AUTO", "address to listen on. Unused in reverse mode. Warning: this service is inherently insecure and offers no protection of its own. Do not expose this port to the world.")
+	reverseType      = flag.String("reverse-type", "", "if non-empty, go into reverse mode where the buildlet dials the coordinator instead of listening for connections. The value is the dashboard/builders.go Hosts map key, naming a HostConfig. This buildlet will receive work for any BuildConfig specifying this named HostConfig.")
+	coordinator      = flag.String("coordinator", "localhost:8119", "address of coordinator, in production use farmer.golang.org. Only used in reverse mode.")
+	hostname         = flag.String("hostname", "", "hostname to advertise to coordinator for reverse mode; default is actual hostname")
+	healthAddr       = flag.String("health-addr", "0.0.0.0:8080", "For reverse buildlets, address to listen for /healthz requests separately from the reverse dialer to the coordinator.")
+	version          = flag.Bool("version", false, "print buildlet version and exit")
+	gomoteServerAddr = flag.String("gomote-server-addr", "gomotessh.golang.org:443", "Gomote server address and port")
+	swarmingBot      = flag.Bool("swarming-bot", false, "start the buildlet on a swarming bot")
 )
 
 // Bump this whenever something notable happens, or when another
@@ -83,7 +86,10 @@ var (
 //	24: removeAllIncludingReadonly
 //	25: use removeAllIncludingReadonly for all work area cleanup
 //	26: clean up path validation and normalization
-const buildletVersion = 26
+//	27: export GOPLSCACHE=$workdir/goplscache
+//	28: add support for gomote server
+//	29: fall back to /bin/sh when SHELL is unset
+const buildletVersion = 29
 
 func defaultListenAddr() string {
 	if runtime.GOOS == "darwin" {
@@ -92,7 +98,7 @@ func defaultListenAddr() string {
 		// root).
 		return ":5936"
 	}
-	// check if if env is dev
+	// check if env is dev
 	if !metadata.OnGCE() && !onEC2() {
 		return "localhost:5936"
 	}
@@ -110,21 +116,24 @@ var (
 	setOSRlimit              func() error
 )
 
-// If non-empty, the $TMPDIR and $GOCACHE environment variables to use
-// for child processes.
+// If non-empty, the $TMPDIR, $GOCACHE, and $GOPLSCACHE environment
+// variables to use for child processes.
 var (
-	processTmpDirEnv  string
-	processGoCacheEnv string
+	processTmpDirEnv     string
+	processGoCacheEnv    string
+	processGoplsCacheEnv string
 )
 
 const (
 	metaKeyPassword = "password"
 	metaKeyTLSCert  = "tls-cert"
 	metaKeyTLSkey   = "tls-key"
+	windowsWorkdir  = `C:\workdir`
 )
 
 func main() {
 	builderEnv := os.Getenv("GO_BUILDER_ENV")
+	defer teardownOnce()
 	onGCE := metadata.OnGCE()
 	switch runtime.GOOS {
 	case "plan9":
@@ -143,8 +152,13 @@ func main() {
 		}
 	}
 
-	log.Printf("buildlet starting.")
 	flag.Parse()
+	if *version {
+		fmt.Printf("buildlet version %v (%s-%s)\n", buildletVersion, runtime.GOOS, runtime.GOARCH)
+		fmt.Printf("built with %v\n", runtime.Version())
+		os.Exit(0)
+	}
+	log.Printf("buildlet starting.")
 
 	if builderEnv == "android-amd64-emu" {
 		startAndroidEmulator()
@@ -186,7 +200,7 @@ func main() {
 		case "windows":
 			// We want a short path on Windows, due to
 			// Windows issues with maximum path lengths.
-			*workDir = `C:\workdir`
+			*workDir = windowsWorkdir
 			if err := os.MkdirAll(*workDir, 0755); err != nil {
 				log.Fatalf("error creating workdir: %v", err)
 			}
@@ -208,11 +222,15 @@ func main() {
 	}
 
 	// Set up and clean $TMPDIR and $GOCACHE directories.
-	if runtime.GOOS != "windows" && runtime.GOOS != "plan9" {
+	if runtime.GOOS != "plan9" { // go.dev/cl/207283 seems to indicate plan9 should work, but someone needs to test it.
 		processTmpDirEnv = filepath.Join(*workDir, "tmp")
-		processGoCacheEnv = filepath.Join(*workDir, "gocache")
 		removeAllAndMkdir(processTmpDirEnv)
+
+		processGoCacheEnv = filepath.Join(*workDir, "gocache")
 		removeAllAndMkdir(processGoCacheEnv)
+
+		processGoplsCacheEnv = filepath.Join(*workDir, "goplscache")
+		removeAllAndMkdir(processGoplsCacheEnv)
 	}
 
 	http.HandleFunc("/", handleRoot)
@@ -238,7 +256,7 @@ func main() {
 	http.Handle("/connect-ssh", requireAuth(handleConnectSSH))
 	http.HandleFunc("/healthz", handleHealthz)
 
-	if !isReverse {
+	if !isReverse && !*swarmingBot {
 		listenForCoordinator()
 	} else {
 		go func() {
@@ -246,9 +264,9 @@ func main() {
 				log.Printf("Error in serveReverseHealth: %v", err)
 			}
 		}()
-		ln, err := dialCoordinator()
+		ln, err := dialServer()
 		if err != nil {
-			log.Fatalf("Error dialing coordinator: %v", err)
+			log.Fatalf("Error dialing server: %v", err)
 		}
 		srv := &http.Server{}
 		err = srv.Serve(ln)
@@ -261,6 +279,27 @@ func main() {
 		}
 		os.Exit(0)
 	}
+}
+
+type teardownFunc func()
+
+var (
+	tdOnce        sync.Once
+	teardownOnce  func() = func() { tdOnce.Do(teardown) }
+	teardownFuncs []teardownFunc
+)
+
+func teardown() {
+	for _, f := range teardownFuncs {
+		f()
+	}
+}
+
+func dialServer() (net.Listener, error) {
+	if *swarmingBot {
+		return dialGomoteServer()
+	}
+	return dialCoordinator()
 }
 
 func listenForCoordinator() {
@@ -406,7 +445,7 @@ func metadataValue(key string) string {
 	v := os.Getenv(envKey)
 	// Respect curl-style '@' prefix to mean the rest is a filename.
 	if strings.HasPrefix(v, "@") {
-		slurp, err := ioutil.ReadFile(v[1:])
+		slurp, err := os.ReadFile(v[1:])
 		if err != nil {
 			log.Fatalf("Error reading file for GCEMETA_%v: %v", key, err)
 		}
@@ -856,11 +895,11 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "HTTP/1.1 or higher required", http.StatusBadRequest)
 		return
 	}
-	// Create *workDir and (if needed) tmp and gocache.
+	// Create *workDir and any needed temporary subdirectories.
 	if !mkdirAllWorkdirOr500(w) {
 		return
 	}
-	for _, dir := range []string{processTmpDirEnv, processGoCacheEnv} {
+	for _, dir := range []string{processTmpDirEnv, processGoCacheEnv, processGoplsCacheEnv} {
 		if dir == "" {
 			continue
 		}
@@ -911,6 +950,9 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 	}
 	if v := processGoCacheEnv; v != "" {
 		env = append(env, "GOCACHE="+v)
+	}
+	if v := processGoplsCacheEnv; v != "" {
+		env = append(env, "GOPLSCACHE="+v)
 	}
 	if path := r.PostForm["path"]; len(path) > 0 {
 		if kv, ok := pathEnv(runtime.GOOS, env, path, *workDir); ok {
@@ -1027,7 +1069,7 @@ func absExecDir(dirArg string, sysMode bool, cmdDir string) (absDir string, err 
 	return filepath.Join(*workDir, relDir), nil
 }
 
-// needsBashWrappers reports whether the given command needs to
+// needsBashWrapper reports whether the given command needs to
 // run through bash.
 func needsBashWrapper(cmd string) bool {
 	if !strings.HasSuffix(cmd, ".bash") {
@@ -1065,7 +1107,7 @@ func pathEnv(goos string, env, path []string, workDir string) (kv string, ok boo
 		"$EMPTY", "",
 	)
 
-	// Apply substitions to a copy of the path argument.
+	// Apply substitutions to a copy of the path argument.
 	subst := make([]string, 0, len(path))
 	for _, elem := range path {
 		if s := r.Replace(elem); s != "" {
@@ -1186,6 +1228,7 @@ func handleHalt(w http.ResponseWriter, r *http.Request) {
 	// remaining second.
 	log.Printf("Halting in 1 second.")
 	time.AfterFunc(1*time.Second, func() {
+		teardownOnce()
 		if *rebootOnHalt {
 			doReboot()
 		}
@@ -1409,6 +1452,10 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func useBuildletSSHServer() bool {
+	return *swarmingBot && runtime.GOOS != "plan9"
+}
+
 func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "requires POST method", http.StatusBadRequest)
@@ -1476,8 +1523,16 @@ func handleConnectSSH(w http.ResponseWriter, r *http.Request) {
 	<-errc
 }
 
+var buildletSSHServer *ssh.Server
+var buldletAuthKeys []byte
+
 // sshPort returns the port to use for the local SSH server.
 func sshPort() string {
+	// use port 2222 regardless of where the buildlet is running.
+	if useBuildletSSHServer() {
+		return "2222"
+	}
+
 	// runningInCOS is whether we're running under GCE's Container-Optimized OS (COS).
 	const runningInCOS = runtime.GOOS == "linux" && runtime.GOARCH == "amd64"
 
@@ -1494,6 +1549,10 @@ var sshServerOnce sync.Once
 
 // startSSHServer starts an SSH server.
 func startSSHServer() {
+	if useBuildletSSHServer() {
+		startSSHServerSwarming()
+		return
+	}
 	if inLinuxContainer() {
 		startSSHServerLinux()
 		return
@@ -1604,7 +1663,7 @@ func waitLocalSSH() {
 
 func numProcs() int {
 	n := 0
-	fis, _ := ioutil.ReadDir("/proc")
+	fis, _ := os.ReadDir("/proc")
 	for _, fi := range fis {
 		if _, err := strconv.Atoi(fi.Name()); err == nil {
 			n++
@@ -1691,7 +1750,7 @@ func httpStatus(err error) int {
 	return he.statusCode
 }
 
-// requirePassword is an http.Handler auth wrapper that enforces a
+// requirePasswordHandler is an http.Handler auth wrapper that enforces an
 // HTTP Basic password. The username is ignored.
 type requirePasswordHandler struct {
 	h        http.Handler
@@ -1774,6 +1833,10 @@ func makeBSDFilesystemFast() {
 }
 
 func appendSSHAuthorizedKey(sshUser, authKey string) error {
+	if *swarmingBot {
+		buldletAuthKeys = append(buldletAuthKeys, []byte(fmt.Sprintf("%s\n%s\n", sshUser, authKey))...)
+		return nil
+	}
 	var homeRoot string
 	switch runtime.GOOS {
 	case "darwin":
@@ -1801,7 +1864,7 @@ func appendSSHAuthorizedKey(sshUser, authKey string) error {
 		return err
 	}
 	authFile := filepath.Join(sshDir, "authorized_keys")
-	exist, err := ioutil.ReadFile(authFile)
+	exist, err := os.ReadFile(authFile)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -1863,8 +1926,7 @@ func removeAllAndMkdir(dir string) {
 // when deleting.
 func removeAllIncludingReadonly(dir string) error {
 	err := os.RemoveAll(dir)
-	if err == nil || !os.IsPermission(err) ||
-		runtime.GOOS == "windows" { // different filesystem permission model; also our windows builders are ephemeral single-use VMs anyway
+	if err == nil || !os.IsPermission(err) {
 		return err
 	}
 	// Make a best effort (ignoring errors) attempt to make all
@@ -1942,10 +2004,6 @@ func disableOutboundNetworkLinux() {
 			return
 		}
 	}
-	const vcsTestGolangOrgIPOnVM = "35.184.38.56" // vcs-test.golang.org, on previous VM
-	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "1", "-m", "state", "--state", "NEW", "-d", vcsTestGolangOrgIPOnVM, "-p", "tcp", "-j", "ACCEPT"))
-	const vcsTestGolangOrgIP = "34.110.184.62" // vcs-test.golang.org, on GKE
-	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "1", "-m", "state", "--state", "NEW", "-d", vcsTestGolangOrgIP, "-p", "tcp", "-j", "ACCEPT"))
 	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "2", "-m", "state", "--state", "NEW", "-d", "10.0.0.0/8", "-p", "tcp", "-j", "ACCEPT"))
 	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "443", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
 	runOrLog(exec.Command(iptables, "-I", "OUTPUT", "3", "-m", "state", "--state", "NEW", "-p", "tcp", "--dport", "80", "-j", "REJECT", "--reject-with", "icmp-host-prohibited"))
@@ -1973,4 +2031,18 @@ func serveReverseHealth() error {
 	m := &http.ServeMux{}
 	m.HandleFunc("/healthz", handleHealthz)
 	return http.ListenAndServe(*healthAddr, m)
+}
+
+func shell() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "bash"
+	case "windows":
+		return `C:\Windows\System32\cmd.exe`
+	default:
+		if shell := os.Getenv("SHELL"); shell != "" {
+			return shell
+		}
+		return "/bin/sh"
+	}
 }

@@ -26,6 +26,44 @@ Alternatively, using docker:
 make dev
 ```
 
+### Enable Cloud Build in your local relui
+
+Set your personal Google Cloud Project.
+
+```bash
+gcloud config set project PROJECT_ID
+```
+
+Enable the Cloud Build API from your project.
+
+```bash
+gcloud services enable cloudbuild.googleapis.com
+```
+
+Create a GCS bucket in your project.
+```bash
+gcloud storage buckets create gs://GCS_BUCKET_NAME
+```
+
+Run relui with additional parameters `-cloud-build-project` and
+`-scratch-files-base`. The local relui will run cloud build in you project and
+copy the results to your GCS bucket.
+```bash
+PGHOST=localhost PGDATABASE=relui-dev PGUSER=postgres go run . -listen-http=localhost:8080 -cloud-build-project PROJECT_ID -scratch-files-base gs://GCS_BUCKET_NAME
+```
+
+### Enable GitHub Client in your local relui
+
+Use github [token](https://github.com/settings/tokens/new) page to generate a
+new access token.
+
+Run relui with additional parameters `-github-token`. The local relui will use
+your personal credential to talk to github.
+
+```bash
+PGHOST=localhost PGDATABASE=relui-dev PGUSER=postgres go run . -listen-http=localhost:8080 -github-token TOKEN
+```
+
 ### Updating Queries
 
 Create or edit SQL files in `internal/relui/queries`.
@@ -37,7 +75,7 @@ details.
 
 ### Creating & Running Database Migrations
 
-Migrations are managed using `github.com/golang-migrate/migrate`. 
+Migrations are managed using `github.com/golang-migrate/migrate`.
 
 #### Creating
 
@@ -61,7 +99,7 @@ migrations are not automatically run and must be manually invoked in
 Run go test with the appropriate
 [libpq-style environment variables](https://www.postgresql.org/docs/current/libpq-envars.html)
 set. If the database connection fails, database integration tests will
-be skipped. If PGDATABASE is unset, relui-test is created, migrated, 
+be skipped. If PGDATABASE is unset, relui-test is created, migrated,
 and used by default.
 
 ```bash

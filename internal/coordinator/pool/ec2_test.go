@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 package pool
 
@@ -534,7 +533,7 @@ func (f *fakeEC2BuildletClient) StartNewVM(ctx context.Context, buildEnv *builde
 		return nil, errors.New("TLS keypair is not set")
 	}
 	if buildEnv == nil {
-		return nil, errors.New("invalid build enviornment")
+		return nil, errors.New("invalid build environment")
 	}
 	if hconf == nil {
 		return nil, errors.New("invalid host configuration")

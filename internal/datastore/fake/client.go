@@ -59,12 +59,12 @@ func (f *Client) DeleteMulti(context.Context, []*datastore.Key) (err error) {
 func (f *Client) Get(_ context.Context, key *datastore.Key, dst interface{}) (err error) {
 	f.m.Lock()
 	defer f.m.Unlock()
-	if f == nil {
-		return datastore.ErrNoSuchEntity
-	}
 	// get catches nil interfaces; we need to catch nil ptr here
 	if dst == nil {
 		return datastore.ErrInvalidEntityType
+	}
+	if key == nil {
+		return datastore.ErrInvalidKey
 	}
 	kdb := f.db[key.Kind]
 	if kdb == nil {

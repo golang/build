@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -18,12 +19,16 @@ func TestMailDLCL(t *testing.T) {
 	year := fmt.Sprint(time.Now().UTC().Year())
 	tests := [...]struct {
 		name    string
-		in      []string
+		kind    ReleaseKind
+		major   int
+		version string
 		wantLog string
 	}{
 		{
-			name: "minor",
-			in:   []string{"go1.17.1", "go1.16.8"},
+			name:    "minor",
+			kind:    KindMinor,
+			major:   17,
+			version: "go1.17.1",
 			wantLog: `file "go1.17.1/main.go" (command "golang.org/dl/go1.17.1"):
 // Copyright ` + year + ` The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -39,7 +44,7 @@ func TestMailDLCL(t *testing.T) {
 // And then use the go1.17.1 command as if it were your normal go
 // command.
 //
-// See the release notes at https://go.dev/doc/devel/release#go1.17.minor.
+// See the release notes at https://go.dev/doc/devel/release#go1.17.1.
 //
 // File bugs at https://go.dev/issue/new.
 package main
@@ -48,36 +53,13 @@ import "golang.org/dl/internal/version"
 
 func main() {
 	version.Run("go1.17.1")
-}
-file "go1.16.8/main.go" (command "golang.org/dl/go1.16.8"):
-// Copyright ` + year + ` The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// The go1.16.8 command runs the go command from Go 1.16.8.
-//
-// To install, run:
-//
-//	$ go install golang.org/dl/go1.16.8@latest
-//	$ go1.16.8 download
-//
-// And then use the go1.16.8 command as if it were your normal go
-// command.
-//
-// See the release notes at https://go.dev/doc/devel/release#go1.16.minor.
-//
-// File bugs at https://go.dev/issue/new.
-package main
-
-import "golang.org/dl/internal/version"
-
-func main() {
-	version.Run("go1.16.8")
 }` + "\n",
 		},
 		{
-			name: "beta",
-			in:   []string{"go1.17beta1"},
+			name:    "beta",
+			kind:    KindBeta,
+			major:   17,
+			version: "go1.17beta1",
 			wantLog: `file "go1.17beta1/main.go" (command "golang.org/dl/go1.17beta1"):
 // Copyright ` + year + ` The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -105,8 +87,10 @@ func main() {
 }` + "\n",
 		},
 		{
-			name: "rc",
-			in:   []string{"go1.17rc2"},
+			name:    "rc",
+			kind:    KindRC,
+			major:   17,
+			version: "go1.17rc2",
 			wantLog: `file "go1.17rc2/main.go" (command "golang.org/dl/go1.17rc2"):
 // Copyright ` + year + ` The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -134,24 +118,26 @@ func main() {
 }` + "\n",
 		},
 		{
-			name: "major",
-			in:   []string{"go1.17"},
-			wantLog: `file "go1.17/main.go" (command "golang.org/dl/go1.17"):
+			name:    "major",
+			kind:    KindMajor,
+			major:   21,
+			version: "go1.21.0",
+			wantLog: `file "go1.21.0/main.go" (command "golang.org/dl/go1.21.0"):
 // Copyright ` + year + ` The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// The go1.17 command runs the go command from Go 1.17.
+// The go1.21.0 command runs the go command from Go 1.21.0.
 //
 // To install, run:
 //
-//	$ go install golang.org/dl/go1.17@latest
-//	$ go1.17 download
+//	$ go install golang.org/dl/go1.21.0@latest
+//	$ go1.21.0 download
 //
-// And then use the go1.17 command as if it were your normal go
+// And then use the go1.21.0 command as if it were your normal go
 // command.
 //
-// See the release notes at https://go.dev/doc/go1.17.
+// See the release notes at https://go.dev/doc/go1.21.
 //
 // File bugs at https://go.dev/issue/new.
 package main
@@ -159,7 +145,7 @@ package main
 import "golang.org/dl/internal/version"
 
 func main() {
-	version.Run("go1.17")
+	version.Run("go1.21.0")
 }` + "\n",
 		},
 	}
@@ -170,15 +156,15 @@ func main() {
 			var buf bytes.Buffer
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
 			tasks := &VersionTasks{Gerrit: nil}
-			changeID, err := tasks.MailDLCL(ctx, tc.in, nil, true)
+			changeID, err := tasks.MailDLCL(ctx, tc.major, tc.kind, tc.version, nil, true)
 			if err != nil {
 				t.Fatal("got a non-nil error:", err)
 			}
 			if got, want := changeID, "(dry-run)"; got != want {
 				t.Errorf("unexpected changeID: got = %q, want %q", got, want)
 			}
-			if got, want := buf.String(), tc.wantLog; got != want {
-				t.Errorf("unexpected log:\ngot:\n%s\nwant:\n%s", got, want)
+			if diff := cmp.Diff(tc.wantLog, buf.String()); diff != "" {
+				t.Errorf("log mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

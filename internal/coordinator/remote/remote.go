@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+//go:build linux || darwin
+
 package remote
 
 import (
@@ -65,7 +67,6 @@ func NewSessionPool(ctx context.Context) *SessionPool {
 	sp.pollWait.Add(1)
 	go func() {
 		internal.PeriodicallyDo(ctx, remoteBuildletCleanInterval, func(ctx context.Context, _ time.Time) {
-			log.Printf("remote: cleaning up expired remote buildlets")
 			sp.destroyExpiredSessions(ctx)
 		})
 		sp.pollWait.Done()
@@ -123,8 +124,9 @@ func (sp *SessionPool) destroyExpiredSessions(ctx context.Context) {
 	sp.mu.Unlock()
 	// the sessions are no longer in the map. They can be mutated.
 	for _, s := range ss {
+		log.Printf("remote: destroying expired buildlet %s", s.ID)
 		if err := s.buildlet.Close(); err != nil {
-			log.Printf("remote: unable to close buildlet connection %s", err)
+			log.Printf("remote: unable to close buildlet connection for %s: %s", s.ID, err)
 		}
 	}
 }
@@ -201,7 +203,7 @@ func (sp *SessionPool) Session(buildletName string) (*Session, error) {
 	return nil, fmt.Errorf("remote buildlet does not exist=%s", buildletName)
 }
 
-// Buildlet returns the buildlet client associated with the Session.
+// BuildletClient returns the buildlet client associated with the Session.
 func (sp *SessionPool) BuildletClient(buildletName string) (buildlet.Client, error) {
 	sp.mu.RLock()
 	defer sp.mu.RUnlock()

@@ -5,9 +5,11 @@
 // https://developers.google.com/protocol-buffers/docs/proto3
 syntax = "proto3";
 
-import "github.com/golang/protobuf/ptypes/timestamp/timestamp.proto";
+import "google/protobuf/timestamp.proto";
 
 package maintpb;
+
+option go_package = "golang.org/x/build/maintner/maintpb";
 
 message Mutation {
   GithubIssueMutation github_issue = 1; // issue-specific changes

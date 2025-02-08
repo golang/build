@@ -1,0 +1,115 @@
+# Copyright 2023 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: gomoteserver-deployment
+spec:
+  selector:
+    matchLabels:
+      app: gomoteserver
+  template:
+    metadata:
+      labels:
+        app: gomoteserver
+    spec:
+      serviceAccountName: gomoteserver
+      containers:
+      - name: gomoteserver
+        image: gcr.io/symbolic-datum-552/gomoteserver:latest
+        imagePullPolicy: Always
+        command:
+          - "/gomoteserver"
+          - "-listen-http=:80"
+          - "-listen-https-autocert=:443"
+          - "-autocert-bucket=gomote-golang-org-autocert-cache"
+          - "-listen-https-selfsigned=:444"
+          - "-private-host-key=secret:symbolic-datum-552/gomoteserver-private-host-key"
+          - "-public-host-key=secret:symbolic-datum-552/gomoteserver-public-host-key"
+          - "-autocert-directory=https://dv.acme-v02.api.pki.goog/directory"
+          - "-autocert-email=go-builders@google.com"
+          - "-autocert-eab=secret:symbolic-datum-552/gomoteserver-certificates-eab"
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        - containerPort: 444
+        - containerPort: 2222 # ssh proxy port
+        resources:
+          requests:
+            cpu: "2"
+            memory: "16Gi"
+          limits:
+            cpu: "4"
+            memory: "16Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: gomoteserver
+spec:
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+    - port: 443
+      targetPort: 443
+      name: https
+    - port: 2222
+      targetPort: 2222
+      name: ssh
+  selector:
+    app: gomoteserver
+  type: LoadBalancer
+  loadBalancerIP: 35.232.178.214 # gomote-ssh-golang-org
+  externalTrafficPolicy: Local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: gomoteserver-internal-iap
+  annotations:
+    cloud.google.com/backend-config: '{"default": "gomoteserver-iap-backend"}'
+    cloud.google.com/neg: '{"ingress": false}'
+    cloud.google.com/app-protocols: '{"https":"HTTP2"}'
+spec:
+  ports:
+    - port: 444
+      targetPort: 444
+      name: https
+  selector:
+    app: gomoteserver
+  type: NodePort
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: prod
+  name: gomoteserver-internal
+  annotations:
+    cloud.google.com/neg: '{"ingress": false}'
+    cloud.google.com/app-protocols: '{"https":"HTTP2"}'
+spec:
+  ports:
+    - port: 444
+      targetPort: 444
+      name: https
+  selector:
+    app: gomoteserver
+  type: NodePort
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  namespace: prod
+  name: gomoteserver-iap-backend
+spec:
+  iap:
+    enabled: true
+    oauthclientCredentials:
+      secretName: iap-oauth
+  timeoutSec: 86400  # For long-running gomote RPCs. See https://go.dev/issue/56423.

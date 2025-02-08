@@ -7,12 +7,15 @@ set -e
 set -u
 
 # Update to the version listed on https://openbsd.org
-readonly VERSION="${VERSION:-7.2}"
+readonly VERSION="${VERSION:-7.6}"
 readonly RELNO="${VERSION/./}"
 readonly SNAPSHOT=false
 
 readonly ARCH="${ARCH:-amd64}"
 readonly MIRROR="${MIRROR:-cdn.openbsd.org}"
+
+readonly WORK="$(mktemp -d)"
+readonly SITE="${WORK}/site"
 
 if [[ "${ARCH}" != "amd64" && "${ARCH}" != "i386" ]]; then
   echo "ARCH must be amd64 or i386"
@@ -31,45 +34,51 @@ if [[ ! -f "${ISO}" ]]; then
 fi
 
 function cleanup() {
-	rm -f "${ISO_PATCHED}"
-	rm -f auto_install.conf
-	rm -f boot.conf
-	rm -f disk.raw
-	rm -f disklabel.template
-	rm -f etc/{installurl,rc.local,sysctl.conf}
-	rm -f install.site
-	rm -f random.seed
-	rm -f site${RELNO}.tgz
-	rmdir etc
+	rm -rf "${WORK}"
 }
 
 trap cleanup EXIT INT
 
 # Create custom siteXX.tgz set.
-PKG_ADD_OPTIONS=""
+PKG_ADD_OPTIONS="-I"
 if [[ "$SNAPSHOT" = true ]]; then
-  PKG_ADD_OPTIONS="-D snap"
+  PKG_ADD_OPTIONS="-I -D snap"
 fi
-mkdir -p etc
-cat >install.site <<EOF
+mkdir -p ${SITE}/etc
+cat >${SITE}/install.site <<EOF
 #!/bin/sh
-touch /firstboot
 echo 'set tty com0' > boot.conf
 EOF
 
-cat >etc/installurl <<EOF
+cat >${SITE}/etc/installurl <<EOF
 https://${MIRROR}/pub/OpenBSD
 EOF
-cat >etc/rc.local <<EOF
-if [[ -f /firstboot ]]; then
-  syspatch
-  # Run syspatch twice in case syspatch itself needs patching (this is the case with OpenBSD
-  # 7.1: https://www.openbsd.org/errata71.html )
-  syspatch
-  pkg_add -iv ${PKG_ADD_OPTIONS} bash curl git
-  rm -f /firstboot
-fi
+cat >${SITE}/etc/rc.firsttime <<EOF
+set -x
+cat > /etc/login.conf.d/moreres <<'EOLOGIN'
+moreres:\
+  :datasize-max=infinity: \
+  :datasize-cur=infinity: \
+  :vmemoryuse-max=infinity: \
+  :vmemoryuse-cur=infinity: \
+  :memoryuse-max=infinity: \
+  :memoryuse-cur=infinity: \
+  :maxproc-max=2048: \
+  :maxproc-cur=2048: \
+  :openfiles-max=4096: \
+  :openfiles-cur=4096: \
+  :tc=default:
+EOLOGIN
+usermod -L moreres swarming
+syspatch
+# Run syspatch twice in case syspatch itself needs patching (this has been needed previously).
+syspatch
+pkg_add -iv ${PKG_ADD_OPTIONS} bash curl git python%3 sudo--gettext
+chown root:wheel /etc/sudoers
+halt -p
+EOF
 
+cat >${SITE}/etc/rc.local <<EOF
 (
   set -x
 
@@ -83,27 +92,43 @@ fi
   (
     set -e
     export PATH="\$PATH:/usr/local/bin"
-    /usr/local/bin/curl -o /buildlet \$(/usr/local/bin/curl --fail -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
-    chmod +x /buildlet
-    exec /buildlet
+    project=\$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)
+    case "\$project" in
+      *luci*)
+        gcehost=\$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/hostname | cut -d . -f 1)
+        swarming=\$(curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/swarming | cut -d . -f 1)
+        su -l swarming -c "/usr/local/bin/bootstrapswarm --hostname \$gcehost --swarming \${swarming}.appspot.com"
+      ;;
+      *)
+        /usr/local/bin/curl -o /buildlet \$(/usr/local/bin/curl --fail -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/buildlet-binary-url)
+        chmod +x /buildlet
+        exec /buildlet
+      ;;
+    esac
   )
   echo "giving up"
   (
-    sleep 10
+    sleep 60
     halt -p
   )&
 )
 EOF
-cat >etc/sysctl.conf <<EOF
+cat >${SITE}/etc/sysctl.conf <<EOF
 hw.smt=1
 kern.timecounter.hardware=tsc
 EOF
-chmod +x install.site
-tar -zcvf site${RELNO}.tgz install.site etc/{installurl,rc.local,sysctl.conf}
+cat >${SITE}/etc/sudoers <<EOF
+root ALL=(ALL:ALL) ALL
+swarming ALL=NOPASSWD:/sbin/shutdown -r now
+EOF
+chmod +x ${SITE}/install.site
+mkdir -p ${SITE}/usr/local/bin
+CGO_ENABLED=0 GOOS=openbsd GOARCH=${ARCH/i386/386} go build -o ${SITE}/usr/local/bin/bootstrapswarm golang.org/x/build/cmd/bootstrapswarm
+tar --mode a=rx,u=rwx --owner root:0 --group wheel:0 -C ${SITE} -zcf ${WORK}/site${RELNO}.tgz .
 
 # Autoinstall script.
-cat >auto_install.conf <<EOF
-System hostname = buildlet
+cat >${WORK}/auto_install.conf <<EOF
+System hostname = openbsd-amd64
 Which network interface = vio0
 IPv4 address for vio0 = dhcp
 IPv6 address for vio0 = none
@@ -111,9 +136,9 @@ Password for root account = root
 Do you expect to run the X Window System = no
 Change the default console to com0 = yes
 Which speed should com0 use = 115200
-Setup a user = gopher
-Full name for user gopher = Gopher Gopherson
-Password for user gopher = gopher
+Setup a user = swarming
+Full name for user swarming = Swarming Gopher Gopherson
+Password for user swarming = swarming
 Allow root ssh login = no
 What timezone = US/Pacific
 Which disk = sd0
@@ -126,32 +151,32 @@ Directory does not contain SHA256.sig. Continue without verification = yes
 EOF
 
 # Disklabel template.
-cat >disklabel.template <<EOF
+cat >${WORK}/disklabel.template <<EOF
 /	5G-*	95%
 swap	1G
 EOF
 
 # Hack install CD a bit.
-echo 'set tty com0' > boot.conf
-dd if=/dev/urandom of=random.seed bs=4096 count=1
+echo 'set tty com0' > ${WORK}/boot.conf
+dd if=/dev/urandom of=${WORK}/random.seed bs=4096 count=1
 cp "${ISO}" "${ISO_PATCHED}"
 growisofs -M "${ISO_PATCHED}" -l -R -graft-points \
-  /${VERSION}/${ARCH}/site${RELNO}.tgz=site${RELNO}.tgz \
-  /auto_install.conf=auto_install.conf \
-  /disklabel.template=disklabel.template \
-  /etc/boot.conf=boot.conf \
-  /etc/random.seed=random.seed
+  /${VERSION}/${ARCH}/site${RELNO}.tgz=${WORK}/site${RELNO}.tgz \
+  /auto_install.conf=${WORK}/auto_install.conf \
+  /disklabel.template=${WORK}/disklabel.template \
+  /etc/boot.conf=${WORK}/boot.conf \
+  /etc/random.seed=${WORK}/random.seed
 
 # Initialize disk image.
-rm -f disk.raw
-qemu-img create -f raw disk.raw 10G
+rm -f ${WORK}/disk.raw
+qemu-img create -f raw ${WORK}/disk.raw 30G
 
 # Run the installer to create the disk image.
 expect <<EOF
 set timeout 1800
 
 spawn qemu-system-x86_64 -nographic -smp 2 \
-  -drive if=virtio,file=disk.raw,format=raw -cdrom "${ISO_PATCHED}" \
+  -drive if=virtio,file=${WORK}/disk.raw,format=raw -cdrom "${ISO_PATCHED}" \
   -net nic,model=virtio -net user -boot once=d
 
 expect timeout { exit 1 } "boot>"
@@ -174,6 +199,6 @@ EOF
 
 # Create Compute Engine disk image.
 echo "Archiving disk.raw... (this may take a while)"
-tar -Szcf "openbsd-${VERSION}-${ARCH}-gce.tar.gz" disk.raw
+tar -C ${WORK} -Szcf "openbsd-${VERSION}-${ARCH}-gce.tar.gz" disk.raw
 
 echo "Done. GCE image is openbsd-${VERSION}-${ARCH}-gce.tar.gz."

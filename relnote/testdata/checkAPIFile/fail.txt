@@ -1,0 +1,13 @@
+errors:
+- foo/123.md does not exist
+- bar/123.md does, but doesn't have the right content.
+-- api.txt --
+pkg foo, type T #123
+pkg bar, type T #123
+-- 7-stdlib/99-minor/bar/123.md --
+Not a sentence
+-- want --
+doc/next/7-stdlib/99-minor/bar/123.md: File must contain a complete sentence or a TODO.
+See doc/README.md for more information.
+doc/next/7-stdlib/99-minor/foo/123.md: File does not exist. Every API change must have a corresponding release note file.
+See doc/README.md for more information.

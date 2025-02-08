@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-// +build go1.16
+//go:build linux || darwin
 
 package legacydash
 
@@ -14,6 +13,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/types"
@@ -25,8 +25,14 @@ func TestUITemplateDataBuilder(t *testing.T) {
 	origBuilders := dashboard.Builders
 	defer func() { dashboard.Builders = origBuilders }()
 	dashboard.Builders = map[string]*dashboard.BuildConfig{
-		"linux-amd64": origBuilders["linux-amd64"],
-		"linux-386":   origBuilders["linux-386"],
+		"linux-amd64": {
+			Name:     "linux-amd64",
+			HostType: "host-linux-amd64-bullseye",
+		},
+		"linux-386": {
+			Name:     "linux-386",
+			HostType: "host-linux-amd64-bullseye",
+		},
 	}
 
 	tests := []struct {
@@ -49,6 +55,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			want: &uiTemplateData{
 				Dashboard:  goDash,
 				Repo:       "go",
+				Branch:     "master",
 				Package:    &Package{Name: "Go", Path: ""},
 				Branches:   []string{"release.foo", "release.bar", "dev.blah"},
 				Builders:   []string{"linux-386", "linux-amd64"},
@@ -101,6 +108,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			want: &uiTemplateData{
 				Dashboard: goDash,
 				Repo:      "go",
+				Branch:    "master",
 				Package:   &Package{Name: "Go", Path: ""},
 				Branches:  []string{"release.foo", "release.bar", "dev.blah"},
 				Builders:  []string{"linux-386", "linux-amd64", "openbsd-amd64"},
@@ -198,6 +206,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			want: &uiTemplateData{
 				Dashboard:  goDash,
 				Repo:       "go",
+				Branch:     "master",
 				Package:    &Package{Name: "Go", Path: ""},
 				Branches:   []string{"release.foo", "release.bar", "dev.blah"},
 				Builders:   []string{"linux-386", "linux-amd64"},
@@ -298,6 +307,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 			want: &uiTemplateData{
 				Dashboard:  goDash,
 				Repo:       "net",
+				Branch:     "master",
 				Package:    &Package{Name: "net", Path: "golang.org/x/net"},
 				Branches:   []string{"master", "dev.blah"},
 				Builders:   []string{"linux-386", "linux-amd64"},
@@ -328,7 +338,7 @@ func TestUITemplateDataBuilder(t *testing.T) {
 				activeBuilds:   tt.activeBuilds,
 				testCommitData: tt.testCommitData,
 			}
-			data, err := tb.buildTemplateData(context.Background())
+			data, err := tb.buildTemplateData(context.Background(), nil, lucipoll.Snapshot{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -351,6 +361,7 @@ func TestToBuildStatus(t *testing.T) {
 			data: &uiTemplateData{
 				Dashboard:  goDash,
 				Repo:       "go",
+				Branch:     "master",
 				Package:    &Package{Name: "Go", Path: ""},
 				Branches:   []string{"release.foo", "release.bar", "dev.blah"},
 				Builders:   []string{"linux-386", "linux-amd64"},
@@ -489,6 +500,7 @@ func TestToBuildStatus(t *testing.T) {
 			data: &uiTemplateData{
 				Dashboard: goDash,
 				Repo:      "tools",
+				Branch:    "master",
 				Builders:  []string{"linux", "windows"},
 				Commits: []*CommitInfo{
 					{

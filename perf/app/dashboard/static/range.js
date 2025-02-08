@@ -1,4 +1,4 @@
-// Copyright 2022 The Go Authors.  All rights reserved.
+// Copyright 2022 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -28,6 +28,17 @@ function Range(low, center, high, min, max, width, height, unit, higherIsBetter)
 	const xScale = d3.scaleLinear([min, max], [margin, width-margin]);
 	const yBaseline = 3*height/4;
 
+	// Draw zero line.
+	const tick = d3.line()
+		.x(d => xScale(d[0]))
+		.y(d => d[1])
+
+	svg.append("path")
+		.attr("fill", "none")
+		.attr("stroke", "#cccccc")
+		.attr("stroke-width", 1)
+		.attr("d", tick([[0, 0], [0, height]]))
+
 	// Draw line.
 	const line = d3.line()
 		.x(d => xScale(d))
@@ -36,7 +47,7 @@ function Range(low, center, high, min, max, width, height, unit, higherIsBetter)
 	const partialStroke = function() {
 		return svg.append("path")
 			.attr("fill", "none")
-			.attr("stroke-width", 6);
+			.attr("stroke-width", 3.5);
 	}
 	if (high < 0) {
 		partialStroke().attr("stroke", pickColor(high))
@@ -50,10 +61,6 @@ function Range(low, center, high, min, max, width, height, unit, higherIsBetter)
 		partialStroke().attr("stroke", pickColor(low))
 			.attr("d", line([low, high]));
 	}
-
-	const tick = d3.line()
-		.x(d => xScale(d[0]))
-		.y(d => d[1])
 
 	const xTicks = [low, center, high];
 	for (const i in xTicks) {
@@ -99,6 +106,31 @@ function Range(low, center, high, min, max, width, height, unit, higherIsBetter)
 			signDisplay: 'always',
 			minimumFractionDigits: 2,
 		}).format(high));
+
+	return svg.node();
+}
+
+function NoDataRange(min, max, width, height) {
+	const margin = 40;
+	const svg = d3.create("svg")
+		.attr("width", width)
+		.attr("height", height)
+		.attr("viewBox", [0, 0, width, height])
+		.attr("style", "max-width: 100%; height: auto; height: intrinsic;");
+
+	const xScale = d3.scaleLinear([min, max], [margin, width-margin]);
+	const yBaseline = 3*height/4;
+
+	// Draw zero line.
+	const tick = d3.line()
+		.x(d => xScale(d[0]))
+		.y(d => d[1])
+
+	svg.append("path")
+		.attr("fill", "none")
+		.attr("stroke", "#cccccc")
+		.attr("stroke-width", 1)
+		.attr("d", tick([[0, 0], [0, height]]))
 
 	return svg.node();
 }

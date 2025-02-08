@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build linux || darwin
-// +build linux darwin
 
 // Code interacting with Google Compute Engine (GCE) and
 // a GCE implementation of the BuildletPool interface.
@@ -219,6 +218,15 @@ func InitGCE(sc *secret.Client, basePin *atomic.Value, fn IsRemoteBuildletFunc, 
 	return nil
 }
 
+// StorageClient retrieves the GCE storage client.
+func StorageClient(ctx context.Context) (*storage.Client, error) {
+	sc, err := storage.NewClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("storage.NewClient: %w", err)
+	}
+	return sc, nil
+}
+
 // TODO(golang.org/issue/38337): These should be moved into a struct as
 // part of the effort to reduce package level variables.
 
@@ -274,7 +282,7 @@ func (c *GCEConfiguration) GoDSClient() *datastore.Client {
 	return goDSClient
 }
 
-// TryDepsErr retrives any Trybot dependency error.
+// TryDepsErr retrieves any Trybot dependency error.
 func (c *GCEConfiguration) TryDepsErr() error {
 	return errTryDeps
 }

@@ -19,9 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/timestamp"
-
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
@@ -134,16 +131,6 @@ func (c *Corpus) Check() error {
 	return nil
 }
 
-// mustProtoFromTime turns a time.Time into a *timestamp.Timestamp or panics if
-// in is invalid.
-func mustProtoFromTime(in time.Time) *timestamp.Timestamp {
-	tp, err := ptypes.TimestampProto(in)
-	if err != nil {
-		panic(err)
-	}
-	return tp
-}
-
 // requires c.mu be held for writing
 func (c *Corpus) str(s string) string {
 	if v, ok := c.strIntern[s]; ok {
@@ -234,7 +221,7 @@ func (c *Corpus) Initialize(ctx context.Context, src MutationSource) error {
 	return c.update(ctx, nil)
 }
 
-// ErrSplit is returned when the the client notices the leader's
+// ErrSplit is returned when the client notices the leader's
 // mutation log has changed. This can happen if the leader restarts
 // with uncommitted transactions. (The leader only commits mutations
 // periodically.)

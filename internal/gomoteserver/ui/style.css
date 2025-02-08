@@ -1,0 +1,103 @@
+/**
+ * Copyright 2023 The Go Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style
+ * license that can be found in the LICENSE file.
+ */
+* {
+  box-sizing: border-box;
+}
+body {
+  color: #222;
+  font-family: sans-serif;
+  margin: 0;
+  padding: 10px;
+}
+h1,
+h2,
+h1 > a,
+h2 > a,
+h1 > a:visited,
+h2 > a:visited {
+  color: #375eab;
+}
+h1 {
+  font-size: 24px;
+}
+h2 {
+  font-size: 20px;
+}
+h1 > a,
+h2 > a {
+  display: none;
+  text-decoration: none;
+}
+h1:hover > a,
+h2:hover > a {
+  display: inline;
+}
+h1 > a:hover,
+h2 > a:hover {
+  text-decoration: underline;
+}
+pre {
+  font-family: monospace;
+  font-size: 9pt;
+}
+header {
+  background: #e0ebf5;
+  margin: -10px -10px 0;
+  padding: 10px;
+}
+header h1 {
+  display: inline;
+  margin: 0;
+  padding-top: 5px;
+}
+header h1 a {
+  display: initial;
+}
+header nav {
+  display: inline-block;
+  margin-left: 20px;
+}
+header nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+header nav ul li {
+  display: inline-block;
+}
+header nav a {
+  background: #375eab;
+  border: 1px solid #375eab;
+  border-radius: 5px;
+  color: white;
+  display: inline-block;
+  font-size: 16px;
+  margin: 0;
+  margin-right: 5px;
+  padding: 10px;
+  text-decoration: none;
+}
+table {
+  border-collapse: collapse;
+  font-size: 9pt;
+}
+table td,
+table th,
+table td,
+table th {
+  padding: 2px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+table thead tr {
+  background: #fff !important;
+}
+div.footer {
+  bottom: 10px;
+  font-family: sans-serif;
+  font-size: 9pt;
+  position: fixed;
+}

@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 package main
 
@@ -121,7 +119,7 @@ func fmtFrac(buf []byte, v uint64, prec int) (nw int, nv uint64) {
 	return w, v
 }
 
-// fmtFrac is identical to fmtInt in the time package.
+// fmtInt is identical to fmtInt in the time package.
 func fmtInt(buf []byte, v uint64) int {
 	w := len(buf)
 	if v == 0 {

@@ -2,8 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16
-// +build go1.16
+//go:build linux || darwin
 
 // Package legacydash holds the serving code for the build dashboard
 // (build.golang.org) and its remaining HTTP API endpoints.
@@ -22,53 +21,60 @@ import (
 
 	"cloud.google.com/go/datastore"
 	"github.com/NYTimes/gziphandler"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/repos"
 	"google.golang.org/grpc"
 )
 
-var (
+type luciClient interface {
+	PostSubmitSnapshot() lucipoll.Snapshot
+}
+
+type handler struct {
+	mux *http.ServeMux
+
 	// Datastore client to a GCP project where build results are stored.
 	// Typically this is the golang-org GCP project.
-	datastoreClient *datastore.Client
+	datastoreCl *datastore.Client
 
 	// Maintner client for the maintner service.
 	// Typically the one at maintner.golang.org.
-	maintnerClient apipb.MaintnerServiceClient
+	maintnerCl apipb.MaintnerServiceClient
 
-	// The builder master key.
-	masterKey string
+	// LUCI is a client for LUCI, used for fetching build results from there.
+	LUCI luciClient
+}
 
-	// TODO(golang.org/issue/38337): Keep moving away from package scope
-	// variables during future refactors.
-)
+func (h handler) ServeHTTP(w http.ResponseWriter, req *http.Request) { h.mux.ServeHTTP(w, req) }
 
 // fakeResults controls whether to make up fake random results. If true, datastore is not used.
 const fakeResults = false
 
 // Handler sets a datastore client, maintner client, builder master key and
 // GRPC server at the package scope, and returns an HTTP mux for the legacy dashboard.
-func Handler(dc *datastore.Client, mc apipb.MaintnerServiceClient, key string, grpcServer *grpc.Server) http.Handler {
-	datastoreClient = dc
-	maintnerClient = mc
-	masterKey = key
-	grpcServer = grpcServer
-
-	mux := http.NewServeMux()
+func Handler(dc *datastore.Client, mc apipb.MaintnerServiceClient, lc luciClient, key string, grpcServer *grpc.Server) http.Handler {
+	h := handler{
+		mux:         http.NewServeMux(),
+		datastoreCl: dc,
+		maintnerCl:  mc,
+		LUCI:        lc,
+	}
+	kc := keyCheck{masterKey: key}
 
 	// authenticated handlers
-	mux.Handle("/clear-results", hstsGzip(AuthHandler(clearResultsHandler))) // called by coordinator for x/build/cmd/retrybuilds
-	mux.Handle("/result", hstsGzip(AuthHandler(resultHandler)))              // called by coordinator after build
+	h.mux.Handle("/clear-results", hstsGzip(authHandler{kc, h.clearResultsHandler})) // called by coordinator for x/build/cmd/retrybuilds
+	h.mux.Handle("/result", hstsGzip(authHandler{kc, h.resultHandler}))              // called by coordinator after build
 
 	// public handlers
-	mux.Handle("/", GRPCHandler(grpcServer, hstsGzip(http.HandlerFunc(uiHandler)))) // enables GRPC server for build.golang.org
-	mux.Handle("/log/", hstsGzip(http.HandlerFunc(logHandler)))
+	h.mux.Handle("/", GRPCHandler(grpcServer, hstsGzip(http.HandlerFunc(h.uiHandler)))) // enables GRPC server for build.golang.org
+	h.mux.Handle("/log/", hstsGzip(http.HandlerFunc(h.logHandler)))
 
 	// static handler
 	fs := http.FileServer(http.FS(static))
-	mux.Handle("/static/", hstsGzip(fs))
+	h.mux.Handle("/static/", hstsGzip(fs))
 
-	return mux
+	return h
 }
 
 //go:embed static

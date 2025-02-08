@@ -47,7 +47,6 @@ func TestGerritEmail(t *testing.T) {
 		{id: "Jean de Klerk", want: "deklerk@google.com"},
 		{id: "Joe Tsai", want: "joetsai@digital-static.net"},
 		{id: "Martin Möhrmann", want: "moehrmann@google.com"},
-		{id: "Matthew Dempsky", want: "mdempsky@google.com"},
 		{id: "Olivier Poitrey", want: "rs@netflix.com"},
 		{id: "Paul Jolly", want: "paul@myitcv.org.uk"},
 		{id: "Ralph Corderoy", want: "ralph@inputplus.co.uk"},

@@ -103,4 +103,12 @@ https://developer.apple.com/support/xcode/ is a more authoritative list of versi
 - install the command line tools: `sudo xcode-select --install`
 - run xcode-select: `sudo xcode-select --switch /Library/Developer/CommandLineTools`
 
+
+
+Install crypto/x509 test root:
+```
+curl -f -o /tmp/test_root.pem "https://storage.googleapis.com/go-builder-data/platform_root_cert.pem"
+security add-trusted-cert -d -r trustRoot -p ssl -k /Library/Keychains/System.keychain /tmp/test_root.pem
+```
+
 Put a builder key in the usual spot.

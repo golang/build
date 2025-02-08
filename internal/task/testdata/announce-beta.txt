@@ -11,6 +11,7 @@ https://go.dev/issue/new
 
 If you have Go installed already, an easy way to try go1.19beta5
 is by using the go command:
+
 $ go install golang.org/dl/go1.19beta5@latest
 $ go1.19beta5 download
 

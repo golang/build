@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -42,7 +43,7 @@ func (ss *stringSlice) Set(v string) error {
 func run(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "run usage: gomote run [run-opts] <instance> <cmd> [args...]")
+		usageLogger.Print("run usage: gomote run [run-opts] <instance> <cmd> [args...]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
@@ -103,7 +104,7 @@ func run(args []string) error {
 	} else if err == nil {
 		runSet = append(runSet, fs.Arg(0))
 		if fs.NArg() == 1 {
-			fmt.Fprintln(os.Stderr, "missing command")
+			log.Print("missing command")
 			fs.Usage()
 		}
 		cmd = fs.Arg(1)
@@ -143,7 +144,7 @@ func run(args []string) error {
 		if len(runSet) > 1 {
 			// There's more than one instance running the command, so let's
 			// be explicit about that.
-			fmt.Fprintf(os.Stderr, "# Running command on %q...\n", inst)
+			log.Printf("Running command on %q...\n", inst)
 		}
 		eg.Go(func() error {
 			// Create a file to write output to so it doesn't get lost.
@@ -153,9 +154,9 @@ func run(args []string) error {
 			}
 			defer func() {
 				outf.Close()
-				fmt.Fprintf(os.Stderr, "# Wrote results from %q to %q.\n", inst, outf.Name())
+				log.Printf("Wrote results from %q to %q.\n", inst, outf.Name())
 			}()
-			fmt.Fprintf(os.Stderr, "# Streaming results from %q to %q...\n", inst, outf.Name())
+			log.Printf("Streaming results from %q to %q...\n", inst, outf.Name())
 
 			outputs := []io.Writer{outf}
 			// If this is the only command running, print to stdout too, for convenience and
@@ -202,10 +203,10 @@ func run(args []string) error {
 					return fmt.Errorf("failed to truncate output file %q: %w", outf.Name(), err)
 				}
 
-				fmt.Fprintf(os.Stderr, "# No match found on %q, running again...\n", inst)
+				log.Printf("No match found on %q, running again...\n", inst)
 			}
 			if until != nil {
-				fmt.Fprintf(os.Stderr, "# Match found on %q.\n", inst)
+				log.Printf("Match found on %q.\n", inst)
 			}
 			if ce != nil {
 				// N.B. If err this wasn't a cmdFailedError
@@ -215,19 +216,19 @@ func run(args []string) error {
 				// Write out the error.
 				_, err := io.MultiWriter(outputs...).Write([]byte(ce.Error() + "\n"))
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to write error to output: %v", err)
+					log.Printf("failed to write error to output: %v", err)
 				}
 			}
 			if collect {
 				f, err := os.Create(fmt.Sprintf("%s.tar.gz", inst))
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "failed to create file to write instance tarball: %v", err)
+					log.Printf("failed to create file to write instance tarball: %v", err)
 					return nil
 				}
 				defer f.Close()
-				fmt.Fprintf(os.Stderr, "# Downloading work dir tarball for %q to %q...\n", inst, f.Name())
+				log.Printf("Downloading work dir tarball for %q to %q...\n", inst, f.Name())
 				if err := doGetTar(ctx, inst, ".", f); err != nil {
-					fmt.Fprintf(os.Stderr, "failed to retrieve instance tarball: %v", err)
+					log.Printf("failed to retrieve instance tarball: %v", err)
 					return nil
 				}
 			}
@@ -241,7 +242,7 @@ func run(args []string) error {
 	// running. We still want to handle them, though, because we want to make sure
 	// we exit with a non-zero exit code to reflect the command failure.
 	for _, ce := range cmdsFailed {
-		fmt.Fprintf(os.Stderr, "# Command %q failed on %q: %v\n", ce.cmd, ce.inst, err)
+		log.Printf("Command %q failed on %q: %v\n", ce.cmd, ce.inst, err)
 	}
 	if len(cmdsFailed) > 0 {
 		return errors.New("one or more commands failed")

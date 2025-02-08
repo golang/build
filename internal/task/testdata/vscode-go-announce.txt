@@ -1,0 +1,11 @@
+Hello gophers,
+
+We have just released vscode-go v0.44.2.
+
+View the github release for more information:
+https://github.com/golang/vscode-go/releases/tag/v0.44.2.
+
+Thanks to everyone who contributed to the release.
+
+Cheers,
+The Go Tools Team

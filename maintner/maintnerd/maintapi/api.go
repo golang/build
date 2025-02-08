@@ -146,12 +146,11 @@ func tryWorkItem(
 		// from matching patchset-level comments. They
 		// are posted on the magic "/PATCHSET_LEVEL" path, see https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#file-id.
 		for _, c := range comments["/PATCHSET_LEVEL"] {
-			// It should be sufficient to match by equal time only.
-			// But check that author and patch set match too in order to be more strict.
-			if !c.Updated.Equal(m.Time) || c.Author.NumericID != m.Author.NumericID || c.PatchSet != m.RevisionNumber {
+			if !c.Updated.Equal(m.Time) || c.Author.NumericID != m.Author.NumericID {
+				// Not a matching time or author ID.
 				continue
 			}
-			if len(w.TryMessage) > 0 && c.PatchSet < int(w.TryMessage[len(w.TryMessage)-1].Version) {
+			if len(w.TryMessage) > 0 && m.RevisionNumber < int(w.TryMessage[len(w.TryMessage)-1].Version) {
 				// Don't include try messages older than the latest we've seen. They're obsolete.
 				continue
 			}
@@ -162,7 +161,7 @@ func tryWorkItem(
 			w.TryMessage = append(w.TryMessage, &apipb.TryVoteMessage{
 				Message:  tm[1],
 				AuthorId: c.Author.NumericID,
-				Version:  int32(c.PatchSet),
+				Version:  int32(m.RevisionNumber),
 			})
 		}
 	}
@@ -396,19 +395,9 @@ func parseReleaseBranchVersion(branchName string) (major, minor int32, ok bool) 
 // from internal-branch.goX-suffix or internal-branch.goX.Y-suffix internal branch names,
 // and reports whether the internal branch name is valid.
 //
-// Before Go 1.16, golang.org/x repositories used release-branch.go1.n as internal
-// branch names, so this function also accepts those branch names. See issue 36882.
-//
 // For example, "internal-branch.go1-vendor" is parsed as version 1.0,
 // and "internal-branch.go1.2-vendor" is parsed as version 1.2.
 func parseInternalBranchVersion(branchName string) (major, minor int32, ok bool) {
-	// Accept release branches as internal branches, since Go 1.15 still uses them.
-	// There was only one branch with a suffix, release-branch.go1.15-bundle in x/net, so just hardcode it.
-	// TODO: This special case can be removed when Go 1.17 is out and 1.15 is no longer supported.
-	if maj, min, ok := version.ParseReleaseBranch(strings.TrimSuffix(branchName, "-bundle")); ok {
-		return int32(maj), int32(min), ok
-	}
-
 	const prefix = "internal-branch."
 	if !strings.HasPrefix(branchName, prefix) {
 		return 0, 0, false

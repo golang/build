@@ -1,3 +1,7 @@
+// Copyright 2023 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package task
 
 import (
@@ -8,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v48/github"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/oauth2"
@@ -17,52 +21,56 @@ import (
 func TestCheckBlockers(t *testing.T) {
 	var errManualApproval = fmt.Errorf("manual approval is required")
 	for _, tc := range [...]struct {
-		name            string
-		milestoneIssues map[int]map[string]bool
-		version         string
-		kind            ReleaseKind
-		want            error
+		name    string
+		issues  map[int]*github.Issue
+		version string
+		kind    ReleaseKind
+		want    error
 	}{
 		{
-			name:            "beta 1 with one hard blocker",
-			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true}},
-			version:         "go1.20beta1", kind: KindBeta,
+			name:    "beta 1 with one hard blocker",
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			version: "go1.20beta1", kind: KindBeta,
 			want: errManualApproval,
 		},
 		{
-			name:            "beta 1 with one blocker marked okay-after-beta1",
-			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true, "okay-after-beta1": true}},
-			version:         "go1.20beta1", kind: KindBeta,
+			name:    "beta 1 with one blocker marked okay-after-beta1",
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-beta1")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			version: "go1.20beta1", kind: KindBeta,
 			want: nil, // Want no error.
 		},
 		{
-			name:            "beta 2 with one hard blocker and meaningless okay-after-beta1 label",
-			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true, "okay-after-beta1": true}},
-			version:         "go1.20beta2", kind: KindBeta,
+			name:    "beta 2 with one hard blocker and meaningless okay-after-beta1 label",
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-beta1")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			version: "go1.20beta2", kind: KindBeta,
 			want: errManualApproval,
 		},
 		{
-			name:            "RC 1 with one hard blocker",
-			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true}},
-			version:         "go1.20rc1", kind: KindRC,
+			name:    "RC 1 with one hard blocker",
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			version: "go1.20rc1", kind: KindRC,
 			want: errManualApproval,
 		},
 		{
-			name:            "RC 1 with one blocker marked okay-after-rc1",
-			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true, "okay-after-rc1": true}},
-			version:         "go1.20rc1", kind: KindRC,
+			name:    "RC 1 with one blocker marked okay-after-rc1",
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-rc1")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			version: "go1.20rc1", kind: KindRC,
 			want: nil, // Want no error.
 		},
 		{
-			name:            "RC 2 with one hard blocker and meaningless okay-after-rc1 label",
-			milestoneIssues: map[int]map[string]bool{123: {"release-blocker": true, "okay-after-rc1": true}},
-			version:         "go1.20rc2", kind: KindRC,
+			name:    "RC 2 with one hard blocker and meaningless okay-after-rc1 label",
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-rc1")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			version: "go1.20rc2", kind: KindRC,
 			want: errManualApproval,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tasks := &MilestoneTasks{
-				Client:        fakeGitHub{tc.milestoneIssues},
+				Client: &FakeGitHub{
+					Milestones:       map[int]string{1: "random-milestone"},
+					Issues:           tc.issues,
+					DisallowComments: true,
+				},
 				ApproveAction: func(*workflow.TaskContext) error { return errManualApproval },
 			}
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
@@ -72,26 +80,6 @@ func TestCheckBlockers(t *testing.T) {
 			}
 		})
 	}
-}
-
-type fakeGitHub struct {
-	milestoneIssues map[int]map[string]bool
-}
-
-func (fakeGitHub) FetchMilestone(_ context.Context, owner, repo, name string, create bool) (int, error) {
-	return 0, nil
-}
-
-func (g fakeGitHub) FetchMilestoneIssues(_ context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error) {
-	return g.milestoneIssues, nil
-}
-
-func (fakeGitHub) EditIssue(_ context.Context, owner string, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
-	return nil, nil, nil
-}
-
-func (fakeGitHub) EditMilestone(_ context.Context, owner string, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
-	return nil, nil, nil
 }
 
 var (

@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build linux || darwin
-// +build linux darwin
-
 package releasetargets
 
 import (
@@ -12,30 +9,31 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"sort"
 	"strings"
 	"testing"
-
-	"golang.org/x/build/dashboard"
-	"golang.org/x/build/internal/coordinator/pool"
 )
 
 var update = flag.Bool("update", false, "controls whether to update releases.txt")
 
 func TestReleaseTargets(t *testing.T) {
-	out := &bytes.Buffer{}
-	for _, release := range sortedReleases() {
-		printRelease(out, release, TargetsForGo1Point(release))
+	releases := sortedReleases()
+	if len(releases) < 3 {
+		t.Errorf("sortedReleases returned %v (len %d); allFirstClass map and allports/go1.n.txt files are expected to cover a minimum of 3 releases (prev + curr + tip)", releases, len(releases))
+	}
+	var out bytes.Buffer
+	for _, rel := range releases {
+		printRelease(&out, rel, TargetsForGo1Point(rel))
 	}
 	if *update {
-		if err := ioutil.WriteFile("releases.txt", out.Bytes(), 0); err != nil {
+		if err := os.WriteFile("releases.txt", out.Bytes(), 0); err != nil {
 			t.Fatalf("updating golden: %v", err)
 		}
 		return
 	}
 
-	golden, err := ioutil.ReadFile("releases.txt")
+	golden, err := os.ReadFile("releases.txt")
 	if err != nil {
 		t.Fatalf("reading golden: %v", err)
 	}
@@ -52,54 +50,24 @@ func printRelease(w io.Writer, release int, targets ReleaseTargets) {
 	}
 	sort.Strings(targetNames)
 	for _, name := range targetNames {
+		const builder = "(cross-compiled via distpack)"
 		target := targets[name]
 		var flags []string
-		if target.BuildOnly {
-			flags = append(flags, "Build only")
+		if !target.SecondClass {
+			flags = append(flags, "First class port")
 		}
-		if target.Race {
-			flags = append(flags, "Race enabled")
+		if target.MinMacOSVersion != "" {
+			flags = append(flags, "Minimum macOS version is "+target.MinMacOSVersion)
 		}
-		if target.LongTestBuilder != "" {
-			flags = append(flags, "Long tests on "+target.LongTestBuilder)
-		}
-		fmt.Fprintf(w, "%-15v %-10v %-10v %v\n", name, target.GOOS, target.GOARCH, target.Builder)
+		fmt.Fprintf(w, "%-15v %-10v %-10v %v\n", name, target.GOOS, target.GOARCH, builder)
 		if len(flags) != 0 {
 			fmt.Fprintf(w, "\t%v\n", strings.Join(flags, ", "))
 		}
 		if len(target.ExtraEnv) != 0 {
 			fmt.Fprintf(w, "\tExtra env: %q\n", target.ExtraEnv)
 		}
-		if bc, ok := dashboard.Builders[target.Builder]; ok {
-			var runningOn string
-			switch pool.ForHost(bc.HostConfig()).(type) {
-			case *pool.EC2Buildlet:
-				runningOn = "AWS"
-			case *pool.GCEBuildlet:
-				runningOn = "GCP"
-			case *pool.ReverseBuildletPool:
-				runningOn = fmt.Sprintf("reverse builder: %v", bc.HostConfig().Notes)
-			default:
-				runningOn = "unknown"
-			}
-			fmt.Fprintf(w, "\tRunning on %v\n", runningOn)
-		}
 
 		fmt.Fprintf(w, "\n")
 	}
 	fmt.Fprintf(w, "\n\n")
-}
-
-func TestBuildersExist(t *testing.T) {
-	for _, rel := range allReleases {
-		for _, target := range rel {
-			_, ok := dashboard.Builders[target.Builder]
-			if !ok {
-				t.Errorf("missing builder: %q", target.Builder)
-			}
-			if _, ok := dashboard.Builders[target.LongTestBuilder]; target.LongTestBuilder != "" && !ok {
-				t.Errorf("missing longtest builder: %q", target.LongTestBuilder)
-			}
-		}
-	}
 }

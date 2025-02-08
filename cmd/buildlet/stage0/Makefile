@@ -1,3 +1,17 @@
+# Common targets:
+#
+#  - compile: build all stage0 binaries (but do not upload)
+#  - upload: build and upload all stage0 binaries to prod
+#  - dev-upload: build and upload all stage0 binaries to dev cluster
+#  - docker: build golang/buildlet-stage0 Docker image (but do not push)
+#  - install-go: install the version of Go needed by the Makefile
+#
+# Individual targets:
+#
+#  - buildlet-stage0.linux-arm64: build stage0 binary for linux-arm64 (but do not upload)
+#  - upload.linux-arm64: build stage0 binary for linux-arm64 and upload to prod
+#  - dev-upload.linux-arm64: build stage0 binary for linux-arm64 and upload to dev cluster
+
 #
 # The stage0 binaries are typically baked into VM images and container
 # images and are NOT downloaded per build or VM/container start-up.

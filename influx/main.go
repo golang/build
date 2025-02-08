@@ -25,11 +25,11 @@ import (
 
 	"cloud.google.com/go/compute/metadata"
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	"github.com/influxdata/influxdb-client-go/v2"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
+	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"github.com/influxdata/influxdb-client-go/v2/domain"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/influx"
-	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
 )
 
 const (
@@ -79,7 +79,7 @@ func run() error {
 }
 
 func startInflux(bindAddr string) (*exec.Cmd, error) {
-	cmd := exec.Command("/docker-entrypoint.sh", "influxd", "--http-bind-address", bindAddr)
+	cmd := exec.Command("/docker-entrypoint.sh", "influxd", "--http-bind-address", bindAddr, "--pprof-disabled")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	log.Printf("Running %v", cmd.Args)

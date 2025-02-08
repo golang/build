@@ -12,7 +12,6 @@ import (
 	"crypto/sha1"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -28,6 +27,7 @@ import (
 	"cloud.google.com/go/compute/metadata"
 	"github.com/google/go-github/v48/github"
 	"github.com/gregjones/httpcache"
+	"golang.org/x/build/cmd/gerritbot/internal/rules"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/secret"
@@ -109,7 +109,7 @@ func writeCookiesFile(sc *secret.Client) error {
 	if err != nil {
 		return fmt.Errorf("secret.Retrieve(ctx, %q): %q, %w", secret.NameGerritbotGitCookies, cookies, err)
 	}
-	return ioutil.WriteFile(*gitcookiesFile, []byte(cookies), 0600)
+	return os.WriteFile(*gitcookiesFile, []byte(cookies), 0600)
 }
 
 func githubClient(sc *secret.Client) (*github.Client, error) {
@@ -143,7 +143,7 @@ func githubToken(sc *secret.Client) (string, error) {
 			return token, nil
 		}
 	}
-	slurp, err := ioutil.ReadFile(*githubTokenFile)
+	slurp, err := os.ReadFile(*githubTokenFile)
 	if err != nil {
 		return "", err
 	}
@@ -175,7 +175,7 @@ func gerritAuth(sc *secret.Client) (string, string, error) {
 		}
 	}
 	if len(slurp) == 0 {
-		slurpBytes, err := ioutil.ReadFile(*gerritTokenFile)
+		slurpBytes, err := os.ReadFile(*gerritTokenFile)
 		if err != nil {
 			return "", "", err
 		}
@@ -207,6 +207,9 @@ const (
 
 	// Footer containing the Gerrit Change ID.
 	prefixGitFooterChangeID = "Change-Id:"
+
+	// Footer containing the LUCI SlowBots to run.
+	prefixGitFooterCQIncludeTrybots = "Cq-Include-Trybots:"
 )
 
 // Gerrit projects we accept PRs for.
@@ -380,7 +383,7 @@ func (b *bot) claApproved(ctx context.Context, repo maintner.GitHubRepoID, pr *g
 	return false, nil
 }
 
-// prShortLink returns text referencing an Issue or Pull Request that will be
+// githubShortLink returns text referencing an Issue or Pull Request that will be
 // automatically converted into a link by GitHub.
 func githubShortLink(owner, repo string, number int) string {
 	return fmt.Sprintf("%s#%d", owner+"/"+repo, number)
@@ -510,15 +513,29 @@ func (b *bot) syncGerritCommentsToGitHub(ctx context.Context, pr *github.PullReq
 		if err != nil {
 			return fmt.Errorf("b.gerritMessageAuthorName: %v", err)
 		}
+
+		// NOTE: care is required to update this message.
+		// GerritBot needs to avoid duplicating old messages,
+		// which it does by checking whether it is about
+		// to insert a duplicate. Any change to the message
+		// text requires also passing the equivalent old version
+		// of the text to postGitHubMessageNoDup.
+
 		header := fmt.Sprintf("Message from %s:\n", authorName)
 		msg := fmt.Sprintf(`
 %s
 
 ---
 Please don’t reply on this GitHub thread. Visit [golang.org/cl/%d](https://go-review.googlesource.com/c/%s/+/%d#message-%s).
-After addressing review feedback, remember to [publish your drafts](https://github.com/golang/go/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
+After addressing review feedback, remember to [publish your drafts](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it)!`,
 			m.Message, cl.Number, cl.Project.Project(), cl.Number, m.Meta.Hash.String())
-		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), header, msg); err != nil {
+
+		// We used to link to the wiki on GitHub.
+		// That no longer works for contextual links
+		// after issue #61940.
+		oldmsg := strings.Replace(msg, "https://go.dev/wiki/", "https://github.com/golang/go/wiki/", 1)
+
+		if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), header, msg, []string{oldmsg}); err != nil {
 			return fmt.Errorf("postGitHubMessageNoDup: %v", err)
 		}
 	}
@@ -567,7 +584,7 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 	}
 
 	repo := pr.GetBase().GetRepo()
-	if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg); err != nil {
+	if err := b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg, nil); err != nil {
 		return fmt.Errorf("postGitHubMessageNoDup: %v", err)
 	}
 
@@ -729,7 +746,8 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 		pushOpts = "%ready"
 	}
 
-	if cl == nil {
+	newCL := cl == nil
+	if newCL {
 		// Add this informational message only on CL creation.
 		msg := fmt.Sprintf("This Gerrit CL corresponds to GitHub PR %s.\n\nAuthor: %s", prShortLink(pr), author)
 		pushOpts += ",m=" + url.QueryEscape(msg)
@@ -749,15 +767,89 @@ func (b *bot) importGerritChangeFromPR(ctx context.Context, pr *github.PullReque
 	repo := pr.GetBase().GetRepo()
 	msg := fmt.Sprintf(`This PR (HEAD: %v) has been imported to Gerrit for code review.
 
-Please visit %s to see it.
+Please visit Gerrit at %s.
 
-Tip: You can toggle comments from me using the %s slash command (e.g. %s)
-See the [Wiki page](https://golang.org/wiki/GerritBot) for more info`,
-		pr.Head.GetSHA(), changeURL, "`comments`", "`/comments off`")
-	return b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg)
+**Important tips**:
+
+* Don't comment on this PR. All discussion takes place in Gerrit.
+* You need a Gmail or other Google account to [log in to Gerrit](https://go-review.googlesource.com/login/).
+* To change your code in response to feedback:
+  * Push a new commit to the branch used by your GitHub PR.
+  * A new "patch set" will then appear in Gerrit.
+  * Respond to each comment by marking as **Done** in Gerrit if implemented as suggested. You can alternatively write a reply.
+  * **Critical**: you must click the [blue **Reply** button](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) near the top to publish your Gerrit responses.
+  * Multiple commits in the PR will be squashed by GerritBot.
+* The title and description of the GitHub PR are used to construct the final commit message.
+  * Edit these as needed via the GitHub web interface (not via Gerrit or git).
+  * You should word wrap the PR description at ~76 characters unless you need longer lines (e.g., for tables or URLs).
+* See the [Sending a change via GitHub](https://go.dev/doc/contribute#sending_a_change_github) and [Reviews](https://go.dev/doc/contribute#reviews) sections of the Contribution Guide as well as the [FAQ](https://go.dev/wiki/GerritBot/#frequently-asked-questions) for details.`,
+		pr.Head.GetSHA(), changeURL)
+	err = b.postGitHubMessageNoDup(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), "", msg, nil)
+	if err != nil {
+		return err
+	}
+
+	checkCommonMistakes := newCL
+	if releaseOrInternalBranch := strings.HasPrefix(pr.Base.GetRef(), "release-branch.") ||
+		strings.HasPrefix(pr.Base.GetRef(), "internal-branch."); releaseOrInternalBranch {
+		// The rules for commit messages on release and internal branches
+		// are different, so don't use the same rules for checking for
+		// common mistakes.
+		checkCommonMistakes = false
+	}
+	if checkCommonMistakes {
+		// Check if we spot any problems with the CL according to our internal
+		// set of rules, and if so, add an unresolved comment to Gerrit.
+		// If the author responds to this, it also helps a reviewer see the author has
+		// registered for a Gerrit account and knows how to reply in Gerrit.
+		// TODO: see CL 509135 for possible follow-ups, including possibly always
+		// asking explicitly if the CL is ready for review even if there are no problems,
+		// and possibly reminder comments followed by ultimately automatically
+		// abandoning the CL if the author never replies.
+		change, err := rules.ParseCommitMessage(repo.GetName(), cmsg)
+		if err != nil {
+			return fmt.Errorf("failed to parse commit message for %s: %v", prShortLink(pr), err)
+		}
+		problems := rules.Check(change)
+		if len(problems) > 0 {
+			summary := rules.FormatResults(problems)
+			// If needed, summary contains advice for how to edit the commit message.
+			msg := fmt.Sprintf("I spotted some possible problems.\n\n"+
+				"These findings are based on simple heuristics. If a finding appears wrong, briefly reply here saying so. "+
+				"Otherwise, please address any problems and update the GitHub PR. "+
+				"When complete, mark this comment as 'Done' and click the [blue 'Reply' button](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) above.\n\n"+
+				"%s\n\n"+
+				"(In general for Gerrit code reviews, the change author is expected to [log in to Gerrit](https://go-review.googlesource.com/login/) "+
+				"with a Gmail or other Google account and then close out each piece of feedback by "+
+				"marking it as 'Done' if implemented as suggested or otherwise reply to each review comment. "+
+				"See the [Review](https://go.dev/doc/contribute#review) section of the Contributing Guide for details.)",
+				summary)
+
+			gcl, err := b.gerritChangeForPR(pr)
+			if err != nil {
+				return fmt.Errorf("could not look up CL after creation for %s: %v", prShortLink(pr), err)
+			}
+			unresolved := true
+			ri := gerrit.ReviewInput{
+				Comments: map[string][]gerrit.CommentInput{
+					"/PATCHSET_LEVEL": {{Message: msg, Unresolved: &unresolved}},
+				},
+			}
+			changeID := fmt.Sprintf("%s~%d", url.PathEscape(gcl.Project), gcl.ChangeNumber)
+			err = b.gerritClient.SetReview(ctx, changeID, "1", ri)
+			if err != nil {
+				return fmt.Errorf("could not add findings comment to CL for %s: %v", prShortLink(pr), err)
+			}
+		}
+	}
+
+	return nil
 }
 
-var changeIdentRE = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-fA-F]{40})\n?`)
+var (
+	changeIdentRE      = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-fA-F]{40})\n?`)
+	CqIncludeTrybotsRE = regexp.MustCompile(`(?m)^Cq-Include-Trybots: (\S+)\n?`)
+)
 
 // commitMessage returns the text used when creating the squashed commit for pr.
 // A non-nil cl indicates that pr is associated with an existing Gerrit Change.
@@ -777,11 +869,22 @@ func commitMessage(pr *github.PullRequest, cl *maintner.GerritCL) (string, error
 		changeID = genChangeID(pr)
 	}
 
+	// LUCI requires this in the footer (hence why we do so below), but we
+	// are intentionally more lenient here and allow the line to appear
+	// anywhere in an attempt to catch simple mistakes.
+	tryBots := CqIncludeTrybotsRE.FindStringSubmatch(prBody)
+	if tryBots != nil {
+		prBody = strings.Replace(prBody, tryBots[0], "", -1)
+	}
+
 	var msg bytes.Buffer
 	fmt.Fprintf(&msg, "%s\n\n%s\n\n", cleanTitle(pr.GetTitle()), prBody)
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterChangeID, changeID)
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterLastRev, pr.Head.GetSHA())
 	fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterPR, prShortLink(pr))
+	if tryBots != nil {
+		fmt.Fprintf(&msg, "%s %s\n", prefixGitFooterCQIncludeTrybots, tryBots[1])
+	}
 
 	// Clean the commit message up.
 	cmd := exec.Command("git", "stripspace")
@@ -847,8 +950,23 @@ func logGitHubRateLimits(resp *github.Response) {
 // postGitHubMessageNoDup ensures that the message being posted on an issue does not already have the
 // same exact content, except for a header which is ignored. These comments can be toggled by the user
 // via a slash command /comments {on|off} at the beginning of a message.
+// The oldMsgs parameter holds a list of older versions of this message;
+// if one of those appears the new message is considered a dup.
 // TODO(andybons): This logic is shared by gopherbot. Consolidate it somewhere.
-func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issueNum int, header, msg string) error {
+func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issueNum int, header, msg string, oldMsgs []string) error {
+	isDup := func(s string) bool {
+		// TODO: check for exact match?
+		if strings.Contains(s, msg) {
+			return true
+		}
+		for _, m := range oldMsgs {
+			if strings.Contains(s, m) {
+				return true
+			}
+		}
+		return false
+	}
+
 	gr := b.corpus.GitHub().Repo(org, repo)
 	if gr == nil {
 		return fmt.Errorf("unknown github repo %s/%s", org, repo)
@@ -861,8 +979,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 		var dup bool
 		gi.ForeachComment(func(c *maintner.GitHubComment) error {
 			since = c.Updated
-			// TODO: check for exact match?
-			if strings.Contains(c.Body, msg) {
+			if isDup(c.Body) {
 				dup = true
 				return nil
 			}
@@ -892,8 +1009,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 	}
 	logGitHubRateLimits(resp)
 	for _, ic := range ics {
-		if strings.Contains(ic.GetBody(), msg) {
-			// Dup.
+		if isDup(ic.GetBody()) {
 			return nil
 		}
 	}
@@ -907,8 +1023,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 		ownerID = issue.GetUser().GetID()
 	}
 	for _, ic := range ics {
-		if strings.Contains(ic.GetBody(), msg) {
-			// Dup.
+		if isDup(ic.GetBody()) {
 			return nil
 		}
 		body := ic.GetBody()

@@ -2,20 +2,22 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build linux
-// +build linux
+//go:build linux || darwin
 
 package dashboard
 
 import (
 	"context"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"golang.org/x/build/cmd/coordinator/internal/lucipoll"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/maintner/maintnerd/apipb"
 	"golang.org/x/build/types"
@@ -54,7 +56,7 @@ func TestHandlerServeHTTP(t *testing.T) {
 	dh.ServeHTTP(w, req)
 	resp := w.Result()
 	defer resp.Body.Close()
-	ioutil.ReadAll(resp.Body)
+	io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("resp.StatusCode = %d, wanted %d", resp.StatusCode, http.StatusOK)
@@ -88,8 +90,8 @@ func TestHandlerCommits(t *testing.T) {
 			ResultData: []string{"test-builder|true|SomeLog|752029e171d535b0dd4ff7bbad5ad0275a3969a8"},
 		},
 	}
+	got := dh.commits(context.Background(), lucipoll.Snapshot{})
 
-	got := dh.commits(context.Background())
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("dh.Commits() mismatch (-want +got):\n%s", diff)
 	}
@@ -128,7 +130,7 @@ func TestHandlerGetBuilders(t *testing.T) {
 			OS: "darwin",
 			Archs: []*arch{
 				{
-					Arch: "amd64",
+					os: "darwin", Arch: "amd64",
 					Name: "darwin-amd64-testfile",
 					Tag:  "testfile",
 				},
@@ -138,12 +140,12 @@ func TestHandlerGetBuilders(t *testing.T) {
 			OS: "linux",
 			Archs: []*arch{
 				{
-					Arch: "386",
+					os: "linux", Arch: "386",
 					Name: "linux-386-testfile",
 					Tag:  "testfile",
 				},
 				{
-					Arch: "amd64",
+					os: "linux", Arch: "amd64",
 					Name: "linux-amd64-testfile",
 					Tag:  "testfile",
 				},
@@ -153,17 +155,16 @@ func TestHandlerGetBuilders(t *testing.T) {
 			OS: "android",
 			Archs: []*arch{
 				{
-					Arch: "386",
+					os: "android", Arch: "386",
 					Name: "android-386-testfile",
 					Tag:  "testfile",
 				},
 			},
 		},
 	}
+	got := dh.getBuilders(builders, lucipoll.Snapshot{})
 
-	got := dh.getBuilders(builders)
-
-	if diff := cmp.Diff(want, got); diff != "" {
+	if diff := cmp.Diff(want, got, cmpopts.EquateComparable(arch{})); diff != "" {
 		t.Errorf("dh.getBuilders() mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -191,7 +192,11 @@ func TestArchFirstClass(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		a := &arch{Name: c.name}
+		segs := strings.SplitN(c.name, "-", 3)
+		if len(segs) == 1 {
+			segs = append(segs, "")
+		}
+		a := &arch{os: segs[0], Arch: segs[1], Name: c.name}
 		if a.FirstClass() != c.want {
 			t.Errorf("%+v.FirstClass() = %v, wanted %v", a, a.FirstClass(), c.want)
 		}
@@ -206,7 +211,7 @@ func TestCommitResultForBuilder(t *testing.T) {
 		User:       "Gopherbot <gopherbot@example.com>",
 		ResultData: []string{"test-builder|true|SomeLog|752029e171d535b0dd4ff7bbad5ad0275a3969a8"},
 	}
-	want := result{
+	want := &result{
 		OK:      true,
 		LogHash: "SomeLog",
 	}

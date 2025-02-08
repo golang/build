@@ -1,0 +1,18 @@
+-- f1.md --
+There is a [bytes] package with symbols
+like [bytes.Buffer]
+and [bytes.Reader.Read].
+This: s[math] is not a link.
+-- stdlib/minor/bytes/x.md --
+Inside this file, [Buffer] can be used instead of
+[bytes.Buffer].
+-- want --
+There is a [`bytes`](/pkg/bytes) package with symbols
+like [`bytes.Buffer`](/pkg/bytes#Buffer)
+and [`bytes.Reader.Read`](/pkg/bytes#Reader.Read).
+This: s[math] is not a link.
+
+#### [`bytes`](/pkg/bytes/)
+
+Inside this file, [`Buffer`](/pkg/bytes#Buffer) can be used instead of
+[`bytes.Buffer`](/pkg/bytes#Buffer).

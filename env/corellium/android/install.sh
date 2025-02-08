@@ -1,14 +1,17 @@
 #!/bin/bash
-# Copyright 2022 Go Authors All rights reserved.
+# Copyright 2022 The Go Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-
-# install.sh sets up newly installed Android Corellium device.
-# Connect to the device with "adb connect <ip>:5001" where
-# <ip> is the device adb address.
+# Setting up a Corellium Android device
 #
-# place a valid builder key in the `buildkey` file.
+# install.sh sets up newly installed Android Corellium device. Before
+# executing install.sh, one must prepare the following steps:
+#
+#    1. Connect to the device with "adb connect 10.11.1.1:5001" where
+#       10.11.1.1 is the device adb address in Corellium.
+#    2. Put a valid builder key as `buildkey` file in the same folder as
+#       `install.sh`.
 
 curl -o com.termux.apk "https://f-droid.org/repo/com.termux_118.apk"
 curl -o com.termux.boot.apk "https://f-droid.org/repo/com.termux.boot_7.apk"
@@ -48,6 +51,7 @@ termux mkdir -p /data/data/com.termux/files/home/tmpdir
 # Run builder at boot.
 termux mkdir -p /data/data/com.termux/files/home/.termux/boot
 adb push files/run-builder-at-boot /data/data/com.termux/files/home/.termux/boot
+termux pkg up
 termux pkg install -y openssh tmux ndk-multilib clang git golang lld
 termux go build clangwrap.go
 

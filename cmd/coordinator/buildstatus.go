@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.16 && (linux || darwin)
-// +build go1.16
-// +build linux darwin
+//go:build linux || darwin
 
 package main
 
@@ -34,6 +32,7 @@ import (
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/pool/queue"
 	"golang.org/x/build/internal/coordinator/schedule"
+	"golang.org/x/build/internal/migration"
 	"golang.org/x/build/internal/singleflight"
 	"golang.org/x/build/internal/sourcecache"
 	"golang.org/x/build/internal/spanlog"
@@ -292,8 +291,7 @@ func (st *buildStatus) onceInitHelpersFunc() {
 }
 
 // useSnapshot reports whether this type of build uses a snapshot of
-// make.bash if it exists (anything can SplitMakeRun) and that the
-// snapshot exists.
+// make.bash if it exists and that the snapshot exists.
 func (st *buildStatus) useSnapshot() bool {
 	return st.useSnapshotFor(st.Rev)
 }
@@ -309,7 +307,7 @@ func (st *buildStatus) useSnapshotFor(rev string) bool {
 	}
 	br := st.BuilderRev
 	br.Rev = rev
-	b := st.conf.SplitMakeRun() && br.SnapshotExists(context.TODO(), pool.NewGCEConfiguration().BuildEnv())
+	b := br.SnapshotExists(context.TODO(), pool.NewGCEConfiguration().BuildEnv())
 	if st.useSnapshotMemo == nil {
 		st.useSnapshotMemo = make(map[string]bool)
 	}
@@ -444,12 +442,7 @@ func (st *buildStatus) build() error {
 
 	makeTest := st.CreateSpan("make_and_test") // warning: magic event named used by handleLogs
 
-	var remoteErr error
-	if st.conf.SplitMakeRun() {
-		remoteErr, err = st.runAllSharded()
-	} else {
-		remoteErr, err = st.runAllLegacy()
-	}
+	remoteErr, err := st.runAllSharded()
 	makeTest.Done(err)
 
 	// bc (aka st.bc) may be invalid past this point, so let's
@@ -606,11 +599,15 @@ func (st *buildStatus) SpanRecord(sp *schedule.Span, err error) *types.SpanRecor
 
 // goBuilder returns a GoBuilder for this buildStatus.
 func (st *buildStatus) goBuilder() buildgo.GoBuilder {
+	goDevDLBootstrap := strings.HasPrefix(
+		st.conf.GoBootstrapURL(pool.NewGCEConfiguration().BuildEnv()), "https://go.dev/dl/")
 	return buildgo.GoBuilder{
-		Logger:     st,
-		BuilderRev: st.BuilderRev,
-		Conf:       st.conf,
-		Goroot:     "go",
+		Logger:           st,
+		BuilderRev:       st.BuilderRev,
+		Conf:             st.conf,
+		Goroot:           "go",
+		GoDevDLBootstrap: goDevDLBootstrap,
+		Force:            true,
 	}
 }
 
@@ -640,11 +637,17 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 		return nil, err
 	}
 
-	if st.conf.RunBench {
+	switch {
+	case st.conf.RunBench:
 		remoteErr, err = st.runBenchmarkTests()
-	} else if st.IsSubrepo() {
+	case st.IsSubrepo():
 		remoteErr, err = st.runSubrepoTests()
-	} else {
+	case st.conf.IsCrossCompileOnly():
+		remoteErr, err = st.buildTestPackages()
+	default:
+		// Only run platform tests if we're not cross-compiling.
+		// dist can't actually build test packages without running them yet.
+		// See #58297.
 		remoteErr, err = st.runTests(st.getHelpers())
 	}
 
@@ -661,27 +664,27 @@ func (st *buildStatus) runAllSharded() (remoteErr, err error) {
 	return nil, nil
 }
 
-// runAllLegacy executes all.bash (or .bat, or whatever) in the traditional way.
-// remoteErr and err are as described at the top of this file.
-//
-// TODO(bradfitz,adg): delete this function when all builders
-// can split make & run (and then delete the SplitMakeRun method)
-func (st *buildStatus) runAllLegacy() (remoteErr, err error) {
-	allScript := st.conf.AllScript()
-	sp := st.CreateSpan("legacy_all_path", allScript)
-	remoteErr, err = st.bc.Exec(st.ctx, "./go/"+allScript, buildlet.ExecOpts{
-		Output:   st,
-		ExtraEnv: st.conf.Env(),
-		Debug:    true,
-		Args:     st.conf.AllScriptArgs(),
+// buildTestPackages runs `go tool dist test -compile-only`, which builds all standard
+// library test packages but does not run any tests. Used in cross-compilation modes.
+func (st *buildStatus) buildTestPackages() (remoteErr, err error) {
+	if st.RevBranch == "release-branch.go1.20" {
+		// Go 1.20 doesn't support `go tool dist test -compile-only` very well.
+		// TODO(mknyszek): Remove this condition when Go 1.20 is no longer supported.
+		return nil, nil
+	}
+	sp := st.CreateSpan("build_test_pkgs")
+	remoteErr, err = st.bc.Exec(st.ctx, path.Join("go", "bin", "go"), buildlet.ExecOpts{
+		Output: st,
+		Debug:  true,
+		Args:   []string{"tool", "dist", "test", "-compile-only"},
 	})
 	if err != nil {
 		sp.Done(err)
 		return nil, err
 	}
 	if remoteErr != nil {
-		sp.Done(err)
-		return fmt.Errorf("all script failed: %v", remoteErr), nil
+		sp.Done(remoteErr)
+		return fmt.Errorf("go tool dist test -compile-only failed: %v", remoteErr), nil
 	}
 	sp.Done(nil)
 	return nil, nil
@@ -838,12 +841,33 @@ func (st *buildStatus) toolchainBaselineCommit() (baseline string, err error) {
 	return "", fmt.Errorf("cannot find latest release for %s", st.RevBranch)
 }
 
+// Temporarily hard-code the subrepo baseline commits to use.
+//
+// TODO(rfindley): in the future, we should use the latestRelease method to
+// automatically choose the latest patch release of the previous minor version
+// (e.g. v0.11.x while we're working on v0.12.y).
+var subrepoBaselines = map[string]string{
+	"tools": "6ce74ceaddcc4ff081d22ae134f4264a667d394f", // gopls@v0.11.0, with additional instrumentation for memory and CPU usage
+}
+
 // subrepoBaselineCommit determines the baseline commit for this subrepo benchmark run.
 func (st *buildStatus) subrepoBaselineCommit() (baseline string, err error) {
-	if st.SubName != "tools" {
+	commit, ok := subrepoBaselines[st.SubName]
+	if !ok {
 		return "", fmt.Errorf("unknown subrepo for benchmarking %q", st.SubName)
 	}
+	return commit, nil
+}
 
+// latestRelease returns the latest release version for a module in subrepo. If
+// submodule is non-empty, it is the path to a subdirectory containing the
+// submodule of interest (for example submodule is "gopls" if we are
+// considering the module golang.org/x/tools/gopls). Otherwise the module is
+// assumed to be at repo root.
+//
+// It is currently unused, but preserved for future use by the
+// subrepoBaselineCommit method.
+func (st *buildStatus) latestRelease(submodule string) (string, error) {
 	// Baseline is the latest gopls release tag (but not prerelease).
 	gerritClient := pool.NewGCEConfiguration().GerritClient()
 	tags, err := gerritClient.GetProjectTags(st.ctx, st.SubName)
@@ -851,34 +875,36 @@ func (st *buildStatus) subrepoBaselineCommit() (baseline string, err error) {
 		return "", fmt.Errorf("error fetching tags for %q: %w", st.SubName, err)
 	}
 
-	goplsVersions := make([]string, 0)
-	goplsRevisions := make(map[string]string)
+	var versions []string
+	revisions := make(map[string]string)
+	prefix := "refs/tags"
+	if submodule != "" {
+		prefix += "/" + submodule // e.g. gopls tags are "gopls/vX.Y.Z"
+	}
 	for ref, ti := range tags {
-		// gopls tags are "gopls/vX.Y.Z". Ignore non-gopls tags.
-		const prefix = "refs/tags/gopls/"
 		if !strings.HasPrefix(ref, prefix) {
 			continue
 		}
 		version := ref[len(prefix):]
-		goplsVersions = append(goplsVersions, version)
-		goplsRevisions[version] = ti.Revision
+		versions = append(versions, version)
+		revisions[version] = ti.Revision
 	}
 
-	semver.Sort(goplsVersions)
+	semver.Sort(versions)
 
 	// Return latest non-prerelease version.
-	for i := len(goplsVersions) - 1; i >= 0; i-- {
-		ver := goplsVersions[i]
+	for i := len(versions) - 1; i >= 0; i-- {
+		ver := versions[i]
 		if !semver.IsValid(ver) {
 			continue
 		}
 		if semver.Prerelease(ver) != "" {
 			continue
 		}
-		return goplsRevisions[ver], nil
+		return revisions[ver], nil
 	}
 
-	return "", fmt.Errorf("no valid versions found in %+v", goplsVersions)
+	return "", fmt.Errorf("no valid versions found in %+v", versions)
 }
 
 // reportErr reports an error to Stackdriver.
@@ -896,7 +922,13 @@ func (st *buildStatus) reportErr(err error) {
 	gceErrsClient.ReportSync(ctx, errorreporting.Entry{Error: err})
 }
 
-func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
+// distTestList uses 'go tool dist test -list' to get a list of dist test names.
+//
+// As of Go 1.21, the dist test naming pattern has changed to always be in the
+// form of "<pkg>[:<variant>]", where "<pkg>" means what used to be previously
+// named "go_test:<pkg>". distTestList maps those new dist test names back to
+// that previous format, a combination of "go_test[_bench]:<pkg>" and others.
+func (st *buildStatus) distTestList() (names []distTestName, remoteErr, err error) {
 	workDir, err := st.bc.WorkDir(st.ctx)
 	if err != nil {
 		err = fmt.Errorf("distTestList, WorkDir: %v", err)
@@ -928,9 +960,12 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 		err = fmt.Errorf("Exec error: %v, %s", err, buf.Bytes())
 		return
 	}
-	for _, test := range strings.Fields(buf.String()) {
+	// To avoid needing to update all the existing dist test adjust policies,
+	// it's easier to remap new dist test names in "<pkg>[:<variant>]" format
+	// to ones used in Go 1.20 and prior. Do that for now.
+	for _, test := range go120DistTestNames(strings.Fields(buf.String())) {
 		isNormalTry := st.isTry() && !st.isSlowBot()
-		if !st.conf.ShouldRunDistTest(test, isNormalTry) {
+		if !st.conf.ShouldRunDistTest(test.Old, isNormalTry) {
 			continue
 		}
 		names = append(names, test)
@@ -938,20 +973,81 @@ func (st *buildStatus) distTestList() (names []string, remoteErr, err error) {
 	return names, nil, nil
 }
 
+// go120DistTestNames converts a list of dist test names from
+// an arbitrary Go distribution to the format used in Go 1.20
+// and prior versions. (Go 1.21 introduces a simpler format.)
+//
+// This exists only to avoid rewriting current dist adjust policies.
+// We wish to avoid new dist adjust policies, but if they're truly needed,
+// they can choose to start using new dist test names instead.
+func go120DistTestNames(names []string) []distTestName {
+	if len(names) == 0 {
+		// Only happens if there's a problem, but no need to panic.
+		return nil
+	} else if strings.HasPrefix(names[0], "go_test:") {
+		// In Go 1.21 and newer no dist tests have a "go_test:" prefix.
+		// In Go 1.20 and older, go tool dist test -list always returns
+		// at least one "go_test:*" test first.
+		// So if we see it, the list is already in Go 1.20 format.
+		var s []distTestName
+		for _, old := range names {
+			s = append(s, distTestName{old, old})
+		}
+		return s
+	}
+	// Remap the new Go 1.21+ dist test names to old ones.
+	var s []distTestName
+	for _, new := range names {
+		var old string
+		switch pkg, variant, _ := strings.Cut(new, ":"); {
+		// Special cases. Enough to cover what's used by old dist
+		// adjust policies. Not much use in going far beyond that.
+		case variant == "nolibgcc":
+			old = "nolibgcc:" + pkg
+		case variant == "race":
+			old = "race"
+		case variant == "moved_goroot":
+			old = "moved_goroot"
+		case pkg == "cmd/internal/testdir":
+			if variant == "" {
+				// Handle this too for when we stop doing special-case sharding only for testdir inside dist.
+				variant = "0_1"
+			}
+			old = "test:" + variant
+		case pkg == "cmd/api" && variant == "check":
+			old = "api"
+		case pkg == "cmd/internal/bootstrap_test":
+			old = "reboot"
+
+		// Easy regular cases.
+		case variant == "":
+			old = "go_test:" + pkg
+		case variant == "racebench":
+			old = "go_test_bench:" + pkg
+
+		// Neither a known special case nor a regular case.
+		default:
+			old = new // Less bad than leaving it empty.
+		}
+		s = append(s, distTestName{Old: old, Raw: new})
+	}
+	return s
+}
+
 type token struct{}
 
-// newTestSet returns a new testSet given the dist test names (strings from "go tool dist test -list")
+// newTestSet returns a new testSet given the dist test names (from "go tool dist test -list")
 // and benchmark items.
-func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, distTestNames []string) (*testSet, error) {
+func (st *buildStatus) newTestSet(testStats *buildstats.TestStats, names []distTestName) (*testSet, error) {
 	set := &testSet{
 		st:        st,
 		testStats: testStats,
 	}
-	for _, name := range distTestNames {
+	for _, name := range names {
 		set.items = append(set.items, &testItem{
 			set:      set,
 			name:     name,
-			duration: testStats.Duration(st.BuilderRev.Name, name),
+			duration: testStats.Duration(st.BuilderRev.Name, name.Old),
 			take:     make(chan token, 1),
 			done:     make(chan token),
 		})
@@ -1071,22 +1167,24 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
 	)
-	if !st.conf.IsReverse() {
-		// GKE value but will be ignored/overwritten by reverse buildlets
-		env = append(env, "GOPROXY="+moduleProxy())
-	}
-	env = append(env, st.conf.ModulesEnv(st.SubName)...)
+	env = append(env, st.modulesEnv()...)
 
 	args := []string{"test"}
-	if !st.conf.IsLongTest() {
-		args = append(args, "-short")
-	}
-	if st.conf.IsRace() {
-		args = append(args, "-race")
-	}
-	if scale := st.conf.GoTestTimeoutScale(); scale != 1 {
-		const goTestDefaultTimeout = 10 * time.Minute // Default value taken from Go 1.20.
-		args = append(args, "-timeout="+(goTestDefaultTimeout*time.Duration(scale)).String())
+	if st.conf.CompileOnly {
+		// Build all packages, but avoid running the binary by executing /bin/true for the tests.
+		// We assume for a compile-only build we're just running on a Linux system.
+		args = append(args, "-exec", "/bin/true")
+	} else {
+		if !st.conf.IsLongTest() {
+			args = append(args, "-short")
+		}
+		if st.conf.IsRace() {
+			args = append(args, "-race")
+		}
+		if scale := st.conf.GoTestTimeoutScale(); scale != 1 {
+			const goTestDefaultTimeout = 10 * time.Minute // Default value taken from Go 1.20.
+			args = append(args, "-timeout="+(goTestDefaultTimeout*time.Duration(scale)).String())
+		}
 	}
 
 	var remoteErrors []error
@@ -1164,24 +1262,17 @@ func (m multiError) Error() string {
 	return b.String()
 }
 
-// moduleProxy returns the GOPROXY environment value to use for module-enabled
-// tests.
+// internalModuleProxy returns the GOPROXY environment value to use for
+// most module-enabled tests.
 //
 // We go through an internal (10.0.0.0/8) proxy that then hits
 // https://proxy.golang.org/ so we're still able to firewall
 // non-internal outbound connections on builder nodes.
 //
-// This moduleProxy func in prod mode (when running on GKE) returns an http
-// URL to the current GKE pod's IP with a Kubernetes NodePort service
-// port that forwards back to the coordinator's 8123. See comment below.
-//
-// In localhost dev mode it just returns the value of GOPROXY.
-func moduleProxy() string {
-	// If we're running on localhost, just use the current environment's value.
-	if pool.NewGCEConfiguration().BuildEnv() == nil || !pool.NewGCEConfiguration().BuildEnv().IsProd {
-		// If empty, use installed VCS tools as usual to fetch modules.
-		return os.Getenv("GOPROXY")
-	}
+// This internalModuleProxy func in prod mode (when running on GKE) returns an
+// http URL to the current GKE pod's IP with a Kubernetes NodePort service port
+// that forwards back to the coordinator's 8123. See comment below.
+func internalModuleProxy() string {
 	// We run a NodePort service on each GKE node
 	// (cmd/coordinator/module-proxy-service.yaml) on port 30157
 	// that maps back the coordinator's port 8123. (We could round
@@ -1192,6 +1283,39 @@ func moduleProxy() string {
 	// once we migrate symbolic-datum-552 off a Legacy VPC network to the modern
 	// scheme that supports internal static IPs.
 	return "http://" + pool.NewGCEConfiguration().GKENodeHostname() + ":30157"
+}
+
+// modulesEnv returns the extra module-specific environment variables
+// to append to tests.
+func (st *buildStatus) modulesEnv() (env []string) {
+	// GOPROXY
+	switch {
+	case st.SubName == "" && !st.conf.OutboundNetworkAllowed():
+		env = append(env, "GOPROXY=off")
+	case st.conf.PrivateGoProxy():
+		// Don't add GOPROXY, the builder is pre-configured.
+	case pool.NewGCEConfiguration().BuildEnv() == nil || !pool.NewGCEConfiguration().BuildEnv().IsProd:
+		// Dev mode; use the system default.
+		env = append(env, "GOPROXY="+os.Getenv("GOPROXY"))
+	case st.conf.IsGCE() && !migration.StopInternalModuleProxy:
+		// On GCE; the internal proxy is accessible, prefer that.
+		env = append(env, "GOPROXY="+internalModuleProxy())
+	default:
+		// Everything else uses the public proxy.
+		env = append(env, "GOPROXY=https://proxy.golang.org")
+
+		if migration.StopInternalModuleProxy {
+			// If the internal module proxy is stopped, we can't disable outbound
+			// network without also breaking downloading of module dependencies
+			// (since proxy.golang.org would be inaccessible). Disabling outbound
+			// network is a nice-to-have to detect tests that accidentally try to
+			// use the internet in -short test mode, and that functionality is
+			// handled by LUCI, so it's fine not to do it in the coordinator now.
+			env = append(env, "GO_DISABLE_OUTBOUND_NETWORK=0")
+		}
+	}
+
+	return env
 }
 
 // runBenchmarkTests runs benchmarks from x/benchmarks when RunBench is set.
@@ -1298,10 +1422,9 @@ func (st *buildStatus) runBenchmarkTests() (remoteErr, err error) {
 		"BENCH_BRANCH="+st.RevBranch,
 		"BENCH_REPOSITORY="+repo,
 		"GOROOT="+goroot,
-		"GOPATH="+gopath,         // For module cache storage
-		"GOPROXY="+moduleProxy(), // GKE value but will be ignored/overwritten by reverse buildlets
+		"GOPATH="+gopath, // For module cache storage
 	)
-	env = append(env, st.conf.ModulesEnv("benchmarks")...)
+	env = append(env, st.modulesEnv()...)
 	if repo != "go" {
 		env = append(env, "BENCH_SUBREPO_PATH="+st.conf.FilePathJoin(workDir, subrepoDir))
 		env = append(env, "BENCH_SUBREPO_BASELINE_PATH="+st.conf.FilePathJoin(workDir, subrepoBaselineDir))
@@ -1494,9 +1617,7 @@ func (st *buildStatus) fetchSubrepoAndBaseline(repoDir, baselineDir string) (bas
 
 var errBuildletsGone = errors.New("runTests: dist test failed: all buildlets had network errors or timeouts, yet tests remain")
 
-// runTests is only called for builders which support a split make/run
-// (should be everything, at least soon). Currently (2015-05-27) iOS
-// and Android do not.
+// runTests runs tests for the main Go repo.
 //
 // After runTests completes, the caller must assume that st.bc might be invalid
 // (It's possible that only one of the helper buildlets survived).
@@ -1607,7 +1728,7 @@ func (st *buildStatus) runTests(helpers <-chan buildlet.Client) (remoteErr, err 
 				timer.Stop()
 				break AwaitDone
 			case <-timer.C:
-				st.LogEventTime("still_waiting_on_test", ti.name)
+				st.LogEventTime("still_waiting_on_test", ti.name.Old)
 			case <-buildletsGone:
 				set.cancelAll()
 				return nil, errBuildletsGone
@@ -1734,10 +1855,10 @@ const maxTestExecErrors = 3
 
 // runTestsOnBuildlet runs tis on bc, using the optional goroot & gopath environment variables.
 func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, goroot, gopath string) {
-	names := make([]string, len(tis))
+	names, rawNames := make([]string, len(tis)), make([]string, len(tis))
 	for i, ti := range tis {
-		names[i] = ti.name
-		if i > 0 && (!strings.HasPrefix(ti.name, "go_test:") || !strings.HasPrefix(names[0], "go_test:")) {
+		names[i], rawNames[i] = ti.name.Old, ti.name.Raw
+		if i > 0 && (!strings.HasPrefix(ti.name.Old, "go_test:") || !strings.HasPrefix(names[0], "go_test:")) {
 			panic("only go_test:* tests may be merged")
 		}
 	}
@@ -1762,7 +1883,7 @@ func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, g
 	if st.useKeepGoingFlag() {
 		args = append(args, "-k")
 	}
-	args = append(args, names...)
+	args = append(args, rawNames...)
 	var buf bytes.Buffer
 	t0 := time.Now()
 	timeout := st.conf.DistTestsExecTimeout(names)
@@ -1773,9 +1894,8 @@ func (st *buildStatus) runTestsOnBuildlet(bc buildlet.Client, tis []*testItem, g
 	env := append(st.conf.Env(),
 		"GOROOT="+goroot,
 		"GOPATH="+gopath,
-		"GOPROXY="+moduleProxy(),
 	)
-	env = append(env, st.conf.ModulesEnv("go")...)
+	env = append(env, st.modulesEnv()...)
 
 	remoteErr, err := bc.Exec(ctx, "./go/bin/go", buildlet.ExecOpts{
 		// We set Dir to "." instead of the default ("go/bin") so when the dist tests
@@ -2025,8 +2145,9 @@ func (st *buildStatus) repeatedCommunicationError(execErr error) error {
 	if execErr == nil {
 		return nil
 	}
-	// For now, only do this for plan9, which is flaky (Issue 31261)
-	if strings.HasPrefix(st.Name, "plan9-") && execErr == errBuildletsGone {
+	// For now, only do this for plan9, which is flaky (Issue 31261),
+	// but not for plan9-arm (Issue 52677)
+	if strings.HasPrefix(st.Name, "plan9-") && st.Name != "plan9-arm" && execErr == errBuildletsGone {
 		// TODO: give it two tries at least later (store state
 		// somewhere; global map?). But for now we're going to
 		// only give it one try.
