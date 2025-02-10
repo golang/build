@@ -51,18 +51,18 @@ require (
 	go.chromium.org/luci v0.0.0-20240207061751-3ff7b3e74e1c
 	go.opencensus.io v0.24.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
-	golang.org/x/crypto v0.32.0
+	golang.org/x/crypto v0.33.0
 	golang.org/x/exp v0.0.0-20230809094429-853ea248256d
-	golang.org/x/image v0.23.0
-	golang.org/x/mod v0.22.0
-	golang.org/x/net v0.34.0
-	golang.org/x/oauth2 v0.25.0
+	golang.org/x/image v0.24.0
+	golang.org/x/mod v0.23.0
+	golang.org/x/net v0.35.0
+	golang.org/x/oauth2 v0.26.0
 	golang.org/x/perf v0.0.0-20230717203022-1ba3a21238c9
-	golang.org/x/sync v0.10.0
-	golang.org/x/sys v0.29.0
-	golang.org/x/term v0.28.0
-	golang.org/x/time v0.9.0
-	golang.org/x/tools v0.29.0
+	golang.org/x/sync v0.11.0
+	golang.org/x/sys v0.30.0
+	golang.org/x/term v0.29.0
+	golang.org/x/time v0.10.0
+	golang.org/x/tools v0.30.0
 	google.golang.org/api v0.136.0
 	google.golang.org/appengine/v2 v2.0.6
 	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142
@@ -140,14 +140,13 @@ require (
 	github.com/shurcooL/graphql v0.0.0-20220520033453-bdb1221e171e // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.46.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.46.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.46.1 // indirect
 	go.opentelemetry.io/otel v1.21.0 // indirect
 	go.opentelemetry.io/otel/metric v1.21.0 // indirect
 	go.opentelemetry.io/otel/trace v1.21.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/appengine v1.6.8-0.20221117013220-504804fb50de // indirect
 	google.golang.org/genproto v0.0.0-20230822172742-b8732ec3820d // indirect
