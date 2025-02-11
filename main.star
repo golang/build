@@ -577,21 +577,21 @@ MAIN_BRANCH_NAME = "master"
 # supported major Go release, and second latest supported major Go release.
 # See the Go Release Policy at go.dev/doc/devel/release#policy.
 #
+# NEXTUP_GO is the next upcoming release. It's used only at the end of the
+# release cycle, when a new release branch is cut, before it's promoted to
+# being used for remaining minor Go releases.
+#
 # These need to be updated every 6 months after a major Go release is made.
 # Keep bootstrap versions tracked inside GO_BRANCHES in mind when updating.
-LATEST_GO = "go1.23"
-SECOND_GO = "go1.22"
-
-# NEXT_GO is the next release candidate. Once this is released, LATEST_GO
-# becomes SECOND_GO and this becomes LATEST_GO, then NEXT_GO can be deleted.
-NEXT_GO = "go1.24"
+NEXTUP_GO = "go1.25"
+LATEST_GO = "go1.24"
+SECOND_GO = "go1.23"
 
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
     "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.22.6"),
-    NEXT_GO: struct(branch = "release-branch." + NEXT_GO, bootstrap = "1.22.6"),
-    LATEST_GO: struct(branch = "release-branch." + LATEST_GO, bootstrap = "1.20.6"),
+    LATEST_GO: struct(branch = "release-branch." + LATEST_GO, bootstrap = "1.22.6"),
     SECOND_GO: struct(branch = "release-branch." + SECOND_GO, bootstrap = "1.20.6"),
 }
 
@@ -609,7 +609,6 @@ INTERNAL_GO_BRANCHES = {
     # release, and want to maintain that history. We use a regex like
     # "private-release-branch.go1.23.\\d+" to match all the point branches
     # so that we don't need to manually update the config each time we issue a point release.
-    NEXT_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[NEXT_GO].branch + ".\\d+"]),
     LATEST_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+"]),
     SECOND_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+"]),
 }
