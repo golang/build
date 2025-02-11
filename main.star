@@ -1180,10 +1180,6 @@ RUN_MODS = dict(
             for proj, typ in PROJECTS.items()
             if proj != "go" and typ != PT.SPECIAL
         ], go_branches = ["gotip"]),
-        known_issues_by_project = {
-            "crypto": 71612,
-            "tools": 71613,
-        },
     ),
 
     # Build and test with the gotypesalias GODEBUG, which enables
