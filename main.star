@@ -259,7 +259,6 @@ def is_first_class(goos, goarch):
 # GOOGLE_LOW_CAPACITY_HOSTS are low-capacity hosts that happen to be operated
 # by Google, so we can rely on them being available.
 GOOGLE_LOW_CAPACITY_HOSTS = [
-    "darwin-amd64_10.15",
     "darwin-amd64_11",
     "darwin-amd64_12",
     "darwin-amd64_13",
@@ -409,7 +408,6 @@ BUILDER_TYPES = [
     "darwin-amd64-longtest",
     "darwin-amd64-nocgo",
     "darwin-amd64-race",
-    "darwin-amd64_10.15",
     "darwin-amd64_11",
     "darwin-amd64_12",
     "darwin-amd64_13",
@@ -939,16 +937,11 @@ def define_for_projects_except(projects):
 def define_for_issue68798():
     def f(port, project, go_branch_short):
         exists = project in ["go", "tools"]
-        if go_branch_short != "gotip" and go_branch_short <= "go1.22":
-            # The builder exists as optional presubmit up to Go 1.22,
-            # since gotypesalias=0 was the default back then and not
-            # all tests are guaranteed to pass.
-            presubmit, postsubmit = False, False
-        else:
-            # Starting with Go 1.23, gotypesalias=1 is the default, so
-            # a builder that sets it explicitly in the environment is expected to be a no-op.
-            # Run it anyway to confirm that's the case for reasons motivated in go.dev/issue/68798.
-            presubmit, postsubmit = True, True
+
+        # Starting with Go 1.23, gotypesalias=1 is the default, so
+        # a builder that sets it explicitly in the environment is expected to be a no-op.
+        # Run it anyway to confirm that's the case for reasons motivated in go.dev/issue/68798.
+        presubmit, postsubmit = True, True
         return (exists, presubmit, postsubmit, [])
 
     return f
@@ -1648,7 +1641,6 @@ def define_builder(env, project, go_branch_short, builder_type):
     if os == "darwin":
         # See available versions with: cipd instances -limit 0 infra_internal/ios/xcode/mac | less
         xcode_versions = {
-            10: "11e503a",  # released Apr 2020, macOS 10.15 released Oct 2019
             11: "12b45b",  # released Nov 2020, macOS 11 released Nov 2020
             12: "13c100",  # released Dec 2021, macOS 12 released Oct 2021
             13: "15c500b",  # released Jan 2024, macOS 13.5 released Jul 2023
@@ -2002,18 +1994,12 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out old OS versions from new branches.
-    if os == "darwin" and suffix == "10.15" and go_branch_short not in ["go1.22"]:
-        # Go 1.22 is last to support macOS 10.15. See go.dev/doc/go1.22#darwin.
-        return False, PRESUBMIT.DISABLED, False, []
-    elif os == "darwin" and suffix == "11" and go_branch_short not in ["go1.22", "go1.23", "go1.24"]:
+    if os == "darwin" and suffix == "11" and go_branch_short not in ["go1.23", "go1.24"]:
         # Go 1.24 is last to support macOS 11. See go.dev/doc/go1.24#darwin.
         return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out new ports on old release branches.
-    if os == "openbsd" and arch == "riscv64" and go_branch_short in ["go1.22"]:
-        # The openbsd/riscv64 port is new to Go 1.23.
-        return False, PRESUBMIT.DISABLED, False, []
-    if os == "freebsd" and arch == "amd64" and go_branch_short in ["go1.22", "go1.23"]:
+    if os == "freebsd" and arch == "amd64" and go_branch_short in ["go1.23"]:
         freebsd_version = suffix
         if freebsd_version == "":
             freebsd_version = DEFAULT_HOST_SUFFIX[host_type]
@@ -2021,15 +2007,8 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
             # The 14.1 freebsd/amd64 LUCI builders need fixes that aren't available on old branches.
             # Just disable the builder on these branches.
             return False, PRESUBMIT.DISABLED, False, []
-    if os == "freebsd" and arch == "amd64" and "race" in run_mods and go_branch_short in ["go1.22", "go1.23", "go1.24"]:
+    if os == "freebsd" and arch == "amd64" and "race" in run_mods and go_branch_short in ["go1.23", "go1.24"]:
         # The freebsd-amd64-race LUCI builders may need fixes that aren't available on old branches.
-        return False, PRESUBMIT.DISABLED, False, []
-
-    # Filter out new projects on old release branches.
-    if project == "oscar" and go_branch_short in ["go1.22"]:
-        return False, PRESUBMIT.DISABLED, False, []
-    if project == "pkgsite" and go_branch_short in ["go1.22"]:
-        # See CL 609142.
         return False, PRESUBMIT.DISABLED, False, []
 
     # Docker builder should only be used in VSCode-Go repo.
@@ -2380,7 +2359,6 @@ def _define_go_internal_ci():
                     # swarming instance. This requires additional resources and
                     # work to set up, hence each such host needs to opt-in here.
                     "linux-arm",
-                    "darwin-amd64_10.15",
                     "darwin-amd64_11",
                     "darwin-amd64_12",
                     "darwin-amd64_13",
