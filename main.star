@@ -936,12 +936,12 @@ def define_for_projects_except(projects):
 # It shouldn't be needed beyond Go 1.24.
 def define_for_issue68798():
     def f(port, project, go_branch_short):
-        exists = project in ["go", "tools"]
-
         # Starting with Go 1.23, gotypesalias=1 is the default, so
         # a builder that sets it explicitly in the environment is expected to be a no-op.
         # Run it anyway to confirm that's the case for reasons motivated in go.dev/issue/68798.
-        presubmit, postsubmit = True, True
+        exists, presubmit, postsubmit = False, True, True
+        if project in ["go", "tools"]:
+            exists = go_branch_short != "gotip" and go_branch_short <= "go1.24"
         return (exists, presubmit, postsubmit, [])
 
     return f
