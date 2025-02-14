@@ -299,7 +299,7 @@ func main() {
 
 	ignoreProjects := map[string]bool{}
 	for p, r := range repos.ByGerritProject {
-		ignoreProjects[p] = !r.ShowOnDashboard()
+		ignoreProjects[p] = !r.AutoTagNextMinorVersion
 	}
 	tagTasks := &task.TagXReposTasks{
 		IgnoreProjects: ignoreProjects,

@@ -5,7 +5,10 @@
 // Package repos contains information about Go source repositories.
 package repos
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type Repo struct {
 	// GoGerritProject, if non-empty, is the repo's Gerrit project
@@ -36,6 +39,15 @@ type Repo struct {
 	// build coordinator knows how to build.
 	CoordinatorCanBuild bool
 
+	// AutoTagNextMinorVersion controls whether automatic tagging of
+	// the next minor release version should be done for this golang.org/x repo.
+	// See issue 48523.
+	AutoTagNextMinorVersion bool
+	// AutoMaintainGoDirective controls whether automatic go directive
+	// maintenance should be done for this golang.org/x repo.
+	// See proposal 69095.
+	AutoMaintainGoDirective bool
+
 	// GitHubRepo is the "org/repo" of where this repo exists on
 	// GitHub. If MirrorToGitHub is true, this is the
 	// destination.
@@ -58,7 +70,7 @@ var ByImportPath = map[string]*Repo{ /* initialized below */ }
 func init() {
 	addMirrored("dl", importPath("golang.org/dl"), coordinatorCanBuild)
 	addMirrored("gddo", importPath("github.com/golang/gddo"), archivedOnGitHub)
-	addMirrored("go", coordinatorCanBuild, noDash, enableCSR("golang-org"))
+	addMirrored("go", coordinatorCanBuild, enableCSR("golang-org"))
 	addMirrored("gofrontend")
 	addMirrored("govulncheck-action")
 	addMirrored("proposal")
@@ -68,14 +80,14 @@ func init() {
 
 	x("arch")
 	x("benchmarks", desc("benchmarks to measure Go as it is developed"))
-	x("blog", noDash)
+	x("blog", noDashNoAuto)
 	x("build", desc("build.golang.org's implementation"))
 	x("crypto", desc("additional cryptography packages"))
 	x("debug", desc("an experimental debugger for Go"))
-	x("example", noDash)
+	x("example", noDashNoAuto)
 	x("exp", desc("experimental and deprecated packages (handle with care; may change without warning)"))
 	x("image", desc("additional imaging packages"))
-	x("lint", noDash, archivedOnGitHub)
+	x("lint", noDashNoAuto, archivedOnGitHub)
 	x("mobile", desc("experimental support for Go on mobile platforms"))
 	x("mod")
 	x("net", desc("additional networking packages"))
@@ -86,21 +98,21 @@ func init() {
 	x("pkgsite-metrics", desc("code for serving pkg.go.dev/metrics"), enableCSR("go-ecosystem"))
 	x("playground", enableCSR("golang-org"))
 	x("review", desc("a tool for working with Gerrit code reviews"))
-	x("scratch", noDash)
+	x("scratch", noDashNoAuto)
 	x("sync", desc("additional concurrency primitives"))
 	x("sys", desc("packages for making system calls"))
-	x("talks", noDash)
+	x("talks", noDashNoAuto)
 	x("telemetry", desc("telemetry server code and libraries"), enableCSR("go-telemetry"))
 	x("term")
 	x("text", desc("packages for working with text"))
 	x("time", desc("additional time packages"))
 	x("tools", desc("godoc, goimports, gorename, and other tools"))
-	x("tour", noDash)
-	x("vgo", noDash)
+	x("tour", noDashNoAuto)
+	x("vgo", noDashNoAuto)
 	x("vuln", desc("code for the Go Vulnerability Database"))
 	x("vulndb", desc("reports for the Go Vulnerability Database"), enableCSR("go-vuln"))
 	x("website", desc("home of the golang.org and go.dev websites"), enableCSR("golang-org"))
-	x("xerrors", noDash)
+	x("xerrors", noDashNoAuto)
 
 	add(&Repo{GoGerritProject: "gollvm"})
 	add(&Repo{GoGerritProject: "grpc-review"})
@@ -130,9 +142,14 @@ func init() {
 
 type modifyRepo func(*Repo)
 
-// noDash is an option to the x func that marks the repo as hidden on
-// the https://build.golang.org/ dashboard.
-func noDash(r *Repo) { r.showOnDashboard = false }
+// noDashNoAuto is an option to the x func that marks the repo as
+// hidden on the https://build.golang.org/ dashboard, and it also
+// disables automatic tagging and automatic go directive upgrades.
+func noDashNoAuto(r *Repo) {
+	r.showOnDashboard = false
+	r.AutoTagNextMinorVersion = false
+	r.AutoMaintainGoDirective = false
+}
 
 func coordinatorCanBuild(r *Repo) { r.CoordinatorCanBuild = true }
 
@@ -164,12 +181,14 @@ func addMirrored(proj string, opts ...modifyRepo) {
 // x adds a golang.org/x repo.
 func x(proj string, opts ...modifyRepo) {
 	repo := &Repo{
-		GoGerritProject:     proj,
-		MirrorToGitHub:      true,
-		CoordinatorCanBuild: true,
-		ImportPath:          "golang.org/x/" + proj,
-		GitHubRepo:          "golang/" + proj,
-		showOnDashboard:     true,
+		GoGerritProject:         proj,
+		MirrorToGitHub:          true,
+		CoordinatorCanBuild:     true,
+		ImportPath:              "golang.org/x/" + proj,
+		GitHubRepo:              "golang/" + proj,
+		showOnDashboard:         true,
+		AutoTagNextMinorVersion: true,
+		AutoMaintainGoDirective: true,
 	}
 	for _, o := range opts {
 		o(repo)
@@ -186,6 +205,12 @@ func add(r *Repo) {
 	}
 	if r.showOnDashboard && !r.CoordinatorCanBuild {
 		panic(fmt.Sprintf("project %+v is showOnDashboard but not marked buildable by coordinator", r))
+	}
+	if r.AutoTagNextMinorVersion && !strings.HasPrefix(r.ImportPath, "golang.org/x/") {
+		panic(fmt.Sprintf("project %+v has AutoTagNextMinorVersion but it's not a golang.org/x repo", r))
+	}
+	if r.AutoMaintainGoDirective && !strings.HasPrefix(r.ImportPath, "golang.org/x/") {
+		panic(fmt.Sprintf("project %+v has AutoMaintainGoDirective but it's not a golang.org/x repo", r))
 	}
 
 	if p := r.GoGerritProject; p != "" {
