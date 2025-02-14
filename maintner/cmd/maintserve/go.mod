@@ -1,6 +1,6 @@
 module golang.org/x/build/maintner/cmd/maintserve
 
-go 1.20
+go 1.23.0
 
 require (
 	dmitri.shuralyov.com/app/changes v0.0.0-20191223015216-e22f40b36873
