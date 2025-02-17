@@ -114,7 +114,7 @@ Run the script with "az vm run-command invoke" as with the startup script above.
 
 ## VM setup (part 3 of 3)
 
-As a final step, you will need to distribute a copy of the private builder key to the VM (for details on keys, see https://github.com/golang/go/wiki/DashboardBuilders#luci-builders).  Because the VM created in step 1 does not have a public IP, we can't use ssh/scp to copy in the file, so instead the recommendation is to do the transfer using "writefilegenpowerscript.go", steps below.
+As a final step, you will need to distribute a copy of the private builder key to the VM (for details on keys, see https://go.dev/wiki/DashboardBuilders#luci-builders).  Because the VM created in step 1 does not have a public IP, we can't use ssh/scp to copy in the file, so instead the recommendation is to do the transfer using "writefilegenpowerscript.go", steps below.
 
 ```
 # Copy key from valentine to a local file

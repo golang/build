@@ -2021,7 +2021,7 @@ func (st *buildStatus) htmlStatus(detail buildStatusDetail) template.HTML {
 	}
 
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "<a href='https://github.com/golang/go/wiki/DashboardBuilders'>%s</a> rev <a href='%s%s'>%s</a>",
+	fmt.Fprintf(&buf, "<a href='https://go.dev/wiki/DashboardBuilders'>%s</a> rev <a href='%s%s'>%s</a>",
 		st.Name, urlPrefix, st.Rev, strSliceTo(st.Rev, 8))
 	if st.IsSubrepo() {
 		if st.SubRev == "" {
