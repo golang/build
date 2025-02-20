@@ -40,6 +40,7 @@ var (
 	filippo       = gh("FiloSottile")
 	findleyr      = gh("findleyr")
 	gri           = gh("griesemer")
+	hxjiang       = gh("h9jiang")
 	hyangah       = gh("hyangah")
 	iant          = gh("ianlancetaylor")
 	iancottrell   = gh("ianthehat")
@@ -56,6 +57,7 @@ var (
 	mdempsky      = gh("mdempsky")
 	mdlayher      = gh("mdlayher")
 	minux         = gh("minux")
+	mkalil        = gh("madelinekalil")
 	mknyszek      = gh("mknyszek")
 	mpvl          = gh("mpvl")
 	mvdan         = gh("mvdan")
@@ -977,7 +979,7 @@ var entries = map[string]*Entry{
 	},
 	"vscode-go": {
 		Primary:   []Owner{toolsTeam},
-		Secondary: []Owner{hyangah},
+		Secondary: []Owner{hxjiang, mkalil},
 	},
 
 	// These components are domains, not Go packages.
