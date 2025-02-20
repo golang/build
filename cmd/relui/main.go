@@ -282,6 +282,10 @@ func main() {
 		Gerrit:     gerritClient,
 		CloudBuild: cloudBuildClient,
 		GoProject:  "go",
+		GoDirectiveXReposTasks: task.GoDirectiveXReposTasks{
+			Gerrit:     gerritClient,
+			CloudBuild: cloudBuildClient,
+		},
 		UpdateProxyTestRepoTasks: task.UpdateProxyTestRepoTasks{
 			Git:       gitClient,
 			GerritURL: "https://golang-modproxy-test.googlesource.com/latest-go-version",

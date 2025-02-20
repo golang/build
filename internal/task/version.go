@@ -24,6 +24,7 @@ type VersionTasks struct {
 	Gerrit     GerritClient
 	CloudBuild CloudBuildClient
 	GoProject  string
+	GoDirectiveXReposTasks
 	UpdateProxyTestRepoTasks
 }
 

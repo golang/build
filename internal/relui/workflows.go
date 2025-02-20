@@ -543,10 +543,16 @@ This is intended for releases with 1+ PRIVATE-track security fixes.`,
 	availableOnProxy := wf.Action2(wd, "Wait for modules on proxy.golang.org", build.awaitProxy, nextVersion, modules, wf.After(uploadedMods))
 	pushed := wf.Action3(wd, "Push issues", milestone.PushIssues, milestones, nextVersion, kindVal, wf.After(tagged))
 	published := wf.Task2(wd, "Publish to website", build.publishArtifacts, nextVersion, signedAndTestedArtifacts, wf.After(uploaded, availableOnProxy, pushed))
+
 	if kind == task.KindMajor {
 		xToolsStdlibCL := wf.Task2(wd, fmt.Sprintf("Mail x/tools stdlib CL for 1.%d", major), version.CreateUpdateStdlibIndexCL, coordinators, nextVersion, wf.After(published))
 		xToolsStdlibCommit := wf.Task2(wd, "Wait for x/tools stdlib CL submission", version.AwaitCL, xToolsStdlibCL, wf.Const(""))
 		wf.Output(wd, "x/tools stdlib CL submitted", xToolsStdlibCommit)
+
+		repos := wf.Task0(wd, "Select repositories", version.GoDirectiveXReposTasks.SelectRepos, wf.After(published),
+			wf.After(xToolsStdlibCommit) /* To start off, wait for x/tools CL to land before generating the second CL. */)
+		urls := wf.Expand3(wd, "Create plan", version.GoDirectiveXReposTasks.BuildPlan, repos, wf.Const(major), coordinators)
+		wf.Output(wd, "Maintained golang.org/x repos", urls)
 	}
 
 	dockerBuild := wf.Task1(wd, "Start Google Docker build", build.runGoogleDockerBuild, nextVersion, wf.After(uploaded))

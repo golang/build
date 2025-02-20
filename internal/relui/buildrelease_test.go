@@ -37,6 +37,18 @@ import (
 )
 
 func TestRelease(t *testing.T) {
+	if testing.Short() {
+		// These release tests are pretty thorough and
+		// take upwards of 50 seconds as of 2025-02-21.
+		//
+		// Also, the major release kind involves doing
+		// a 'go run git-generate@version' which needs
+		// the internet if that version isn't in cache.
+		//
+		// Skip in short mode.
+		t.Skip("skipping large test in short mode")
+	}
+
 	t.Run("minor", func(t *testing.T) {
 		testRelease(t, "go1.22", 22, "go1.22.1", task.KindMinor)
 	})
@@ -131,20 +143,28 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	goRepo.Tag(previousTag, base)
 	goRepo.Branch(fmt.Sprintf("release-branch.go1.%d", major), base)
 	dlRepo := task.NewFakeRepo(t, "dl")
+	buildRepo := task.NewFakeRepo(t, "build")
+	buildRepo.Commit(map[string]string{
+		"go.mod": "module golang.org/x/build\n",
+	})
 	toolsRepo := task.NewFakeRepo(t, "tools")
-	toolsRepo1 := toolsRepo.Commit(map[string]string{
+	toolsRepo.Commit(map[string]string{
 		"go.mod":                       "module golang.org/x/tools\n",
 		"go.sum":                       "\n",
 		"internal/imports/mkstdlib.go": "package imports\nconst C=1",
 	})
-	toolsRepo.Tag("master", toolsRepo1)
-	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo, toolsRepo)
+	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo, buildRepo, toolsRepo)
 
 	gerrit := &reviewerCheckGerrit{FakeGerrit: fakeGerrit}
 	versionTasks := &task.VersionTasks{
 		Gerrit:     gerrit,
 		CloudBuild: task.NewFakeCloudBuild(t, fakeGerrit, "", nil, task.FakeBinary{Name: "go", Implementation: fakeGo}),
 		GoProject:  "go",
+		GoDirectiveXReposTasks: task.GoDirectiveXReposTasks{
+			ForceRepos: []string{"build", "tools"},
+			Gerrit:     fakeGerrit,
+			CloudBuild: task.NewFakeCloudBuild(t, fakeGerrit, "", nil),
+		},
 	}
 	milestoneTasks := &task.MilestoneTasks{
 		Client: &task.FakeGitHub{
@@ -368,6 +388,22 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		}
 		if string(version) != versionFile {
 			t.Errorf("VERSION file is %q, expected %q", version, versionFile)
+		}
+	}
+
+	// Check for go.dev/issue/69095.
+	for _, repo := range [...]string{"build", "tools"} {
+		goMod, err := deps.gerrit.ReadFile(deps.ctx, repo, "HEAD", "go.mod")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := fmt.Sprintf("module golang.org/x/%s\n", repo)
+		if kind == task.KindMajor {
+			prevGoVer := major - 1 // See https://go.googlesource.com/proposal/+/HEAD/design/69095-x-repo-continuous-go.md#why-1_n_1_0.
+			want += fmt.Sprintf("\ngo 1.%d.0\n", prevGoVer)
+		}
+		if diff := cmp.Diff(want, string(goMod)); diff != "" {
+			t.Errorf("x/ repo should have a maintained go directive and no toolchain directive: go.mod mismatch (-want +got):\n%s", diff)
 		}
 	}
 }
