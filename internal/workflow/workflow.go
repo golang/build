@@ -534,6 +534,14 @@ func (c *TaskContext) Printf(format string, v ...interface{}) {
 	c.Logger.Printf(format, v...)
 }
 
+// DisableRetries disables automatic retries for the remaining
+// task execution. It's intended to be used when interacting with
+// external systems, where it's preferable to leave the decision
+// of whether to retry to the human release coordinator instead of
+// automatically retrying a number of times.
+//
+// Once the current task completes, the following task runs as usual
+// with automatic reties enabled once again.
 func (c *TaskContext) DisableRetries() {
 	c.disableRetries = true
 }

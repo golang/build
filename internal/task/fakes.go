@@ -350,6 +350,17 @@ func (g *FakeGerrit) CreateAutoSubmitChange(_ *wf.TaskContext, input gerrit.Chan
 	return changeID, nil
 }
 
+func (g *FakeGerrit) considerCommitSubmitted(repo *FakeRepo, commit string) (changeID string) {
+	if g.repos[repo.name] != repo {
+		repo.t.Fatalf("FakeGerrit.createSubmittedChange: provided repo %q isn't a part of this FakeGerrit instance", repo.name)
+	}
+	g.changesMu.Lock()
+	changeID = fmt.Sprintf("%s~%d", repo.name, len(g.changes)+1)
+	g.changes[changeID] = commit
+	g.changesMu.Unlock()
+	return changeID
+}
+
 func (g *FakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
 	g.changesMu.Lock()
 	commit, ok := g.changes[changeID]
@@ -922,6 +933,45 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 	cb.results[id] = runErr
 	cb.mu.Unlock()
 	return CloudBuild{Project: cb.project, ID: id, ResultURL: "file://" + resultDir}, nil
+}
+
+func (cb *FakeCloudBuild) GenerateAutoSubmitChange(ctx *wf.TaskContext, input gerrit.ChangeInput, reviewers []string) (changeID string, _ error) {
+	if input.Project == "" {
+		return "", fmt.Errorf("input.Project must be specified")
+	} else if input.Branch == "" {
+		return "", fmt.Errorf("input.Branch must be specified")
+	} else if !strings.Contains(input.Subject, "\n[git-generate]\n") {
+		return "", fmt.Errorf("a commit message with a [git-generate] script must be provided")
+	}
+
+	r, err := cb.gerrit.repo(input.Project)
+	if err != nil {
+		return "", err
+	}
+	if input.Branch != "master" {
+		return "", fmt.Errorf("FakeCloudBuild.GenerateAutoSubmitChange: not implemented for branch %q", input.Branch)
+	}
+
+	// Create an empty commit with the git-generate script in commit message.
+	r.runGit("commit", "--allow-empty", "-m", input.Subject)
+
+	// Run git-generate.
+	cmd := exec.CommandContext(ctx, "go", "run", "rsc.io/rf/git-generate@"+gitGenerateVersion)
+	cmd.Dir = r.dir.dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("git-generate failed: %v output:\n%s", err, out)
+	}
+
+	// Update the empty commit with generated content.
+	r.runGit("commit", "--amend", "--no-edit")
+
+	if testing.Verbose() {
+		cb.t.Logf("FakeCloudBuild.GenerateAutoSubmitChange: generated commit content:\n%s", r.runGit("show", "HEAD"))
+	}
+
+	commit := strings.TrimSpace(string(r.runGit("rev-parse", "HEAD")))
+	return cb.gerrit.considerCommitSubmitted(r, commit), nil
 }
 
 func (cb *FakeCloudBuild) RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep, _ *CloudBuildOptions) (CloudBuild, error) {

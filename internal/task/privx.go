@@ -195,10 +195,10 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 			return nil, fmt.Errorf("git push failed: %v, stdout: %q stderr: %q", err, stdout.String(), stderr.String())
 		}
 
-		// Extract the CL number from the output using a quick and dirty regex.
-		re, err := regexp.Compile(fmt.Sprintf(`https:\/\/go-review.googlesource.com\/c\/%s\/\+\/(\d+)`, regexp.QuoteMeta(repoName)))
+		// Extract the CL number from the output using a simple regexp.
+		re, err := regexp.Compile(fmt.Sprintf(`https:\/\/go-review\.googlesource\.com\/c\/%s\/\+\/(\d+)`, regexp.QuoteMeta(repoName)))
 		if err != nil {
-			return nil, fmt.Errorf("failed to compile regex: %s", err)
+			return nil, fmt.Errorf("failed to compile regexp: %s", err)
 		}
 		matches := re.FindSubmatch(stderr.Bytes())
 		if len(matches) != 2 {
