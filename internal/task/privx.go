@@ -98,6 +98,8 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
 				return nil, err
 			}
+		} else {
+			change = &newCI
 		}
 		newCI, err = x.PrivateGerrit.RebaseChange(ctx.Context, change.ChangeID, "")
 		if err != nil {
@@ -106,8 +108,10 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
 				return nil, err
 			}
+		} else {
+			change = &newCI
 		}
-		return &newCI, nil
+		return change, nil
 	}, checkedChange, checkpointBranch)
 
 	// wait for change to be submitted

@@ -147,6 +147,8 @@ func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, 
 			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
 				return nil, err
 			}
+		} else {
+			cls[i] = &newCI
 		}
 		newCI, err = x.PrivateGerrit.RebaseChange(ctx.Context, ci.ChangeID, "")
 		if err != nil {
@@ -154,9 +156,9 @@ func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, 
 			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
 				return nil, err
 			}
+		} else {
+			cls[i] = &newCI
 		}
-
-		cls[i] = &newCI
 	}
 	return cls, nil
 }
