@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	goversion "go/version"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -140,11 +141,19 @@ func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, 
 	for i, ci := range cls {
 		newCI, err := x.PrivateGerrit.MoveChange(ctx.Context, ci.ChangeID, checkpointBranch)
 		if err != nil {
-			return nil, err
+			// In case we need to re-run the Move step, tolerate the case where the change
+			// is already on the branch.
+			var httpErr *gerrit.HTTPError
+			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch" {
+				return nil, err
+			}
 		}
 		newCI, err = x.PrivateGerrit.RebaseChange(ctx.Context, ci.ChangeID, "")
 		if err != nil {
-			return nil, err
+			var httpErr *gerrit.HTTPError
+			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date." {
+				return nil, err
+			}
 		}
 
 		cls[i] = &newCI
