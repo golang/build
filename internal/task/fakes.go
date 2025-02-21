@@ -539,7 +539,7 @@ func (*FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, branch
 	return gerrit.ChangeInfo{}, false, nil
 }
 
-func (*FakeGerrit) MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error) {
+func (*FakeGerrit) MoveChange(ctx context.Context, changeID string, branch string) (gerrit.ChangeInfo, error) {
 	return gerrit.ChangeInfo{}, nil
 }
 

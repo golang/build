@@ -47,7 +47,7 @@ func (g *fakeCoalesceGerrit) GetRevisionActions(_ context.Context, changeID stri
 	return map[string]*gerrit.ActionInfo{"submit": action}, nil
 }
 
-func (g *fakeCoalesceGerrit) MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error) {
+func (g *fakeCoalesceGerrit) MoveChange(ctx context.Context, changeID string, branch string) (gerrit.ChangeInfo, error) {
 	ci, ok := g.changes[changeID]
 	if !ok {
 		return gerrit.ChangeInfo{}, errors.New("MoveChange: not found")

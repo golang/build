@@ -75,7 +75,7 @@ type GerritClient interface {
 	// the change is rebased directly on top of the target branch.
 	RebaseChange(ctx context.Context, changeID string, revision string) (gerrit.ChangeInfo, error)
 	// MoveChange moves a change onto a new branch.
-	MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error)
+	MoveChange(ctx context.Context, changeID string, branch string) (gerrit.ChangeInfo, error)
 	// GetRevisionActions retrieves revision actions.
 	GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error)
 	// GetCommitMessage retrieves the commit message for a change.
@@ -351,8 +351,8 @@ func (c *RealGerritClient) CreateCherryPick(ctx context.Context, changeID string
 	return ci, false, nil
 }
 
-func (c *RealGerritClient) MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error) {
-	return c.Client.MoveChange(ctx, changeID, gerrit.MoveInput{DestinationBranch: branch, KeepAllVotes: keepAllVotes})
+func (c *RealGerritClient) MoveChange(ctx context.Context, changeID string, branch string) (gerrit.ChangeInfo, error) {
+	return c.Client.MoveChange(ctx, changeID, gerrit.MoveInput{DestinationBranch: branch})
 }
 
 func (c *RealGerritClient) RebaseChange(ctx context.Context, changeID string, base string) (gerrit.ChangeInfo, error) {

@@ -89,7 +89,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	// move and rebase change onto checkpoint branch
 	movedChange := wf.Task2(wd, "Move change+rebase onto checkpoint branch", func(ctx *wf.TaskContext, change *gerrit.ChangeInfo, checkpointBranch string) (*gerrit.ChangeInfo, error) {
-		newCI, err := x.PrivateGerrit.MoveChange(ctx.Context, change.ChangeID, checkpointBranch, true)
+		newCI, err := x.PrivateGerrit.MoveChange(ctx.Context, change.ChangeID, checkpointBranch)
 		if err != nil {
 			return nil, err
 		}

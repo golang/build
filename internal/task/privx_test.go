@@ -68,7 +68,7 @@ func (c *privxClient) CreateBranch(ctx context.Context, project, branch string, 
 	return "", nil
 }
 
-func (c *privxClient) MoveChange(ctx context.Context, changeID string, branch string, keepAllVotes bool) (gerrit.ChangeInfo, error) {
+func (c *privxClient) MoveChange(ctx context.Context, changeID string, branch string) (gerrit.ChangeInfo, error) {
 	return gerrit.ChangeInfo{}, nil
 }
 

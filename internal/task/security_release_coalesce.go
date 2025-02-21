@@ -138,7 +138,7 @@ func (x *SecurityReleaseCoalesceTask) CreateCheckpoint(ctx *wf.TaskContext, bi b
 
 func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, checkpointBranch string, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
 	for i, ci := range cls {
-		newCI, err := x.PrivateGerrit.MoveChange(ctx.Context, ci.ChangeID, checkpointBranch, true)
+		newCI, err := x.PrivateGerrit.MoveChange(ctx.Context, ci.ChangeID, checkpointBranch)
 		if err != nil {
 			return nil, err
 		}
