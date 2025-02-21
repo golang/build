@@ -144,14 +144,14 @@ func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, 
 			// In case we need to re-run the Move step, tolerate the case where the change
 			// is already on the branch.
 			var httpErr *gerrit.HTTPError
-			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch" {
+			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
 				return nil, err
 			}
 		}
 		newCI, err = x.PrivateGerrit.RebaseChange(ctx.Context, ci.ChangeID, "")
 		if err != nil {
 			var httpErr *gerrit.HTTPError
-			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date." {
+			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
 				return nil, err
 			}
 		}
