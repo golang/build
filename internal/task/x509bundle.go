@@ -41,8 +41,8 @@ func (x *BundleNSSRootsTask) NewDefinition() *wf.Definition {
 
 const clTitle = "x509roots/fallback: update bundle"
 
-func (x *BundleNSSRootsTask) UpdateBundle(ctx *wf.TaskContext, reviewers []string) (string, error) {
-	query := fmt.Sprintf(`message:%q status:open owner:gobot@golang.org repo:crypto -age:14d`, clTitle)
+func (x *BundleNSSRootsTask) UpdateBundle(ctx *wf.TaskContext, reviewers []string) (result string, _ error) {
+	query := fmt.Sprintf(`subject:%q status:open owner:gobot@golang.org repo:crypto -age:14d`, clTitle)
 	changes, err := x.Gerrit.QueryChanges(ctx, query)
 	if err != nil {
 		return "", err
@@ -51,26 +51,22 @@ func (x *BundleNSSRootsTask) UpdateBundle(ctx *wf.TaskContext, reviewers []strin
 		return "skipped, existing pending bundle update CL", nil
 	}
 
-	build, err := x.CloudBuild.RunScript(ctx, "cd x509roots && go generate", "crypto", []string{"x509roots/fallback/bundle.go"})
-	if err != nil {
-		return "", err
-	}
-	files, err := buildToOutputs(ctx, x.CloudBuild, build)
-	if err != nil {
-		return "", err
-	}
-	changeInput := gerrit.ChangeInput{
+	changeID, err := x.CloudBuild.GenerateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: "crypto",
-		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the NSS root bundle.", clTitle),
 		Branch:  "master",
-	}
+		Subject: fmt.Sprintf(`%s
 
-	changeID, err := x.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
+This is an automated CL which updates the NSS root bundle.
+
+[git-generate]
+go generate ./x509roots
+`, clTitle),
+	}, reviewers)
 	if err != nil {
 		return "", err
 	}
 	if changeID == "" {
-		return "no diff", nil
+		return "created no change, regenerating produced no diff", nil
 	}
-	return changeID, nil
+	return fmt.Sprintf("created a change at %s", ChangeLink(changeID)), nil
 }
