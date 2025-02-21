@@ -52,7 +52,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 			return nil, fmt.Errorf("no repository %q", repoName)
 		}
 
-		changeInfo, err := x.PrivateGerrit.GetChange(ctx, clNumber, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION"}})
+		changeInfo, err := x.PrivateGerrit.GetChange(ctx, clNumber, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION", "SUBMITTABLE"}})
 		if err != nil {
 			return nil, err
 		}
