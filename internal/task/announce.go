@@ -146,9 +146,14 @@ type AnnounceMailTasks struct {
 	testHookNow func() time.Time
 }
 
-// SentMail represents an email that was sent.
+// SentMail represents an email that was sent to a mailing list.
+//
+// If the subject alone is guaranteed to uniquely identify the email,
+// then keywords aren't needed. If the subject isn't unique enough,
+// then keywords from the email body need to be specified as well.
 type SentMail struct {
-	Subject string // Subject of the email. Expected to be unique so it can be used to identify the email.
+	Subject  string   // Subject of the email.
+	Keywords []string // Keywords in the email. Optional, needed only if subject isn't unique.
 }
 
 // AnnounceRelease sends an email to Google Groups
@@ -331,7 +336,15 @@ type MailContent struct {
 //   - golangOrgXPreAnnouncement for a golang.org/x (or other Go module) security
 //     release pre-announcement
 //   - goplsPrereleaseAnnouncement for a gopls pre-announcement
-func announcementMail(data any) (MailContent, error) {
+//   - vscodeGo…Announcement for vscode-go announcements
+//
+// It also returns keywords intended to help uniquely identify the mail
+// after it is sent to a mailing list. For example, if the keywords are
+// "CVE-2025-1234" and "CVE-2025-1235", then it's expected that a query
+// like https://groups.google.com/g/golang-announce/search?q=CVE-2025-1234%20CVE-2025-1235
+// should find the email. If the email subject alone will uniquely find
+// the email, there's no need to specify any keywords.
+func announcementMail(data any) (_ MailContent, sentMailKeywords []string, _ error) {
 	// Select the appropriate template name.
 	var name string
 	switch r := data.(type) {
@@ -346,7 +359,7 @@ func announcementMail(data any) (MailContent, error) {
 		case KindMinor:
 			name = "announce-minor.md"
 		default:
-			return MailContent{}, fmt.Errorf("unknown release kind: %v", r.Kind)
+			return MailContent{}, nil, fmt.Errorf("unknown release kind: %v", r.Kind)
 		}
 		if len(r.Security) > 0 && name != "announce-minor.md" {
 			// The Security field isn't supported in templates other than minor,
@@ -355,14 +368,15 @@ func announcementMail(data any) (MailContent, error) {
 			// Note: Maybe in the future we'd want to consider support for including sentences like
 			// "This beta release includes the same security fixes as in Go X.Y.Z and Go A.B.C.",
 			// but we'll have a better idea after these initial templates get more practical use.
-			return MailContent{}, fmt.Errorf("email template %q doesn't support the Security field; this field can only be used in minor releases", name)
+			return MailContent{}, nil, fmt.Errorf("email template %q doesn't support the Security field; this field can only be used in minor releases", name)
 		} else if r.SecondaryVersion != "" && name != "announce-minor.md" {
-			return MailContent{}, fmt.Errorf("email template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
+			return MailContent{}, nil, fmt.Errorf("email template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
 		}
 	case releasePreAnnouncement:
 		name = "pre-announce-minor.md"
 	case golangOrgXPreAnnouncement:
 		name = "pre-announce-x.md"
+		sentMailKeywords = r.CVEs // Rely on CVEs in body to differentiate "[security] {{.Module}} fix pre-announcement" emails.
 	case goplsReleaseAnnouncement:
 		name = "gopls-announce.md"
 	case goplsPrereleaseAnnouncement:
@@ -374,7 +388,7 @@ func announcementMail(data any) (MailContent, error) {
 	case vscodeGoInsiderAnnouncement:
 		name = "vscode-go-insider-announce.md"
 	default:
-		return MailContent{}, fmt.Errorf("unknown template data type %T", data)
+		return MailContent{}, nil, fmt.Errorf("unknown template data type %T", data)
 	}
 
 	// Render the (pre-)announcement email template.
@@ -382,28 +396,28 @@ func announcementMail(data any) (MailContent, error) {
 	// It'll produce a valid message with a MIME header and a body, so parse it as such.
 	var buf bytes.Buffer
 	if err := announceTmpl.ExecuteTemplate(&buf, name, data); err != nil {
-		return MailContent{}, err
+		return MailContent{}, nil, err
 	}
 	m, err := mail.ReadMessage(&buf)
 	if err != nil {
-		return MailContent{}, fmt.Errorf(`email template must be formatted like a mail message, but reading it failed: %v`, err)
+		return MailContent{}, nil, fmt.Errorf(`email template must be formatted like a mail message, but reading it failed: %v`, err)
 	}
 
 	// Get the email subject (it's a plain string, no further processing needed).
 	if _, ok := m.Header["Subject"]; !ok {
-		return MailContent{}, fmt.Errorf(`email template must have a "Subject" key in its MIME header, but it's not found`)
+		return MailContent{}, nil, fmt.Errorf(`email template must have a "Subject" key in its MIME header, but it's not found`)
 	} else if n := len(m.Header["Subject"]); n != 1 {
-		return MailContent{}, fmt.Errorf(`email template must have a single "Subject" value in its MIME header, but have %d values`, n)
+		return MailContent{}, nil, fmt.Errorf(`email template must have a single "Subject" value in its MIME header, but have %d values`, n)
 	}
 	subject := m.Header.Get("Subject")
 
 	// Render the email body, in Markdown format at this point, to HTML and plain text.
 	html, text, err := renderMarkdown(m.Body)
 	if err != nil {
-		return MailContent{}, err
+		return MailContent{}, nil, err
 	}
 
-	return MailContent{subject, html, text}, nil
+	return MailContent{subject, html, text}, sentMailKeywords, nil
 }
 
 // announceTmpl holds templates for Go release announcement emails.
@@ -532,7 +546,7 @@ func (t AnnounceMailTasks) AwaitAnnounceMail(ctx *workflow.TaskContext, m SentMa
 	// Find the URL for the announcement while giving the email a chance to be received and moderated.
 	check := func() (string, bool, error) {
 		// See if our email is available by now.
-		threadURL, err := findGoogleGroupsThread(ctx, m.Subject)
+		threadURL, err := findGoogleGroupsThread(ctx, m.Subject, m.Keywords)
 		if err != nil {
 			ctx.Printf("findGoogleGroupsThread: %v", err)
 			return "", false, nil
@@ -543,15 +557,21 @@ func (t AnnounceMailTasks) AwaitAnnounceMail(ctx *workflow.TaskContext, m SentMa
 	return AwaitCondition(ctx, 10*time.Second, check)
 }
 
-// findGoogleGroupsThread fetches the first page of threads from the golang-announce
+// findGoogleGroupsThread fetches a search query of threads from the golang-announce
 // Google Groups mailing list, and looks for a thread with the matching subject line.
+// The search query includes the email subject and/or any keywords that are provided.
 // It returns its URL if found or the empty string if not found.
 //
 // findGoogleGroupsThread returns an error that matches fetchError with
 // PossiblyRetryable set to true when it has signal that repeating the
 // same call after some time may succeed.
-func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadURL string, _ error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://groups.google.com/g/golang-announce", nil)
+func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string, keywords []string) (threadURL string, _ error) {
+	searchQuery := fmt.Sprintf(`subject:"%s"`, subject)
+	if len(keywords) > 0 {
+		searchQuery += " " + strings.Join(keywords, " ")
+	}
+	u := "https://groups.google.com/g/golang-announce/search?" + url.Values{"q": []string{searchQuery}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "", err
 	}
@@ -597,7 +617,7 @@ func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string) (threadUR
 	}
 	f(doc)
 	if !found {
-		// Thread not found on the first page.
+		// Thread not found within the search query.
 		return "", nil
 	}
 	base, err := url.Parse(baseHref)
@@ -785,7 +805,7 @@ func (markdownToTextRenderer) AddOptions(...renderer.Option) {}
 
 func (t AnnounceMailTasks) generateAndSendAnnouncementMail(ctx *workflow.TaskContext, data any) (SentMail, error) {
 	// Generate the announcement email.
-	m, err := announcementMail(data)
+	m, sentMailKeywords, err := announcementMail(data)
 	if err != nil {
 		return SentMail{}, err
 	}
@@ -794,7 +814,7 @@ func (t AnnounceMailTasks) generateAndSendAnnouncementMail(ctx *workflow.TaskCon
 	ctx.Printf("announcement body text:\n%s", m.BodyText)
 
 	// Before sending, check to see if this announcement already exists.
-	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject); err != nil {
+	if threadURL, err := findGoogleGroupsThread(ctx, m.Subject, sentMailKeywords); err != nil {
 		return SentMail{}, fmt.Errorf("stopping early due to error checking for an existing Google Groups thread: %w", err)
 	} else if threadURL != "" {
 		// This should never happen since this task runs once per release.
@@ -804,13 +824,13 @@ func (t AnnounceMailTasks) generateAndSendAnnouncementMail(ctx *workflow.TaskCon
 		//
 		// So if we see that the email exists, consider it as "task completed successfully"
 		// and pretend we were the ones that sent it, so the high level workflow can keep going.
-		ctx.Printf("a Google Groups thread with matching subject %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, threadURL)
-		return SentMail{m.Subject}, nil
+		ctx.Printf("a Google Groups thread with matching subject %q and keywords %q already exists at %q, so we'll consider that as it being sent successfully", m.Subject, sentMailKeywords, threadURL)
+		return SentMail{m.Subject, sentMailKeywords}, nil
 	}
 
 	// Send the announcement email to the destination mailing lists.
 	if t.SendMail == nil {
-		return SentMail{Subject: "[dry-run] " + m.Subject}, nil
+		return SentMail{"[dry-run] " + m.Subject, sentMailKeywords}, nil
 	}
 	ctx.DisableRetries()
 	err = t.SendMail(t.AnnounceMailHeader, m)
@@ -818,5 +838,5 @@ func (t AnnounceMailTasks) generateAndSendAnnouncementMail(ctx *workflow.TaskCon
 		return SentMail{}, err
 	}
 
-	return SentMail{m.Subject}, nil
+	return SentMail{m.Subject, sentMailKeywords}, nil
 }

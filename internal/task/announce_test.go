@@ -188,7 +188,7 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			m, err := announcementMail(tc.in)
+			m, _, err := announcementMail(tc.in)
 			if err != nil {
 				t.Fatal("announcementMail returned non-nil error:", err)
 			}
@@ -426,9 +426,12 @@ func TestPreAnnounceXFix(t *testing.T) {
 			target:       Date{2022, time.July, 12},
 			module:       "golang.org/x/crypto",
 			packages:     []string{"golang.org/x/crypto/ssh"},
-			cves:         []string{"CVE-2025-1234", "CVE-2025-1235"},
+			cves:         []string{"CVE-2025-1234", "CVE-2025-1235"}, // Intentionally made up CVEs so the real email doesn't get in the way.
 			coordinators: []string{"roland"},
-			want:         SentMail{Subject: "[security] golang.org/x/crypto fix pre-announcement"},
+			want: SentMail{
+				Subject:  "[security] golang.org/x/crypto fix pre-announcement",
+				Keywords: []string{"CVE-2025-1234", "CVE-2025-1235"},
+			},
 			wantLog: `announcement subject: [security] golang.org/x/crypto fix pre-announcement
 
 announcement body HTML:
@@ -464,9 +467,12 @@ Roland for the Go team` + "\n",
 			target:       Date{2022, time.July, 12},
 			module:       "golang.org/x/crypto",
 			packages:     []string{"golang.org/x/crypto/ssh", "golang.org/x/crypto/ocsp", "golang.org/x/crypto/xts"},
-			cves:         []string{"CVE-2025-1234", "CVE-2025-1235"},
+			cves:         []string{"CVE-2025-1234", "CVE-2025-1235"}, // Intentionally made up CVEs so the real email doesn't get in the way.
 			coordinators: []string{"roland"},
-			want:         SentMail{Subject: "[security] golang.org/x/crypto fix pre-announcement"},
+			want: SentMail{
+				Subject:  "[security] golang.org/x/crypto fix pre-announcement",
+				Keywords: []string{"CVE-2025-1234", "CVE-2025-1235"},
+			},
 			wantLog: `announcement subject: [security] golang.org/x/crypto fix pre-announcement
 
 announcement body HTML:
@@ -528,18 +534,49 @@ func TestFindGoogleGroupsThread(t *testing.T) {
 		t.Skip("not running test that uses internet in short mode")
 	}
 
-	threadURL, err := findGoogleGroupsThread(&workflow.TaskContext{
-		Context: context.Background(),
-	}, "[security] Go 1.18.3 and Go 1.17.11 are released")
-	if err != nil {
-		if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
-			t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
-		}
-		t.Fatalf("findGoogleGroupsThread returned a non-nil error: %v", err)
+	tests := [...]struct {
+		subject  string
+		keywords []string
+		wantURL  string
+	}{
+		{
+			subject: "Go 1.24.0 is released",
+			wantURL: "https://groups.google.com/g/golang-announce/c/_G2hEiKx8SE/m/5uEc3vwVAgAJ",
+		}, {
+			subject: "[security] Go 1.18.3 and Go 1.17.11 are released",
+			wantURL: "https://groups.google.com/g/golang-announce/c/TzIC9-t8Ytg/m/IWz5T6x7AAAJ",
+		},
+
+		{
+			subject:  "[security] golang.org/x/crypto fix pre-announcement",
+			keywords: []string{"CVE-2025-22869"},
+			wantURL:  "https://groups.google.com/g/golang-announce/c/bCdrolFjKwo/m/90HhIGbdAQAJ",
+		}, {
+			subject:  "[security] golang.org/x/crypto/ssh fix pre-announcement",
+			keywords: []string{"CVE-2024-45337"},
+			wantURL:  "https://groups.google.com/g/golang-announce/c/ZA1tNV10Mcs/m/su8etgnKAQAJ",
+		}, {
+			subject:  "[security] golang.org/x/crypto/ssh fix pre-announcement",
+			keywords: []string{"Thursday, December 2nd"},
+			wantURL:  "https://groups.google.com/g/golang-announce/c/WQy3nVP7bvE/m/2IPITDm-BgAJ",
+		},
 	}
-	// Just log the threadURL since we can't rely on stable output.
-	// This test is mostly for debugging if we need to.
-	t.Logf("threadURL: %q\n", threadURL)
+	for _, tc := range tests {
+		t.Run(tc.subject, func(t *testing.T) {
+			gotURL, err := findGoogleGroupsThread(&workflow.TaskContext{
+				Context: context.Background(),
+			}, tc.subject, tc.keywords)
+			if err != nil {
+				if fe := (fetchError{}); errors.As(err, &fe) && fe.PossiblyRetryable {
+					t.Skip("test run produced no actionable signal due to a transient network error:", err) // See go.dev/issue/60541.
+				}
+				t.Fatalf("findGoogleGroupsThread returned a non-nil error: %v", err)
+			}
+			if diff := cmp.Diff(tc.wantURL, gotURL); diff != "" {
+				t.Errorf("thread URL mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
 
 func TestMarkdownToText(t *testing.T) {

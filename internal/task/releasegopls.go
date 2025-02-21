@@ -477,7 +477,7 @@ func (r *ReleaseGoplsTasks) mailPrereleaseAnnouncement(ctx *wf.TaskContext, rele
 		Commit:  commit,
 		Issue:   issue,
 	}
-	content, err := announcementMail(announce)
+	content, _, err := announcementMail(announce)
 	if err != nil {
 		return err
 	}
@@ -506,7 +506,7 @@ func (r *ReleaseGoplsTasks) mailReleaseAnnouncement(ctx *wf.TaskContext, release
 		Branch:  goplsReleaseBranchName(release),
 		Commit:  info.Revision,
 	}
-	content, err := announcementMail(announce)
+	content, _, err := announcementMail(announce)
 	if err != nil {
 		return err
 	}

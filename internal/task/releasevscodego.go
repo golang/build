@@ -720,7 +720,7 @@ func (r *ReleaseVSCodeGoTasks) mailAnnouncement(ctx *wf.TaskContext, release rel
 		}
 	}
 
-	content, err := announcementMail(announce)
+	content, _, err := announcementMail(announce)
 	if err != nil {
 		return err
 	}
