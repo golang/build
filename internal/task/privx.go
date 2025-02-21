@@ -81,7 +81,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 			return "", err
 		}
 		checkpointName := fmt.Sprintf("public-%s", time.Now().UTC().Format("2006-01-02-1504"))
-		if _, err := x.PrivateGerrit.CreateBranch(ctx.Context, "go", checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
+		if _, err := x.PrivateGerrit.CreateBranch(ctx.Context, repoName, checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
 			return "", err
 		}
 		return checkpointName, nil

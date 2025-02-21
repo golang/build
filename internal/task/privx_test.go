@@ -6,6 +6,7 @@ package task
 
 import (
 	"context"
+	"fmt"
 	"net/mail"
 	"os"
 	"path/filepath"
@@ -20,7 +21,8 @@ import (
 type privxClient struct {
 	GerritClient
 
-	privRepoDir string
+	privRepoDir     string
+	expectedProject string
 }
 
 func (c *privxClient) Submitted(ctx context.Context, changeID string, parentCommit string) (string, bool, error) {
@@ -32,10 +34,16 @@ func (c *privxClient) ListProjects(ctx context.Context) ([]string, error) {
 }
 
 func (c *privxClient) ReadBranchHead(ctx context.Context, project string, branch string) (string, error) {
+	if project != c.expectedProject {
+		return "", fmt.Errorf("wrong project: got %q, want %q", project, c.expectedProject)
+	}
 	return "", nil
 }
 
 func (c *privxClient) ReadFile(ctx context.Context, project string, head string, file string) ([]byte, error) {
+	if project != c.expectedProject {
+		return nil, fmt.Errorf("wrong project: got %q, want %q", project, c.expectedProject)
+	}
 	return []byte("module golang.org/x/net\n\ngo 1.24"), nil
 }
 
@@ -54,6 +62,9 @@ func (c *privxClient) GetRevisionActions(ctx context.Context, changeID, revision
 }
 
 func (c *privxClient) CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error) {
+	if project != c.expectedProject {
+		return "", fmt.Errorf("wrong project: got %q, want %q", project, c.expectedProject)
+	}
 	return "", nil
 }
 
@@ -113,8 +124,8 @@ echo`), 0777); err != nil {
 	var announcementMessage MailContent
 	p := &PrivXPatch{
 		Git:           &Git{},
-		PrivateGerrit: &privxClient{privRepoDir: privRepo.dir.dir},
-		PublicGerrit:  &privxClient{},
+		PrivateGerrit: &privxClient{privRepoDir: privRepo.dir.dir, expectedProject: "net"},
+		PublicGerrit:  &privxClient{expectedProject: "net"},
 
 		PublicRepoURL: func(repo string) string {
 			return pubBase + "/" + repo
@@ -131,7 +142,7 @@ echo`), 0777); err != nil {
 		},
 	}
 
-	wd := p.NewDefinition(&TagXReposTasks{Gerrit: &privxClient{}})
+	wd := p.NewDefinition(&TagXReposTasks{Gerrit: &privxClient{expectedProject: filepath.Base(pubRepo.dir.dir)}})
 	w, err := workflow.Start(wd, map[string]any{
 		"go-internal CL number":              "1234",
 		reviewersParam.Name:                  []string{},
