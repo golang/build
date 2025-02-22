@@ -963,6 +963,13 @@ func (cb *FakeCloudBuild) GenerateAutoSubmitChange(ctx *wf.TaskContext, input ge
 		return "", fmt.Errorf("git-generate failed: %v output:\n%s", err, out)
 	}
 
+	if len(r.runGit("status", "--porcelain=v2")) == 0 {
+		// Generated content is empty, drop the empty
+		// in-progress commit and return empty string.
+		r.runGit("reset", "HEAD^")
+		return "", nil
+	}
+
 	// Update the empty commit with generated content.
 	r.runGit("commit", "--amend", "--no-edit")
 

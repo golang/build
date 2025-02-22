@@ -206,6 +206,18 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 		refspec += ",r=" + r
 	}
 
+	const (
+		buildStepGitCommit = 4
+		buildStepGitPush   = 7
+	)
+	buildStepOutput := func(b *cloudbuildpb.Build, buildStep int) []byte {
+		out := b.GetResults().GetBuildStepOutputs()
+		if buildStep >= len(out) {
+			return nil
+		}
+		return out[buildStep]
+	}
+
 	// Create a Cloud Build that will generate and mail the CL.
 	//
 	// To remove the possibility of mailing multiple CLs due to
@@ -235,10 +247,18 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 					Args:       []string{"run", "rsc.io/rf/git-generate@" + gitGenerateVersion},
 					Dir:        "checkout",
 				},
-				{
-					Name: "gcr.io/cloud-builders/git",
-					Args: []string{"-c", "user.name=Gopher Robot", "-c", "user.email=gobot@golang.org",
-						"commit", "--amend", "--no-edit"},
+				buildStepGitCommit: {
+					Name:       "gcr.io/cloud-builders/git",
+					Entrypoint: "bash",
+					// Note: Use 'set -o pipefail' here to stop the build short of mailing if this
+					// fails. The '--allow-empty' flag is intentionally not included here to force
+					// this command to fail whenever the commit is still empty.
+					//
+					// Whenever this step fails with output that has a "\nNo changes\n" suffix, it
+					// will be reported as a successful "no change is needed" result.
+					Args: []string{"-c", "set -o pipefail && " +
+						"git -c user.name='Gopher Robot' -c user.email=gobot@golang.org commit " +
+						`--amend --no-edit | tee "$$BUILDER_OUTPUT/output"`},
 					Dir: "checkout",
 				},
 				{
@@ -250,11 +270,17 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 					Name: "bash", Args: []string{"-c", `touch .gitcookies && chmod 0600 .gitcookies && printf ".googlesource.com\tTRUE\t/\tTRUE\t2147483647\to\tgit-gobot.golang.org=$$GOBOT_TOKEN\n" >> .gitcookies`},
 					SecretEnv: []string{"GOBOT_TOKEN"},
 				},
-				{
+				buildStepGitPush: {
 					Name:       "gcr.io/cloud-builders/git",
 					Entrypoint: "bash",
-					Args:       []string{"-c", `git -c http.cookieFile=../.gitcookies push origin ` + refspec + ` 2>&1 | tee "$$BUILDER_OUTPUT/output"`},
-					Dir:        "checkout",
+					// Note: This intentionally doesn't do 'set -o pipefail' because we want the
+					// git push output to be written to $BUILDER_OUTPUT/output regardless of its
+					// exit code, and complete the nearly-done build.
+					//
+					// Whether the push successfully created a CL or not will be determined from
+					// the output text.
+					Args: []string{"-c", `git -c http.cookieFile=../.gitcookies push origin ` + refspec + ` 2>&1 | tee "$$BUILDER_OUTPUT/output"`},
+					Dir:  "checkout",
 				},
 				{
 					Name: "bash", Args: []string{"-c", "rm .gitcookies"},
@@ -285,44 +311,49 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 	if err != nil {
 		return "", fmt.Errorf("reading metadata: %w", err)
 	}
-	build := CloudBuild{Project: c.ScriptProject, ID: meta.Build.Id}
+
+	// completedGeneratingCL reports whether a build has finished,
+	// returning the change ID that the given build generated, or
+	// an empty string if no change was needed.
+	// It's suitable for use with AwaitCondition, as done below.
+	completedGeneratingCL := func() (changeID string, completed bool, _ error) {
+		b, err := c.BuildClient.GetBuild(ctx, &cloudbuildpb.GetBuildRequest{
+			ProjectId: c.ScriptProject,
+			Id:        meta.Build.Id,
+		})
+		if err != nil {
+			return "", false, err
+		}
+		if b.FinishTime == nil {
+			return "", false, nil
+		}
+		if b.Status != cloudbuildpb.Build_SUCCESS {
+			if b.Status == cloudbuildpb.Build_FAILURE {
+				gitCommitOutput := buildStepOutput(b, buildStepGitCommit)
+				if bytes.HasSuffix(gitCommitOutput, []byte("\nNo changes\n")) {
+					// No files changed, report that no CL was mailed.
+					return "", true, nil
+				}
+			}
+
+			return "", false, fmt.Errorf("build %q failed, see %v: %v", meta.Build.Id, b.LogUrl, b.FailureInfo)
+		}
+
+		// Extract the CL number from the output using a simple regexp.
+		re := regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/c\/([a-zA-Z0-9_\-]+)\/\+\/(\d+)`)
+		gitPushOutput := buildStepOutput(b, buildStepGitPush)
+		if matches := re.FindSubmatch(gitPushOutput); len(matches) == 3 {
+			changeID = fmt.Sprintf("%s~%s", matches[1], matches[2])
+		} else {
+			return "", false, fmt.Errorf("no match for successful mail of generated CL in git push output:\n%s", gitPushOutput)
+		}
+
+		return changeID, true, nil
+	}
 
 	// Await the Cloud Build and extract the ID of the CL that was mailed.
-	ctx.Printf("Awaiting completion of build %q in %s.", build.ID, build.Project)
-	return AwaitCondition(ctx, 30*time.Second, func() (changeID string, completed bool, _ error) {
-		return c.completedGeneratingCL(ctx, build)
-	})
-}
-
-// completedGeneratingCL reports whether a build has finished,
-// returning the change ID that the given build generated.
-// The build must've been created by GenerateAutoSubmitChange.
-// It's suitable for use with AwaitCondition.
-func (c *RealCloudBuildClient) completedGeneratingCL(ctx context.Context, build CloudBuild) (changeID string, completed bool, _ error) {
-	b, err := c.BuildClient.GetBuild(ctx, &cloudbuildpb.GetBuildRequest{
-		ProjectId: build.Project,
-		Id:        build.ID,
-	})
-	if err != nil {
-		return "", false, err
-	}
-	if b.FinishTime == nil {
-		return "", false, nil
-	}
-	if b.Status != cloudbuildpb.Build_SUCCESS {
-		return "", false, fmt.Errorf("build %q failed, see %v: %v", build.ID, b.LogUrl, b.FailureInfo)
-	}
-
-	// Extract the CL number from the output using a simple regexp.
-	re := regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/c\/([a-zA-Z0-9_\-]+)\/\+\/(\d+)`)
-	gitPushOutput := bytes.Join(b.GetResults().GetBuildStepOutputs(), nil)
-	if matches := re.FindSubmatch(gitPushOutput); len(matches) == 3 {
-		changeID = fmt.Sprintf("%s~%s", matches[1], matches[2])
-	} else {
-		return "", false, fmt.Errorf("no match for successful mail of generated CL in git push output:\n%s", gitPushOutput)
-	}
-
-	return changeID, true, nil
+	ctx.Printf("Awaiting completion of build %q in %s.", meta.Build.Id, c.ScriptProject)
+	return AwaitCondition(ctx, 30*time.Second, completedGeneratingCL)
 }
 
 func (c *RealCloudBuildClient) RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep, options *CloudBuildOptions) (CloudBuild, error) {
