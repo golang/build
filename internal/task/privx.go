@@ -90,7 +90,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	// move and rebase change onto checkpoint branch
 	movedChange := wf.Task2(wd, "Move change+rebase onto checkpoint branch", func(ctx *wf.TaskContext, change *gerrit.ChangeInfo, checkpointBranch string) (*gerrit.ChangeInfo, error) {
-		newCI, err := x.PrivateGerrit.MoveChange(ctx.Context, change.ChangeID, checkpointBranch)
+		movedCI, err := x.PrivateGerrit.MoveChange(ctx.Context, change.ChangeID, checkpointBranch)
 		if err != nil {
 			// In case we need to re-run the Move step, tolerate the case where the change
 			// is already on the branch.
@@ -99,9 +99,9 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 				return nil, err
 			}
 		} else {
-			change = &newCI
+			change = &movedCI
 		}
-		newCI, err = x.PrivateGerrit.RebaseChange(ctx.Context, change.ChangeID, "")
+		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx.Context, change.ChangeID, "")
 		if err != nil {
 			// Don't fail if the branch is already up to date.
 			var httpErr *gerrit.HTTPError
@@ -109,7 +109,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 				return nil, err
 			}
 		} else {
-			change = &newCI
+			change = &rebasedCI
 		}
 		return change, nil
 	}, checkedChange, checkpointBranch)

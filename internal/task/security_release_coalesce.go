@@ -139,7 +139,7 @@ func (x *SecurityReleaseCoalesceTask) CreateCheckpoint(ctx *wf.TaskContext, bi b
 
 func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, checkpointBranch string, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
 	for i, ci := range cls {
-		newCI, err := x.PrivateGerrit.MoveChange(ctx.Context, ci.ChangeID, checkpointBranch)
+		movedCI, err := x.PrivateGerrit.MoveChange(ctx.Context, ci.ChangeID, checkpointBranch)
 		if err != nil {
 			// In case we need to re-run the Move step, tolerate the case where the change
 			// is already on the branch.
@@ -148,16 +148,16 @@ func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, 
 				return nil, err
 			}
 		} else {
-			cls[i] = &newCI
+			cls[i] = &movedCI
 		}
-		newCI, err = x.PrivateGerrit.RebaseChange(ctx.Context, ci.ChangeID, "")
+		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx.Context, ci.ChangeID, "")
 		if err != nil {
 			var httpErr *gerrit.HTTPError
 			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
 				return nil, err
 			}
 		} else {
-			cls[i] = &newCI
+			cls[i] = &rebasedCI
 		}
 	}
 	return cls, nil
