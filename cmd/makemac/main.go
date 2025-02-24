@@ -373,7 +373,7 @@ func handleDeadBots(mc macServiceClient, bots map[string]*spb.BotInfo, leases ma
 
 // renewLeases renews lease expiration on all makemac-managed leases. Note that
 // this may renew leases that will later be removed because their image is no
-// longer required. This is harmless.
+// longer required or there are fewer of them requested. This is harmless.
 func renewLeases(mc macServiceClient, leases map[string]macservice.Instance) {
 	log.Printf("Renewing leases...")
 
@@ -419,8 +419,8 @@ func renewLeases(mc macServiceClient, leases map[string]macservice.Instance) {
 }
 
 // handleObsoleteLeases vacates any makemac-managed leases with images that are
-// not requested by imageConfigs. This typically occurs when updating makemac
-// to roll out a new image version.
+// not requested by imageConfigs. This typically occurs when makemac is updated
+// to roll out a new image version or if Count is reduced for an existing image.
 func handleObsoleteLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig, leases map[string]macservice.Instance) {
 	log.Printf("Checking for leases with obsolete images...")
 
@@ -429,6 +429,8 @@ func handleObsoleteLeases(mc macServiceClient, config map[*swarmingConfig][]imag
 	for sc, ic := range config {
 		swarmingImages[sc.Host] = imageConfigMap(ic)
 	}
+	// swarming host -> image sha -> count
+	swarmingImageCount := make(map[string]map[string]int)
 
 	var ids []string
 	for id := range leases {
@@ -453,13 +455,30 @@ func handleObsoleteLeases(mc macServiceClient, config map[*swarmingConfig][]imag
 			continue
 		}
 
+		var vacateReason string // A non-empty string means to vacate with said reason.
+
 		image := lease.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256
-		if _, ok := images[image]; ok {
+		if config, ok := images[image]; !ok {
+			vacateReason = fmt.Sprintf("it uses an obsolete image %s", image)
+		} else {
+			if _, ok := swarmingImageCount[swarming]; !ok {
+				swarmingImageCount[swarming] = make(map[string]int)
+			}
+			swarmingImageCount[swarming][image]++
+
+			haveCount := swarmingImageCount[swarming][image]
+			extra := haveCount - config.Count
+			if extra > 0 {
+				vacateReason = fmt.Sprintf("it is instance number %d, want only %d instances", haveCount, config.Count)
+			}
+		}
+
+		if vacateReason == "" {
 			continue
 		}
 
-		// Config doesn't want instances with this image. Vacate.
-		log.Printf("Lease %s uses obsolete image %s", id, image)
+		// Config doesn't want this instance. Vacate.
+		log.Printf("Lease %s is being vacated because %s", id, vacateReason)
 		log.Printf("Vacating lease %s...", id)
 		if err := mc.Vacate(macservice.VacateRequest{LeaseID: id}); err != nil {
 			log.Printf("Error vacating lease %s: %v", id, err)
@@ -516,7 +535,8 @@ func makeLeaseRequest(sc *swarmingConfig, ic *imageConfig) (macservice.LeaseRequ
 }
 
 // addNewLeases adds new MacService leases as needed to ensure that there are
-// at least MinCount makemac-managed leases of each configured image type.
+// at least Count makemac-managed leases of each configured image type.
+// Removing leases if they exceed Count is done by handleObsoleteLeases.
 func addNewLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig, leases map[string]macservice.Instance) {
 	log.Printf("Checking if new leases are required...")
 
@@ -557,7 +577,7 @@ func addNewLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig,
 		for _, image := range imageOrder[i] {
 			config := imageMap[i][image]
 			gotCount := swarmingImageCount[sc.Host][config.Image]
-			log.Printf("\tHost %s: image %s: have %d leases\twant %d leases", sc.Host, config.Image, gotCount, config.MinCount)
+			log.Printf("\tHost %s: image %s: have %d leases\twant %d leases", sc.Host, config.Image, gotCount, config.Count)
 		}
 	}
 
@@ -565,7 +585,7 @@ func addNewLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig,
 		for _, image := range imageOrder[i] {
 			config := imageMap[i][image]
 			gotCount := swarmingImageCount[sc.Host][config.Image]
-			need := config.MinCount - gotCount
+			need := config.Count - gotCount
 			if need <= 0 {
 				continue
 			}

@@ -41,7 +41,7 @@ type imageConfig struct {
 	Cert     string // Bot certificate (resolved with internal/secret)
 	Key      string // bot key (resolved with internal/secret)
 	Image    string // image SHA
-	MinCount int    // minimum instance count to maintain
+	Count    int    // target instance count to maintain
 }
 
 // Production image configuration for each swarming host.
@@ -60,28 +60,28 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-11-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-11-key",
 			Image:    "3279e7f8aef8a1d02ba0897de44e5306f94c8cacec3c8c662a897b810879f655",
-			MinCount: 5, // Fewer because it runs on release branches only.
+			Count:    5, // Fewer because it runs on release branches only.
 		},
 		{
 			Hostname: "darwin-amd64-12",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-key",
 			Image:    "959a409833522fcba0be62c0c818d68b29d4e1be28d3cbf43dbbc81cb3e3fdeb",
-			MinCount: 8,
+			Count:    8,
 		},
 		{
 			Hostname: "darwin-amd64-13",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-13-key",
 			Image:    "30efbbd26e846da8158a7252d47b3adca15b30270668a95620ace3502cdcaa36",
-			MinCount: 8,
+			Count:    8,
 		},
 		{
 			Hostname: "darwin-amd64-14",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-key",
 			Image:    "88491078fb25b3bd6db3fe519d0bca63448cddf3f7f10177da2e46019664a85b",
-			MinCount: 14, // More to cover longtest, race, nocgo, etc.
+			Count:    14, // More to cover longtest, race, nocgo, etc.
 		},
 	},
 	internalSwarming: {
@@ -90,28 +90,28 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-11-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-11-security-key",
 			Image:    "3279e7f8aef8a1d02ba0897de44e5306f94c8cacec3c8c662a897b810879f655",
-			MinCount: 3,
+			Count:    3,
 		},
 		{
 			Hostname: "darwin-amd64-12-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-security-key",
 			Image:    "959a409833522fcba0be62c0c818d68b29d4e1be28d3cbf43dbbc81cb3e3fdeb",
-			MinCount: 3,
+			Count:    3,
 		},
 		{
 			Hostname: "darwin-amd64-13-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-13-security-key",
 			Image:    "30efbbd26e846da8158a7252d47b3adca15b30270668a95620ace3502cdcaa36",
-			MinCount: 3,
+			Count:    3,
 		},
 		{
 			Hostname: "darwin-amd64-14-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-security-key",
 			Image:    "88491078fb25b3bd6db3fe519d0bca63448cddf3f7f10177da2e46019664a85b",
-			MinCount: 6, // More to cover longtest, race, nocgo, etc.
+			Count:    6, // More to cover longtest, race, nocgo, etc.
 		},
 	},
 }
@@ -151,6 +151,6 @@ func init() {
 func logImageConfig(sc *swarmingConfig, cc []imageConfig) {
 	log.Printf("%s image configuration:", sc.Host)
 	for _, c := range cc {
-		log.Printf("\t%s: image=%s\tcount=%d", c.Hostname, c.Image, c.MinCount)
+		log.Printf("\t%s: image=%s\tcount=%d", c.Hostname, c.Image, c.Count)
 	}
 }
