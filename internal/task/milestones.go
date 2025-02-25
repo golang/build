@@ -322,6 +322,11 @@ type GitHubClientInterface interface {
 	// See github.Client.Repositories.CreateRelease.
 	CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error)
 
+	// PublishRelease publishes the release by marking draft as false if not
+	// already.
+	// See github.Client.Repositories.EditRelease.
+	PublishRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error)
+
 	// UploadReleaseAsset uploads an fs.File to a GitHub release as a release
 	// asset.
 	// It uses NewUploadRequest as github.Client.Repositories.UploadReleaseAsset
@@ -386,6 +391,16 @@ func (c *GitHubClient) UploadReleaseAsset(ctx context.Context, owner, repo strin
 
 func (c *GitHubClient) CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
 	release, _, err := c.V3.Repositories.CreateRelease(ctx, owner, repo, release)
+	return release, err
+}
+
+func (c *GitHubClient) PublishRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
+	if release.Draft != nil && !*release.Draft {
+		return release, nil
+	}
+	release, _, err := c.V3.Repositories.EditRelease(ctx, owner, repo, release.GetID(), &github.RepositoryRelease{
+		Draft: github.Bool(false),
+	})
 	return release, err
 }
 

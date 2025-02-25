@@ -165,7 +165,7 @@ func (r *ReleaseVSCodeGoTasks) NewPrereleaseDefinition() *wf.Definition {
 	build := wf.Task3(wd, "generate package extension (.vsix) for release candidate", r.generatePackageExtension, release, prerelease, revision, wf.After(verified))
 
 	tagged := wf.Action3(wd, "tag the release candidate", r.tag, revision, release, prerelease, wf.After(branch))
-	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, prerelease, build, wf.After(tagged))
+	released := wf.Action3(wd, "create release note", r.createGitHubRelease, release, prerelease, build, wf.After(tagged))
 
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, prerelease, revision, issue, wf.After(released))
 	return wd
@@ -642,7 +642,7 @@ See release https://github.com/golang/vscode-go/releases/tag/%s for details.`
 	return buf.String(), nil
 }
 
-func (r *ReleaseVSCodeGoTasks) createGitHubReleaseDraft(ctx *wf.TaskContext, release releaseVersion, prerelease string, build CloudBuild) error {
+func (r *ReleaseVSCodeGoTasks) createGitHubRelease(ctx *wf.TaskContext, release releaseVersion, prerelease string, build CloudBuild) error {
 	body, err := r.vscodeGoGitHubReleaseBody(ctx, release, prerelease)
 	if err != nil {
 		return err
@@ -679,6 +679,13 @@ func (r *ReleaseVSCodeGoTasks) createGitHubReleaseDraft(ctx *wf.TaskContext, rel
 	}
 
 	ctx.Printf("Uploaded asset %s to release %v as asset ID %v", asset.GetName(), draft.GetID(), asset.GetID())
+
+	released, err := r.GitHub.PublishRelease(ctx, "golang", "vscode-go", draft)
+	if err != nil {
+		return err
+	}
+
+	ctx.Printf("Published the release in %s", released.GetHTMLURL())
 	return nil
 }
 
@@ -766,7 +773,7 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 
 	tagged := wf.Action3(wd, "tag the insider release", r.tag, revision, release, wf.Const(""), wf.After(build))
 
-	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
+	released := wf.Action3(wd, "create release note", r.createGitHubRelease, release, wf.Const(""), build, wf.After(tagged))
 
 	changelogChangeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLog, release, reviewers, wf.After(tagged))
 	changelogSubmitted := wf.Task1(wd, "await CHANGELOG.md CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changelogChangeID)
@@ -1063,7 +1070,7 @@ func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
 	build := wf.Task3(wd, "generate package extension (.vsix) from release candidate tag", r.generatePackageExtension, release, wf.Const(""), commit)
 
 	tagged := wf.Action3(wd, "tag the stable release", r.tag, commit, release, wf.Const(""), wf.After(build))
-	released := wf.Action3(wd, "create release note", r.createGitHubReleaseDraft, release, wf.Const(""), build, wf.After(tagged))
+	released := wf.Action3(wd, "create release note", r.createGitHubRelease, release, wf.Const(""), build, wf.After(tagged))
 
 	changeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLog, release, reviewers, wf.After(build))
 	submitted := wf.Task1(wd, "await CHANGELOG.md CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)

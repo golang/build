@@ -1285,6 +1285,10 @@ func (*FakeGitHub) CreateRelease(ctx context.Context, owner, repo string, releas
 	return nil, nil
 }
 
+func (*FakeGitHub) PublishRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
+	return nil, nil
+}
+
 func (*FakeGitHub) EditIssue(_ context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
 	return nil, nil, nil
 }
