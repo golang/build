@@ -362,7 +362,7 @@ func reportBrokenBots(ctx context.Context, c *LUCIClient) {
 			log.Printf("failed to post broken bot issue: %s", err)
 			continue
 		}
-		fmt.Printf("Posted new broken bot issue for %s, issue: %s\n", bot.ID, i.ID)
+		fmt.Printf("Posted new broken bot issue for %s, issue: %d\n", bot.ID, i.Number)
 	}
 }
 
