@@ -7,7 +7,6 @@ package task_test
 import (
 	"context"
 	"flag"
-	"runtime"
 	"testing"
 
 	cloudbuild "cloud.google.com/go/cloudbuild/apiv1/v2"
@@ -17,9 +16,6 @@ import (
 )
 
 func TestUpdateX509Bundle(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("doesn't work on Windows until a fix for https://github.com/rsc/rf/issues/30 lands")
-	}
 	if testing.Short() {
 		t.Skip("not running test that uses internet in short mode")
 	}

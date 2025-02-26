@@ -24,7 +24,7 @@ import (
 	wf "golang.org/x/build/internal/workflow"
 )
 
-const gitGenerateVersion = "v0.0.0-20240603191855-5c202b9c66be"
+const gitGenerateVersion = "v0.0.0-20250226160655-0213393d1768"
 
 type CloudBuildClient interface {
 	// RunBuildTrigger runs an existing trigger in project with the given
