@@ -20,7 +20,6 @@ import (
 	"cloud.google.com/go/storage"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gcsfs"
-	"golang.org/x/build/internal/secret"
 	wf "golang.org/x/build/internal/workflow"
 )
 
@@ -208,7 +207,7 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 
 	const (
 		buildStepGitCommit = 4
-		buildStepGitPush   = 7
+		buildStepGitPush   = 6
 	)
 	buildStepOutput := func(b *cloudbuildpb.Build, buildStep int) []byte {
 		out := b.GetResults().GetBuildStepOutputs()
@@ -266,10 +265,6 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 					Args: []string{"show", "HEAD"},
 					Dir:  "checkout",
 				},
-				{
-					Name: "bash", Args: []string{"-c", `touch .gitcookies && chmod 0600 .gitcookies && printf ".googlesource.com\tTRUE\t/\tTRUE\t2147483647\to\tgit-gobot.golang.org=$$GOBOT_TOKEN\n" >> .gitcookies`},
-					SecretEnv: []string{"GOBOT_TOKEN"},
-				},
 				buildStepGitPush: {
 					Name:       "gcr.io/cloud-builders/git",
 					Entrypoint: "bash",
@@ -279,11 +274,8 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 					//
 					// Whether the push successfully created a CL or not will be determined from
 					// the output text.
-					Args: []string{"-c", `git -c http.cookieFile=../.gitcookies push origin ` + refspec + ` 2>&1 | tee "$$BUILDER_OUTPUT/output"`},
+					Args: []string{"-c", `git push origin ` + refspec + ` 2>&1 | tee "$$BUILDER_OUTPUT/output"`},
 					Dir:  "checkout",
-				},
-				{
-					Name: "bash", Args: []string{"-c", "rm .gitcookies"},
 				},
 			},
 			Options: &cloudbuildpb.BuildOptions{
@@ -291,14 +283,6 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 				Logging:     cloudbuildpb.BuildOptions_CLOUD_LOGGING_ONLY,
 			},
 			ServiceAccount: c.ScriptAccount,
-			AvailableSecrets: &cloudbuildpb.Secrets{
-				SecretManager: []*cloudbuildpb.SecretManagerSecret{
-					{
-						VersionName: "projects/" + c.ScriptProject + "/secrets/" + secret.NameGobotPassword + "/versions/latest",
-						Env:         "GOBOT_TOKEN",
-					},
-				},
-			},
 		},
 	})
 	if err != nil {
