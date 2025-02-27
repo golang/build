@@ -266,7 +266,6 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/vet": {
 		Primary:   []Owner{matloob},
-		Secondary: []Owner{taking},
 	},
 	"go/src/cmp": {
 		Primary:   []Owner{iant},
@@ -853,7 +852,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"tools/go/analysis": {
-		Primary:   []Owner{adonovan, taking},
+		Primary:   []Owner{adonovan},
 		Secondary: []Owner{matloob, zpavlinovic},
 	},
 	"tools/go/ast": {
