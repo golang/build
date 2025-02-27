@@ -2732,7 +2732,7 @@ func init() {
 	addPerson("Tim Heckman", "t@heckman.io", "@theckman")
 	addPerson("Tim Henderson", "tim.tadh@gmail.com", "@timtadh")
 	addPerson("Tim Hockin", "thockin@google.com", "@thockin")
-	addPerson("Tim King", "taking@google.com", "@timothy-king")
+	addPerson("Tim King", "taking@golang.org", "@timothy-king")
 	addPerson("Tim Shen", "timshen@google.com", "@timshen91")
 	addPerson("Tim St. Clair", "stclair@google.com")
 	addPerson("Tim Swast", "swast@google.com", "@tswast")
