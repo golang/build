@@ -1600,6 +1600,7 @@ func init() {
 	addPerson("Junda Liu", "junda@celer.network")
 	addPerson("Jungho Ahn", "jhahn@google.com", "@jhahn21")
 	addPerson("Junya Hayashi", "ledmonster@gmail.com")
+	addPerson("Junyang Shao", "shaojunyang@google.com", "@JunyangShao")
 	addPerson("Juraj Sukop", "sukop@users.noreply.github.com", "@sukop")
 	addPerson("Jure Ham", "jure.ham@zemanta.com", "@hamaxx")
 	addPerson("Jurgen De Commer", "jurgen.decommer@gmail.com")
