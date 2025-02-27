@@ -65,7 +65,7 @@ func (c *RealBuildBucketClient) RunBuild(ctx context.Context, bucket, builder st
 	if err != nil {
 		return 0, err
 	}
-	return build.Id, err
+	return build.Id, nil
 }
 
 func (c *RealBuildBucketClient) Completed(ctx context.Context, id int64) (string, bool, error) {

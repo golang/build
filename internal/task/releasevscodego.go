@@ -471,7 +471,7 @@ func (r *ReleaseVSCodeGoTasks) determineReleaseVersion(ctx *wf.TaskContext, vers
 	default:
 		return releaseVersion{}, fmt.Errorf("unknown version selection strategy: %q", versionBumpStrategy)
 	}
-	return release, err
+	return release, nil
 }
 
 // nextPrereleaseVersion inspects the tags in vscode-go repo that match with the

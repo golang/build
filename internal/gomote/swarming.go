@@ -763,7 +763,7 @@ func (ss *SwarmingServer) signURLForDownload(object string) (url string, err err
 	if err != nil {
 		return "", fmt.Errorf("unable to generate signed url: %w", err)
 	}
-	return url, err
+	return url, nil
 }
 
 // SwarmOpts provides additional options for swarming task creation.

@@ -512,7 +512,7 @@ func (s *Server) signURLForDownload(object string) (url string, err error) {
 	if err != nil {
 		return "", fmt.Errorf("unable to generate signed url: %w", err)
 	}
-	return url, err
+	return url, nil
 }
 
 // WriteFileFromURL initiates an HTTP request to the passed in URL and streams the contents of the request to the gomote instance.

@@ -153,7 +153,7 @@ func (ac *AWSClient) Instance(ctx context.Context, instID string) (*Instance, er
 		return nil, errors.New("describe instances output does not contain a valid instance")
 	}
 	ec2Inst := dio.Reservations[0].Instances[0]
-	return ec2ToInstance(ec2Inst), err
+	return ec2ToInstance(ec2Inst), nil
 }
 
 // RunningInstances retrieves all EC2 instances in a region which have not been terminated or stopped.
@@ -206,7 +206,7 @@ func (ac *AWSClient) DestroyInstances(ctx context.Context, instIDs ...string) er
 	if err != nil {
 		return fmt.Errorf("unable to destroy vm: %w", err)
 	}
-	return err
+	return nil
 }
 
 // WaitUntilInstanceRunning waits until a stopping condition is met. The stopping conditions are:
@@ -220,7 +220,7 @@ func (ac *AWSClient) WaitUntilInstanceRunning(ctx context.Context, instID string
 	if err != nil {
 		return fmt.Errorf("failed waiting for vm instance: %w", err)
 	}
-	return err
+	return nil
 }
 
 // InstanceType contains information about an EC2 vm instance type.

@@ -1638,7 +1638,7 @@ func (p *githubRepoPoller) getMilestonePage(ctx context.Context, page int) ([]in
 	for i, m := range ms {
 		its[i] = m
 	}
-	return its, res, err
+	return its, res, nil
 }
 
 func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
@@ -1652,7 +1652,7 @@ func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]interf
 	for i, lb := range ls {
 		its[i] = lb
 	}
-	return its, res, err
+	return its, res, nil
 }
 
 // foreachItem walks over all pages of items from getPage and calls fn for each item.
