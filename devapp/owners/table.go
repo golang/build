@@ -431,6 +431,10 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{compilerTeam, runtimeTeam},
 		Secondary: []Owner{mknyszek, cherryyz},
 	},
+	"go/src/internal/asan": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{mauri870},
+	},
 	"go/src/internal/buildcfg": {
 		Primary: []Owner{compilerTeam},
 	},
@@ -464,6 +468,10 @@ var entries = map[string]*Entry{
 	"go/src/internal/goos": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{mknyszek, prattmic},
+	},
+	"go/src/internal/msan": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{mauri870},
 	},
 	"go/src/internal/pkgbits": {
 		Primary: []Owner{compilerTeam},
