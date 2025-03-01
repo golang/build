@@ -366,7 +366,10 @@ SLOW_HOSTS = {
     "openbsd-arm": struct(scale = 5),
     "openbsd-arm64": struct(scale = 5),
     "openbsd-ppc64": struct(scale = 3),
-    "openbsd-riscv64": struct(scale = 4),
+    "openbsd-riscv64": struct(
+        scale = 4,
+        scope = ["go@gotip", "net@gotip", "sys@gotip"],  # see go.dev/issue/67105#issuecomment-2265480107
+    ),
     "windows-arm64": struct(scale = 2),
 }
 
