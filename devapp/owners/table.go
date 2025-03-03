@@ -31,6 +31,7 @@ var (
 	bradfitz      = gh("bradfitz")
 	cherryyz      = gh("cherrymui")
 	codyoss       = gh("codyoss")
+	cpu           = gh("cpu")
 	dmitshur      = gh("dmitshur")
 	danderson     = gh("danderson")
 	drakkan       = gh("drakkan")
@@ -303,10 +304,10 @@ var entries = map[string]*Entry{
 		Primary: []Owner{neild, sameer},
 	},
 	"go/src/crypto": {
-		Primary: []Owner{filippo, roland, securityTeam},
+		Primary: []Owner{filippo, roland, cpu, securityTeam},
 	},
 	"go/src/crypto/tls": {
-		Primary:   []Owner{filippo, roland, securityTeam},
+		Primary:   []Owner{filippo, roland, cpu, securityTeam},
 		Secondary: []Owner{kevinburke},
 	},
 	"go/src/database/sql": {
@@ -331,7 +332,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc},
 	},
 	"go/src/encoding/asn1": {
-		Primary: []Owner{filippo, roland, securityTeam},
+		Primary: []Owner{filippo, roland, cpu, securityTeam},
 	},
 	"go/src/encoding/binary": {
 		Primary: []Owner{gri},
@@ -747,15 +748,15 @@ var entries = map[string]*Entry{
 		Primary: []Owner{dmitshur},
 	},
 	"crypto": {
-		Primary: []Owner{filippo, roland, securityTeam},
+		Primary: []Owner{filippo, roland, cpu, securityTeam},
 	},
 	"crypto/acme": {
 		Primary:   []Owner{roland, securityTeam},
-		Secondary: []Owner{filippo},
+		Secondary: []Owner{filippo, cpu},
 	},
 	"crypto/acme/autocert": {
 		Primary:   []Owner{bradfitz, roland, securityTeam},
-		Secondary: []Owner{filippo},
+		Secondary: []Owner{filippo, cpu},
 	},
 	"crypto/ssh": {
 		Primary:   []Owner{drakkan, securityTeam},

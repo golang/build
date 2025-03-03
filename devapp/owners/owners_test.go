@@ -31,7 +31,7 @@ func TestMatch(t *testing.T) {
 		{
 			"crypto/chacha20poly1305/chacha20poly1305.go",
 			&Entry{
-				Primary: []Owner{filippo, roland, securityTeam},
+				Primary: []Owner{filippo, roland, cpu, securityTeam},
 			},
 		},
 		{
@@ -120,7 +120,7 @@ func TestHandler(t *testing.T) {
 			},
 			map[string]*Entry{
 				"go/src/archive/zip/a.go":                     {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}},
-				"crypto/chacha20poly1305/chacha20poly1305.go": {Primary: []Owner{filippo, roland, securityTeam}},
+				"crypto/chacha20poly1305/chacha20poly1305.go": {Primary: []Owner{filippo, roland, cpu, securityTeam}},
 			},
 			nil,
 		},
@@ -132,7 +132,7 @@ func TestHandler(t *testing.T) {
 			},
 			map[string]*Entry{
 				"go/src/archive/zip/a.go":                     {Primary: []Owner{joetsai}, Secondary: []Owner{bradfitz}},
-				"crypto/chacha20poly1305/chacha20poly1305.go": {Primary: []Owner{filippo, roland, securityTeam}},
+				"crypto/chacha20poly1305/chacha20poly1305.go": {Primary: []Owner{filippo, roland, cpu, securityTeam}},
 			},
 			archOses,
 		},

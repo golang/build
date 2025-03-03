@@ -763,6 +763,7 @@ func init() {
 	addPerson("Daniel Mahu", "dmahu@google.com")
 	addPerson("Daniel Martí", "mvdan@mvdan.cc", "13550@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Daniel Martí", "mvdan@mvdan.cc", "@mvdan")
+	addPerson("Daniel McCarney", "daniel@binaryparadox.net", "@cpu")
 	addPerson("Daniel Morsing", "daniel.morsing@gmail.com", "5310@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Daniel Morsing", "daniel.morsing@gmail.com", "@DanielMorsing")
 	addPerson("Daniel Nephin", "dnephin@gmail.com", "@dnephin")
