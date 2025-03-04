@@ -90,7 +90,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	// move and rebase change onto checkpoint branch
 	movedChange := wf.Task2(wd, "Move change+rebase onto checkpoint branch", func(ctx *wf.TaskContext, change *gerrit.ChangeInfo, checkpointBranch string) (*gerrit.ChangeInfo, error) {
-		movedCI, err := x.PrivateGerrit.MoveChange(ctx.Context, change.ChangeID, checkpointBranch)
+		movedCI, err := x.PrivateGerrit.MoveChange(ctx.Context, change.ID, checkpointBranch)
 		if err != nil {
 			// In case we need to re-run the Move step, tolerate the case where the change
 			// is already on the branch.
@@ -101,7 +101,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		} else {
 			change = &movedCI
 		}
-		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx.Context, change.ChangeID, "")
+		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx.Context, change.ID, "")
 		if err != nil {
 			// Don't fail if the branch is already up to date.
 			var httpErr *gerrit.HTTPError
@@ -121,7 +121,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 			// The ChangeInfo object returned by RebaseChange doesn't contain
 			// information about submittability, so we need to refetch it using
 			// GetChange.
-			ci, err := x.PrivateGerrit.GetChange(ctx, change.ChangeID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+			ci, err := x.PrivateGerrit.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
 			if err != nil {
 				return "", false, err
 			}
@@ -130,7 +130,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 				return "", false, nil
 			}
 
-			submitted, err = x.PrivateGerrit.SubmitChange(ctx, ci.ChangeID)
+			submitted, err = x.PrivateGerrit.SubmitChange(ctx, ci.ID)
 			if err != nil {
 				return "", false, err
 			}
@@ -145,7 +145,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	// publish change publicly
 	publicChange := wf.Task3(wd, "Publish change", func(ctx *wf.TaskContext, change *gerrit.ChangeInfo, reviewers []string, repoName string) (*gerrit.ChangeInfo, error) {
-		changeInfo, err := x.PrivateGerrit.GetChange(ctx, change.ChangeID, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION"}})
+		changeInfo, err := x.PrivateGerrit.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION"}})
 		if err != nil {
 			return nil, err
 		}

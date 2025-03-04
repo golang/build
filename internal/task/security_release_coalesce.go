@@ -139,7 +139,7 @@ func (x *SecurityReleaseCoalesceTask) CreateCheckpoint(ctx *wf.TaskContext, bi b
 
 func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, checkpointBranch string, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
 	for i, ci := range cls {
-		movedCI, err := x.PrivateGerrit.MoveChange(ctx.Context, ci.ChangeID, checkpointBranch)
+		movedCI, err := x.PrivateGerrit.MoveChange(ctx.Context, ci.ID, checkpointBranch)
 		if err != nil {
 			// In case we need to re-run the Move step, tolerate the case where the change
 			// is already on the branch.
@@ -150,7 +150,7 @@ func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, 
 		} else {
 			cls[i] = &movedCI
 		}
-		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx.Context, ci.ChangeID, "")
+		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx.Context, movedCI.ID, "")
 		if err != nil {
 			var httpErr *gerrit.HTTPError
 			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
@@ -173,7 +173,7 @@ func (x *SecurityReleaseCoalesceTask) WaitAndSubmit(ctx *wf.TaskContext, cls []*
 				continue
 			}
 
-			ci, err := x.PrivateGerrit.GetChange(ctx, change.ChangeID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+			ci, err := x.PrivateGerrit.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
 			if err != nil {
 				return "", false, err
 			}
@@ -182,7 +182,7 @@ func (x *SecurityReleaseCoalesceTask) WaitAndSubmit(ctx *wf.TaskContext, cls []*
 				continue
 			}
 
-			submitted, err := x.PrivateGerrit.SubmitChange(ctx, ci.ChangeID)
+			submitted, err := x.PrivateGerrit.SubmitChange(ctx, ci.ID)
 			if err != nil {
 				return "", false, err
 			}
