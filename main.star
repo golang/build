@@ -384,7 +384,7 @@ DEFAULT_HOST_SUFFIX = {
     "freebsd-amd64": "14.1",
     "linux-amd64": "debian11",
     "linux-arm64": "debian12",
-    "openbsd-amd64": "7.2",
+    "openbsd-amd64": "7.6",
     "windows-386": "10",
     "windows-amd64": "10",
 }
@@ -504,7 +504,6 @@ BUILDER_TYPES = [
     "netbsd-arm64",
     "openbsd-386",
     "openbsd-amd64",
-    "openbsd-amd64_7.6",
     "openbsd-arm",
     "openbsd-arm64",
     "openbsd-ppc64",
@@ -532,7 +531,6 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
 
 KNOWN_ISSUE_BUILDER_TYPES = {
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
-    "openbsd-amd64_7.6": known_issue(issue_number = 69823, hide_from_presubmit = False),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
 
     # The known issue for these builder types tracks the work of starting to add them.
