@@ -1130,7 +1130,7 @@ func (r *ReleaseVSCodeGoTasks) diffBaseVersion(ctx context.Context, release rele
 		if release.Patch == 0 {
 			previousRelease, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor-2), isReleaseVersion)
 		} else {
-			previousRelease, _ = latestVersion(tags, isSameMajorMinor(release.Major, release.Minor), isReleaseVersion)
+			previousRelease = releaseVersion{Major: release.Major, Minor: release.Minor, Patch: release.Patch - 1}
 		}
 	}
 	return previousRelease, previousPrerelease, nil
