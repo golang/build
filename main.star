@@ -346,29 +346,35 @@ HOST_NOTIFIERS = {
 # scaling factor; run_mods may multiply this scaling factor further. It also
 # affects the decision of whether to include a builder in presubmit testing
 # by default (slow high-capacity hosts aren't included).
+#
+# Optionally, a slow host may also limit its repo@go_branch_short scope if there's
+# no better alternative. This has the downside of reducing coverage for the port.
 SLOW_HOSTS = {
-    "darwin-amd64": 2,  # see go.dev/issue/65040
-    "freebsd-riscv64": 4,
-    "linux-ppc64_power10": 2,
-    "linux-ppc64_power8": 2,
-    "linux-ppc64le_power10": 2,
-    "linux-ppc64le_power8": 2,
-    "linux-ppc64le_power9": 2,
-    "linux-riscv64": 2,
-    "netbsd-arm": 5,
-    "netbsd-arm64": 2,
-    "openbsd-amd64": 2,
-    "openbsd-arm": 5,
-    "openbsd-arm64": 5,
-    "openbsd-ppc64": 3,
-    "openbsd-riscv64": 4,
-    "windows-arm64": 2,
+    "darwin-amd64": struct(scale = 2),  # see go.dev/issue/65040
+    "freebsd-riscv64": struct(scale = 4),
+    "linux-ppc64_power10": struct(scale = 2),
+    "linux-ppc64_power8": struct(scale = 2),
+    "linux-ppc64le_power10": struct(scale = 2),
+    "linux-ppc64le_power8": struct(scale = 2),
+    "linux-ppc64le_power9": struct(scale = 2),
+    "linux-riscv64": struct(scale = 2),
+    "netbsd-arm": struct(
+        scale = 5,
+        scope = ["go", "net", "sys"],  # not tools; see go.dev/issue/72061#issuecomment-2695226251
+    ),
+    "netbsd-arm64": struct(scale = 2),
+    "openbsd-amd64": struct(scale = 2),
+    "openbsd-arm": struct(scale = 5),
+    "openbsd-arm64": struct(scale = 5),
+    "openbsd-ppc64": struct(scale = 3),
+    "openbsd-riscv64": struct(scale = 4),
+    "windows-arm64": struct(scale = 2),
 }
 
 # host_timeout_scale returns the default test timeout scale for a given host.
 def host_timeout_scale(host):
     if host in SLOW_HOSTS:
-        return SLOW_HOSTS[host]
+        return SLOW_HOSTS[host].scale
     return 1
 
 # DEFAULT_HOST_SUFFIX defines the default host suffixes for builder types which
@@ -2057,6 +2063,12 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         postsubmit = postsubmit and post
         if prefilt:
             presubmit_filters.extend(prefilt)
+
+    # Disable presubmit and postsubmit if given (project, Go branch) pair is out of scope of slow hosts.
+    if builder_type in SLOW_HOSTS and hasattr(SLOW_HOSTS[builder_type], "scope"):
+        if "%s@%s" % (project, go_branch_short) not in SLOW_HOSTS[builder_type].scope and \
+           project not in SLOW_HOSTS[builder_type].scope:
+            presubmit, postsubmit = False, False
 
     # Hide from presubmit if required.
     presubmit_state = PRESUBMIT.ENABLED if presubmit else PRESUBMIT.OPTIONAL
