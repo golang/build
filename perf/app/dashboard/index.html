@@ -32,10 +32,10 @@ license that can be found in the LICENSE file.
 			<li><a href="/dashboard">Performance Dashboard</a></li>
 			<li><a href="https://farmer.golang.org/builders">Builders</a></li>
 			<span class="left-separator"></span>
-			<li><a class="alt-nav-button" href="?repository=tools&benchmark=all&branch=latest-release">x/tools Dashboard</a>
-			<li><a class="alt-nav-button" href="?benchmark=regressions&platform=linux/amd64">linux/amd64 Regressions</a>
-			<li><a class="alt-nav-button" href="?benchmark=regressions&platform=linux/arm64">linux/arm64 Regressions</a>
-			<li><a class="alt-nav-button" href="?repository=tools&benchmark=regressions&branch=latest-release">x/tools Regressions</a>
+			<li><a class="alt-nav-button" href="?benchmark=all">Go Benchmark List</a>
+			<li><a class="alt-nav-button" href="?benchmark=all&regressions=true">Go Regressions</a>
+			<li><a class="alt-nav-button" href="?repository=tools&branch=latest-release">x/tools Dashboard</a>
+			<li><a class="alt-nav-button" href="?repository=tools&benchmark=all">x/tools Benchmark List</a>
 		</ul>
 	</nav>
 </header>
@@ -50,10 +50,7 @@ license that can be found in the LICENSE file.
 				<div class="Dashboard-search-unit">
 					<input id="unit-input" type="text" name="unit" placeholder="Unit (optional)" />
 				</div>
-				<input type="button" class="alt-nav-button" onclick="setBenchmarkInput('all')" value="All">
-				<input type="button" class="alt-nav-button" onclick="setBenchmarkInput('regressions')" value="Regressions first">
 			</li>
-			<span class="left-separator"></span>
 			<li>
 				Repository:
 				<select id="repository-select" name="repository">
@@ -147,33 +144,29 @@ const noDataHTML = `
 
 function removeLoadingMessage() {
 	let loading = document.getElementById("loading");
-	loading.parentNode.removeChild(loading);
+	if (loading) {
+		loading.parentNode.removeChild(loading);
+	}
 }
 
-function setBenchmarkInput(benchmark) {
-	let input = document.getElementById('benchmark-input');
-	input.value = benchmark;
-}
+let allBenchmarkChartSections = [];
+let allBenchmarkChartSectionsByGroup = new Map();
 
-function addCharts(benchmarks, repository, goBranch, commits) {
+function addCharts(benchmarks, repository, goBranch, commits, regressions) {
 	let dashboard = document.getElementById("dashboard");
 
 	removeLoadingMessage();
 
-	let prevName = "";
-	let prevPlatform = "";
-	let grid = null;
-	let addedChart = false;
 	for (const b in benchmarks) {
 		const bench = benchmarks[b];
+		let sec = null;
 
-		if (bench.Name != prevName || bench.Platform != prevPlatform) {
-			prevName = bench.Name;
-			prevPlatform = bench.Platform;
-
+		const groupKey = bench.Name+'+'+bench.Platform;
+		if (allBenchmarkChartSectionsByGroup.has(groupKey)) {
+			sec = allBenchmarkChartSectionsByGroup.get(groupKey)
+		} else {
 			let section = document.createElement("grid");
 			section.classList.add("Dashboard-section");
-			dashboard.appendChild(section);
 
 			let link = document.createElement("a");
 			link.href = "?benchmark=" + bench.Name + "&platform=" + bench.Platform + "&repository=" + repository + "&branch=" + goBranch;
@@ -187,6 +180,17 @@ function addCharts(benchmarks, repository, goBranch, commits) {
 			grid = document.createElement("grid");
 			grid.classList.add("Dashboard-grid");
 			section.appendChild(grid);
+
+			sec = {
+				Section: section,
+				Grid: grid,
+				Items: [],
+				Name: bench.Name,
+				Platform: bench.Platform,
+				Regression: bench.Regression,
+			};
+			allBenchmarkChartSections.push(sec);
+			allBenchmarkChartSectionsByGroup.set(groupKey, sec);
 		}
 
 		let item = document.createElement("div");
@@ -221,7 +225,7 @@ function addCharts(benchmarks, repository, goBranch, commits) {
 					p.innerHTML += ` <span style="font-style: normal;">&#128513;</span>`;
 				}
 			} else {
-				p.textContext = `Not ranked because ${r.IgnoredBecause}.`;
+				continue;
 			}
 			item.appendChild(p);
 		}
@@ -234,11 +238,49 @@ function addCharts(benchmarks, repository, goBranch, commits) {
 			higherIsBetter: bench.HigherIsBetter,
 			history: commits,
 		}));
-		grid.appendChild(item);
-		addedChart = true;
+		sec.Items.push({Unit: bench.Unit, Item: item});
 	}
-	if (!addedChart) {
+	if (allBenchmarkChartSections.length === 0) {
 		dashboard.innerHTML = noDataHTML;
+	} else {
+		allBenchmarkChartSections.sort(function(a, b) {
+			if (a.Regression) {
+				let ra = a.Regression;
+				let rb = b.Regression;
+
+				// Regressions w/ a delta index come first
+				if ((ra.DeltaIndex < 0) != (rb.DeltaIndex < 0)) {
+					if (rb.DeltaIndex < 0) {
+						return -1;
+					} else {
+						return 1;
+					}
+				}
+				// Put larger regressions first.
+				if (ra.Change > rb.Change) {
+					return -1;
+				} else {
+					return 1;
+				}
+			}
+			if (a.Name === b.Name) {
+				return a.Platform < b.Platform ? -1 : 1;
+			}
+			return a.Name < b.Name ? -1 : 1;
+		});
+		// N.B. Re-appending moves a child into the right location.
+		for (const s in allBenchmarkChartSections) {
+			const sec = allBenchmarkChartSections[s];
+			sec.Items.sort(function(a, b) {
+				return a.Unit < b.Unit ? -1 : 1;
+			});
+			for (const i in sec.Items) {
+				sec.Grid.appendChild(sec.Items[i].Item);
+			}
+			if (sec.Items.length > 0) {
+				dashboard.appendChild(sec.Section);
+			}
+		}
 	}
 }
 
@@ -402,6 +444,38 @@ function addTable(bench, unit, platform, repository, goBranch, commits) {
 	}
 }
 
+function addBenchmarkList(benchmarks) {
+	let dashboard = document.getElementById("dashboard");
+
+	removeLoadingMessage();
+
+	let section = document.createElement("grid");
+	section.classList.add("Dashboard-section");
+	section.classList.add("Dashboard-section-expand");
+	dashboard.appendChild(section);
+
+	let title = document.createElement("h2");
+	title.classList.add("Dashboard-title");
+	title.textContent = "All " + benchmarks[0].Repository + " benchmarks";
+	section.appendChild(title);
+
+	const list = document.createElement("ul");
+	for (let i = 0; i < benchmarks.length; i++) {
+		const bench = benchmarks[i];
+		const li = document.createElement("li");
+		let link = document.createElement("a");
+		let goBranch = "master";
+		if (bench.Repository != "go") {
+			goBranch = "latest-release";
+		}
+		link.href = "?benchmark=" + bench.Name + "&repository=" + bench.Repository + "&branch=" + goBranch;
+		link.textContent = bench.Name;
+		li.appendChild(link);
+		list.appendChild(li);
+	}
+	section.appendChild(list);
+}
+
 function failure(name, response) {
 	let dashboard = document.getElementById("dashboard");
 
@@ -479,6 +553,7 @@ function prefillSearch(formFields) {
 		input.value = now.toISOString().slice(0, 16);
 	}
 }
+
 fetch('./formfields.json')
 	.then(response => {
 		if (!response.ok) {
@@ -513,12 +588,38 @@ let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
 let unit = (new URLSearchParams(window.location.search)).get('unit');
 let platform = (new URLSearchParams(window.location.search)).get('platform');
 let goBranch = (new URLSearchParams(window.location.search)).get('branch');
+let regressions = (new URLSearchParams(window.location.search)).get('regressions');
 if (!goBranch) {
 	// Assume the same thing the server does when no branch is specified.
 	goBranch = "master";
 }
-let dataURL = './data.json' + window.location.search; // Pass through all URL params.
-fetch(dataURL)
+
+function fetchData(params, callback) {
+	let dataURL = './data.json?' + params;
+	fetch(dataURL)
+		.then(response => {
+			if (!response.ok) {
+				failure(benchmark, response);
+				throw new Error("Data fetch failed");
+			}
+			return response.json();
+		})
+		.then(function(data) {
+			let benchmarks = data.Benchmarks;
+
+			// Convert CommitDate to a proper dates.
+			benchmarks.forEach(function(b) {
+				b.Values.forEach(function(v) {
+					v.CommitDate = new Date(v.CommitDate);
+				});
+			});
+
+			callback(benchmarks);
+		});
+}
+
+let benchmarksURL = './benchmarks.json' + window.location.search; // Pass through all URL params.
+fetch(benchmarksURL)
 	.then(response => {
 		if (!response.ok) {
 			failure(benchmark, response);
@@ -526,31 +627,74 @@ fetch(dataURL)
 		}
 		return response.json();
 	})
-	.then(function(data) {
-		let benchmarks = data.Benchmarks;
-		let commits = data.Commits;
+	.then(function(benchmarks) {
+		let benchmarkKeys = benchmarks.Benchmarks;
+		let commits = benchmarks.Commits;
 
-		// Convert CommitDate and Date to a proper dates.
-		benchmarks.forEach(function(b) {
-			b.Values.forEach(function(v) {
-				v.CommitDate = new Date(v.CommitDate);
-			});
-		});
+		// Render a list of benchmarks if the user asks for all of them.
+		if (benchmark === 'all' && regressions !== 'true') {
+			addBenchmarkList(benchmarkKeys);
+			return;
+		}
+
+		// Convert Date to a proper dates.
 		commits.forEach(function(c) {
 			c.Date = new Date(c.Date);
 		})
 
-		// Figure out the date range we care about.
-
 		// If we have an explicit unit, then there should be just one result.
-		if (unit && platform && platform != "all") {
-			if (benchmarks.length !== 1) {
-				failure(benchmark, "got more that one benchmark when a unit was specified");
-				throw new Error("Data fetch failed");
-			}
-			addTable(benchmarks[0], unit, platform, repository, goBranch, commits);
+		let callback = null;
+		if (benchmarkKeys.length === 1 && unit && platform && platform != "all") {
+			callback = (benchmarks) => addTable(benchmarks[0], unit, platform, repository, goBranch, commits);
 		} else {
-			addCharts(benchmarks, repository, goBranch, commits);
+			callback = (benchmarks) => addCharts(benchmarks, repository, goBranch, commits);
+		}
+
+		// Customize the home page.
+		if (!benchmark && repository === "go") {
+			for (const k in benchmarkKeys) {
+				let params = new URLSearchParams(window.location.search);
+				params.set('benchmark', benchmarkKeys[k].Name); // Pass through all URL params, but be specific about the benchmark name.
+				params.set('unit', 'sec/op');
+				fetchData(params, callback);
+				params.set('unit', 'average-RSS-bytes');
+				fetchData(params, callback);
+				params.set('unit', 'peak-RSS-bytes');
+				fetchData(params, callback);
+			}
+		} else {
+			let loadWord = "Loading";
+			if (regressions === 'true') {
+				loadWord = "Checking";
+			}
+			const popup = document.createElement("div");
+			popup.classList.add("Dashboard-popup");
+			popup.textContent = loadWord+" benchmarks 0/"+benchmarkKeys.length.toString();
+			document.body.appendChild(popup);
+
+			// Load all the charts.
+			let k = 0;
+			let n = 0;
+			const max = 4;
+			function dispatch() {
+				while (k < benchmarkKeys.length && n < max) {
+					let params = new URLSearchParams(window.location.search);
+					params.set('benchmark', benchmarkKeys[k].Name); // Pass through all URL params, but be specific about the benchmark name.
+					fetchData(params, function(benchmarks) {
+						n--;
+						callback(benchmarks);
+					});
+					k++;
+					n++;
+					popup.textContent = loadWord+" benchmarks "+k.toString()+"/"+benchmarkKeys.length.toString();
+				}
+				if (k < benchmarkKeys.length) {
+					setTimeout(dispatch, 100);
+				} else {
+					document.body.removeChild(popup);
+				}
+			}
+			dispatch();
 		}
 	});
 </script>

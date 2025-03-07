@@ -221,3 +221,13 @@ input[type=number] {
   font-style: oblique;
   text-align: center;
 }
+.Dashboard-popup {
+  color: #375eab;
+  font-size: 22px;
+  background: #e0ebf5;
+  display: block;
+  position: fixed;
+  right: 0;
+  bottom: 32px;
+  padding: 10px;
+}

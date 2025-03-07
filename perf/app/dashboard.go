@@ -49,14 +49,25 @@ var dashboardFS embed.FS
 func (a *App) dashboardRegisterOnMux(mux *http.ServeMux) {
 	mux.Handle("/dashboard/", http.FileServer(http.FS(dashboardFS)))
 	mux.Handle("/dashboard/third_party/bandchart/", http.StripPrefix("/dashboard/third_party/bandchart/", http.FileServer(http.FS(bandchart.FS))))
+	mux.HandleFunc("/dashboard/benchmarks.json", a.benchmarkList)
 	mux.HandleFunc("/dashboard/data.json", a.dashboardData)
 	mux.HandleFunc("/dashboard/formfields.json", a.formFields)
+}
+
+// BenchmarksJSON is the result of accessing the benchmarks.json endpoint.
+type BenchmarksJSON struct {
+	Benchmarks []BenchmarkKey
+	Commits    []Commit
+}
+
+type BenchmarkKey struct {
+	Name       string
+	Repository string
 }
 
 // DataJSON is the result of accessing the data.json endpoint.
 type DataJSON struct {
 	Benchmarks []*BenchmarkJSON
-	Commits    []Commit
 }
 
 // BenchmarkJSON contains the timeseries values for a single benchmark name +
@@ -97,7 +108,7 @@ type filter struct {
 	goBranch   string    // Required.
 }
 
-func fluxRecordToValue(rec *query.FluxRecord) (ValueJSON, error) {
+func fluxRecordToValueJSON(rec *query.FluxRecord) (ValueJSON, error) {
 	low, ok := rec.ValueByKey("low").(float64)
 	if !ok {
 		return ValueJSON{}, fmt.Errorf("record %s low value got type %T want float64", rec, rec.ValueByKey("low"))
@@ -218,49 +229,43 @@ from(bucket: "perf")
 	return b[0], nil
 }
 
-// fetchDefaultBenchmarks queries Influx for the default benchmark set.
-func fetchDefaultBenchmarks(ctx context.Context, qc api.QueryAPI, f *filter) ([]*BenchmarkJSON, error) {
-	if f.repository != "go" {
-		// No defaults defined for other subrepos yet, just return an
-		// empty set.
-		return nil, nil
+func fetchBenchmarkKeys(ctx context.Context, qc api.QueryAPI, start, end time.Time) ([]BenchmarkKey, error) {
+	// Find any points in the time range and group by only the name and repository to get the set of unique name/repository combinations.
+	query := fmt.Sprintf(`
+from(bucket: "perf")
+  |> range(start: %s, stop: %s)
+  |> filter(fn: (r) => r["_measurement"] == "benchmark-result")
+  |> filter(fn: (r) => r["_field"] == "upload-time")
+  |> group(columns: ["name", "repository"])
+  |> unique(column: "repository")
+  |> yield(name: "unique")
+`, start.Format(time.RFC3339), end.Format(time.RFC3339))
+
+	res, err := influxQuery(ctx, qc, query)
+	if err != nil {
+		return nil, fmt.Errorf("error performing query: %w", err)
 	}
 
-	// Keep benchmarks with the same name grouped together, which is
-	// assumed by the JS.
-	benchmarks := []struct{ name, unit string }{
-		{"geomean/go/vs_release/c2s16", "sec/op"},
-		{"geomean/go/vs_release/c2s16", "average-RSS-bytes"},
-		{"geomean/go/vs_release/c2s16", "peak-RSS-bytes"},
-		{"geomean/go/vs_release/c4as16", "sec/op"},
-		{"geomean/go/vs_release/c4as16", "average-RSS-bytes"},
-		{"geomean/go/vs_release/c4as16", "peak-RSS-bytes"},
-		{"geomean/go/vs_release/c3h88", "sec/op"},
-		{"geomean/go/vs_release/c3h88", "average-RSS-bytes"},
-		{"geomean/go/vs_release/c3h88", "peak-RSS-bytes"},
-		{"geomean/go/vs_release/c4ah72", "sec/op"},
-		{"geomean/go/vs_release/c4ah72", "average-RSS-bytes"},
-		{"geomean/go/vs_release/c4ah72", "peak-RSS-bytes"},
-	}
+	var keys []BenchmarkKey
+	for res.Next() {
+		rec := res.Record()
 
-	ret := make([]*BenchmarkJSON, 0, len(benchmarks))
-	for _, bench := range benchmarks {
-		b, err := fetchNamedUnitBenchmark(ctx, qc, f, bench.name, bench.unit)
-		if errors.Is(err, errBenchmarkNotFound) {
-			continue
+		name, ok := rec.ValueByKey("name").(string)
+		if !ok {
+			return nil, fmt.Errorf("record %s name got type %T want string", rec, rec.ValueByKey("name"))
 		}
-		if err != nil {
-			return nil, fmt.Errorf("error fetching benchmark %s/%s: %w", bench.name, bench.unit, err)
+		repo, ok := rec.ValueByKey("repository").(string)
+		if !ok {
+			return nil, fmt.Errorf("record %s name got type %T want string", rec, rec.ValueByKey("repository"))
 		}
-		ret = append(ret, b)
+		keys = append(keys, BenchmarkKey{Name: name, Repository: repo})
 	}
-
-	return ret, nil
+	return keys, nil
 }
 
 // fetchNamedBenchmark queries Influx for all benchmark results with the passed
 // name (for all units).
-func fetchNamedBenchmark(ctx context.Context, qc api.QueryAPI, f *filter, name string) ([]*BenchmarkJSON, error) {
+func fetchNamedBenchmark(ctx context.Context, qc api.QueryAPI, f *filter, name string, regressions bool) ([]*BenchmarkJSON, error) {
 	if err := validateFluxString(f.repository); err != nil {
 		return nil, fmt.Errorf("invalid repository name: %w", err)
 	}
@@ -303,7 +308,7 @@ from(bucket: "perf")
 		return nil, fmt.Errorf("error performing query: %w", err)
 	}
 
-	b, err := groupBenchmarkResults(res, false)
+	b, err := groupBenchmarkResults(res, regressions)
 	if err != nil {
 		return nil, err
 	}
@@ -311,49 +316,6 @@ from(bucket: "perf")
 		return nil, errBenchmarkNotFound
 	}
 	return b, nil
-}
-
-// fetchAllBenchmarks queries Influx for all benchmark results.
-func fetchAllBenchmarks(ctx context.Context, qc api.QueryAPI, regressions bool, f *filter) ([]*BenchmarkJSON, error) {
-	if err := validateFluxString(f.repository); err != nil {
-		return nil, fmt.Errorf("invalid repository name: %w", err)
-	}
-	if f.goos != "" {
-		if err := validateFluxString(f.goos); err != nil {
-			return nil, fmt.Errorf("invalid GOOS: %w", err)
-		}
-	}
-	if f.goarch != "" {
-		if err := validateFluxString(f.goarch); err != nil {
-			return nil, fmt.Errorf("invalid GOOS: %w", err)
-		}
-	}
-	if err := validateFluxString(f.goBranch); err != nil {
-		return nil, fmt.Errorf("invalid go branch name: %w", err)
-	}
-
-	// Note that very old points are missing the "repository" field. fill()
-	// sets repository=go on all points missing that field, as they were
-	// all runs of the go repo.
-	query := fmt.Sprintf(`
-from(bucket: "perf")
-  |> range(start: %s, stop: %s)
-  |> filter(fn: (r) => r["_measurement"] == "benchmark-result")
-  |> filter(fn: (r) => r["branch"] == "%s")
-  |> filter(fn: (r) => ("%s" != "" and r["goos"] == "%s") or "%s" == "")
-  |> filter(fn: (r) => ("%s" != "" and r["goarch"] == "%s") or "%s" == "")
-  |> fill(column: "repository", value: "go")
-  |> filter(fn: (r) => r["repository"] == "%s")
-  |> pivot(columnKey: ["_field"], rowKey: ["_time"], valueColumn: "_value")
-  |> yield(name: "last")
-`, f.start.Format(time.RFC3339), f.end.Format(time.RFC3339), f.goBranch, f.goos, f.goos, f.goos, f.goarch, f.goarch, f.goarch, f.repository)
-
-	res, err := influxQuery(ctx, qc, query)
-	if err != nil {
-		return nil, fmt.Errorf("error performing query: %w", err)
-	}
-
-	return groupBenchmarkResults(res, regressions)
 }
 
 type RegressionJSON struct {
@@ -365,11 +327,11 @@ type RegressionJSON struct {
 	deltaScore float64 // score of that change (in 95%ile boxes)
 }
 
-// queryToJson process a QueryTableResult into a slice of BenchmarkJSON,
+// fluxRecordsToBenchmarkJSON process a QueryTableResult into a slice of BenchmarkJSON,
 // with that slice in no particular order (i.e., it needs to be sorted or
 // run-to-run results will vary).  For each benchmark in the slice, however,
 // results are sorted into commit-date order.
-func queryToJson(res *api.QueryTableResult) ([]*BenchmarkJSON, error) {
+func fluxRecordsToBenchmarkJSON(res *api.QueryTableResult) ([]*BenchmarkJSON, error) {
 	type key struct {
 		name   string
 		unit   string
@@ -414,7 +376,7 @@ func queryToJson(res *api.QueryTableResult) ([]*BenchmarkJSON, error) {
 			m[k] = b
 		}
 
-		v, err := fluxRecordToValue(res.Record())
+		v, err := fluxRecordToValueJSON(res.Record())
 		if err != nil {
 			return nil, err
 		}
@@ -434,47 +396,20 @@ func queryToJson(res *api.QueryTableResult) ([]*BenchmarkJSON, error) {
 	return s, nil
 }
 
-// filterAndSortRegressions filters out benchmarks that didn't regress and sorts the
-// benchmarks in s so that those with the largest detectable regressions come first.
-func filterAndSortRegressions(s []*BenchmarkJSON) []*BenchmarkJSON {
-	// Compute per-benchmark estimates of point where the most interesting regression happened.
-	for _, b := range s {
-		b.Regression = worstRegression(b)
-		// TODO(mknyszek, drchase, mpratt): Filter out benchmarks once we're confident this
-		// algorithm works OK.
-	}
-
-	// Sort benchmarks with detectable regressions first, ordered by
-	// size of regression at end of sample.  Also sort the remaining
-	// benchmarks into end-of-sample regression order.
-	sort.Slice(s, func(i, j int) bool {
-		ri, rj := s[i].Regression, s[j].Regression
-		// regressions w/ a delta index come first
-		if (ri.DeltaIndex < 0) != (rj.DeltaIndex < 0) {
-			return rj.DeltaIndex < 0
-		}
-		if ri.Change != rj.Change {
-			// put larger regression first.
-			return ri.Change > rj.Change
-		}
-		if s[i].Name == s[j].Name {
-			return s[i].Unit < s[j].Unit
-		}
-		return s[i].Name < s[j].Name
-	})
-	return s
-}
-
 // groupBenchmarkResults groups all benchmark results from the passed query.
 // if byRegression is true, order the benchmarks with largest current regressions
 // with detectable points first.
-func groupBenchmarkResults(res *api.QueryTableResult, byRegression bool) ([]*BenchmarkJSON, error) {
-	s, err := queryToJson(res)
+func groupBenchmarkResults(res *api.QueryTableResult, regression bool) ([]*BenchmarkJSON, error) {
+	s, err := fluxRecordsToBenchmarkJSON(res)
 	if err != nil {
 		return nil, err
 	}
-	if byRegression {
-		return filterAndSortRegressions(s), nil
+	if regression {
+		for _, b := range s {
+			b.Regression = worstRegression(b)
+			// TODO(mknyszek, drchase, mpratt): Filter out benchmarks once we're confident this
+			// algorithm works OK.
+		}
 	}
 	// Keep benchmarks with the same name grouped together, which is
 	// assumed by the JS.
@@ -612,13 +547,7 @@ const (
 	maxDays     = 366
 )
 
-// search handles /dashboard/data.json.
-//
-// TODO(prattmic): Consider caching Influx results in-memory for a few mintures
-// to reduce load on Influx.
-func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
+func parseBenchmarkQueryParams(ctx context.Context, r *http.Request, log *log.Logger) (*filter, int, error) {
 	days := uint64(defaultDays)
 	dayParam := r.FormValue("days")
 	if dayParam != "" {
@@ -626,13 +555,11 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		days, err = strconv.ParseUint(dayParam, 10, 32)
 		if err != nil {
 			log.Printf("Error parsing days %q: %v", dayParam, err)
-			http.Error(w, fmt.Sprintf("day parameter must be a positive integer less than or equal to %d", maxDays), http.StatusBadRequest)
-			return
+			return nil, http.StatusBadRequest, fmt.Errorf("day parameter must be a positive integer less than or equal to %d", maxDays)
 		}
 		if days == 0 || days > maxDays {
 			log.Printf("days %d too large", days)
-			http.Error(w, fmt.Sprintf("day parameter must be a positive integer less than or equal to %d", maxDays), http.StatusBadRequest)
-			return
+			return nil, http.StatusBadRequest, fmt.Errorf("day parameter must be a positive integer less than or equal to %d", maxDays)
 		}
 	}
 
@@ -647,27 +574,10 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		end, err = time.Parse("2006-01-02T15:04", endParam)
 		if err != nil {
 			log.Printf("Error parsing end %q: %v", endParam, err)
-			http.Error(w, "end parameter must be a timestamp similar to RFC3339 without a time zone, like 2000-12-31T15:00", http.StatusBadRequest)
-			return
+			return nil, http.StatusBadRequest, fmt.Errorf("end parameter must be a timestamp similar to RFC3339 without a time zone, like 2000-12-31T15:00")
 		}
 	}
-
 	start := end.Add(-24 * time.Hour * time.Duration(days))
-
-	methStart := time.Now()
-	defer func() {
-		log.Printf("Dashboard total query time: %s", time.Since(methStart))
-	}()
-
-	ifxc, err := a.influxClient(ctx)
-	if err != nil {
-		log.Printf("Error getting Influx client: %v", err)
-		http.Error(w, "Error connecting to Influx", 500)
-		return
-	}
-	defer ifxc.Close()
-
-	qc := ifxc.QueryAPI(influx.Org)
 
 	repository := r.FormValue("repository")
 	if repository == "" {
@@ -680,7 +590,7 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		releases, err := goReleasesCache.Get(ctx)
 		if err != nil {
 			log.Printf("Fetching latest release: %v", err)
-			http.Error(w, "Error fetching latest release", 500)
+			return nil, http.StatusInternalServerError, fmt.Errorf("error fetching latest release")
 		}
 		branch = latestRelease(releases).BranchName
 	}
@@ -698,17 +608,50 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		goos, goarch, err := parsePlatform(platform)
 		if err != nil {
 			log.Printf("Invalid platform %q: %v", platform, err)
-			http.Error(w, "Error parsing platform", 400)
+			return nil, http.StatusBadRequest, fmt.Errorf("error parsing platform")
 		}
 		f.goos = goos
 		f.goarch = goarch
 	}
+	return f, http.StatusOK, nil
+}
 
-	historyBranch := branch
-	if repository != "go" {
+var defaultBenchmarks = map[string][]BenchmarkKey{
+	"go": []BenchmarkKey{
+		{"geomean/go/vs_release/c2s16", "go"},
+		{"geomean/go/vs_release/c4as16", "go"},
+		{"geomean/go/vs_release/c3h88", "go"},
+		{"geomean/go/vs_release/c4ah72", "go"},
+	},
+	"tools": []BenchmarkKey{
+		{"geomean/x_tools/vs_gopls_0_11/c2s16", "tools"},
+		{"geomean/x_tools/vs_gopls_0_11/c4as16", "tools"},
+	},
+}
+
+// benchmarkList handles /dashboard/benchmarks.json.
+//
+// TODO(prattmic): Consider caching Influx results in-memory for a few mintures
+// to reduce load on Influx.
+func (a *App) benchmarkList(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	methStart := time.Now()
+	defer func() {
+		log.Printf("Benchmark list total query time: %s", time.Since(methStart))
+	}()
+
+	f, status, err := parseBenchmarkQueryParams(ctx, r, log.Default())
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	historyBranch := f.goBranch
+	if f.repository != "go" {
 		historyBranch = "master"
 	}
-	commits, err := fetchGitHistory(ctx, gitilesHost, repository, historyBranch, start, end)
+	commits, err := fetchGitHistory(ctx, gitilesHost, f.repository, historyBranch, f.start, f.end)
 	if err != nil {
 		log.Printf("Fetching git history: %v", err)
 		http.Error(w, "Error fetching git history", 500)
@@ -717,17 +660,100 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 	// Commits come out newest-first, we want oldest-first.
 	slices.Reverse(commits)
 
+	ifxc, err := a.influxClient(ctx)
+	if err != nil {
+		log.Printf("Error getting Influx client: %v", err)
+		http.Error(w, "Error connecting to Influx", 500)
+		return
+	}
+	defer ifxc.Close()
+
+	qc := ifxc.QueryAPI(influx.Org)
+
+	// Fetch benchmark names, or use the default set.
+	benchmarkKeys := defaultBenchmarks[f.repository]
+
+	benchmark := r.FormValue("benchmark")
+	if benchmark != "" {
+		benchmarkKeys, err = fetchBenchmarkKeys(ctx, qc, f.start, f.end)
+		if err != nil {
+			log.Printf("Error fetching benchmarks: %v", err)
+			http.Error(w, "Error fetching benchmarks", 500)
+			return
+		}
+		// Filter out benchmark names that don't match.
+		for i := 0; i < len(benchmarkKeys); {
+			key := benchmarkKeys[i]
+			if key.Repository != f.repository || (benchmark != "all" && !strings.Contains(key.Name, benchmark)) {
+				benchmarkKeys[i] = benchmarkKeys[len(benchmarkKeys)-1]
+				benchmarkKeys = benchmarkKeys[:len(benchmarkKeys)-1]
+				continue
+			}
+			i++
+		}
+	}
+	if len(benchmarkKeys) == 0 {
+		log.Printf("No benchmarks like %s found", benchmark)
+		http.Error(w, "No matching benchmarks found", 404)
+		return
+	}
+	slices.SortFunc(benchmarkKeys, func(a, b BenchmarkKey) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		w = &gzipResponseWriter{w: gz, ResponseWriter: w}
+	}
+
+	if err := json.NewEncoder(w).Encode(&BenchmarksJSON{Benchmarks: benchmarkKeys, Commits: commits}); err != nil {
+		log.Printf("Error encoding results: %v", err)
+		http.Error(w, "Internal error, see logs", 500)
+	}
+}
+
+// dashboardData handles /dashboard/data.json.
+//
+// TODO(prattmic): Consider caching Influx results in-memory for a few mintures
+// to reduce load on Influx.
+func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	methStart := time.Now()
+	defer func() {
+		log.Printf("Dashboard total query time: %s", time.Since(methStart))
+	}()
+
+	f, status, err := parseBenchmarkQueryParams(ctx, r, log.Default())
+	if err != nil {
+		http.Error(w, err.Error(), status)
+		return
+	}
+
+	ifxc, err := a.influxClient(ctx)
+	if err != nil {
+		log.Printf("Error getting Influx client: %v", err)
+		http.Error(w, "Error connecting to Influx", 500)
+		return
+	}
+	defer ifxc.Close()
+
+	qc := ifxc.QueryAPI(influx.Org)
+
+	regressions := r.FormValue("regressions")
 	benchmark := r.FormValue("benchmark")
 	unit := r.FormValue("unit")
 	var benchmarks []*BenchmarkJSON
 	if benchmark == "" {
-		benchmarks, err = fetchDefaultBenchmarks(ctx, qc, f)
-	} else if benchmark == "all" {
-		benchmarks, err = fetchAllBenchmarks(ctx, qc, false, f)
-	} else if benchmark == "regressions" {
-		benchmarks, err = fetchAllBenchmarks(ctx, qc, true, f)
-	} else if benchmark != "" && unit == "" {
-		benchmarks, err = fetchNamedBenchmark(ctx, qc, f, benchmark)
+		log.Printf("data.json: no benchmark name")
+		http.Error(w, "No benchmark name specified", http.StatusBadRequest)
+		return
+	}
+	if unit == "" {
+		benchmarks, err = fetchNamedBenchmark(ctx, qc, f, benchmark, regressions == "true")
 	} else {
 		var result *BenchmarkJSON
 		result, err = fetchNamedUnitBenchmark(ctx, qc, f, benchmark, unit)
@@ -755,7 +781,7 @@ func (a *App) dashboardData(w http.ResponseWriter, r *http.Request) {
 		w = &gzipResponseWriter{w: gz, ResponseWriter: w}
 	}
 
-	if err := json.NewEncoder(w).Encode(&DataJSON{Benchmarks: benchmarks, Commits: commits}); err != nil {
+	if err := json.NewEncoder(w).Encode(&DataJSON{Benchmarks: benchmarks}); err != nil {
 		log.Printf("Error encoding results: %v", err)
 		http.Error(w, "Internal error, see logs", 500)
 	}
