@@ -513,6 +513,10 @@ let benchmark = (new URLSearchParams(window.location.search)).get('benchmark');
 let unit = (new URLSearchParams(window.location.search)).get('unit');
 let platform = (new URLSearchParams(window.location.search)).get('platform');
 let goBranch = (new URLSearchParams(window.location.search)).get('branch');
+if (!goBranch) {
+	// Assume the same thing the server does when no branch is specified.
+	goBranch = "master";
+}
 let dataURL = './data.json' + window.location.search; // Pass through all URL params.
 fetch(dataURL)
 	.then(response => {
