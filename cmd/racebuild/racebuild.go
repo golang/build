@@ -393,6 +393,35 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
+	{
+		OS:   "linux",
+		Arch: "loong64",
+		Type: "gotip-linux-loong64",
+		Script: `#!/usr/bin/env bash
+set -e
+cat /etc/os-release
+# Because LUCI builder is not run as root, these dependencies have been manually installed
+# yum install -y gcc-c++ git golang-bin unzip
+git clone https://go.googlesource.com/go
+pushd go
+git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
+popd
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_loong64.syso go/src/runtime/race
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_loong64.syso outdir/race_linux_loong64.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
+(cd go/src && ./race.bash)
+			`,
+	},
 }
 
 func init() {
