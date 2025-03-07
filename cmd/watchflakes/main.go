@@ -269,6 +269,27 @@ Repeat:
 		return
 	}
 
+	// Check if we're about to post too many new issues.
+	//
+	// This shouldn't happen normally, but might happen if the GitHub API were to
+	// misbehave and return an incomplete list of issues and no error, as it might
+	// have done in go.dev/issue/72731.
+	if *post {
+		const tooManyNewIssues = 100
+		newIssues := 0
+		for _, issue := range issues {
+			if issue.Number == 0 {
+				newIssues++
+			}
+		}
+		if newIssues >= tooManyNewIssues {
+			err := fmt.Errorf("need to create %d new issues, which might be a recurrence of go.dev/issue/72731; %d boards, %d failures, %d issues, in %v", newIssues, len(boards), len(failRes), len(issues), time.Since(startTime))
+			log.Println("Backing off and then crashing out of abundance of caution:", err)
+			time.Sleep(30 * time.Minute)
+			log.Fatalln("Now crashing out of abundance of caution:", err)
+		}
+	}
+
 	posts := 0
 	for _, issue := range issues {
 		if len(issue.Post) > 0 {
