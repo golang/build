@@ -555,8 +555,7 @@ This is intended for releases with 1+ PRIVATE-track security fixes.`,
 		wf.Output(wd, "Maintained golang.org/x repos", urls)
 	}
 
-	dockerBuild := wf.Task1(wd, "Start Google Docker build", build.runGoogleDockerBuild, nextVersion, wf.After(uploaded))
-	dockerResult := wf.Task1(wd, "Await Google Docker build", build.awaitCloudBuild, dockerBuild)
+	dockerResult := wf.Task1(wd, "Run and Await Google Docker build", build.runAndAwaitGoogleDockerBuild, nextVersion, wf.After(uploaded))
 	wf.Output(wd, "Google Docker image status", dockerResult)
 
 	wf.Output(wd, "Published to website", published)
@@ -1724,17 +1723,20 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 	return task.Published{Version: version, Files: files}, nil
 }
 
-func (b *BuildReleaseTasks) runGoogleDockerBuild(ctx context.Context, version string) (task.CloudBuild, error) {
+func (b *BuildReleaseTasks) runAndAwaitGoogleDockerBuild(ctx *wf.TaskContext, version string) (detail string, _ error) {
 	// Because we want to publish versions without the leading "go", it's easiest to strip it here.
 	v := strings.TrimPrefix(version, "go")
-	return b.CloudBuildClient.RunBuildTrigger(ctx, b.GoogleDockerBuildProject, b.GoogleDockerBuildTrigger, map[string]string{"_GO_VERSION": v})
-}
-
-func (b *BuildReleaseTasks) awaitCloudBuild(ctx *wf.TaskContext, build task.CloudBuild) (string, error) {
-	detail, err := task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
+	// We're about to trigger a Cloud Build run, and then await its result.
+	// Allow only manual retries from this point to remove the possibility
+	// of multiple Cloud Build runs being started by automated retries.
+	ctx.DisableRetries()
+	build, err := b.CloudBuildClient.RunBuildTrigger(ctx, b.GoogleDockerBuildProject, b.GoogleDockerBuildTrigger, map[string]string{"_GO_VERSION": v})
+	if err != nil {
+		return "", err
+	}
+	return task.AwaitCondition(ctx, 30*time.Second, func() (string, bool, error) {
 		return b.CloudBuildClient.Completed(ctx, build)
 	})
-	return detail, err
 }
 
 // jsonEncodeScratchFile JSON encodes v into a new scratch file and returns its name.
