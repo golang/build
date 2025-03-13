@@ -266,7 +266,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mknyszek, prattmic},
 	},
 	"go/src/cmd/vet": {
-		Primary:   []Owner{matloob},
+		Primary: []Owner{matloob},
 	},
 	"go/src/cmp": {
 		Primary:   []Owner{iant},
@@ -770,7 +770,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{vulndbTeam},
 	},
 	"mobile": {
-		Primary: []Owner{hyangah},
+		Primary: []Owner{},
 	},
 	"mod": {
 		Primary: []Owner{matloob, samthanawalla},
