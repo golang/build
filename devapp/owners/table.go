@@ -41,6 +41,7 @@ var (
 	filippo       = gh("FiloSottile")
 	findleyr      = gh("findleyr")
 	gri           = gh("griesemer")
+	hajimehoshi   = gh("hajimehoshi")
 	hxjiang       = gh("h9jiang")
 	hyangah       = gh("hyangah")
 	iant          = gh("ianlancetaylor")
@@ -770,7 +771,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{vulndbTeam},
 	},
 	"mobile": {
-		Primary: []Owner{},
+		Primary: []Owner{hajimehoshi},
 	},
 	"mod": {
 		Primary: []Owner{matloob, samthanawalla},
