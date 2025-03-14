@@ -3,15 +3,12 @@
 #  - compile: build all buildlets (but do not upload)
 #  - upload: build and upload all buildlets to prod
 #  - dev-upload: build and upload all buildlets to dev cluster
-#  - install-go: install the version of Go needed by the Makefile
 #
 # Individual targets:
 #
 #  - buildlet.linux-amd64: build buildlet for linux-amd64 (but do not upload)
 #  - upload.linux-amd64: build buildlet for linux-amd64 and upload to prod
 #  - dev-upload.linux-amd64: build buildlet for linux-amd64 and upload to dev cluster
-
-GO=go1.22.8
 
 ALL=\
 	buildlet.aix-ppc64 \
@@ -65,11 +62,6 @@ usage: FORCE
 
 FORCE:
 
-# A convenience for people who are missing $(GO).
-install-go:
-	go install golang.org/dl/$(GO)@latest
-	$(GO) download
-
 clean:
 	rm -f buildlet.*-*
 
@@ -80,7 +72,7 @@ GOFILES:=$(shell ls *.go)
 
 VERSION:=$(USER)-$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-BUILD=CGO_ENABLED=0 $(GO) build -ldflags='-X main.Version=$(VERSION)' -o
+BUILD=CGO_ENABLED=0 go build -ldflags='-X main.Version=$(VERSION)' -o
 
 buildlet.%-386: $(GOFILES)
 	GOOS=$* GOARCH=386 $(BUILD) $@
@@ -145,7 +137,7 @@ buildlet.%-s390x: $(GOFILES)
 # Upload everything.
 upload: $(ALL:buildlet.%=upload.%)
 
-UPLOAD=$(GO) run golang.org/x/build/cmd/upload -verbose -public -cacheable=false
+UPLOAD=go run golang.org/x/build/cmd/upload -verbose -public -cacheable=false
 
 upload.%: buildlet.%
 	$(UPLOAD) -file=$< go-builder-data/$<

@@ -4,7 +4,6 @@
 #  - upload: build and upload all stage0 binaries to prod
 #  - dev-upload: build and upload all stage0 binaries to dev cluster
 #  - docker: build golang/buildlet-stage0 Docker image (but do not push)
-#  - install-go: install the version of Go needed by the Makefile
 #
 # Individual targets:
 #
@@ -18,8 +17,6 @@
 # The only reason we upload them to GCS is because that's where the
 # automated VM/container creation scripts download them from.
 #
-
-GO=go1.19
 
 ALL=\
 	buildlet-stage0.illumos-amd64 \
@@ -43,11 +40,6 @@ usage: FORCE
 
 FORCE:
 
-# A convenience for people who are missing $(GO).
-install-go:
-	go install golang.org/dl/$(GO)@latest
-	$(GO) download
-
 clean:
 	rm -f buildlet-stage0.*-*
 
@@ -56,7 +48,7 @@ compile: $(ALL)
 
 GOFILES:=$(shell ls *.go)
 
-BUILD=CGO_ENABLED=0 $(GO) build -o
+BUILD=CGO_ENABLED=0 go build -o
 
 buildlet-stage0.%-arm: $(GOFILES)
 	GOOS=$* GOARCH=arm GOARM=7 $(BUILD) $@
@@ -98,7 +90,7 @@ docker: Dockerfile
 # Upload everything.
 upload: $(ALL:buildlet-stage0.%=upload.%)
 
-UPLOAD=$(GO) run golang.org/x/build/cmd/upload -verbose -public -cacheable=false
+UPLOAD=go run golang.org/x/build/cmd/upload -verbose -public -cacheable=false
 
 upload.%: buildlet-stage0.%
 	$(UPLOAD) -file=$< go-builder-data/$<
