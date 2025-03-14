@@ -30,6 +30,7 @@ ALL=\
 	buildlet.linux-arm-7 \
 	buildlet.linux-arm-arm5 \
 	buildlet.linux-arm64 \
+	buildlet.linux-loong64 \
 	buildlet.linux-mips \
 	buildlet.linux-mips64 \
 	buildlet.linux-mips64le \
@@ -113,6 +114,9 @@ buildlet.plan9-arm: buildlet.plan9-arm-5
 
 buildlet.%-arm64: $(GOFILES)
 	GOOS=$* GOARCH=arm64 $(BUILD) $@
+
+buildlet.%-loong64: $(GOFILES)
+	GOOS=$* GOARCH=loong64 $(BUILD) $@
 
 buildlet.%-mips: $(GOFILES)
 	GOOS=$* GOARCH=mips $(BUILD) $@
