@@ -296,7 +296,6 @@ TBD_CAPACITY_HOSTS = [
     "linux-s390x",
     "netbsd-386",
     "netbsd-amd64",
-    "openbsd-386",
     "windows-arm",
 ]
 
@@ -384,6 +383,7 @@ DEFAULT_HOST_SUFFIX = {
     "freebsd-amd64": "14.1",
     "linux-amd64": "debian11",
     "linux-arm64": "debian12",
+    "openbsd-386": "7.6",
     "openbsd-amd64": "7.6",
     "windows-386": "10",
     "windows-amd64": "10",
