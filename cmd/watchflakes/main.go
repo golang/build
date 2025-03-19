@@ -356,8 +356,18 @@ func reportBrokenBots(ctx context.Context, c *LUCIClient) {
 	if err != nil {
 		log.Printf("failed to query for platform owners: %s", err)
 	}
+
+	// lastSeenThreshold is the minimum amount of time a dead bot has not been
+	// seen in before an issue is created for it.
+	lastSeenThreshold := 24 * time.Hour
+
 	// for each broken bot, is there an existing open issue?
 	for _, bot := range brokenBots {
+		// Do not open to an issue when a dead bot has not been dead for at least the lastSeenThreshold amount.
+		if bot.Dead && bot.LastSeen.After(time.Now().Add(-lastSeenThreshold)) {
+			fmt.Printf("broken bot %q has not been dead for %s. Skipping issue creation/updates.", bot.ID, lastSeenThreshold.String())
+			continue
+		}
 		if issueID, ok := botIssues[bot.ID]; ok {
 			fmt.Printf("issue #%d found for broken bot %s\n", issueID, bot.ID)
 			continue

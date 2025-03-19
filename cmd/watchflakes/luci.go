@@ -152,6 +152,7 @@ type Bot struct {
 	Goarch      string
 	Dead        bool
 	Quarantined bool
+	LastSeen    time.Time
 }
 
 // ListCommits fetches the list of commits from Gerrit.
@@ -733,7 +734,13 @@ nextCursor:
 				fmt.Printf("failed to determine platform for %s: %s\n", bot.GetBotId(), err)
 				continue
 			}
-			brokenBots = append(brokenBots, Bot{ID: bot.BotId, Dead: bot.IsDead, Quarantined: bot.Quarantined, Goos: goos, Goarch: goarch})
+			brokenBots = append(brokenBots, Bot{
+				ID:          bot.BotId,
+				Dead:        bot.IsDead,
+				Quarantined: bot.Quarantined,
+				Goos:        goos,
+				Goarch:      goarch,
+				LastSeen:    bot.GetLastSeenTs().AsTime()})
 		}
 	}
 	if resp.GetCursor() != "" {
