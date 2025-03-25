@@ -1,22 +1,18 @@
 make.bash creates a Google Compute Engine VM image to run the Go
-FreeBSD builder, booting up to run the buildlet.
+FreeBSD builder, booting up to run the bootstrapswarm command.
 
 make.bash should be run on a Linux box with qemu and a few additional packages.
 on ubuntu 20.04:
-  apt-get install qemu-system-x86 qemu-utils expect genisoimage
+    apt-get install qemu-system-x86 qemu-utils expect genisoimage
+    ./make.bash 14.2
 
-After it completes, it creates a file freebsd-amd64-gce101.tar.gz
+After it completes, it creates a file freebsd-amd64-142.tar.gz.
 
 Then:
-    gsutil cp -a public-read freebsd-amd64-103.tar.gz gs://go-builder-data/freebsd-amd64-103.tar.gz
+    make upload-prod
 Or just use the web UI at:
     https://console.developers.google.com/project/symbolic-datum-552/storage/browser/go-builder-data/
 
 Then:
-   gcloud compute --project symbolic-datum-552 images delete freebsd-amd64-103
-   gcloud compute --project symbolic-datum-552 images create freebsd-amd64-103 --source-uri gs://go-builder-data/freebsd-amd64-103.tar.gz
-
-The VM needs to be run with the GCE metadata attribute "buildlet-binary-url" set to a URL
-of the FreeBSD buildlet (cross-compiled, typically).
-
-    buildlet-binary-url == http://storage.googleapis.com/go-builder-data/buildlet.freebsd-amd64
+    make delete-image-prod
+    make create-image-prod
