@@ -382,7 +382,7 @@ def host_timeout_scale(host):
 # do not specify one.
 DEFAULT_HOST_SUFFIX = {
     "darwin-amd64": "14",
-    "freebsd-amd64": "14.1",
+    "freebsd-amd64": "14.2",
     "linux-amd64": "debian11",
     "linux-arm64": "debian12",
     "openbsd-386": "7.6",
@@ -429,7 +429,7 @@ BUILDER_TYPES = [
     "freebsd-386",
     "freebsd-amd64",
     "freebsd-amd64-race",
-    "freebsd-amd64_14.2",
+    "freebsd-amd64_14.1",
     "freebsd-arm",
     "freebsd-arm64",
     "freebsd-riscv64",
@@ -537,7 +537,7 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
     )
 
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "freebsd-amd64_14.2": known_issue(issue_number = 72030, hide_from_presubmit = False),
+    "freebsd-amd64_14.1": known_issue(issue_number = 72030, skip_x_repos = True, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
 
