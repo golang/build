@@ -425,6 +425,7 @@ BUILDER_TYPES = [
     "freebsd-386",
     "freebsd-amd64",
     "freebsd-amd64-race",
+    "freebsd-amd64_14.2",
     "freebsd-arm",
     "freebsd-arm64",
     "freebsd-riscv64",
@@ -530,6 +531,7 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
     )
 
 KNOWN_ISSUE_BUILDER_TYPES = {
+    "freebsd-amd64_14.2": known_issue(issue_number = 72030, skip_x_repos = True, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
 
@@ -2012,8 +2014,8 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         freebsd_version = suffix
         if freebsd_version == "":
             freebsd_version = DEFAULT_HOST_SUFFIX[host_type]
-        if freebsd_version == "14.1":
-            # The 14.1 freebsd/amd64 LUCI builders need fixes that aren't available on old branches.
+        if "14." in freebsd_version:
+            # The 14.* freebsd/amd64 LUCI builders need fixes that aren't available on old branches.
             # Just disable the builder on these branches.
             return False, PRESUBMIT.DISABLED, False, []
     if os == "freebsd" and arch == "amd64" and "race" in run_mods and go_branch_short in ["go1.23", "go1.24"]:
