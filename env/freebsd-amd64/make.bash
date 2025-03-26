@@ -143,7 +143,7 @@ cat >iso/install.sh <<'EOF'
 #!/bin/sh
 set -x
 
-mkdir -p /usr/local/etc/rc.d/ /usr/local/bin/
+mkdir -p /usr/local/etc/rc.d/ /usr/local/etc/sudoers.d/ /usr/local/bin/
 cp /mnt/usr/local/etc/rc.d/buildlet /usr/local/etc/rc.d/buildlet
 chmod +x /usr/local/etc/rc.d/buildlet
 cp /mnt/boot/loader.conf /boot/loader.conf
@@ -154,6 +154,7 @@ adduser -f - <<ADDUSEREOF
 swarming::::::Swarming Gopher Gopherson::/bin/sh:swarming
 ADDUSEREOF
 pw user mod swarming -G wheel
+echo 'swarming ALL=NOPASSWD:/sbin/shutdown -r now' > /usr/local/etc/sudoers.d/shutdown
 
 # Enable serial console early in boot process.
 echo '-h' > /boot.conf
@@ -252,7 +253,7 @@ if {$::env(DOWNLOAD_UPDATES)} {
 
 expect -re $prompt
 sleep 1
-send "pkg install -y bash curl doas git gdb python\n"
+send "pkg install -y bash curl doas git gdb python sudo unzip nano\n"
 
 expect -re $prompt
 send "sync\n"
