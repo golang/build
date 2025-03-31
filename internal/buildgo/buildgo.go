@@ -170,7 +170,7 @@ func (gb GoBuilder) RunMake(ctx context.Context, bc buildlet.Client, w io.Writer
 			return nil, err
 		}
 		if remoteErr != nil {
-			sp.Done(err)
+			sp.Done(remoteErr)
 			return fmt.Errorf("go install -race std failed: %v", remoteErr), nil
 		}
 		sp.Done(nil)
