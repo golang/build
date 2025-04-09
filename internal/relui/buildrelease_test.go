@@ -50,16 +50,16 @@ func TestRelease(t *testing.T) {
 	}
 
 	t.Run("minor", func(t *testing.T) {
-		testRelease(t, "go1.22", 22, "go1.22.1", task.KindMinor)
+		testRelease(t, "go1.24", 24, "go1.24.1", task.KindMinor)
 	})
 	t.Run("beta", func(t *testing.T) {
-		testRelease(t, "go1.22", 23, "go1.23beta1", task.KindBeta)
+		testRelease(t, "go1.24", 25, "go1.25beta1", task.KindBeta)
 	})
 	t.Run("rc", func(t *testing.T) {
-		testRelease(t, "go1.22", 23, "go1.23rc1", task.KindRC)
+		testRelease(t, "go1.24", 25, "go1.25rc1", task.KindRC)
 	})
 	t.Run("major", func(t *testing.T) {
-		testRelease(t, "go1.22", 23, "go1.23.0", task.KindMajor)
+		testRelease(t, "go1.24", 25, "go1.25.0", task.KindMajor)
 	})
 }
 
@@ -168,7 +168,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	}
 	milestoneTasks := &task.MilestoneTasks{
 		Client: &task.FakeGitHub{
-			Milestones:       map[int]string{0: "Go1.18", 1: "Go1.23", 2: "Go1.22.1"},
+			Milestones:       map[int]string{0: "Go1.18", 1: "Go1.25", 2: "Go1.24.1"},
 			DisallowComments: true,
 		},
 		RepoOwner: "golang",
