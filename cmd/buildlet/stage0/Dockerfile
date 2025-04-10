@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.19 AS build
+FROM golang:1.24 AS build
 LABEL maintainer="golang-dev@googlegroups.com"
 
 RUN mkdir /gocache
@@ -24,6 +24,6 @@ ENV CGO_ENABLED=0
 RUN go install golang.org/x/build/cmd/buildlet/stage0
 RUN go install golang.org/x/build/cmd/bootstrapswarm
 
-FROM golang:1.19
+FROM golang:1.24
 COPY --from=build /go/bin/* /go/bin/
 COPY cmd/buildlet/stage0/run-worker.sh /go/bin
