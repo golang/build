@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"go/build"
 	"io"
 	"io/fs"
 	"net/http"
@@ -59,6 +60,12 @@ func TestRelease(t *testing.T) {
 		testRelease(t, "go1.24", 25, "go1.25rc1", task.KindRC)
 	})
 	t.Run("major", func(t *testing.T) {
+		if len(build.Default.ReleaseTags) < 24 {
+			// The 'Maintain x/repo go directive' task will run
+			// 'go get go@1.24.0', which can't be done on older
+			// toolchains without involving a toolchain upgrade.
+			t.Skip("TestRelease/major needs Go 1.24 or newer to run")
+		}
 		testRelease(t, "go1.24", 25, "go1.25.0", task.KindMajor)
 	})
 }
