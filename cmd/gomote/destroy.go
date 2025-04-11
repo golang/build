@@ -64,16 +64,17 @@ func destroy(args []string) error {
 			return fmt.Errorf("unable to destroy instance: %w", err)
 		}
 	}
+	if err := pruneFromAllGroups(destroySet...); err != nil {
+		log.Printf("Warning: failed to prune new instance(s) from existing groups; there may be stale entries: error: %v", err)
+	}
 	if activeGroup != nil {
 		if destroyGroup {
 			if err := deleteGroup(activeGroup.Name); err != nil {
 				return err
 			}
+			activeGroup = nil
 		} else {
 			activeGroup.Instances = nil
-			if err := storeGroup(activeGroup); err != nil {
-				return err
-			}
 		}
 	}
 	return nil

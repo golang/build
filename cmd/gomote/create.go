@@ -303,8 +303,11 @@ func createInstances(ctx context.Context, builderType string, cfg *createConfig)
 	if err := eg.Wait(); err != nil {
 		return nil, nil, err
 	}
+	if err := pruneFromAllGroups(instances...); err != nil {
+		log.Printf("Warning: failed to prune new instance(s) from existing groups; there may be stale entries: error: %v", err)
+	}
 	if group != nil {
-		if err := storeGroup(group); err != nil {
+		if err := updateGroup(group); err != nil {
 			return nil, nil, err
 		}
 	}
