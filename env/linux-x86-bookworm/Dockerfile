@@ -52,6 +52,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # lsof: misc basic tool
 # make: used for setting up benchmarks in the x/benchmark builders
 # mercurial: mercurial VCS supported by cmd/go
+# nano: for interactive debugging convenience
 # netbase: for net package tests, issue 42750
 # patch: used for building some benchmarks
 # procps: misc basic tool

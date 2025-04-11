@@ -18,6 +18,8 @@ ENV DEBIAN_FRONTEND noninteractive
 # libgles2-mesa-dev libopenal-dev fonts-droid-fallback: required by x/mobile repo
 # upx: executable compressor, needed to test for go binaries compatibility
 # qemu-user: QEMU (machine emulator and virtualizer) user-space emulation
+# python3.12: for bootstrapswarm
+# nano: for interactive debugging convenience
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	libcrypt1 \
@@ -44,10 +46,32 @@ RUN apt-get update && apt-get install -y \
 	make \
 	sudo \
 	iproute2 \
+	python3.12 \
+	nano \
 	&& rm -rf /var/lib/apt/lists/*
 
-# Otherwise we get "Missing privilege separation directory: /run/sshd" ...
-RUN mkdir --mode=0700 /run/sshd
+# bootstrapswarming requires a 'python3' binary in PATH, so add one that points to the python3.12 installed above.
+#
+# Note: python3.12 is installed because python3 gets python 3.13, and as of 2025-04-16 swarming bot wasn't compatible
+# with it due to reliance on a deprecated 'pipes' module:
+#
+#	2025-04-16 00:10:05.187 E: Failed to run start_bot
+#	Traceback (most recent call last):
+#	  File "/home/swarming/.swarming/swarming_bot.1.zip/__main__.py", line 324, in main
+#	    return fn(args)
+#	  File "/home/swarming/.swarming/swarming_bot.1.zip/__main__.py", line 194, in CMDstart_bot
+#	    from bot_code import bot_main
+#	  File "/home/swarming/.swarming/swarming_bot.1.zip/bot_code/bot_main.py", line 47, in <module>
+#	    from api import bot
+#	  File "/home/swarming/.swarming/swarming_bot.1.zip/api/bot.py", line 20, in <module>
+#	    from api import os_utilities
+#	  File "/home/swarming/.swarming/swarming_bot.1.zip/api/os_utilities.py", line 24, in <module>
+#	    import pipes
+#	ModuleNotFoundError: No module named 'pipes'
+#
+# Once swarming bot is updated to be compatible with the latest python3 version, this can be removed
+# and the python3 package can be installed.
+RUN ln -s /usr/bin/python3.12 /usr/local/bin/python3
 
 RUN mkdir -p /go1.4-amd64 \
 	&& ( \
