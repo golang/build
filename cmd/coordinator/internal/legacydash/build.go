@@ -218,13 +218,6 @@ func trim(s []string, n int) []string {
 	return s[len(s)-l:]
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Result returns the build Result for this Commit for the given builder/goHash.
 //
 // For the main Go repo, goHash is the empty string.
