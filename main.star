@@ -469,6 +469,7 @@ BUILDER_TYPES = [
     "linux-amd64_c3h88-perf_vs_release",
     "linux-amd64_c3h88-perf_vs_tip",
     "linux-amd64_c3h88-perf_vs_oldest_stable",
+    "linux-amd64_debiansid",
     "linux-amd64_docker",
     "linux-arm",
     "linux-arm64",
@@ -534,6 +535,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-amd64_14.2": known_issue(issue_number = 72030, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
+    "linux-amd64_debiansid": known_issue(issue_number = 61112, hide_from_presubmit = False),
 
     # The known issue for these builder types tracks the work of starting to add them.
     # Skip the builder definitions for x/ repos to reduce noise.
@@ -1332,8 +1334,9 @@ def dimensions_of(host_type):
 
     if suffix != "":
         if goos == "linux" and "debian" in suffix:
-            # linux-amd64_debian11 -> Debian-11
-            os = suffix.replace("debian", "Debian-")
+            # linux-amd64_debian11  -> Debian-11
+            # linux-amd64_debiansid -> Debian-trixie/sid
+            os = suffix.replace("debian", "Debian-").replace("sid", "trixie/sid")
         elif goos == "linux" and suffix in ["c2s16", "c3h88", "c4as16", "c4ah72"]:
             # Performance test machines.
             os = "Debian-12"
