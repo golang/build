@@ -2152,9 +2152,53 @@ def _define_go_ci():
                     ],
                 )
 
+                # For the main Go repo, include the ability to run presubmit
+                # against any golang.org/x repo.
+                # Make presubmit enabled by default for a few select cases.
+                if project != "go":
+                    # As a baseline, all golang.org/x repo builders (which aren't
+                    # disabled for presubmit) are available in the main Go repo
+                    # for presubmit as optional. Some adjustments are made below.
+                    go_repo_presubmit = PRESUBMIT.OPTIONAL
+                    location_filters = None
+
+                    # Add an x/tools builder to the Go presubmit by default.
+                    if project == "tools" and builder_type == "linux-amd64":
+                        go_repo_presubmit = PRESUBMIT.ENABLED
+
+                    # Add an x/debug builder to the Go presubmit by default.
+                    # It mostly only matters when changes to cmd/compile, cmd/link,
+                    # or the runtime are made, but certain satellite packages like
+                    # internal/abi also matter. Just enable it for everything,
+                    # it's a fast builder.
+                    if project == "debug" and builder_type == "linux-amd64":
+                        go_repo_presubmit = PRESUBMIT.ENABLED
+
+                    # Add an x/website builder to the Go presubmit
+                    # but only when release notes are being edited.
+                    # This is to catch problems with Markdown/HTML.
+                    # See go.dev/issue/68633.
+                    if project == "website" and builder_type == "linux-amd64" and go_branch_short == "gotip":
+                        go_repo_presubmit = PRESUBMIT.ENABLED
+                        location_filters = [
+                            cq.location_filter(
+                                gerrit_host_regexp = "go-review.googlesource.com",
+                                gerrit_project_regexp = "^go$",
+                                path_regexp = "doc/next/.+",
+                            ),
+                        ]
+
+                    luci.cq_tryjob_verifier(
+                        builder = name,
+                        cq_group = go_cq_group("go", go_branch_short).name,
+                        includable_only = go_repo_presubmit == PRESUBMIT.OPTIONAL,
+                        disable_reuse = True,
+                        location_filters = location_filters,
+                    )
+
                 # For golang.org/x repos, include the ability to run presubmit
                 # against all supported releases in addition to testing with tip.
-                # Make presubmit mandatory for builders deemed "fast".
+                # Make presubmit enabled by default for builders deemed "fast".
                 # See go.dev/issue/17626.
                 if project != "go" and go_branch_short != "gotip":
                     first_class_subset = builder_type in ["linux-amd64", "linux-386", "darwin-amd64_14", "windows-amd64"]
@@ -2168,44 +2212,6 @@ def _define_go_ci():
                         cq_group = go_cq_group(project, "gotip").name,
                         includable_only = not x_repo_presubmit,
                         disable_reuse = True,
-                    )
-
-                # Add an x/tools builder to the Go presubmit.
-                if project == "go" and builder_type == "linux-amd64":
-                    luci.cq_tryjob_verifier(
-                        builder = PUBLIC_TRY_ENV.bucket + "/" + builder_name("tools", go_branch_short, builder_type),
-                        cq_group = cq_group.name,
-                        disable_reuse = True,
-                    )
-
-                # Add an x/debug builder to the Go presubmit. It mostly
-                # only matters when changes to cmd/compile, cmd/link, or
-                # the runtime are made, but certain satellite packages like
-                # internal/abi also matter. Just enable it for everything,
-                # it's a fast builder.
-                if project == "go" and builder_type == "linux-amd64":
-                    luci.cq_tryjob_verifier(
-                        builder = PUBLIC_TRY_ENV.bucket + "/" + builder_name("debug", go_branch_short, builder_type),
-                        cq_group = cq_group.name,
-                        disable_reuse = True,
-                    )
-
-                # Add an x/website builder to the Go presubmit
-                # but only when release notes are being edited.
-                # This is to catch problems with Markdown/HTML.
-                # See go.dev/issue/68633.
-                if project == "go" and builder_type == "linux-amd64" and go_branch_short == "gotip":
-                    luci.cq_tryjob_verifier(
-                        builder = PUBLIC_TRY_ENV.bucket + "/" + builder_name("website", go_branch_short, builder_type),
-                        cq_group = cq_group.name,
-                        disable_reuse = True,
-                        location_filters = [
-                            cq.location_filter(
-                                gerrit_host_regexp = "go-review.googlesource.com",
-                                gerrit_project_regexp = "^%s$" % project,
-                                path_regexp = "doc/next/.+",
-                            ),
-                        ],
                     )
 
             # For golang.org/x/tools, also include coverage for extra Go versions.
