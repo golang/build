@@ -45,7 +45,7 @@ license that can be found in the LICENSE file.
 		<ul>
 			<li>
 				<div class="Dashboard-search-benchmark">
-					<input id="benchmark-input" type="text" name="benchmark" placeholder="Type benchmark name..." />
+					<input id="benchmark-input" type="text" name="benchmark" placeholder="Search benchmarks (case sensitive)..." />
 				</div>
 				<div class="Dashboard-search-unit">
 					<input id="unit-input" type="text" name="unit" placeholder="Unit (optional)" />
@@ -81,14 +81,17 @@ license that can be found in the LICENSE file.
 		Each graph displays benchmark results relative to its baseline
 		commit, which is the latest stable release (e.g., 1.18.3) at
 		the time of testing. The 95% confidence interval is displayed
-		in light gray. On hover, the graph displays the benchmarked
-		commit at that point (click to view full commit).
+		in light gray, if available. On hover, the graph displays the
+		benchmarked commit at that point. Click that commit to go to
+		a more detailed page highlighting the results at that commit
+		in context. You may also reach this page by clicking the name
+		of the unit right above each graph.
 	</p>
 	<p>
 		Note that some commits are not tested, so there could be
 		multiple commits (not shown) between two points on the graph.
-		See the <code>gotip-linux-amd64_debian12-perf_vs_release</code>
-		column on the
+		See the columns with titles ending in <code>perf_vs_release</code>
+		on the
 		<a href="https://ci.chromium.org/p/golang/g/go-gotip/console">build dashboard</a>.
 		Individually tested commits have their own green box. A single
 		box that covers multiple commits indicates that only the latest
@@ -98,12 +101,6 @@ license that can be found in the LICENSE file.
 		The 'Go branch' selection above is the Go branch that benchmarking
 		ran against on
 		<a href="https://ci.chromium.org/ui/p/golang">the build dashboard</a>.
-	</p>
-	<p>
-		Using the 'unit' search box above leads to a page that shows much
-		more detail about each individual point in the selected time range.
-		Another way of reaching this page is to click the unit name that acts
-		as each graph's title, i.e. "sec/op".
 	</p>
 	<p>
 		Further documentation is available on the
