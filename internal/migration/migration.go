@@ -39,6 +39,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	"linux-386":                     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386.
 	"linux-386-longtest":            true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-longtest.
 	"linux-386-clang":               true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-clang15 (a newer clang, but we won't be adding exactly -clang7 to LUCI by now).
+	"linux-386-sid":                 true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386_debiansid.
 	"linux-386-softfloat":           true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-softfloat.
 	"linux-arm-aws":                 true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm.
 	"linux-amd64":                   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64.
@@ -52,6 +53,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	"linux-amd64-clang":             true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-clang15 (a newer clang, but we won't be adding exactly -clang7 to LUCI by now).
 	"linux-amd64-goamd64v3":         true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-goamd64v3.
 	"linux-amd64-boringcrypto":      true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-boringcrypto.
+	"linux-amd64-sid":               true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64_debiansid.
 	"linux-amd64-ssacheck":          true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-ssacheck.
 	"linux-amd64-staticlockranking": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-staticlockranking.
 	"linux-amd64-newinliner":        true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-newinliner.
