@@ -266,6 +266,8 @@ GOOGLE_LOW_CAPACITY_HOSTS = [
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
+    "darwin-arm64_14",
+    "darwin-arm64_15",
     "linux-arm",
     "windows-arm64",
 ]
@@ -421,6 +423,8 @@ BUILDER_TYPES = [
     "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
+    "darwin-arm64_14",
+    "darwin-arm64_15",
     "dragonfly-amd64",
     "freebsd-386",
     "freebsd-amd64",
@@ -548,6 +552,8 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "android-amd64": known_issue(issue_number = 61097, skip_x_repos = True),
     "android-arm": known_issue(issue_number = 61097, skip_x_repos = True),
     "android-arm64": known_issue(issue_number = 61097, skip_x_repos = True),
+    "darwin-arm64_14": known_issue(issue_number = 73397, skip_x_repos = True),
+    "darwin-arm64_15": known_issue(issue_number = 73397, skip_x_repos = True),
     "dragonfly-amd64": known_issue(issue_number = 61092, skip_x_repos = True),
     "freebsd-386": known_issue(issue_number = 60468, skip_x_repos = True),
     "freebsd-arm": known_issue(issue_number = 67300, skip_x_repos = True),
@@ -1661,6 +1667,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             12: "13c100",  # released Dec 2021, macOS 12 released Oct 2021
             13: "15c500b",  # released Jan 2024, macOS 13.5 released Jul 2023
             14: "15e204a",  # released Mar 2023, macOS 14 released Sep 2023
+            15: "16e140",  # released Mar 2025, macOS 15.2 released Dec 2024
         }
         base_props["xcode_version"] = xcode_versions[int(dimensions_of(host_type)["os"].split(".")[0].replace("Mac-", ""))]
 
@@ -2391,6 +2398,8 @@ def _define_go_internal_ci():
                     "darwin-amd64_12",
                     "darwin-amd64_13",
                     "darwin-amd64_14",
+                    "darwin-arm64_14",
+                    "darwin-arm64_15",
                 ]:
                     # The list above is expected to contain only Google low-capacity hosts.
                     # Verify that's the case.
