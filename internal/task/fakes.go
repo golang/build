@@ -907,7 +907,7 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 	cmd.Dir = wd
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "TEMP="+tempDir, "TMP="+tempDir, "TEMPDIR="+tempDir, "TMPDIR="+tempDir)
-	cmd.Env = append(cmd.Env, "PATH="+cb.toolDir+":/bin:/usr/bin")
+	cmd.Env = append(cmd.Env, "PATH="+cb.toolDir+string(filepath.ListSeparator)+os.Getenv("PATH"))
 
 	buf := &bytes.Buffer{}
 	cmd.Stdout = buf
@@ -1083,7 +1083,8 @@ func (c *FakeSwarmingClient) RunTask(ctx context.Context, dims map[string]string
 	cmd.Dir = c.t.TempDir()
 	cmd.Env = os.Environ()
 	cmd.Env = append(cmd.Env, "TEMP="+tempDir, "TMP="+tempDir, "TEMPDIR="+tempDir, "TMPDIR="+tempDir)
-	cmd.Env = append(cmd.Env, "PATH="+c.toolDir+":/bin:/usr/bin:.") // Note: . is on PATH to help with Windows compatibility
+	cmd.Env = append(cmd.Env, "PATH="+c.toolDir+string(filepath.ListSeparator)+os.Getenv("PATH")+
+		string(filepath.ListSeparator)+".") // Note: '.' is on PATH to help with Windows compatibility.
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

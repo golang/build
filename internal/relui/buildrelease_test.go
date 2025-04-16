@@ -11,6 +11,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"go/build"
 	"io"
@@ -18,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -120,6 +122,11 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("Requires bash shell scripting support.")
 	}
+	if _, err := exec.LookPath("python3"); errors.Is(err, exec.ErrNotFound) {
+		// python3 is used in makeScript.
+		t.Skip("Requires python3 to be available in PATH.")
+	}
+
 	task.AwaitDivisor, workflow.MaxRetries = 100, 1
 	t.Cleanup(func() { task.AwaitDivisor, workflow.MaxRetries = 1, 3 })
 	ctx, cancel := context.WithCancel(context.Background())
