@@ -435,6 +435,7 @@ BUILDER_TYPES = [
     "js-wasm",
     "linux-386",
     "linux-386-clang15",
+    "linux-386_debiansid",
     "linux-386-longtest",
     "linux-386-softfloat",
     "linux-amd64",
@@ -535,6 +536,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-amd64_14.2": known_issue(issue_number = 72030, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
+    "linux-386_debiansid": known_issue(issue_number = 61112, hide_from_presubmit = False),
     "linux-amd64_debiansid": known_issue(issue_number = 61112, hide_from_presubmit = False),
 
     # The known issue for these builder types tracks the work of starting to add them.
