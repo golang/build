@@ -11,7 +11,7 @@
 // within the user's home directory.
 //
 // Requirements:
-// - Python3 installed and in the calling user's PATH.
+//   - Python 3 installed and available in PATH (or equivalent) under the name python3 (or python3.exe on Windows).
 //
 // Not on GCE: bootstrapswarm will read the token file and retrieve the
 // the luci machine token. It will use that token to authenticate and
@@ -19,7 +19,7 @@
 // directory within the user's home directory.
 //
 // Requirements:
-//   - Python3 installed and in the calling user's PATH.
+//   - Python 3 installed and available in PATH (or equivalent) under the name python3 (or python3.exe on Windows).
 //   - luci_machine_tokend running as root in a cron job.
 //     See https://chromium.googlesource.com/infra/luci/luci-go/+/main/tokenserver.
 //     Further instructions can be found at https://go.dev/wiki/DashboardBuilders.
@@ -48,7 +48,7 @@ import (
 )
 
 var (
-	hostname = flag.String("hostname", os.Getenv("HOSTNAME"), "Hostname of machine to bootstrap")
+	hostname = flag.String("hostname", os.Getenv("HOSTNAME"), "Hostname of machine to bootstrap (required when not on GCE)")
 	swarming = flag.String("swarming", "chromium-swarm.appspot.com", "Swarming server to connect to")
 )
 
@@ -58,7 +58,8 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
-	if *hostname == "" {
+	if *hostname == "" && !metadata.OnGCE() {
+		fmt.Fprintln(os.Stderr, "Hostname is required when not on GCE.")
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -83,7 +84,7 @@ func bootstrap(ctx context.Context, hostname string) error {
 
 		// Override the hostname flag with the GCE hostname. This is a hard
 		// requirement for LUCI, so there's no point in trying anything else.
-		fullHost, err := metadata.Hostname()
+		fullHost, err := metadata.HostnameWithContext(ctx)
 		if err != nil {
 			return fmt.Errorf("retrieving hostname: %w", err)
 		}
