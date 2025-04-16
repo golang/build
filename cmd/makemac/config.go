@@ -55,6 +55,7 @@ type imageConfig struct {
 // each lease, which could then have unique hostnames.
 var prodImageConfig = map[*swarmingConfig][]imageConfig{
 	publicSwarming: {
+		// amd64
 		{
 			Hostname: "darwin-amd64-11",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-11-cert",
@@ -83,8 +84,24 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Image:    "88491078fb25b3bd6db3fe519d0bca63448cddf3f7f10177da2e46019664a85b",
 			Count:    14, // More to cover longtest, race, nocgo, etc.
 		},
+		// arm64
+		{
+			Hostname: "darwin-arm64-14",
+			Cert:     "secret:symbolic-datum-552/darwin-arm64-14-cert",
+			Key:      "secret:symbolic-datum-552/darwin-arm64-14-key",
+			Image:    "edbf519386cb968127d9e682ac5bbc9ca9fbc9b8e8657bade9488089bb842405",
+			Count:    10,
+		},
+		{
+			Hostname: "darwin-arm64-15",
+			Cert:     "secret:symbolic-datum-552/darwin-arm64-15-cert",
+			Key:      "secret:symbolic-datum-552/darwin-arm64-15-key",
+			Image:    "203520220bdfe6b42592d2ae731c9cb985768c701c569ff1bc572d1573e63ad6",
+			Count:    10,
+		},
 	},
 	internalSwarming: {
+		// amd64
 		{
 			Hostname: "darwin-amd64-11-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-11-security-cert",
@@ -112,6 +129,21 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-security-key",
 			Image:    "88491078fb25b3bd6db3fe519d0bca63448cddf3f7f10177da2e46019664a85b",
 			Count:    6, // More to cover longtest, race, nocgo, etc.
+		},
+		// arm64
+		{
+			Hostname: "darwin-arm64-14-security",
+			Cert:     "secret:symbolic-datum-552/darwin-arm64-14-security-cert",
+			Key:      "secret:symbolic-datum-552/darwin-arm64-14-security-key",
+			Image:    "edbf519386cb968127d9e682ac5bbc9ca9fbc9b8e8657bade9488089bb842405",
+			Count:    5,
+		},
+		{
+			Hostname: "darwin-arm64-15-security",
+			Cert:     "secret:symbolic-datum-552/darwin-arm64-15-security-cert",
+			Key:      "secret:symbolic-datum-552/darwin-arm64-15-security-key",
+			Image:    "203520220bdfe6b42592d2ae731c9cb985768c701c569ff1bc572d1573e63ad6",
+			Count:    5,
 		},
 	},
 }
