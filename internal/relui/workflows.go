@@ -40,7 +40,6 @@ import (
 	"golang.org/x/build/internal/relui/groups"
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/task"
-	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/exp/maps"
 	"golang.org/x/net/context/ctxhttp"
@@ -105,7 +104,7 @@ It must be three to seven days after the pre-announcement as documented in the s
 	}
 	securityPreAnnParam = wf.ParamDef[string]{
 		Name: "Security Content",
-		ParamType: workflow.ParamType[string]{
+		ParamType: wf.ParamType[string]{
 			HTMLElement: "select",
 			HTMLSelectOptions: []string{
 				"the standard library",
@@ -1445,8 +1444,8 @@ func (b *BuildReleaseTasks) runAdvisoryTest(ctx *wf.TaskContext, name string, sk
 		}
 	}
 	err := errors.New("untested") // prime the loop
-	for attempt := 1; attempt <= workflow.MaxRetries && err != nil; attempt++ {
-		ctx.Printf("======== Attempt %d of %d ========\n", attempt, workflow.MaxRetries)
+	for attempt := 1; attempt <= wf.MaxRetries && err != nil; attempt++ {
+		ctx.Printf("======== Attempt %d of %d ========\n", attempt, wf.MaxRetries)
 		err = run()
 		if err != nil {
 			ctx.Printf("Attempt failed: %v\n", err)

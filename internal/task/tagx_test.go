@@ -21,7 +21,6 @@ import (
 	"go.chromium.org/luci/grpc/prpc"
 	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"golang.org/x/build/gerrit"
-	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
 )
 
@@ -37,7 +36,7 @@ func TestSelectReposLive(t *testing.T) {
 			Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.GitCookiesAuth()),
 		},
 	}
-	ctx := &workflow.TaskContext{
+	ctx := &wf.TaskContext{
 		Context: context.Background(),
 		Logger:  &testLogger{t, ""},
 	}
@@ -150,7 +149,7 @@ func TestFindMissingBuildersLive(t *testing.T) {
 		t.Fatalf("-run-find-missing-builders-test flag must be module@rev: %q", *flagRunFindMissingBuildersLiveTest)
 	}
 
-	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
+	ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
 	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, chromeinfra.DefaultAuthOptions()).Client()
 	if err != nil {
 		t.Fatal("auth.NewAuthenticator:", err)
@@ -330,7 +329,7 @@ func TestTagXRepos(t *testing.T) {
 	deps := newTagXTestDeps(t, sys, mod, tools, build)
 
 	wd := deps.tagXTasks.NewDefinition()
-	w, err := workflow.Start(wd, map[string]interface{}{
+	w, err := wf.Start(wd, map[string]interface{}{
 		reviewersParam.Name: []string(nil),
 	})
 	if err != nil {
@@ -441,7 +440,7 @@ func testTagSingleRepo(t *testing.T, skipPostSubmit bool) {
 	}
 
 	wd := deps.tagXTasks.NewSingleDefinition()
-	w, err := workflow.Start(wd, args)
+	w, err := wf.Start(wd, args)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +483,7 @@ func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
 	return nil
 }
 
-func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.TaskState) error {
+func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *wf.TaskState) error {
 	switch {
 	case !st.Finished:
 		l.t.Logf("task %-10v: started", st.Name)
@@ -499,7 +498,7 @@ func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.T
 	return nil
 }
 
-func (l *verboseListener) Logger(_ uuid.UUID, task string) workflow.Logger {
+func (l *verboseListener) Logger(_ uuid.UUID, task string) wf.Logger {
 	return &testLogger{t: l.t, task: task}
 }
 

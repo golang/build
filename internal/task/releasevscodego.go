@@ -22,7 +22,6 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
 	"golang.org/x/build/internal/secret"
-	"golang.org/x/build/internal/workflow"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/mod/semver"
 )
@@ -67,7 +66,7 @@ type ReleaseVSCodeGoTasks struct {
 
 var nextVersionParam = wf.ParamDef[string]{
 	Name: "next version",
-	ParamType: workflow.ParamType[string]{
+	ParamType: wf.ParamType[string]{
 		HTMLElement: "select",
 		HTMLSelectOptions: []string{
 			"next minor",
