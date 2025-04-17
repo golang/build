@@ -36,13 +36,14 @@ var BuildersPortedToLUCI = map[string]bool{
 	"darwin-arm64-12":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-darwin-arm64_12.
 
 	// Linux builders (just those covering first-class ports).
-	"linux-386":                     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386.
-	"linux-386-longtest":            true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-longtest.
-	"linux-386-clang":               true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-clang15 (a newer clang, but we won't be adding exactly -clang7 to LUCI by now).
-	"linux-386-sid":                 true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386_debiansid.
-	"linux-386-softfloat":           true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-softfloat.
-	"linux-arm-aws":                 true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm.
-	"linux-amd64":                   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64.
+	"linux-386": true, "linux-386-bullseye": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386.
+	"linux-386-longtest":  true,                               // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-longtest.
+	"linux-386-clang":     true,                               // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-clang15 (a newer clang, but we won't be adding exactly -clang7 to LUCI by now).
+	"linux-386-sid":       true,                               // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386_debiansid.
+	"linux-386-softfloat": true,                               // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-386-softfloat.
+	"linux-arm-aws":       true,                               // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm.
+	"linux-amd64":         true, "linux-amd64-bullseye": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64.
+	"linux-amd64-bookworm":          true, // Available (in a GOARCH=arm64 variant) as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-arm64.
 	"linux-amd64-longtest":          true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-longtest.
 	"linux-amd64-perf":              true, // Available in the form of multiple linux-amd64_…-perf_vs_… LUCI builders.
 	"linux-amd64-race":              true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-amd64-race.
