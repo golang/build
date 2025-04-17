@@ -550,8 +550,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "android-amd64": known_issue(issue_number = 61097, skip_x_repos = True),
     "android-arm": known_issue(issue_number = 61097, skip_x_repos = True),
     "android-arm64": known_issue(issue_number = 61097, skip_x_repos = True),
-    "darwin-arm64_14": known_issue(issue_number = 73397, skip_x_repos = True),
-    "darwin-arm64_15": known_issue(issue_number = 73397, skip_x_repos = True),
     "dragonfly-amd64": known_issue(issue_number = 61092, skip_x_repos = True),
     "freebsd-386": known_issue(issue_number = 60468, skip_x_repos = True),
     "freebsd-arm": known_issue(issue_number = 67300, skip_x_repos = True),
