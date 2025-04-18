@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/criadb"
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/relui/db"
@@ -844,6 +845,11 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 	}
 	s := NewServer(p, worker, nil, SiteHeader{}, nil, criadb.NewTestDatabase(memberships))
 
+	iap := access.IAPFields{
+		Email: "test@google.com",
+		ID:    "testid",
+	}
+
 	hourAgo := time.Now().Add(-1 * time.Hour)
 	q := db.New(p)
 
@@ -854,7 +860,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 			"workflow.schedule":    []string{string(ScheduleImmediate)},
 		}.Encode()))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
 		s.createWorkflowHandler(rec, req)
@@ -892,7 +898,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 		params := httprouter.Params{{Key: "id", Value: wfID.String()}, {Key: "name", Value: "beep"}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "tasks", "beep", "retry"), nil)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
 		s.retryTaskHandler(rec, req, params)
@@ -933,7 +939,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 		params := httprouter.Params{{Key: "id", Value: wfID.String()}, {Key: "name", Value: "approve"}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "tasks", "approve", "approve"), nil)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
 		s.approveTaskHandler(rec, req, params)
@@ -965,7 +971,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 		params := httprouter.Params{{Key: "id", Value: wfID.String()}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "stop"), nil)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
 		s.stopWorkflowHandler(rec, req, params)
@@ -989,7 +995,7 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 		params := httprouter.Params{{Key: "id", Value: strconv.Itoa(int(sched.ID))}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/schedules/", strconv.Itoa(int(sched.ID)), "delete"), nil)
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req = req.WithContext(context.WithValue(req.Context(), "email", "test@google.com"))
+		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
 		s.deleteScheduleHandler(rec, req, params)

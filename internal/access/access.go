@@ -73,8 +73,7 @@ func RequireIAPAuthHandler(h http.Handler, audience string) http.Handler {
 			log.Printf("JWT validation error: %v", err)
 			return
 		}
-		ctx := context.WithValue(r.Context(), "subject", iap.ID)
-		ctx = context.WithValue(ctx, "email", iap.Email)
+		ctx := ContextWithIAP(r.Context(), iap)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/julienschmidt/httprouter"
+	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/criadb"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/relui/db"
@@ -676,16 +677,16 @@ func (s *Server) authorizedForWorkflow(ctx context.Context, d *workflow.Definiti
 		return true
 	}
 
-	email := ctx.Value("email")
-	if email == nil {
-		log.Printf("request context did not contain expected 'email' value from IAP JWT")
+	iap, err := access.IAPFromContext(ctx)
+	if err != nil {
+		log.Printf("Error getting IAP fields from context: %v", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return false
 	}
 
-	isMember, err := s.cria.IsMemberOfAny(ctx, fmt.Sprintf("user:%s", email), authorizedGroups)
+	isMember, err := s.cria.IsMemberOfAny(ctx, fmt.Sprintf("user:%s", iap.Email), authorizedGroups)
 	if err != nil {
-		log.Printf("cria.IsMemberOfAny(user:%s) failed: %s", email, err)
+		log.Printf("cria.IsMemberOfAny(user:%s) failed: %s", iap.Email, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return false
 	}
