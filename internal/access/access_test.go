@@ -34,8 +34,6 @@ func TestIAPAuthFunc(t *testing.T) {
 	wantAudience := "foo/bar/zar"
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
 		iapHeaderJWT:   wantJWTToken,
-		iapHeaderEmail: want.Email,
-		iapHeaderID:    want.ID,
 	}))
 	testValidator := func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
 		if token != wantJWTToken || audience != wantAudience {
@@ -46,6 +44,10 @@ func TestIAPAuthFunc(t *testing.T) {
 			Audience: audience,
 			Expires:  time.Now().Add(time.Minute).Unix(),
 			IssuedAt: time.Now().Add(-time.Minute).Unix(),
+			Subject:  want.ID,
+			Claims:   map[string]any{
+				"email": want.Email,
+			},
 		}, nil
 	}
 	authFunc := iapAuthFunc(wantAudience, testValidator)
@@ -78,6 +80,10 @@ func TestIAPAuthFuncError(t *testing.T) {
 					Audience: audience,
 					Expires:  time.Now().Add(time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-time.Minute).Unix(),
+					Subject:  "chaz-service.moo",
+					Claims:   map[string]any{
+						"email": "mary@foo.com",
+					},
 				}, nil
 			},
 			ctx:      context.Background(),
@@ -85,19 +91,20 @@ func TestIAPAuthFuncError(t *testing.T) {
 			wantErr:  codes.Internal,
 		},
 		{
-			desc: "invalid jwt header",
+			desc: "missing jwt header",
 			validator: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
 				return &idtoken.Payload{
 					Issuer:   "https://cloud.google.com/iap",
 					Audience: audience,
 					Expires:  time.Now().Add(time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-time.Minute).Unix(),
+					Subject:  "chaz-service.moo",
+					Claims:   map[string]any{
+						"email": "mary@foo.com",
+					},
 				}, nil
 			},
-			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-				iapHeaderEmail: "mary@foo.com",
-				iapHeaderID:    "chaz.service.moo",
-			})),
+			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
 		},
@@ -108,8 +115,6 @@ func TestIAPAuthFuncError(t *testing.T) {
 			},
 			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
 				iapHeaderJWT:   "xyz",
-				iapHeaderEmail: "mary@foo.com",
-				iapHeaderID:    "chaz.service.moo",
 			})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
@@ -122,12 +127,14 @@ func TestIAPAuthFuncError(t *testing.T) {
 					Audience: audience,
 					Expires:  time.Now().Add(time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-time.Minute).Unix(),
+					Subject:  "chaz-service.moo",
+					Claims:   map[string]any{
+						"email": "mary@foo.com",
+					},
 				}, nil
 			},
 			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
 				iapHeaderJWT:   "xyz",
-				iapHeaderEmail: "mary@foo.com",
-				iapHeaderID:    "chaz.service.moo",
 			})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
@@ -140,12 +147,50 @@ func TestIAPAuthFuncError(t *testing.T) {
 					Audience: audience,
 					Expires:  time.Now().Add(-time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-10 * time.Minute).Unix(),
+					Subject:  "chaz-service.moo",
+					Claims:   map[string]any{
+						"email": "mary@foo.com",
+					},
 				}, nil
 			},
 			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
 				iapHeaderJWT:   "xyz",
-				iapHeaderEmail: "mary@foo.com",
-				iapHeaderID:    "chaz.service.moo",
+			})),
+			audience: "foo/bar/zar",
+			wantErr:  codes.Unauthenticated,
+		},
+		{
+			desc: "jwt missing subject",
+			validator: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+				return &idtoken.Payload{
+					Issuer:   "https://cloud.google.com/iap",
+					Audience: audience,
+					Expires:  time.Now().Add(time.Minute).Unix(),
+					IssuedAt: time.Now().Add(-time.Minute).Unix(),
+					Claims:   map[string]any{
+						"email": "mary@foo.com",
+					},
+				}, nil
+			},
+			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+				iapHeaderJWT:   "xyz",
+			})),
+			audience: "foo/bar/zar",
+			wantErr:  codes.Unauthenticated,
+		},
+		{
+			desc: "jwt missing claims",
+			validator: func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
+				return &idtoken.Payload{
+					Issuer:   "https://cloud.google.com/iap",
+					Audience: audience,
+					Expires:  time.Now().Add(time.Minute).Unix(),
+					IssuedAt: time.Now().Add(-time.Minute).Unix(),
+					Subject:  "chaz-service.moo",
+				}, nil
+			},
+			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+				iapHeaderJWT:   "xyz",
 			})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
@@ -160,36 +205,6 @@ func TestIAPAuthFuncError(t *testing.T) {
 			}
 			if status.Code(err) != tc.wantErr {
 				t.Fatalf("authFunc(ctx) = nil, %s; want %s", status.Code(err), tc.wantErr)
-			}
-		})
-	}
-}
-
-func TestContextWithIAPMDError(t *testing.T) {
-	testCases := []struct {
-		desc string
-		md   metadata.MD
-	}{
-		{
-			desc: "missing email header",
-			md: metadata.New(map[string]string{
-				iapHeaderJWT: "jwt",
-				iapHeaderID:  "id",
-			}),
-		},
-		{
-			desc: "missing id header",
-			md: metadata.New(map[string]string{
-				iapHeaderJWT:   "jwt",
-				iapHeaderEmail: "email",
-			}),
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			ctx, err := contextWithIAPMD(context.Background(), tc.md)
-			if err == nil {
-				t.Errorf("contextWithIAPMD(ctx, %v) = %+v, %s; want ctx, error", tc.md, ctx, err)
 			}
 		})
 	}

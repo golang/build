@@ -14,7 +14,6 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
@@ -637,17 +636,14 @@ func isPrivilegedUser(email string) bool {
 		strings.HasSuffix(email, "@go-security-trybots.iam.gserviceaccount.com")
 }
 
-// iapEmailRE matches the email string returned by Identity Aware Proxy for sessions where
-// the authority is Google.
-var iapEmailRE = regexp.MustCompile(`^accounts\.google\.com:.+@.+\..+$`)
-
 // emailToUser returns the displayed user for the IAP email string passed in.
-// For example, "accounts.google.com:example@gmail.com" -> "example"
+// For example, "example@gmail.com" -> "example"
 func emailToUser(email string) (string, error) {
-	if match := iapEmailRE.MatchString(email); !match {
+	i := strings.LastIndex(email, "@")
+	if i <= 0 || i == len(email)-1 {
 		return "", errors.New("invalid email format")
 	}
-	return email[strings.Index(email, ":")+1 : strings.LastIndex(email, "@")], nil
+	return email[0:i], nil
 }
 
 // onObjectStore returns true if the url is for an object on GCS.

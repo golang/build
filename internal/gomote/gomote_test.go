@@ -1091,13 +1091,13 @@ func TestEmailToUser(t *testing.T) {
 		email string
 		want  string
 	}{
-		{"valid email", "accounts.google.com:example@gmail.com", "example"},
-		{"valid email", "accounts.google.com:mary@google.com", "mary"},
-		{"valid email", "accounts.google.com:george@funky.com", "george"},
-		{"single digit local", "accounts.google.com:g@funky.com", "g"},
-		{"single digit domain", "accounts.google.com:g@funky.com", "g"},
-		{"multiple colon", "accounts.google.com:example@gmail.com:more-info", "example"},                        // while not desired, wont lead to a panic
-		{"multiple at", "accounts.google.com:example@gmail.com:example@gmail.com", "example@gmail.com:example"}, // while not desired, wont lead to a panic
+		{"valid email", "example@gmail.com", "example"},
+		{"valid email", "mary@google.com", "mary"},
+		{"valid email", "george@funky.com", "george"},
+		{"single digit local", "g@funky.com", "g"},
+		{"single digit domain", "george@f", "george"},
+		{"colon", "example@gmail.com:more-info", "example"},                                 // while not desired, wont lead to a panic
+		{"multiple at", "example@gmail.com:example@gmail.com", "example@gmail.com:example"}, // while not desired, wont lead to a panic
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -1113,11 +1113,8 @@ func TestEmailToUserError(t *testing.T) {
 		desc  string
 		email string
 	}{
-		{"no local", "accounts.google.com:@funky.com"},
-		{"incorrect authority", "accountsxgoogleycom:george@funky.com"},
-		{"hyphens authority", "accounts-google-com:george@funky.com"},
-		{"no domain", "accounts.google.com:george@"},
-		{"missing colon", "accounts.google.comxgeorge@a.b"},
+		{"no local", "@funky.com"},
+		{"no domain", "george@"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -1130,11 +1127,11 @@ func TestEmailToUserError(t *testing.T) {
 
 func fakeAuthContext(ctx context.Context, privileged bool) context.Context {
 	iap := access.IAPFields{
-		Email: "accounts.google.com:example@gmail.com",
+		Email: "example@gmail.com",
 		ID:    "accounts.google.com:randomuuidstuff",
 	}
 	if privileged {
-		iap.Email = "accounts.google.com:test@google.com"
+		iap.Email = "test@google.com"
 	}
 	return access.ContextWithIAP(ctx, iap)
 }
@@ -1145,7 +1142,7 @@ func fakeIAP() access.IAPFields {
 
 func fakeIAPWithUser(user string, id string) access.IAPFields {
 	return access.IAPFields{
-		Email: fmt.Sprintf("accounts.google.com:%s@gmail.com", user),
+		Email: fmt.Sprintf("%s@gmail.com", user),
 		ID:    fmt.Sprintf("accounts.google.com:%s", id),
 	}
 }

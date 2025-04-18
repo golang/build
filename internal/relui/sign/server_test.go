@@ -187,7 +187,7 @@ func setupSigningTest(t *testing.T, ctx context.Context) (protos.ReleaseServiceC
 
 func fakeAuthContext(ctx context.Context) context.Context {
 	return access.ContextWithIAP(ctx, access.IAPFields{
-		Email: "accounts.google.com:relui-user@google.com",
+		Email: "relui-user@google.com",
 		ID:    "accounts.google.com:randomuuidstuff",
 	})
 }
@@ -198,7 +198,7 @@ func fakeIAP() access.IAPFields {
 
 func fakeIAPWithUser(user string, id string) access.IAPFields {
 	return access.IAPFields{
-		Email: fmt.Sprintf("accounts.google.com:%s@gmail.com", user),
+		Email: fmt.Sprintf("%s@gmail.com", user),
 		ID:    fmt.Sprintf("accounts.google.com:%s", id),
 	}
 }

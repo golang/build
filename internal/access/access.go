@@ -6,6 +6,8 @@ package access
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -27,10 +29,6 @@ const (
 
 	// IAPHeaderJWT is the header IAP stores the JWT token in.
 	iapHeaderJWT = "X-Goog-IAP-JWT-Assertion"
-	// iapHeaderEmail is the header IAP stores the email in.
-	iapHeaderEmail = "X-Goog-Authenticated-User-Email"
-	// iapHeaderID is the header IAP stores the user id in.
-	iapHeaderID = "X-Goog-Authenticated-User-Id"
 
 	// IAPSkipAudienceValidation is the audience string used when the validation is not
 	// necessary. https://pkg.go.dev/google.golang.org/api/idtoken#Validate
@@ -41,7 +39,7 @@ const (
 // Proxy.
 type IAPFields struct {
 	// Email contains the user's email address
-	// For example, "accounts.google.com:example@gmail.com"
+	// For example, "example@gmail.com"
 	Email string
 	// ID contains a unique identifier for the user
 	// For example, "accounts.google.com:userIDvalue"
@@ -69,16 +67,14 @@ func RequireIAPAuthHandler(h http.Handler, audience string) http.Handler {
 			fmt.Fprintf(w, "must run under IAP\n")
 			return
 		}
-		payload, err := validateIAPJWT(r.Context(), jwt, audience, idtoken.Validate)
+		iap, err := validateIAPJWT(r.Context(), jwt, audience, idtoken.Validate)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			log.Printf("JWT validation error: %v", err)
 			return
 		}
-		// TODO: idtoken.Payload doesn't include email for some reason, so we
-		// get it from claims, which _should_ also contain it.
-		ctx := context.WithValue(r.Context(), "subject", payload.Subject)
-		ctx = context.WithValue(ctx, "email", payload.Claims["email"])
+		ctx := context.WithValue(r.Context(), "subject", iap.ID)
+		ctx = context.WithValue(ctx, "email", iap.Email)
 		h.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -98,54 +94,51 @@ func iapAuthFunc(audience string, validatorFn validator) grpcauth.AuthFunc {
 		if len(jwtHeaders) == 0 {
 			return ctx, status.Error(codes.Unauthenticated, "IAP JWT not found in request")
 		}
-		if _, err := validateIAPJWT(ctx, jwtHeaders[0], audience, validatorFn); err != nil {
-			return nil, err
-		}
-		ctx, err := contextWithIAPMD(ctx, md)
+		iap, err := validateIAPJWT(ctx, jwtHeaders[0], audience, validatorFn)
 		if err != nil {
-			log.Printf("access: unable to set IAP fields in context: %s", err)
-			return ctx, status.Error(codes.Unauthenticated, "unable to authenticate")
+			return nil, status.Error(codes.Unauthenticated, err.Error())
 		}
-		return ctx, nil
+		return ContextWithIAP(ctx, iap), nil
 	}
 }
 
-func validateIAPJWT(ctx context.Context, jwt, audience string, validatorFn validator) (*idtoken.Payload, error) {
+func validateIAPJWT(ctx context.Context, jwt, audience string, validatorFn validator) (IAPFields, error) {
 	payload, err := validatorFn(ctx, jwt, audience)
 	if err != nil {
 		log.Printf("access: error validating JWT: %s", err)
-		return nil, status.Error(codes.Unauthenticated, "unable to authenticate")
+		return IAPFields{}, errors.New("unable to authenticate")
 	}
 	if payload.Issuer != "https://cloud.google.com/iap" {
 		log.Printf("access: incorrect issuer: %q", payload.Issuer)
-		return nil, status.Error(codes.Unauthenticated, "incorrect issuer")
+		return IAPFields{}, errors.New("incorrect issuer")
 	}
 	if payload.Expires+30 < time.Now().Unix() || payload.IssuedAt-30 > time.Now().Unix() {
 		log.Printf("Bad JWT times: expires %v, issued %v", time.Unix(payload.Expires, 0), time.Unix(payload.IssuedAt, 0))
-		return nil, status.Error(codes.Unauthenticated, "JWT timestamp invalid")
+		return IAPFields{}, errors.New("JWT timestamp invalid")
 	}
 
-	return payload, nil
-}
+	// Always prefer email and ID from JWT over the headers.
+	//
+	// https://cloud.google.com/iap/docs/signed-headers-howto#retrieving_the_user_identity
+	//
+	// Note that unlike the header, the JWT email does not have a "accounts.google.com:" prefix.
 
-// contextWithIAPMD copies the headers set by IAP into the context.
-func contextWithIAPMD(ctx context.Context, md metadata.MD) (context.Context, error) {
-	retrieveFn := func(fmd metadata.MD, mdKey string) (string, error) {
-		val := fmd.Get(mdKey)
-		if len(val) == 0 || val[0] == "" {
-			return "", fmt.Errorf("unable to retrieve %s from GRPC metadata", mdKey)
-		}
-		return val[0], nil
+	// TODO: idtoken.Payload doesn't include email for some reason, so we
+	// get it from claims, which _should_ also contain it.
+	email, ok := payload.Claims["email"].(string)
+	if !ok {
+		return IAPFields{}, fmt.Errorf("JWT email %v (%T) is not a string", payload.Claims["email"], payload.Claims["email"])
 	}
-	var iap IAPFields
-	var err error
-	if iap.Email, err = retrieveFn(md, iapHeaderEmail); err != nil {
-		return ctx, fmt.Errorf("unable to retrieve metadata field: %s", iapHeaderEmail)
+	if email == "" {
+		return IAPFields{}, fmt.Errorf("JWT missing email claim")
 	}
-	if iap.ID, err = retrieveFn(md, iapHeaderID); err != nil {
-		return ctx, fmt.Errorf("unable to retrieve metadata field: %s", iapHeaderID)
+	if payload.Subject == "" {
+		return IAPFields{}, fmt.Errorf("JWT missing subject")
 	}
-	return ContextWithIAP(ctx, iap), nil
+	return IAPFields{
+		Email: email,
+		ID:    payload.Subject,
+	}, nil
 }
 
 // ContextWithIAP adds the iap fields to the context.
@@ -190,10 +183,15 @@ func IAPAudienceAppEngine(projectNumber int64, projectID string) string {
 // FakeContextWithOutgoingIAPAuth adds the iap fields to the metadata of an outgoing GRPC request and
 // should only be used for testing.
 func FakeContextWithOutgoingIAPAuth(ctx context.Context, iap IAPFields) context.Context {
+	// Instead of a real JWT, we simply pass through the IAP fields we want
+	// to get out from FakeIAPAuthFunc.
+	b, err := json.Marshal(iap)
+	if err != nil {
+		panic(fmt.Sprintf("error marshalling %+v: %v", iap, err))
+	}
+
 	md := metadata.New(map[string]string{
-		iapHeaderEmail: iap.Email,
-		iapHeaderID:    iap.ID,
-		iapHeaderJWT:   "test-jwt",
+		iapHeaderJWT: string(b),
 	})
 	return metadata.NewOutgoingContext(ctx, md)
 }
@@ -201,12 +199,28 @@ func FakeContextWithOutgoingIAPAuth(ctx context.Context, iap IAPFields) context.
 // FakeIAPAuthFunc provides a fake IAP authentication validation and should only be used for testing.
 func FakeIAPAuthFunc() grpcauth.AuthFunc {
 	return iapAuthFunc("TESTING", func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
-		return &idtoken.Payload{
+		var iap IAPFields
+		if err := json.Unmarshal([]byte(token), &iap); err != nil {
+			// Panic because this is an internal test infra
+			// problem. We don't want a problem here masked by
+			// passing tests because a higher level simply treats
+			// this as unauthenticated.
+			panic(fmt.Sprintf("error unmarshalling %s: %v", token, err))
+		}
+
+		payload := &idtoken.Payload{
 			Issuer:   "https://cloud.google.com/iap",
 			Audience: audience,
 			Expires:  time.Now().Add(time.Minute).Unix(),
 			IssuedAt: time.Now().Add(-time.Minute).Unix(),
-		}, nil
+			Subject:  iap.ID,
+		}
+		if iap.Email != "" {
+			payload.Claims =  map[string]any{
+				"email": iap.Email,
+			}
+		}
+		return payload, nil
 	})
 }
 
