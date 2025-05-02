@@ -444,12 +444,14 @@ BUILDER_TYPES = [
     "linux-386-clang15",
     "linux-386_debiansid",
     "linux-386-longtest",
+    "linux-386-greenteagc",
     "linux-386-softfloat",
     "linux-amd64",
     "linux-amd64-asan-clang15",
     "linux-amd64-boringcrypto",
     "linux-amd64-clang15",
     "linux-amd64-goamd64v3",
+    "linux-amd64-greenteagc",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-longtest-noswissmap",
@@ -484,6 +486,7 @@ BUILDER_TYPES = [
     "linux-arm64-asan-clang15",
     "linux-arm64-boringcrypto",
     "linux-arm64-clang15",
+    "linux-arm64-greenteagc",
     "linux-arm64-longtest",
     "linux-arm64-msan-clang15",
     "linux-arm64-race",
@@ -925,6 +928,15 @@ def define_for_go_postsubmit_or_presubmit_with_filters(filters):
 
     return f
 
+# define the builder only for postsubmit of the tip branch of the go project,
+# or for presubmit of the go project if a particular location is touched.
+def define_for_gotip_postsubmit_or_presubmit_with_filters(filters):
+    def f(port, project, go_branch_short):
+        run = project == "go" and go_branch_short == "gotip"
+        return (run, run, run, filters)
+
+    return f
+
 # define the builder as existing for the go project, so it's includable in presubmit,
 # but don't run it anywhere by default.
 def define_for_optional_presubmit_only(projects):
@@ -1007,6 +1019,12 @@ RUN_MODS = dict(
     goamd64v3 = make_run_mod(
         add_env = {"GOAMD64": "v3"},
         enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Build and test with GOEXPERIMENT=greenteagc.
+    greenteagc = make_run_mod(
+        add_env = {"GOEXPERIMENT": "greenteagc"},
+        enabled = define_for_gotip_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
     ),
 
     # Run a larger set of tests.
