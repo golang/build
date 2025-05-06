@@ -108,14 +108,13 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx *wf.TaskContext, input ger
 	if err != nil {
 		return "", err
 	}
-	changeID := fmt.Sprintf("%s~%d", change.Project, change.ChangeNumber)
 	anyChange := false
 	for path, content := range files {
 		var err error
 		if content == "" {
-			err = c.Client.DeleteFileInChangeEdit(ctx, changeID, path)
+			err = c.Client.DeleteFileInChangeEdit(ctx, change.ID, path)
 		} else {
-			err = c.Client.ChangeFileContentInChangeEdit(ctx, changeID, path, content)
+			err = c.Client.ChangeFileContentInChangeEdit(ctx, change.ID, path, content)
 		}
 		if errors.Is(err, gerrit.ErrNotModified) {
 			continue
@@ -126,35 +125,40 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx *wf.TaskContext, input ger
 		anyChange = true
 	}
 	if !anyChange {
-		if err := c.Client.AbandonChange(ctx, changeID, "no changes necessary"); err != nil {
+		if err := c.Client.AbandonChange(ctx, change.ID, "no changes necessary"); err != nil {
 			return "", err
 		}
 		return "", nil
 	}
 
-	if err := c.Client.PublishChangeEdit(ctx, changeID); err != nil {
+	if err := c.Client.PublishChangeEdit(ctx, change.ID); err != nil {
 		return "", err
 	}
 
-	var reviewerInputs []gerrit.ReviewerInput
-	for _, r := range reviewerEmails {
-		if r == "joedian@golang.org" {
-			// A temporary workaround for 'https://go-review.googlesource.com/accounts/joedian@golang.org' being 404.
-			// TODO(go.dev/issue/68276): Generalize this.
-			continue
-		}
-		reviewerInputs = append(reviewerInputs, gerrit.ReviewerInput{Reviewer: r})
-	}
-	if err := c.Client.SetReview(ctx, changeID, "current", gerrit.ReviewInput{
+	review := gerrit.ReviewInput{
 		Labels: map[string]int{
 			"Commit-Queue": 1,
 			"Auto-Submit":  1,
 		},
-		Reviewers: reviewerInputs,
-	}); err != nil {
-		return "", err
 	}
-	return changeID, nil
+	for _, r := range reviewerEmails {
+		review.Reviewers = append(review.Reviewers, gerrit.ReviewerInput{Reviewer: r})
+	}
+	if reviewError := c.Client.SetReview(ctx, change.ID, "current", review); reviewError != nil {
+		ctx.Printf("CreateAutoSubmitChange: error setting a review on change %s: %v", change.ID, reviewError)
+
+		// It's possible one of the Gerrit accounts has changed but the gophers package entry hasn't been
+		// updated yet. If so, try setting review again, this time without any reviewers, then keep going.
+		if he := (*gerrit.HTTPError)(nil); errors.As(reviewError, &he) && he.Res.StatusCode == http.StatusBadRequest {
+			review.Reviewers = nil
+			if err := c.Client.SetReview(ctx, change.ID, "current", review); err != nil {
+				ctx.Printf("CreateAutoSubmitChange: error setting a review on change %s without reviewers: %v", change.ID, err)
+			} else {
+				ctx.Printf("CreateAutoSubmitChange: setting a review on change %s without reviewers succeeded", change.ID)
+			}
+		}
+	}
+	return change.ID, nil
 }
 
 func (c *RealGerritClient) Submitted(ctx context.Context, changeID, parentCommit string) (string, bool, error) {
