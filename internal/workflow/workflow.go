@@ -79,7 +79,7 @@ type Definition struct {
 
 func (d *Definition) Sub(name string) *Definition {
 	return &Definition{
-		namePrefix:      name + ": " + d.namePrefix,
+		namePrefix:      d.namePrefix + name + ": ",
 		definitionState: d.definitionState,
 	}
 }

@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -95,16 +97,22 @@ func TestSub(t *testing.T) {
 	}
 
 	wd := wf.New(wf.ACL{})
-	sub1 := wd.Sub("sub1")
+	topSub := wd.Sub("top-sub")
+	sub1 := topSub.Sub("sub1")
 	g1 := wf.Task0(sub1, "Greeting", hi)
-	sub2 := wd.Sub("sub2")
+	sub2 := topSub.Sub("sub2")
 	g2 := wf.Task0(sub2, "Greeting", hi)
 	wf.Output(wd, "result", wf.Task2(wd, "Concatenate", concat, g1, g2))
 
+	storage := &mapListener{Listener: &verboseListener{t}}
 	w := startWorkflow(t, wd, nil)
-	outputs := runWorkflow(t, w, nil)
+	outputs := runWorkflow(t, w, storage)
 	if got, want := outputs["result"], "hi hi"; got != want {
 		t.Errorf("result = %q, want %q", got, want)
+	}
+	const wantTaskID = "top-sub: sub1: Greeting"
+	if _, ok := storage.states[w.ID][wantTaskID]; !ok {
+		t.Errorf("task ID %q doesn't exist, have: %q", wantTaskID, slices.Sorted(maps.Keys(storage.states[w.ID])))
 	}
 }
 
