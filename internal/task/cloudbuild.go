@@ -35,6 +35,7 @@ type CloudBuildClient interface {
 	// starts trybots with auto-submit enabled, and returns its change ID.
 	// If the requested contents match the state of the repository, no change
 	// is created and the returned change ID will be empty.
+	//
 	// Reviewers is the username part of a golang.org or google.com email address.
 	GenerateAutoSubmitChange(ctx *wf.TaskContext, input gerrit.ChangeInput, reviewers []string) (changeID string, _ error)
 

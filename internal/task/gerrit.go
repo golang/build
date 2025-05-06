@@ -27,9 +27,15 @@ type GerritClient interface {
 	// CreateAutoSubmitChange creates a change with the given metadata and
 	// contents, starts trybots with auto-submit enabled, and returns its change ID.
 	// If the content of a file is empty, that file will be deleted from the repository.
-	// If the requested contents match the state of the repository, no change
-	// is created and the returned change ID will be empty.
+	// If the requested contents match the state of the repository, the created change
+	// is closed and the returned change ID will be empty.
+	// Consider GenerateAutoSubmitChange if the list of files that need to be updated
+	// isn't known ahead of time.
+	//
 	// Reviewers is the username part of a golang.org or google.com email address.
+	//
+	// As a special case for the main Go repository, if the only file content being
+	// updated is the special VERSION file, trybots are bypassed.
 	CreateAutoSubmitChange(ctx *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error)
 	// Submitted checks if the specified change has been submitted or failed
 	// trybots. If the CL is submitted, returns the submitted commit hash.
@@ -140,6 +146,15 @@ func (c *RealGerritClient) CreateAutoSubmitChange(ctx *wf.TaskContext, input ger
 			"Commit-Queue": 1,
 			"Auto-Submit":  1,
 		},
+	}
+	if v, ok := files["VERSION"]; input.Project == "go" && len(files) == 1 && ok && strings.HasPrefix(v, "go1.") {
+		// As a special case for the main Go repo, if the only change is the content
+		// of the VERSION file (still being some Go 1 version), opt to bypass trybots.
+		// This file is overwritten by golangbuild during test execution anyway, so we rely
+		// on tests run as part of the Go release process where the new VERSION file content
+		// is set precisely to match that of the upcoming Go release. See go.dev/issue/73614.
+		delete(review.Labels, "Commit-Queue")
+		review.Labels["TryBot-Bypass"] = 1
 	}
 	for _, r := range reviewerEmails {
 		review.Reviewers = append(review.Reviewers, gerrit.ReviewerInput{Reviewer: r})
