@@ -6,13 +6,15 @@ package task
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"golang.org/x/build/internal/workflow"
 )
 
 func TestTagTelemetry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("not running test that uses internet in short mode")
+	}
 	mustHaveShell(t)
 
 	tests := []struct {
@@ -60,11 +62,13 @@ func TestTagTelemetry(t *testing.T) {
 			// with the masterConfig contents.
 			telemetry := NewFakeRepo(t, "telemetry")
 			t1 := telemetry.Commit(map[string]string{
-				"go.mod":             "module golang.org/x/telemetry\n",
-				"go.sum":             "\n",
-				"config/go.mod":      "module golang.org/x/telemetry/config\n",
-				"config/go.sum":      "\n",
-				"config/config.json": test.initialConfig,
+				"go.mod":                     "module golang.org/x/telemetry\n",
+				"go.sum":                     "\n",
+				"config/go.mod":              "module golang.org/x/telemetry/config\n",
+				"config/go.sum":              "\n",
+				"config/config.json":         test.initialConfig,
+				"internal/configgen/main.go": "//go:generate cp gen.out ../../config/config.json\npackage main\n",
+				"internal/configgen/gen.out": test.generatedConfig,
 			})
 			for _, tag := range test.tags {
 				telemetry.Tag(tag, t1)
@@ -75,16 +79,9 @@ func TestTagTelemetry(t *testing.T) {
 			})
 			gerrit := NewFakeGerrit(t, telemetry)
 
-			// Go setup: since the task only ever invokes `go run`, just write the
-			// resulting generated config to config.json.
-			var fakeGo = fmt.Sprintf(`#!/bin/bash -eu
-
-echo -n %q > config/config.json
-`, test.generatedConfig)
-
 			tasks := &TagTelemetryTasks{
 				Gerrit:     gerrit,
-				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil),
 			}
 
 			wd := tasks.NewDefinition()

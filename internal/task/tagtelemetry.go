@@ -36,14 +36,14 @@ func (t *TagTelemetryTasks) NewDefinition() *wf.Definition {
 	return wd
 }
 
-// GenerateConfig runs the upload config generator in a buildlet, extracts the
-// resulting config.json, and creates a CL with the result if anything changed.
+// GenerateConfig runs the upload config generator in Cloud Build to get
+// a new config.json, and mails a CL with the result if anything changed.
 //
 // It returns the change ID, or "" if the CL was not created.
 func (t *TagTelemetryTasks) GenerateConfig(ctx *wf.TaskContext, reviewers []string) (string, error) {
 	const clTitle = "config: regenerate upload config"
 
-	// Query for an existing pending config CL, to avoid duplication.
+	// Query for an existing pending config CL, to avoid duplication, then proceed.
 	//
 	// Only wait a week, because configs are volatile: we really want to update
 	// them within a week.
@@ -56,37 +56,17 @@ func (t *TagTelemetryTasks) GenerateConfig(ctx *wf.TaskContext, reviewers []stri
 		ctx.Printf("not creating CL: found existing CL %d", changes[0].ChangeNumber)
 		return "", nil
 	}
-
-	const script = `
-cp config/config.json config/config.json.before
-go run ./internal/configgen -w
-`
-
-	build, err := t.CloudBuild.RunScript(ctx, script, "telemetry", []string{"config/config.json.before", "config/config.json"})
-	if err != nil {
-		return "", err
-	}
-
-	outputs, err := buildToOutputs(ctx, t.CloudBuild, build)
-	if err != nil {
-		return "", err
-	}
-
-	before, after := outputs["config/config.json.before"], outputs["config/config.json"]
-	if before == after {
-		ctx.Printf("not creating CL: config has not changed")
-		return "", nil
-	}
-
-	changeInput := gerrit.ChangeInput{
+	return t.CloudBuild.GenerateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: "telemetry",
-		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the generated upload config.", clTitle),
 		Branch:  "master",
-	}
-	files := map[string]string{
-		"config/config.json": string(after),
-	}
-	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
+		Subject: fmt.Sprintf(`%s
+
+This is an automated CL which updates the generated upload config.
+
+[git-generate]
+go generate ./internal/configgen
+`, clTitle),
+	}, reviewers)
 }
 
 // AwaitSubmission waits for the CL with the given change ID to be submitted.
