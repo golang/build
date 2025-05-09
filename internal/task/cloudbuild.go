@@ -198,6 +198,7 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 	}
 
 	refspec := fmt.Sprintf("HEAD:refs/for/%s%%l=Auto-Submit,l=Commit-Queue+1", input.Branch)
+	refspecNoReviewers := refspec
 	reviewerEmails, err := coordinatorEmails(reviewers)
 	if err != nil {
 		return "", err
@@ -273,10 +274,14 @@ func (c *RealCloudBuildClient) GenerateAutoSubmitChange(ctx *wf.TaskContext, inp
 					// git push output to be written to $BUILDER_OUTPUT/output regardless of its
 					// exit code, and complete the nearly-done build.
 					//
+					// First try a regular push, but also try again without reviewers in case it
+					// helps. See go.dev/issue/68276.
+					//
 					// Whether the push successfully created a CL or not will be determined from
 					// the output text.
-					Args: []string{"-c", `git push origin ` + refspec + ` 2>&1 | tee "$$BUILDER_OUTPUT/output"`},
-					Dir:  "checkout",
+					Args: []string{"-c", fmt.Sprintf("(git push origin %s || git push origin %s)", refspec, refspecNoReviewers) +
+						` 2>&1 | tee "$$BUILDER_OUTPUT/output"`},
+					Dir: "checkout",
 				},
 			},
 			Options: &cloudbuildpb.BuildOptions{
