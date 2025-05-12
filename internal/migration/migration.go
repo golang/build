@@ -70,15 +70,16 @@ var BuildersPortedToLUCI = map[string]bool{
 	"windows-amd64-race":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-windows-amd64-race.
 	"windows-arm64-11":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-windows-arm64.
 
-	"linux-riscv64-jsing":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-riscv64.
-	"linux-riscv64-unmatched": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-riscv64 (this builder is testing the same port as on the line above).
-
+	"linux-riscv64-jsing":      true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-riscv64.
+	"linux-riscv64-unmatched":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-riscv64 (this builder is testing the same port as on the line above).
 	"linux-ppc64le-buildlet":   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le_power8.
 	"linux-ppc64le-power9osu":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le_power9.
 	"linux-ppc64le-power10osu": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le_power10.
 	"linux-ppc64-sid-buildlet": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64_power8.
 	"linux-ppc64-sid-power10":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64_power10.
 	"linux-loong64-3a5000":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-loong64.
+	"linux-s390x-ibm":          true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-s390x.
+	"linux-s390x-ibm-race":     true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-s390x-race.
 
 	"freebsd-amd64-12_3": true, "freebsd-amd64-13_0": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-freebsd-amd64 (a newer OS version, but we won't be adding exactly 12.3 or 13.0 to LUCI by now).
 	"freebsd-amd64-race": true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-freebsd-amd64-race.
