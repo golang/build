@@ -49,7 +49,7 @@ var platforms = []*Platform{
 		Arch:    "amd64",
 		SubArch: "v1",
 		Skip:    true, // openbsd support is removed from TSAN, see issue #52090
-		Type:    "openbsd-amd64-72",
+		Type:    "gotip-openbsd-amd64",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -76,7 +76,7 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:      "freebsd",
 		Arch:    "amd64",
 		SubArch: "v1",
-		Type:    "freebsd-amd64-race",
+		Type:    "gotip-freebsd-amd64-race",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -103,7 +103,7 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:      "darwin",
 		Arch:    "amd64",
 		SubArch: "v1",
-		Type:    "darwin-amd64-12_0",
+		Type:    "gotip-darwin-amd64_14",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -123,7 +123,7 @@ mkdir outdir
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso outdir/race_darwin.syso
 # free some disk space
 rm -r llvm.zip llvm-project-${REV}
-(cd go/src && ./race.bash)
+(cd go/src && GO_TEST_TIMEOUT_SCALE=4 ./race.bash)
 			`,
 	},
 	{
@@ -131,7 +131,7 @@ rm -r llvm.zip llvm-project-${REV}
 		Arch:    "amd64",
 		SubArch: "v3",
 		Skip:    true,
-		Type:    "darwin-amd64-12_0",
+		Type:    "gotip-darwin-amd64_14",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -147,13 +147,13 @@ mkdir outdir
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso outdir/race_darwin.syso
 # free some disk space
 rm -r llvm.zip llvm-project-${REV}
-(cd go/src && GOAMD64=v3 ./race.bash)
+(cd go/src && GO_TEST_TIMEOUT_SCALE=4 GOAMD64=v3 ./race.bash)
 			`,
 	},
 	{
 		OS:   "darwin",
 		Arch: "arm64",
-		Type: "darwin-arm64-12",
+		Type: "gotip-darwin-arm64_14",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -173,18 +173,17 @@ mkdir outdir
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_arm64.syso outdir/race_darwin_arm64.syso
 # free some disk space
 rm -r llvm.zip llvm-project-${REV}
-(cd go/src && ./race.bash)
+(cd go/src && GO_TEST_TIMEOUT_SCALE=4 ./race.bash)
 			`,
 	},
 	{
 		OS:      "linux",
 		Arch:    "amd64",
 		SubArch: "v1",
-		Type:    "linux-amd64-race",
+		Type:    "gotip-linux-amd64-race",
+		// Needs git, g++, unzip on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
-apt-get update --allow-releaseinfo-change
-apt-get install -y git g++ unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -209,11 +208,10 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:      "linux",
 		Arch:    "amd64",
 		SubArch: "v3",
-		Type:    "linux-amd64-race",
+		Type:    "gotip-linux-amd64-race",
+		// Needs git, g++, unzip on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
-apt-get update
-apt-get install -y git g++ unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -233,11 +231,10 @@ rm -r llvm.zip llvm-project-${REV}
 	{
 		OS:   "linux",
 		Arch: "ppc64le",
-		Type: "linux-ppc64le-buildlet",
+		Type: "gotip-linux-ppc64le_power8",
+		// Needs git, g++, unzip on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
-apt-get update --allow-releaseinfo-change
-apt-get install -y git g++ unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -257,17 +254,16 @@ cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso outdir/ra
 # TODO(#23731): Uncomment to test the syso file before accepting it.
 # free some disk space
 # rm -r llvm.zip llvm-project-${REV}
-# (cd go/src && ./race.bash)
+# (cd go/src && GO_TEST_TIMEOUT_SCALE=2 ./race.bash)
 			`,
 	},
 	{
 		OS:   "linux",
 		Arch: "arm64",
-		Type: "linux-arm64-race",
+		Type: "gotip-linux-arm64-race",
+		// Needs git, g++, unzip on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
-apt-get update --allow-releaseinfo-change
-apt-get install -y git g++ unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -368,11 +364,11 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 	{
 		OS:   "linux",
 		Arch: "s390x",
-		Type: "linux-s390x-ibm",
+		Type: "gotip-linux-s390x",
+		// Needs git, g++, unzip, golang-bin on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 cat /etc/os-release
-yum install -y gcc-c++ git golang-bin unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
@@ -397,11 +393,10 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:   "linux",
 		Arch: "loong64",
 		Type: "gotip-linux-loong64",
+		// Needs git, g++, unzip, golang-bin on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 cat /etc/os-release
-# Because LUCI builder is not run as root, these dependencies have been manually installed
-# yum install -y gcc-c++ git golang-bin unzip
 git clone https://go.googlesource.com/go
 pushd go
 git checkout $GOREV
