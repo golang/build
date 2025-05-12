@@ -511,6 +511,7 @@ BUILDER_TYPES = [
     "linux-ppc64le_power9",
     "linux-riscv64",
     "linux-s390x",
+    "linux-s390x-race",
     "netbsd-386",
     "netbsd-amd64",
     "netbsd-arm",
