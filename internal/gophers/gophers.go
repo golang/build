@@ -129,6 +129,7 @@ func init() {
 	addPerson("Telemetry Team", "@golang/telemetry")
 	addPerson("Tools Team", "@golang/tools-team")
 	addPerson("Compiler Team", "@golang/compiler")
+	addPerson("Command Line Team", "@golang/command-line")
 
 	addPerson("AIX Team", "@golang/aix")
 	addPerson("Android Team", "@golang/android")

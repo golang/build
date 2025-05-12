@@ -82,16 +82,17 @@ var (
 	tombergan     = gh("tombergan")
 	zpavlinovic   = gh("zpavlinovic")
 
-	compilerTeam  = gh("golang/compiler")
-	fuzzingTeam   = gh("golang/fuzzing")
-	oscarTeam     = gh("golang/oscar-team")
-	pkgsiteTeam   = gh("golang/pkgsite")
-	releaseTeam   = gh("golang/release")
-	runtimeTeam   = gh("golang/runtime")
-	securityTeam  = gh("golang/security")
-	telemetryTeam = gh("golang/telemetry")
-	toolsTeam     = gh("golang/tools-team")
-	vulndbTeam    = gh("golang/vulndb")
+	commandlineTeam = gh("golang/command-line")
+	compilerTeam    = gh("golang/compiler")
+	fuzzingTeam     = gh("golang/fuzzing")
+	oscarTeam       = gh("golang/oscar-team")
+	pkgsiteTeam     = gh("golang/pkgsite")
+	releaseTeam     = gh("golang/release")
+	runtimeTeam     = gh("golang/runtime")
+	securityTeam    = gh("golang/security")
+	telemetryTeam   = gh("golang/telemetry")
+	toolsTeam       = gh("golang/tools-team")
+	vulndbTeam      = gh("golang/vulndb")
 )
 
 // entries is a map of <repo name>/<path>, <domain>, or <branch> to Owner
@@ -190,8 +191,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"go/src/cmd/go": {
-		Primary:   []Owner{matloob, samthanawalla},
-		Secondary: []Owner{rsc, iant},
+		Primary: []Owner{commandlineTeam},
 	},
 	"go/src/cmd/gofmt": {
 		Primary:   []Owner{gri},
@@ -774,7 +774,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{hajimehoshi},
 	},
 	"mod": {
-		Primary: []Owner{matloob, samthanawalla},
+		Primary: []Owner{commandlineTeam},
 	},
 	"net": {
 		Primary: []Owner{neild, iant},
@@ -838,7 +838,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{adonovan},
 	},
 	"tools/cmd/auth": {
-		Secondary: []Owner{matloob, samthanawalla},
+		Primary: []Owner{commandlineTeam},
 	},
 	"tools/cmd/godoc": {
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
