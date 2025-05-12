@@ -34,6 +34,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # strace: optionally used by some net/http tests
 # subversion: subversion VCS supported by cmd/go
 # swig: used for c/c++ interop related tests
+# unzip: used by racebuild
 # zlib1g: used for ASAN symbolization with clang
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
@@ -70,6 +71,7 @@ RUN apt-get update && apt-get install -y \
 	subversion \
 	sudo \
 	swig \
+	unzip \
 	zlib1g \
 	&& rm -rf /var/lib/apt/lists/*
 

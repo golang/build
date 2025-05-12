@@ -20,6 +20,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # qemu-user: QEMU (machine emulator and virtualizer) user-space emulation
 # python3.12: for bootstrapswarm
 # nano: for interactive debugging convenience
+# unzip: used by racebuild
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	libcrypt1 \
@@ -48,6 +49,7 @@ RUN apt-get update && apt-get install -y \
 	iproute2 \
 	python3.12 \
 	nano \
+	unzip \
 	&& rm -rf /var/lib/apt/lists/*
 
 # bootstrapswarming requires a 'python3' binary in PATH, so add one that points to the python3.12 installed above.

@@ -60,6 +60,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # strace: optionally used by some net/http tests
 # subversion: subversion VCS supported by cmd/go
 # swig: used for c/c++ interop related tests
+# unzip: used by racebuild
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	bzr \
@@ -97,6 +98,7 @@ RUN apt-get update && apt-get install -y \
 	subversion \
 	sudo \
 	swig \
+	unzip \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=stage0 /go/bin/* /usr/local/bin/
