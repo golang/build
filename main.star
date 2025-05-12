@@ -548,7 +548,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
     "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
     "openbsd-riscv64": known_issue(issue_number = 73569, hide_from_presubmit = False),
-    "linux-s390x": known_issue(issue_number = 67307, hide_from_presubmit = False),
 
     # The known issue for these builder types tracks the work of starting to add them.
     # Skip the builder definitions for x/ repos to reduce noise.
