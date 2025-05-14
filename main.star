@@ -1370,7 +1370,7 @@ def dimensions_of(host_type):
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
             cpu = goarch + "-64-" + suffix.replace("power", "POWER")
         elif goos == "linux" and goarch == "amd64" and suffix == "docker":
-            os = "Ubuntu-20"
+            os = "Ubuntu-22"
         elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffix
