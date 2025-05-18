@@ -187,8 +187,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{compilerTeam},
 	},
 	"go/src/cmd/doc": {
-		Primary:   []Owner{r},
-		Secondary: []Owner{mvdan},
+		Primary: []Owner{r},
 	},
 	"go/src/cmd/go": {
 		Primary: []Owner{commandlineTeam},
@@ -702,12 +701,10 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/text/template": {
-		Primary:   []Owner{r},
-		Secondary: []Owner{mvdan},
+		Primary: []Owner{r},
 	},
 	"go/src/text/template/parse": {
-		Primary:   []Owner{r},
-		Secondary: []Owner{mvdan},
+		Primary: []Owner{r},
 	},
 	"go/src/time": {
 		Primary: []Owner{rsc},
