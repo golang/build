@@ -281,7 +281,7 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build, 
 			}
 			continue
 		}
-		if rest, ok := strings.CutPrefix(t.pkg, "golang.org/x/"); ok {
+		if rest, ok := cutAnyPrefix(t.pkg, "golang.org/x/", "google.golang.org/"); ok {
 			if strings.HasPrefix(rest, project) {
 				t.path = "./x_" + rest
 			} else {
@@ -342,6 +342,16 @@ func printTestCommands(ctx context.Context, hc *http.Client, build *bbpb.Build, 
 		log.Printf("Note: Unable to parse name of failed test %s.", name)
 	}
 	return nil
+}
+
+func cutAnyPrefix(s string, prefixes ...string) (rest string, ok bool) {
+	for _, p := range prefixes {
+		rest, ok = strings.CutPrefix(s, p)
+		if ok {
+			return
+		}
+	}
+	return "", false
 }
 
 type test struct {
