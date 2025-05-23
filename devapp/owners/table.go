@@ -43,9 +43,7 @@ var (
 	gri           = gh("griesemer")
 	hajimehoshi   = gh("hajimehoshi")
 	hxjiang       = gh("h9jiang")
-	hyangah       = gh("hyangah")
 	iant          = gh("ianlancetaylor")
-	iancottrell   = gh("ianthehat")
 	jba           = gh("jba")
 	jbd           = gh("rakyll")
 	joetsai       = gh("dsnet")
@@ -70,13 +68,11 @@ var (
 	prattmic      = gh("prattmic")
 	pjw           = gh("pjweinb")
 	r             = gh("robpike")
-	rakoczy       = gh("toothrot")
 	roland        = gh("rolandshoemaker")
 	rsc           = gh("rsc")
 	sameer        = gh("Sajmani")
 	samthanawalla = gh("samthanawalla")
 	shinfan       = gh("shinfan")
-	taking        = gh("timothy-king")
 	thanm         = gh("thanm")
 	tklauser      = gh("tklauser")
 	tombergan     = gh("tombergan")
@@ -852,7 +848,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/analysis": {
 		Primary:   []Owner{adonovan},
-		Secondary: []Owner{matloob, zpavlinovic},
+		Secondary: []Owner{matloob, findleyr},
 	},
 	"tools/go/ast": {
 		Primary:   []Owner{adonovan, gri},
@@ -864,7 +860,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/callgraph": {
 		Primary:   []Owner{adonovan, zpavlinovic},
-		Secondary: []Owner{taking, toolsTeam},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/gcexportdata": {
 		Primary:   []Owner{gri, findleyr},
@@ -885,8 +881,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{adonovan},
 	},
 	"tools/go/ssa": {
-		Primary:   []Owner{taking, adonovan},
-		Secondary: []Owner{findleyr},
+		Primary:   []Owner{adonovan, findleyr},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/imports": {
 		Primary: []Owner{toolsTeam},
@@ -912,17 +908,19 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/jsonrpc2": {
-		Primary:   []Owner{iancottrell},
-		Secondary: []Owner{findleyr, jba},
+		Primary:   []Owner{findleyr},
+		Secondary: []Owner{adonovan, jba},
 	},
 	"tools/internal/tool": {
-		Primary: []Owner{iancottrell},
+		Primary:   []Owner{findleyr},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/internal/xcontext": {
-		Primary: []Owner{iancottrell},
+		Primary:   []Owner{findleyr},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/playground": {
-		Primary: []Owner{toolsTeam, rakoczy},
+		Primary: []Owner{toolsTeam},
 	},
 	"tools/present": {
 		Primary: []Owner{rsc},
@@ -938,7 +936,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{pkgsiteTeam},
 	},
 	"playground": {
-		Primary: []Owner{rakoczy},
+		Primary:   []Owner{findleyr},
+		Secondary: []Owner{toolsTeam},
 	},
 	"vuln": {
 		Primary: []Owner{vulndbTeam},
@@ -1023,5 +1022,5 @@ var wasmOwners = []Owner{neelance, cherryyz}
 
 var modProxyOwners = &Entry{
 	Primary:   []Owner{toolsTeam},
-	Secondary: []Owner{samthanawalla, findleyr, hyangah},
+	Secondary: []Owner{samthanawalla, findleyr},
 }
