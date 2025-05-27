@@ -137,6 +137,55 @@ func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMi
 	return m.ApproveAction(ctx)
 }
 
+// RelnoteTracking holds milestone and issue numbers for tracking writing release notes.
+type RelnoteTracking struct {
+	Milestone int // Milestone number.
+	Issue     int // Issue number.
+}
+
+// FetchRelnoteMilestoneAndIssue finds the Go 1.N milestone number and the "doc: write
+// release notes for Go 1.N" issue number for the specified Go 1.N development version.
+func (m *MilestoneTasks) FetchRelnoteMilestoneAndIssue(ctx *wf.TaskContext, develVersion int) (RelnoteTracking, error) {
+	gh, ok := m.Client.(*GitHubClient)
+	if !ok || gh.V4 == nil {
+		// It's not worth moving the GraphQL query/mutation into GitHubClientInterface
+		// at this time. That harms readability because GraphQL code is a flexible API
+		// call and is most readable when close to where it's used.
+		return RelnoteTracking{}, fmt.Errorf("no GitHub API v4 client")
+	}
+
+	milestoneName := fmt.Sprintf("Go1.%d", develVersion)
+	relnoteIssueTitle := fmt.Sprintf("doc: write release notes for Go 1.%d", develVersion)
+
+	milestoneNumber, err := m.Client.FetchMilestone(ctx, m.RepoOwner, m.RepoName, milestoneName, false)
+	if err != nil {
+		return RelnoteTracking{}, err
+	}
+	var q struct {
+		Search struct {
+			Nodes []struct {
+				Issue struct {
+					Number int
+					Title  string
+				} `graphql:"...on Issue"`
+			}
+			IssueCount int
+		} `graphql:"search(first: 100, type:ISSUE, query: $relnoteIssueQuery)"`
+	}
+	relnoteIssueQuery := fmt.Sprintf("repo:%s/%s type:issue state:open milestone:%s label:Documentation label:release-blocker in:title %q", m.RepoOwner, m.RepoName, milestoneName, relnoteIssueTitle)
+	if err := gh.V4.Query(ctx, &q, map[string]any{
+		"relnoteIssueQuery": githubv4.String(relnoteIssueQuery),
+	}); err != nil {
+		return RelnoteTracking{}, err
+	}
+	for _, n := range q.Search.Nodes {
+		if n.Issue.Title == relnoteIssueTitle {
+			return RelnoteTracking{Milestone: milestoneNumber, Issue: n.Issue.Number}, nil
+		}
+	}
+	return RelnoteTracking{}, fmt.Errorf("release notes issue not found within %d matching issues (see https://github.com/search?type=issues&q=%s)", q.Search.IssueCount, url.QueryEscape(relnoteIssueQuery))
+}
+
 // PushIssues updates issues to reflect a finished release.
 // For major and minor releases, it moves issues to the next milestone and closes the current milestone.
 // For pre-releases, it cleans up any "okay-after-..." labels in the current milestone that are done serving their purpose.
@@ -202,16 +251,15 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 // develVersion is a value like 22 representing that Go 1.22 is the major version whose
 // development has recently started, and whose early-in-cycle issues are to be pinged.
 func (m *MilestoneTasks) PingEarlyIssues(ctx *wf.TaskContext, develVersion int, openTreeURL string) (result struct{}, _ error) {
-	milestoneName := fmt.Sprintf("Go1.%d", develVersion)
-
 	gh, ok := m.Client.(*GitHubClient)
 	if !ok || gh.V4 == nil {
-		// TODO(go.dev/issue/58856): Decide if it's worth moving the GraphQL query/mutation
-		// into GitHubClientInterface. That kinda harms readability because GraphQL code is
-		// basically a flexible API call, so it's most readable when close to where they're
-		// used. This also depends on what kind of tests we'll want to use for this.
+		// It's not worth moving the GraphQL query/mutation into GitHubClientInterface
+		// at this time. That harms readability because GraphQL code is a flexible API
+		// call and is most readable when close to where it's used.
 		return struct{}{}, fmt.Errorf("no GitHub API v4 client")
 	}
+
+	milestoneName := fmt.Sprintf("Go1.%d", develVersion)
 
 	// Find all open early-in-cycle issues in the development major release milestone.
 	type issue struct {
@@ -233,11 +281,11 @@ func (m *MilestoneTasks) PingEarlyIssues(ctx *wf.TaskContext, develVersion int, 
 	if err != nil {
 		return struct{}{}, err
 	}
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"repoOwner":       githubv4.String(m.RepoOwner),
 		"repoName":        githubv4.String(m.RepoName),
 		"avoidDupSince":   githubv4.DateTime{Time: time.Now().Add(-30 * 24 * time.Hour)},
-		"milestoneNumber": githubv4.String(fmt.Sprint(milestoneNumber)), // For some reason GitHub API v4 uses string type for milestone numbers.
+		"milestoneNumber": githubv4.String(fmt.Sprint(milestoneNumber)), // The IssueFilters.milestoneNumber input in GitHub API v4 uses String type.
 		"issueCursor":     (*githubv4.String)(nil),
 	}
 	for {
@@ -416,7 +464,7 @@ func findMilestone(ctx context.Context, client *githubv4.Client, owner, repo, na
 			} `graphql:"milestones(first:10, query: $milestoneName)"`
 		} `graphql:"repository(owner: $repoOwner, name: $repoName)"`
 	}
-	if err := client.Query(ctx, &query, map[string]interface{}{
+	if err := client.Query(ctx, &query, map[string]any{
 		"repoOwner":     githubv4.String(owner),
 		"repoName":      githubv4.String(repo),
 		"milestoneName": githubv4.String(name),
@@ -484,7 +532,7 @@ func (c *GitHubClient) FetchMilestoneIssues(ctx context.Context, owner, repo str
 	}
 	var afterToken *githubv4.String
 more:
-	if err := c.V4.Query(ctx, &query, map[string]interface{}{
+	if err := c.V4.Query(ctx, &query, map[string]any{
 		"repoOwner":       githubv4.String(owner),
 		"repoName":        githubv4.String(repo),
 		"milestoneNumber": githubv4.String(fmt.Sprint(milestoneID)),

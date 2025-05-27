@@ -82,10 +82,35 @@ func TestCheckBlockers(t *testing.T) {
 	}
 }
 
+var flagMilestonesVersion = flag.Int("milestones-relnote-version", 0, "Go 1.N version to use in TestFetchRelnoteMilestoneAndIssue")
+
+func TestFetchRelnoteMilestoneAndIssue(t *testing.T) {
+	if *flagMilestonesVersion == 0 {
+		t.Skip("Not enabled by flags")
+	}
+
+	httpClient := oauth2.NewClient(context.Background(), oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
+	))
+	clV3, clV4 := github.NewClient(httpClient), githubv4.NewClient(httpClient)
+
+	tasks := &MilestoneTasks{
+		Client:    &GitHubClient{V3: clV3, V4: clV4},
+		RepoOwner: "golang", RepoName: "go",
+	}
+
+	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+	got, err := tasks.FetchRelnoteMilestoneAndIssue(ctx, *flagMilestonesVersion)
+	if err != nil {
+		t.Fatal("FetchRelnoteMilestoneAndIssue:", err)
+	}
+	t.Logf("FetchRelnoteMilestoneAndIssue: %#v", got)
+}
+
 var (
-	flagRun   = flag.Bool("run-destructive-milestones-test", false, "Run the milestone test. Requires repository owner and name flags, and GITHUB_TOKEN set in the environment.")
-	flagOwner = flag.String("milestones-github-owner", "", "Owner of testing repository")
-	flagRepo  = flag.String("milestones-github-repo", "", "Testing repository")
+	flagRunDestructiveMilestonesTest = flag.Bool("run-destructive-milestones-test", false, "Run the milestone test. Requires repository owner and name flags, and GITHUB_TOKEN set in the environment.")
+	flagOwner                        = flag.String("milestones-github-owner", "", "Owner of testing repository")
+	flagRepo                         = flag.String("milestones-github-repo", "", "Testing repository")
 )
 
 func TestMilestones(t *testing.T) {
@@ -94,32 +119,26 @@ func TestMilestones(t *testing.T) {
 		Logger:  &testLogger{t, ""},
 	}
 
-	if !*flagRun {
+	if !*flagRunDestructiveMilestonesTest {
 		t.Skip("Not enabled by flags")
 	}
 	if *flagOwner == "golang" {
 		t.Fatal("This is a destructive test! Don't run it on a real repository.")
 	}
 
-	src := oauth2.StaticTokenSource(
+	httpClient := oauth2.NewClient(ctx, oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
-	)
-	httpClient := oauth2.NewClient(ctx, src)
-	client3 := github.NewClient(httpClient)
-	client4 := githubv4.NewClient(httpClient)
+	))
+	clV3, clV4 := github.NewClient(httpClient), githubv4.NewClient(httpClient)
 
-	normal, blocker, err := resetRepo(ctx, client3)
+	normal, blocker, err := resetRepo(ctx, clV3)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	tasks := &MilestoneTasks{
-		Client: &GitHubClient{
-			V3: client3,
-			V4: client4,
-		},
-		RepoOwner: *flagOwner,
-		RepoName:  *flagRepo,
+		Client:    &GitHubClient{V3: clV3, V4: clV4},
+		RepoOwner: *flagOwner, RepoName: *flagRepo,
 		ApproveAction: func(*workflow.TaskContext) error {
 			return fmt.Errorf("not approved")
 		},
@@ -131,7 +150,7 @@ func TestMilestones(t *testing.T) {
 	if err := tasks.PushIssues(ctx, milestones, "go1.20beta1", KindBeta); err != nil {
 		t.Fatalf("Pushing issues for beta release: %v", err)
 	}
-	pushedBlocker, _, err := client3.Issues.Get(ctx, *flagOwner, *flagRepo, blocker.GetNumber())
+	pushedBlocker, _, err := clV3.Issues.Get(ctx, *flagOwner, *flagRepo, blocker.GetNumber())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +161,7 @@ func TestMilestones(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "open release blockers") {
 		t.Fatalf("CheckBlockers with an open release blocker didn't give expected error: %v", err)
 	}
-	if _, _, err := client3.Issues.Edit(ctx, *flagOwner, *flagRepo, *blocker.Number, &github.IssueRequest{State: github.String("closed")}); err != nil {
+	if _, _, err := clV3.Issues.Edit(ctx, *flagOwner, *flagRepo, *blocker.Number, &github.IssueRequest{State: github.String("closed")}); err != nil {
 		t.Fatal(err)
 	}
 	if err := tasks.CheckBlockers(ctx, milestones, "go1.20", KindMajor); err != nil {
@@ -151,14 +170,14 @@ func TestMilestones(t *testing.T) {
 	if err := tasks.PushIssues(ctx, milestones, "go1.20", KindMajor); err != nil {
 		t.Fatalf("PushIssues for major release failed: %v", err)
 	}
-	milestone, _, err := client3.Issues.GetMilestone(ctx, *flagOwner, *flagRepo, milestones.Current)
+	milestone, _, err := clV3.Issues.GetMilestone(ctx, *flagOwner, *flagRepo, milestones.Current)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if milestone.GetState() != "closed" {
 		t.Errorf("current milestone is %q, should be closed", milestone.GetState())
 	}
-	pushedNormal, _, err := client3.Issues.Get(ctx, *flagOwner, *flagRepo, normal.GetNumber())
+	pushedNormal, _, err := clV3.Issues.Get(ctx, *flagOwner, *flagRepo, normal.GetNumber())
 	if err != nil {
 		t.Fatal(err)
 	}

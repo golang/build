@@ -43,6 +43,7 @@ func TestPromoteNextAPIAndOpenAPIAuditIssue(t *testing.T) {
 	apiAuditIssue, err := cycleTasks.OpenAPIAuditIssue(
 		&workflow.TaskContext{Context: context.Background(), Logger: testLogger{t: t}},
 		version,
+		task.RelnoteTracking{Milestone: 322},
 		promotedAPI,
 	)
 	if err != nil {

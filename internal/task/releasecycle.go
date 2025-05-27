@@ -133,12 +133,7 @@ func (t ReleaseCycleTasks) PromoteNextAPI(ctx *wf.TaskContext, version int, revi
 	return promoted, nil
 }
 
-func (t ReleaseCycleTasks) OpenAPIAuditIssue(ctx *wf.TaskContext, version int, nextAPI PromotedAPI) (openedIssue int, _ error) {
-	// TODO(go.dev/issue/70655): Determine programmatically.
-	const (
-		devVerMilestone = 322 // Go1.24 milestone (https://github.com/golang/go/milestone/322).
-	)
-
+func (t ReleaseCycleTasks) OpenAPIAuditIssue(ctx *wf.TaskContext, version int, tracking RelnoteTracking, nextAPI PromotedAPI) (openedIssue int, _ error) {
 	// Parse individual lines into sorted groups by package.
 	parseLine := func(line string) (pkg, feature string, proposal int, _ error) {
 		pkgAndFeature, proposalStr, ok := strings.Cut(line, " #")
@@ -219,7 +214,7 @@ CC @aclements, @ianlancetaylor, @golang/release.`))
 		Title:     github.String(title),
 		Body:      github.String(body.String()),
 		Labels:    &[]string{"NeedsDecision", "release-blocker", "ExpertNeeded"},
-		Milestone: github.Int(devVerMilestone),
+		Milestone: github.Int(tracking.Milestone),
 	})
 	if err != nil {
 		return 0, err
@@ -258,12 +253,7 @@ type NextRelnote struct {
 // MergeNextRelnoteAndAddToWebsite merges the release fragments found in
 // doc/next of the main Go repository, and adds the merged release notes
 // to _content/doc of the x/website repository.
-func (t ReleaseCycleTasks) MergeNextRelnoteAndAddToWebsite(ctx *wf.TaskContext, version int, reviewers []string) (NextRelnote, error) {
-	// TODO(go.dev/issue/70655): Determine programmatically.
-	const (
-		releaseNotesIssue = 68545 // "doc: write release notes for Go 1.24"
-	)
-
+func (t ReleaseCycleTasks) MergeNextRelnoteAndAddToWebsite(ctx *wf.TaskContext, version int, tracking RelnoteTracking, reviewers []string) (NextRelnote, error) {
 	// Read branch head.
 	goRepo, err := gitfs.NewRepo(t.Gerrit.GitilesURL() + "/" + "go")
 	if err != nil {
@@ -323,7 +313,7 @@ template: false
 
 Using doc/next content as of %s (commit %s).
 
-For golang/go#%d.`, version, time.Now().Format(time.DateOnly), commit, releaseNotesIssue),
+For golang/go#%d.`, version, time.Now().Format(time.DateOnly), commit, tracking.Issue),
 	}, reviewers, map[string]string{mergedRelnoteFile: mergedRelnoteContent})
 	if err != nil {
 		return NextRelnote{}, err
@@ -344,12 +334,7 @@ For golang/go#%d.`, version, time.Now().Format(time.DateOnly), commit, releaseNo
 
 // RemoveNextRelnoteFromMainRepo removes release note fragments
 // from doc/next in the main Go repository.
-func (t ReleaseCycleTasks) RemoveNextRelnoteFromMainRepo(ctx *wf.TaskContext, version int, nr NextRelnote, reviewers []string) error {
-	// TODO(go.dev/issue/70655): Determine programmatically.
-	const (
-		releaseNotesIssue = 68545 // "doc: write release notes for Go 1.24"
-	)
-
+func (t ReleaseCycleTasks) RemoveNextRelnoteFromMainRepo(ctx *wf.TaskContext, version int, tracking RelnoteTracking, nr NextRelnote, reviewers []string) error {
 	// Read branch head.
 	goRepo, err := gitfs.NewRepo(t.Gerrit.GitilesURL() + "/" + "go")
 	if err != nil {
@@ -391,7 +376,7 @@ func (t ReleaseCycleTasks) RemoveNextRelnoteFromMainRepo(ctx *wf.TaskContext, ve
 The release note fragments have been merged and added
 as _content/doc/go1.%d.md in x/website in CL %d.
 
-For #%d.`, version, nr.AddMergedToWebsiteCL, releaseNotesIssue),
+For #%d.`, version, nr.AddMergedToWebsiteCL, tracking.Issue),
 	}, reviewers, files)
 	if err != nil {
 		return err
