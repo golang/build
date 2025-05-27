@@ -22,7 +22,7 @@ spec:
       - name: watchflakes
         image: gcr.io/symbolic-datum-552/watchflakes:latest
         imagePullPolicy: Always
-        command: ["/watchflakes", "-use-secret-manager", "-repeat=1h", "-post"]
+        command: ["/watchflakes", "-use-luci-authn", "-use-secret-manager", "-repeat=1h", "-post"]
         resources:
           requests:
             cpu: "1"

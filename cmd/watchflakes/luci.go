@@ -38,7 +38,6 @@ const (
 
 // LUCIClient is a LUCI client.
 type LUCIClient struct {
-	HTTPClient     *http.Client
 	BotsClient     spb.BotsClient
 	BuildersClient bbpb.BuildersClient
 	BuildsClient   bbpb.BuildsClient
@@ -52,15 +51,19 @@ type LUCIClient struct {
 }
 
 // NewLUCIClient creates a LUCI client.
-// nProc controls concurrency. NewLUCIClient panics if nProc is non-positive.
-func NewLUCIClient(nProc int) *LUCIClient {
+//
+// If c is nil, an unauthenticated http.DefaultClient is used,
+// otherwise c is expected to be an authenticated HTTP client.
+//
+// nProc controls concurrency. NewLUCIClient returns an error
+// if nProc is non-positive.
+func NewLUCIClient(c *http.Client, nProc int) (*LUCIClient, error) {
 	if nProc < 1 {
-		panic(fmt.Errorf("nProc is %d, want 1 or higher", nProc))
+		return nil, fmt.Errorf("nProc is %d, want 1 or higher", nProc)
 	}
-	c := new(http.Client)
-	gitilesClient, err := gitiles.NewRESTClient(c, gitilesHost, false)
+	gitilesClient, err := gitiles.NewRESTClient(c, gitilesHost, c != nil)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	buildsClient := bbpb.NewBuildsClient(&prpc.Client{
 		C:    c,
@@ -79,14 +82,13 @@ func NewLUCIClient(nProc int) *LUCIClient {
 		Host: swarmingHost,
 	})
 	return &LUCIClient{
-		HTTPClient:     c,
 		BotsClient:     botsClient,
 		GitilesClient:  gitilesClient,
 		BuildsClient:   buildsClient,
 		BuildersClient: buildersClient,
 		ResultDBClient: resultDBClient,
 		nProc:          nProc,
-	}
+	}, nil
 }
 
 type BuilderConfigProperties struct {

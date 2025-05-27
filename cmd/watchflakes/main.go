@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"go.chromium.org/luci/auth"
 	bbpb "go.chromium.org/luci/buildbucket/proto"
 	rdbpb "go.chromium.org/luci/resultdb/proto/v1"
 	"golang.org/x/build/buildenv"
@@ -51,6 +52,7 @@ var (
 	repeat  = flag.Duration("repeat", 0, "keep running with specified `period`; zero means to run once and exit")
 	verbose = flag.Bool("v", false, "print verbose posting decisions")
 
+	useLUCIAuthn     = flag.Bool("use-luci-authn", false, "use LUCI authentication")
 	useSecretManager = flag.Bool("use-secret-manager", false, "fetch GitHub token from Secret Manager instead of $HOME/.netrc")
 )
 
@@ -78,6 +80,16 @@ func main() {
 		query = &Issue{Issue: new(github.Issue), Script: s, ScriptText: flag.Arg(0)}
 	}
 
+	var luciHTTPClient *http.Client
+	if *useLUCIAuthn {
+		// Create an authenticated HTTP client.
+		var err error
+		luciHTTPClient, err = auth.NewAuthenticator(context.Background(), auth.SilentLogin, auth.Options{GCEAllowAsDefault: true}).Client()
+		if err != nil {
+			log.Fatalln("auth.NewAuthenticator.Client:", err)
+		}
+	}
+
 	// Create an authenticated GitHub client.
 	if *useSecretManager {
 		// Fetch credentials from Secret Manager.
@@ -99,8 +111,11 @@ func main() {
 		}
 	}
 
-	// Load LUCI dashboards
-	c := NewLUCIClient(runtime.GOMAXPROCS(0) * 4)
+	// Load LUCI dashboards.
+	c, err := NewLUCIClient(luciHTTPClient, runtime.GOMAXPROCS(0)*4)
+	if err != nil {
+		log.Fatalln("NewLUCIClient:", err)
+	}
 	c.TraceSteps = true
 
 	var ticker *time.Ticker
@@ -156,7 +171,7 @@ Repeat:
 
 	// Load GitHub issues
 	var issues []*Issue
-	issues, err := readIssues(issues)
+	issues, err = readIssues(issues)
 	if err != nil {
 		log.Fatal(err)
 	}
