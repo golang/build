@@ -25,14 +25,14 @@ spec:
           command: ["/watchflakes", "-use-luci-authn", "-use-secret-manager", "-repeat=1h", "-post"]
           env:
             - name: GOMEMLIMIT  # 2025-12-19 is the last time it was tested that it helps to set GOMEMLIMIT explicitly in this context
-              value: "1800MiB"  # 90% of requested memory
+              value: "3600MiB"  # 90% of requested memory
           resources:
             requests:
               cpu: "1"
-              memory: "2Gi"  # if changing this, update GOMEMLIMIT above
+              memory: "4Gi"  # if changing this, update GOMEMLIMIT above
             limits:
               cpu: "2"
-              memory: "4Gi"
+              memory: "8Gi"
 ---
 apiVersion: v1
 kind: ServiceAccount
