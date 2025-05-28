@@ -8,7 +8,7 @@ metadata:
   namespace: prod
   name: watchflakes-deployment
 spec:
-  replicas: 1 # more than 1 might cause duplicate GitHub comments
+  replicas: 1  # more than 1 might cause duplicate GitHub comments
   selector:
     matchLabels:
       app: watchflakes
@@ -19,17 +19,20 @@ spec:
     spec:
       serviceAccountName: watchflakes
       containers:
-      - name: watchflakes
-        image: gcr.io/symbolic-datum-552/watchflakes:latest
-        imagePullPolicy: Always
-        command: ["/watchflakes", "-use-luci-authn", "-use-secret-manager", "-repeat=1h", "-post"]
-        resources:
-          requests:
-            cpu: "1"
-            memory: "2Gi"
-          limits:
-            cpu: "2"
-            memory: "4Gi"
+        - name: watchflakes
+          image: gcr.io/symbolic-datum-552/watchflakes:latest
+          imagePullPolicy: Always
+          command: ["/watchflakes", "-use-luci-authn", "-use-secret-manager", "-repeat=1h", "-post"]
+          env:
+            - name: GOMEMLIMIT  # 2025-12-19 is the last time it was tested that it helps to set GOMEMLIMIT explicitly in this context
+              value: "1800MiB"  # 90% of requested memory
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"  # if changing this, update GOMEMLIMIT above
+            limits:
+              cpu: "2"
+              memory: "4Gi"
 ---
 apiVersion: v1
 kind: ServiceAccount
