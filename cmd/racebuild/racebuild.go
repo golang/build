@@ -318,15 +318,6 @@ cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso outdir/rac
 		SubArch: "v1",
 		Type:    "gotip-windows-amd64-race",
 		Script: `
-@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "[System.net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
-choco install git -y
-if %errorlevel% neq 0 exit /b %errorlevel%
-call refreshenv
-echo adding back in compiler path
-set PATH=C:\go\bin;%PATH%;C:\godep\gcc64\bin
-rem make sure we have a working copy of gcc
-gcc --version
-if %errorlevel% neq 0 exit /b %errorlevel%
 git clone https://go.googlesource.com/go
 if %errorlevel% neq 0 exit /b %errorlevel%
 cd go
@@ -356,6 +347,8 @@ mkdir outdir
 if %errorlevel% neq 0 exit /b %errorlevel%
 copy llvm-project\compiler-rt\lib\tsan\go\race_windows_amd64.syso outdir\race_windows.syso
 if %errorlevel% neq 0 exit /b %errorlevel%
+set PATH=%cd%\go\bin;%PATH%
+set GO_TEST_TIMEOUT_SCALE=2
 cd go/src
 call race.bat
 if %errorlevel% neq 0 exit /b %errorlevel%
