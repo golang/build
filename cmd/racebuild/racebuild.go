@@ -288,7 +288,7 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:      "netbsd",
 		Arch:    "amd64",
 		SubArch: "v1",
-		Type:    "netbsd-amd64-9_3",
+		Type:    "gotip-netbsd-amd64",
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -316,7 +316,7 @@ cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso outdir/rac
 		OS:      "windows",
 		Arch:    "amd64",
 		SubArch: "v1",
-		Type:    "windows-amd64-race",
+		Type:    "gotip-windows-amd64-race",
 		Script: `
 @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -InputFormat None -ExecutionPolicy Bypass -Command "[System.net.ServicePointManager]::SecurityProtocol = 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\chocolatey\bin"
 choco install git -y
