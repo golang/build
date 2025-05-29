@@ -629,8 +629,8 @@ INTERNAL_GO_BRANCHES = {
     # release, and want to maintain that history. We use a regex like
     # "private-release-branch.go1.23.\\d+" to match all the point branches
     # so that we don't need to manually update the config each time we issue a point release.
-    LATEST_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+", "private-internal-branch." + LATEST_GO + "-vendor"]),
-    SECOND_GO: struct(branch_regexps = ["private-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+", "private-internal-branch." + SECOND_GO + "-vendor"]),
+    LATEST_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+", "private-internal-branch." + LATEST_GO + "-vendor"]),
+    SECOND_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+", "private-internal-branch." + SECOND_GO + "-vendor"]),
 }
 
 # TOOLS_GO_BRANCHES are Go branches that aren't used for project-wide testing
