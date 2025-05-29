@@ -83,6 +83,39 @@ CC @aclements, @ianlancetaylor, @golang/release.`
 	}
 }
 
+func TestPromoteNextAPIAlreadyExists(t *testing.T) {
+	newAPILine := "pkg bytes, func ContainsFunc([]uint8, func(int32) bool) bool #54386"
+	goRepo := task.NewFakeRepo(t, "go")
+	goRepo.Commit(map[string]string{
+		"api/go1.24.txt": newAPILine + "\n",
+	})
+	fakeGerrit := task.NewFakeGerrit(t, goRepo)
+
+	const version = 24
+	approved := false
+	cycleTasks := task.ReleaseCycleTasks{
+		Gerrit: fakeGerrit,
+		ApproveAction: func(tc *workflow.TaskContext) error {
+			approved = true
+			return nil
+		},
+	}
+	promotedAPI, err := cycleTasks.PromoteNextAPI(
+		&workflow.TaskContext{Context: context.Background(), Logger: testLogger{t: t}},
+		version,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !approved {
+		t.Error("expected ApproveAction to have executed on retry, but it did not")
+	}
+	if len(promotedAPI.APIs) != 1 || promotedAPI.APIs[0] != newAPILine {
+		t.Fatalf("unexpected promoted APIs: want []string{%s}, got %+v", newAPILine, promotedAPI.APIs)
+	}
+}
+
 type testLogger struct {
 	t    testing.TB
 	task string // Optional.

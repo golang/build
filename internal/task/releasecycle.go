@@ -44,6 +44,22 @@ type PromotedAPI struct {
 	PromotionCL int
 }
 
+func splitPromotedAPIs(file []byte) ([]string, error) {
+	// TODO(dmitshur): After Go 1.24, consider simplifying bytes.CutSuffix(…, []byte("\n")) + bytes.Split(…, []byte("\n")) in favor of iterating over bytes.Lines or so.
+	var apis []string
+	b, ok := bytes.CutSuffix(file, []byte("\n"))
+	if !ok {
+		return nil, errors.New("missing trailing newline")
+	}
+	for _, l := range bytes.Split(b, []byte("\n")) {
+		if len(l) == 0 {
+			return nil, errors.New("unexpected blank line")
+		}
+		apis = append(apis, string(l))
+	}
+	return apis, nil
+}
+
 // PromoteNextAPI promotes api under api/next to api/go1.{version}.txt
 // by mailing a Gerrit CL that does this and waiting for it to be submitted,
 // then returns the promoted API.
@@ -60,10 +76,33 @@ func (t ReleaseCycleTasks) PromoteNextAPI(ctx *wf.TaskContext, version int, revi
 
 	// Confirm that "api/go1.{version}.txt" hasn't already been made.
 	promotedAPIFile := path.Join("api", fmt.Sprintf("go1.%d.txt", version))
-	_, err = t.Gerrit.ReadFile(ctx, "go", commit, promotedAPIFile)
+	promotedAPIFileContents, err := t.Gerrit.ReadFile(ctx, "go", commit, promotedAPIFile)
 	if err == nil {
-		ctx.Printf("The %s file is already created, so refusing to run this task (and tasks that depend on it).", promotedAPIFile)
-		return PromotedAPI{}, fmt.Errorf("%s already exists; the scope of this task is to create that file only", promotedAPIFile)
+		ctx.Printf(`The %s file is already created.
+
+If this is because the requisite change is already submitted, and this task failed for some unrelated reason
+(timeout or a redeploy).
+
+Approve this task if you intend the rest of the workflow to proceed as if it created %[1]s itself.
+
+Otherwise, please cancel the workflow and complete any follow-up work manually, as proceeding may create
+duplicate issues or broken CLs.`, promotedAPIFile)
+
+		if err := t.ApproveAction(ctx); err != nil {
+			return PromotedAPI{}, err
+		}
+		var promoted PromotedAPI
+		promoted.APIs, err = splitPromotedAPIs(promotedAPIFileContents)
+		if err != nil {
+			return PromotedAPI{}, fmt.Errorf("API file %s: %v", promotedAPIFile, err)
+		}
+		if !slices.IsSorted(promoted.APIs) {
+			ctx.Printf("Note that lines in %s are unexpectedly unsorted.", promotedAPIFile)
+			slices.Sort(promoted.APIs)
+		}
+		// N.B. We leave the CL that did the promotion intentionally blank.
+		// This path should be rare, and looking it up is a bit complicated.
+		return promoted, nil
 	} else if errors.Is(err, gerrit.ErrResourceNotExist) {
 		// OK. We'll be creating it below.
 	} else if err != nil {
@@ -85,17 +124,11 @@ func (t ReleaseCycleTasks) PromoteNextAPI(ctx *wf.TaskContext, version int, revi
 		if err != nil {
 			return PromotedAPI{}, err
 		}
-		// TODO(dmitshur): After Go 1.24, consider simplifying bytes.CutSuffix(…, []byte("\n")) + bytes.Split(…, []byte("\n")) in favor of iterating over bytes.Lines or so.
-		b, ok := bytes.CutSuffix(b, []byte("\n"))
-		if !ok {
-			return PromotedAPI{}, fmt.Errorf("API file %s doesn't have a trailing newline", de.Name)
+		apis, err := splitPromotedAPIs(b)
+		if err != nil {
+			return PromotedAPI{}, fmt.Errorf("API file %s: %v", de.Name, err)
 		}
-		for _, l := range bytes.Split(b, []byte("\n")) {
-			if len(l) == 0 {
-				return PromotedAPI{}, fmt.Errorf("API file %s has a blank line", de.Name)
-			}
-			promoted.APIs = append(promoted.APIs, string(l))
-		}
+		promoted.APIs = append(promoted.APIs, apis...)
 
 		files[path.Join("api/next", de.Name)] = "" // Delete the file.
 	}
