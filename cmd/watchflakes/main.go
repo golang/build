@@ -136,7 +136,12 @@ Repeat:
 		if err != nil {
 			log.Fatalln("ListBoards:", err)
 		}
-		err = c.ReadBoards(ctx, boards, startTime.Add(-timeLimit))
+		since := startTime.Add(-timeLimit)
+		if resultAdapterFix := time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC); since.Before(resultAdapterFix) {
+			// Skip data before result_adapter fix rolled out. See go.dev/issue/73921.
+			since = resultAdapterFix
+		}
+		err = c.ReadBoards(ctx, boards, since)
 		if err != nil {
 			log.Fatalln("ReadBoards:", err)
 		}
