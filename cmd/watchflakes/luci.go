@@ -63,7 +63,7 @@ func NewLUCIClient(c *http.Client, nProc int) (*LUCIClient, error) {
 	}
 	gitilesClient, err := gitiles.NewRESTClient(c, gitilesHost, c != nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("NewRESTClient: %w", err)
 	}
 	buildsClient := bbpb.NewBuildsClient(&prpc.Client{
 		C:    c,
@@ -158,7 +158,7 @@ type Bot struct {
 }
 
 // ListCommits fetches the list of commits from Gerrit.
-func (c *LUCIClient) ListCommits(ctx context.Context, repo, goBranch string, since time.Time) []Commit {
+func (c *LUCIClient) ListCommits(ctx context.Context, repo, goBranch string, since time.Time) ([]Commit, error) {
 	if c.TraceSteps {
 		log.Println("ListCommits", repo, goBranch)
 	}
@@ -176,7 +176,7 @@ nextPage:
 		PageToken:  pageToken,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return nil, fmt.Errorf("GitilesClient.Log: %w", err)
 	}
 	for _, c := range resp.GetLog() {
 		commitTime := c.GetCommitter().GetTime().AsTime()
@@ -193,7 +193,7 @@ nextPage:
 		goto nextPage
 	}
 done:
-	return commits
+	return commits, nil
 }
 
 // ListBuilders fetches the list of builders, on the given repo and goBranch.
@@ -213,13 +213,13 @@ nextPage:
 		PageToken: pageToken,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("BuildersClient.ListBuilders: %w", err)
 	}
 	for _, b := range resp.GetBuilders() {
 		var p BuilderConfigProperties
 		err := json.Unmarshal([]byte(b.GetConfig().GetProperties()), &p)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("JSON unmarshal into BuilderConfigProperties: %w", err)
 		}
 		if p.KnownIssue != 0 {
 			continue
@@ -241,7 +241,7 @@ nextPage:
 func (c *LUCIClient) ListBoards(ctx context.Context) ([]*Dashboard, error) {
 	builders, err := c.ListBuilders(ctx, "", "")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ListBuilders: %w", err)
 	}
 	repoMap := make(map[Project]bool)
 	for _, b := range builders {
@@ -279,7 +279,7 @@ func (c *LUCIClient) GetBuilds(ctx context.Context, builder string, since time.T
 	}
 	mask, err := fieldmaskpb.New((*bbpb.Build)(nil), "id", "builder", "output", "status", "steps", "infra", "end_time")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating a build mask: %w", err)
 	}
 	var builds []*bbpb.Build
 	var pageToken string
@@ -291,7 +291,7 @@ nextPage:
 		PageToken: pageToken,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("BuildsClient.SearchBuilds: %w", err)
 	}
 	builds = append(builds, resp.GetBuilds()...)
 	if resp.GetNextPageToken() != "" {
@@ -306,11 +306,14 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 	if c.TraceSteps {
 		log.Println("ReadBoard", dash.Repo, dash.GoBranch)
 	}
-	dash.Commits = c.ListCommits(ctx, dash.Repo, dash.GoBranch, since)
 	var err error
+	dash.Commits, err = c.ListCommits(ctx, dash.Repo, dash.GoBranch, since)
+	if err != nil {
+		return fmt.Errorf("ListCommits: %w", err)
+	}
 	dash.Builders, err = c.ListBuilders(ctx, dash.Repo, dash.GoBranch)
 	if err != nil {
-		return err
+		return fmt.Errorf("ListBuilders: %w", err)
 	}
 
 	dashMap := make([]map[string]*BuildResult, len(dash.Builders)) // indexed by builder, then keyed by commit hash
@@ -326,7 +329,7 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 			bName := builder.Name
 			builds, err := c.GetBuilds(groupContext, bName, since)
 			if err != nil {
-				return err
+				return fmt.Errorf("GetBuilds: %w", err)
 			}
 			for _, b := range builds {
 				r := c.GetBuildResult(groupContext, dash.Repo, builder, b)
@@ -351,7 +354,7 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return err
+		return fmt.Errorf("get builds from builders: %w", err)
 	}
 
 	// Gather into dashboard.
@@ -471,14 +474,14 @@ func (c *LUCIClient) GetBuild(ctx context.Context, id int64) (*BuildResult, erro
 	}
 	mask, err := fieldmaskpb.New((*bbpb.Build)(nil), "id", "builder", "output", "status", "steps", "infra", "end_time")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error creating a build mask: %w", err)
 	}
 	b, err := c.BuildsClient.GetBuild(ctx, &bbpb.GetBuildRequest{
 		Id:   id,
 		Mask: &bbpb.BuildMask{Fields: mask},
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("BuildsClient.GetBuild: %w", err)
 	}
 	bi, err := c.BuildersClient.GetBuilder(ctx, &bbpb.GetBuilderRequest{
 		Id: &bbpb.BuilderID{
@@ -488,12 +491,12 @@ func (c *LUCIClient) GetBuild(ctx context.Context, id int64) (*BuildResult, erro
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("BuildersClient.GetBuilder: %w", err)
 	}
 	var p BuilderConfigProperties
 	err = json.Unmarshal([]byte(bi.GetConfig().GetProperties()), &p)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("JSON unmarshal into BuilderConfigProperties: %w", err)
 	}
 	builder := Builder{bi.GetId().GetBuilder(), &p}
 	r := c.GetBuildResult(ctx, builder.Repo, builder, b)
@@ -504,7 +507,7 @@ func (c *LUCIClient) ReadBoards(ctx context.Context, boards []*Dashboard, since 
 	for _, dash := range boards {
 		err := c.ReadBoard(ctx, dash, since)
 		if err != nil {
-			return err
+			return fmt.Errorf("ReadBoard: %w", err)
 		}
 	}
 	return nil
@@ -523,7 +526,7 @@ func (c *LUCIClient) GetResultAndArtifacts(ctx context.Context, r *BuildResult) 
 	}
 	resp, err := c.ResultDBClient.QueryTestResults(ctx, req)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("ResultDBClient.QueryTestResults:", err)
 	}
 
 	var failures []*Failure
@@ -540,7 +543,7 @@ func (c *LUCIClient) GetResultAndArtifacts(ctx context.Context, r *BuildResult) 
 			PageSize: 1000,
 		})
 		if err != nil {
-			log.Fatal(err)
+			log.Fatalln("ResultDBClient.QueryArtifacts:", err)
 		}
 		for _, a := range resp.GetArtifacts() {
 			if a.GetArtifactId() != "output" {
@@ -720,11 +723,11 @@ nextCursor:
 		Limit:  1000,
 		Cursor: cursor,
 		Dimensions: []*spb.StringPair{
-			&spb.StringPair{Key: "pool", Value: "luci.golang.shared-workers"},
+			{Key: "pool", Value: "luci.golang.shared-workers"},
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("BotsClient.ListBots: %w", err)
 	}
 	for _, bot := range resp.GetItems() {
 		if checkFilters(bot) {
@@ -789,7 +792,7 @@ func platform(bot *spb.BotInfo) (string, string, error) {
 func fetchURL(url string) string {
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal(fmt.Errorf("GET %s: failed to get a response: %w", url, err))
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {

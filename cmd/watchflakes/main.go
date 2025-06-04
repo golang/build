@@ -178,7 +178,7 @@ Repeat:
 	var issues []*Issue
 	issues, err = readIssues(issues)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("readIssues:", err)
 	}
 	findScripts(issues)
 	if query == nil {
@@ -232,7 +232,7 @@ Repeat:
 					}
 					issue, err := prepareNew(fp)
 					if err != nil {
-						log.Fatal(err)
+						log.Fatalln("prepareNew:", err)
 					}
 					issues = append(issues, issue)
 					newIssue++
