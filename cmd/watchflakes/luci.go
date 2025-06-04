@@ -25,6 +25,8 @@ import (
 	spb "go.chromium.org/luci/swarming/proto/api_v2"
 	goluci "golang.org/x/build/internal/luci"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -166,17 +168,38 @@ func (c *LUCIClient) ListCommits(ctx context.Context, repo, goBranch string, sin
 	if repo == "go" {
 		branch = goBranch
 	}
-	var commits []Commit
-	var pageToken string
-nextPage:
+	var (
+		commits []Commit
+		page    struct {
+			Token string
+			Index int
+		}
+		try = 1
+	)
+fetchPage:
 	resp, err := c.GitilesClient.Log(ctx, &gpb.LogRequest{
 		Project:    repo,
 		Committish: "refs/heads/" + branch,
-		PageSize:   1000,
-		PageToken:  pageToken,
+		PageSize:   100,
+		PageToken:  page.Token,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("GitilesClient.Log: %w", err)
+	if e := status.Code(err); e == codes.Unavailable || e == codes.ResourceExhausted {
+		const maxTries = 10
+		if try == maxTries {
+			// At this point, return an error to the caller.
+			return nil, fmt.Errorf("after %d attempts, log of repo %s still failed: %v", maxTries, repo, err)
+		}
+		someDelay := time.Duration(try*try) * 15 * time.Second
+		log.Printf("log of repo %s did not succeed on attempt %d, will try again in %v: %v", repo, try, someDelay, err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(someDelay):
+			try++
+			goto fetchPage
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("GitilesClient.Log(%q, %q, page %d): %w", repo, branch, page.Index+1, err)
 	}
 	for _, c := range resp.GetLog() {
 		commitTime := c.GetCommitter().GetTime().AsTime()
@@ -189,8 +212,9 @@ nextPage:
 		})
 	}
 	if resp.GetNextPageToken() != "" {
-		pageToken = resp.GetNextPageToken()
-		goto nextPage
+		page.Token, page.Index = resp.GetNextPageToken(), page.Index+1
+		try = 1 // Reset try counter after getting a page successfully.
+		goto fetchPage
 	}
 done:
 	return commits, nil
