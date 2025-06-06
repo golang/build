@@ -611,6 +611,7 @@ SECOND_GO = "go1.23"
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
     "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.22.6"),
+    NEXTUP_GO: struct(branch = "release-branch." + NEXTUP_GO, bootstrap = "1.22.6"),
     LATEST_GO: struct(branch = "release-branch." + LATEST_GO, bootstrap = "1.22.6"),
     SECOND_GO: struct(branch = "release-branch." + SECOND_GO, bootstrap = "1.20.6"),
 }
@@ -629,6 +630,7 @@ INTERNAL_GO_BRANCHES = {
     # release, and want to maintain that history. We use a regex like
     # "private-release-branch.go1.23.\\d+" to match all the point branches
     # so that we don't need to manually update the config each time we issue a point release.
+    NEXTUP_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[NEXTUP_GO].branch + ".\\d+", "private-internal-branch." + NEXTUP_GO + "-vendor"]),
     LATEST_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+", "private-internal-branch." + LATEST_GO + "-vendor"]),
     SECOND_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+", "private-internal-branch." + SECOND_GO + "-vendor"]),
 }
