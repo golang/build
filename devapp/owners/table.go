@@ -262,7 +262,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mknyszek, prattmic},
 	},
 	"go/src/cmd/vet": {
-		Primary: []Owner{matloob},
+		Primary:   []Owner{adonovan},
+		Secondary: []Owner{matloob},
 	},
 	"go/src/cmp": {
 		Primary:   []Owner{iant},
@@ -383,11 +384,6 @@ var entries = map[string]*Entry{
 	},
 	"go/src/go/internal/gcimporter": {
 		Primary: []Owner{gri},
-	},
-	// go/packages doesn't exist yet, but x/tools/go/packages has been proposed to
-	// move there and many issues already refer to the new path.
-	"go/src/go/packages": {
-		Primary: []Owner{matloob},
 	},
 	"go/src/go/parser": {
 		Primary: []Owner{gri},
@@ -871,14 +867,16 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/internal/packagesdriver": {
-		Primary: []Owner{matloob},
+		Primary:   []Owner{adonovan},
+		Secondary: []Owner{matloob},
 	},
 	"tools/go/loader": {
-		Primary: []Owner{adonovan, matloob},
+		Primary:   []Owner{adonovan},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/packages": {
-		Primary:   []Owner{matloob},
-		Secondary: []Owner{adonovan},
+		Primary:   []Owner{adonovan},
+		Secondary: []Owner{matloob},
 	},
 	"tools/go/ssa": {
 		Primary:   []Owner{adonovan, findleyr},
@@ -888,7 +886,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/analysisinternal": {
-		Primary:   []Owner{adonovan, matloob},
+		Primary:   []Owner{adonovan},
 		Secondary: []Owner{toolsTeam},
 	},
 	"tools/internal/apidiff": {
