@@ -70,7 +70,7 @@ var reviewersParam = wf.ParamDef[[]string]{
 type TagRepo struct {
 	Name         string    // Gerrit project name, e.g., "tools".
 	ModPath      string    // Module path, e.g., "golang.org/x/tools".
-	Deps         []*TagDep // Dependency modules.
+	DepsToUpdate []*TagDep // Dependency modules that are in scope of being updated.
 	StartVersion string    // The version of the module when the workflow started. Empty string means repo hasn't begun release version tagging yet.
 	NewerVersion string    // The version of the module that will be tagged, or the empty string when the repo is being updated only and not tagged.
 }
@@ -117,7 +117,7 @@ func (x *TagXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]TagRepo, error) {
 	// Now that we know all repos and their deps,
 	// do a second pass to update the Wait field.
 	for _, r := range repos {
-		for _, dep := range r.Deps {
+		for _, dep := range r.DepsToUpdate {
 			if updateOnly[dep.ModPath] {
 				// No need to wait for repos that we don't plan to tag.
 				dep.Wait = false
@@ -211,7 +211,7 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 				wait = false
 			}
 		}
-		result.Deps = append(result.Deps, &TagDep{
+		result.DepsToUpdate = append(result.DepsToUpdate, &TagDep{
 			ModPath: req.Mod.Path,
 			Wait:    wait,
 		})
@@ -266,7 +266,7 @@ func checkCycles1(reposByModule map[string]TagRepo, repo TagRepo, stack []string
 		return cycles
 	}
 
-	for _, dep := range repo.Deps {
+	for _, dep := range repo.DepsToUpdate {
 		if !dep.Wait {
 			// Deps we don't wait for don't matter for cycles.
 			continue
@@ -332,7 +332,7 @@ func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagR
 	tagged, ok := x.planRepo(wd, repo, plannedRepos, reviewers, skipPostSubmit)
 	if !ok {
 		var deps []string
-		for _, d := range repo.Deps {
+		for _, d := range repo.DepsToUpdate {
 			deps = append(deps, d.ModPath)
 		}
 		return nil, fmt.Errorf("%q doesn't have all of its dependencies (%q)", repo.Name, deps)
@@ -344,24 +344,28 @@ func (x *TagXReposTasks) BuildSingleRepoPlan(wd *wf.Definition, repoSlice []TagR
 // a Value containing the tagged repository's information, or nil, false
 // if the dependencies it's waiting on haven't been planned yet.
 func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, planned map[string]wf.Value[TagRepo], reviewers []string, skipPostSubmit bool) (_ wf.Value[TagRepo], ready bool) {
-	var plannedDeps []wf.Value[TagRepo]
-	for _, dep := range repo.Deps {
+	// Collect deps for this repo that we need to wait for.
+	var waitingDeps []wf.Value[TagRepo]
+	for _, dep := range repo.DepsToUpdate {
 		if !dep.Wait {
+			// No need to wait on this dependency, skip.
 			continue
 		} else if r, ok := planned[dep.ModPath]; ok {
-			plannedDeps = append(plannedDeps, r)
+			waitingDeps = append(waitingDeps, r)
 		} else {
+			// One of the deps isn't planned yet, so return early.
 			return nil, false
 		}
 	}
+
 	wd = wd.Sub(repo.Name)
 	repoName, branch := wf.Const(repo.Name), wf.Const("master")
 
 	var tagCommit wf.Value[string]
-	if len(plannedDeps) == 0 {
+	if len(repo.DepsToUpdate) == 0 {
 		tagCommit = wf.Task2(wd, "read branch head", x.Gerrit.ReadBranchHead, repoName, branch)
 	} else {
-		goMod := wf.Task3(wd, "generate go.mod", x.UpdateGoMod, wf.Const(repo), wf.Slice(plannedDeps...), branch)
+		goMod := wf.Task3(wd, "generate go.mod", x.UpdateGoMod, wf.Const(repo), wf.Slice(waitingDeps...), branch)
 		cl := wf.Task4(wd, "mail go.mod", x.MailGoMod, repoName, branch, goMod, wf.Const(reviewers))
 		tagCommit = wf.Task3(wd, "wait for submit", x.AwaitGoMod, cl, repoName, branch)
 	}
@@ -376,12 +380,22 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, planned map[s
 	return tagged, true
 }
 
-func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, deps []TagRepo, branch string) (files map[string]string, _ error) {
-	// Update the root module to the selected versions.
+func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, updatedDeps []TagRepo, branch string) (files map[string]string, _ error) {
+	// Update select dependencies of the root module.
+	// For deps that were updated by us to dep.NewerVersion, use that version.
+	// For deps that weren't updated by us, use the "upgrade" module query. See go.dev/issue/73264.
+	var remainingDeps = make(map[string]struct{}) // remainingDeps tracks remaining deps to update. Map key is module path.
+	for _, dep := range repo.DepsToUpdate {
+		remainingDeps[dep.ModPath] = struct{}{}
+	}
 	var script strings.Builder
 	script.WriteString("go get")
-	for _, dep := range deps {
+	for _, dep := range updatedDeps {
 		script.WriteString(" " + dep.ModPath + "@" + dep.NewerVersion)
+		delete(remainingDeps, dep.ModPath)
+	}
+	for dep := range remainingDeps {
+		script.WriteString(" " + dep + "@upgrade")
 	}
 	script.WriteString("\n")
 

@@ -63,10 +63,10 @@ func TestCycles(t *testing.T) {
 	}{
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: deps("tools")},
-				{Name: "tools", Deps: deps("text")},
+				{Name: "text", DepsToUpdate: deps("tools")},
+				{Name: "tools", DepsToUpdate: deps("text")},
 				{Name: "sys"},
-				{Name: "net", Deps: deps("sys")},
+				{Name: "net", DepsToUpdate: deps("sys")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -75,9 +75,9 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: deps("tools")},
-				{Name: "tools", Deps: deps("fake")},
-				{Name: "fake", Deps: deps("text")},
+				{Name: "text", DepsToUpdate: deps("tools")},
+				{Name: "tools", DepsToUpdate: deps("fake")},
+				{Name: "fake", DepsToUpdate: deps("text")},
 			},
 			want: []string{
 				"tools,fake,text,tools",
@@ -87,9 +87,9 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: deps("tools")},
-				{Name: "tools", Deps: deps("fake", "text")},
-				{Name: "fake", Deps: deps("tools")},
+				{Name: "text", DepsToUpdate: deps("tools")},
+				{Name: "tools", DepsToUpdate: deps("fake", "text")},
+				{Name: "fake", DepsToUpdate: deps("tools")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -100,10 +100,10 @@ func TestCycles(t *testing.T) {
 		},
 		{
 			repos: []TagRepo{
-				{Name: "text", Deps: deps("tools")},
-				{Name: "tools", Deps: deps("fake", "text")},
-				{Name: "fake1", Deps: deps("fake2")},
-				{Name: "fake2", Deps: deps("tools")},
+				{Name: "text", DepsToUpdate: deps("tools")},
+				{Name: "tools", DepsToUpdate: deps("fake", "text")},
+				{Name: "fake1", DepsToUpdate: deps("fake2")},
+				{Name: "fake2", DepsToUpdate: deps("tools")},
 			},
 			want: []string{
 				"tools,text,tools",
@@ -116,9 +116,9 @@ func TestCycles(t *testing.T) {
 		var repos []TagRepo
 		for _, r := range tt.repos {
 			repos = append(repos, TagRepo{
-				Name:    r.Name,
-				ModPath: r.Name,
-				Deps:    r.Deps,
+				Name:         r.Name,
+				ModPath:      r.Name,
+				DepsToUpdate: r.DepsToUpdate,
 			})
 		}
 		cycles := checkCycles(repos)
@@ -386,10 +386,9 @@ require (
 	if !strings.Contains(string(goMod), "sys@v0.2.0") || !strings.Contains(string(goMod), "mod@v1.0.0") {
 		t.Errorf("tools should use sys v0.2.0 and mod v1.0.0. go.mod: %v", string(goMod))
 	}
-	if strings.Contains(string(goMod), "we've upgraded to golang.org/x/build@upgrade") ||
-		strings.Contains(string(goMod), "we've upgraded to golang.org/x/net@upgrade") {
-		// TODO(go.dev/issue/73264): Make it upgrade golang.org/x dependencies, even if they're not being tagged.
-		t.Errorf("tools should not have upgraded x/build and x/net: %v", string(goMod))
+	if !strings.Contains(string(goMod), "we've upgraded to golang.org/x/build@upgrade") ||
+		!strings.Contains(string(goMod), "we've upgraded to golang.org/x/net@upgrade") {
+		t.Errorf("tools should have upgraded x/build and x/net: %v", string(goMod))
 	}
 	if strings.Contains(string(goMod), "we've upgraded to external.example.com") {
 		t.Errorf("tools should not have upgraded external.example.com: %v", string(goMod))
