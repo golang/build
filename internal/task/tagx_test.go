@@ -325,6 +325,9 @@ require (
 	// The x/build repo isn't being tagged.
 	golang.org/x/build v0.0.0
 
+	// An example of a nested golang.org/x module.
+	golang.org/x/exp/event v0.0.0
+
 	// An example of a tagx:ignore'd repo.
 	golang.org/x/net v0.21.0 // tagx:ignore
 
@@ -387,8 +390,9 @@ require (
 		t.Errorf("tools should use sys v0.2.0 and mod v1.0.0. go.mod: %v", string(goMod))
 	}
 	if !strings.Contains(string(goMod), "we've upgraded to golang.org/x/build@upgrade") ||
-		!strings.Contains(string(goMod), "we've upgraded to golang.org/x/net@upgrade") {
-		t.Errorf("tools should have upgraded x/build and x/net: %v", string(goMod))
+		!strings.Contains(string(goMod), "we've upgraded to golang.org/x/net@upgrade") ||
+		!strings.Contains(string(goMod), "we've upgraded to golang.org/x/exp/event@upgrade") {
+		t.Errorf("tools should have upgraded x/build, x/net, x/exp/event: %v", string(goMod))
 	}
 	if strings.Contains(string(goMod), "we've upgraded to external.example.com") {
 		t.Errorf("tools should not have upgraded external.example.com: %v", string(goMod))

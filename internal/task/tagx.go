@@ -172,14 +172,14 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		return nil, err
 	}
 
-	// TODO(heschi): ignoring nested modules for now. We should find and handle
-	// x/exp/event, maybe by reading release tags? But don't tag gopls...
+	// TODO(dmitshur,heschi): ignoring nested modules for purposes of tagging for now.
+	// We should find and handle x/exp/event, maybe by reading release tags? But don't tag gopls...
 	isXRoot := func(path string) bool {
 		return strings.HasPrefix(path, "golang.org/x/") &&
 			!strings.Contains(strings.TrimPrefix(path, "golang.org/x/"), "/")
 	}
 	if !isXRoot(mf.Module.Mod.Path) {
-		ctx.Printf("ignoring %v: not golang.org/x", project)
+		ctx.Printf("ignoring %v: not a golang.org/x root module", project)
 		return nil, nil
 	}
 
@@ -194,21 +194,33 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		StartVersion: currentTag,
 	}
 
+	// Collect module dependencies to update.
 	for _, req := range mf.Require {
-		if !isXRoot(req.Mod.Path) {
+		if !strings.HasPrefix(req.Mod.Path, "golang.org/x/") {
+			// At this time, we only apply automatic module version updates to all golang.org/x modules.
+			// We own them fully and can be certain newer versions have gone through our review process.
+			// Skip others.
 			continue
 		} else if x.IgnoreProjects[strings.TrimPrefix(req.Mod.Path, "golang.org/x/")] {
 			ctx.Printf("Dependency %v is ignored", req.Mod.Path)
 			continue
 		}
 		wait := true
-		for _, c := range req.Syntax.Comments.Suffix {
+		if !isXRoot(req.Mod.Path) {
+			ctx.Printf("not waiting on %v: not a golang.org/x root module", project)
+			wait = false
+		} else {
 			// We have cycles in the x repo dependency graph. Allow a magic
-			// comment, `// tagx:ignore`, to exclude requirements from
-			// consideration.
-			if strings.Contains(c.Token, "tagx:ignore") {
-				ctx.Printf("ignoring %v's requirement on %v: %q", project, req.Mod, c.Token)
-				wait = false
+			// comment, `// tagx:ignore`, to not wait on those requirements.
+			//
+			// A better name by now would be "tagx:notwait" or so, but it's
+			// not worth renaming all of its instances.
+			for _, c := range req.Syntax.Comments.Suffix {
+				if strings.Contains(c.Token, "tagx:ignore") {
+					ctx.Printf("not waiting on %v's requirement on %v: %q", project, req.Mod, c.Token)
+					wait = false
+					break
+				}
 			}
 		}
 		result.DepsToUpdate = append(result.DepsToUpdate, &TagDep{
