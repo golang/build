@@ -196,13 +196,7 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 
 	// Collect module dependencies to update.
 	for _, req := range mf.Require {
-		if !strings.HasPrefix(req.Mod.Path, "golang.org/x/") {
-			// At this time, we only apply automatic module version updates to all golang.org/x modules.
-			// We own them fully and can be certain newer versions have gone through our review process.
-			// Skip others.
-			continue
-		} else if x.IgnoreProjects[strings.TrimPrefix(req.Mod.Path, "golang.org/x/")] {
-			ctx.Printf("Dependency %v is ignored", req.Mod.Path)
+		if !x.considerModuleForAutomaticUpdate(req.Mod.Path) {
 			continue
 		}
 		wait := true
@@ -230,6 +224,15 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 	}
 
 	return result, nil
+}
+
+// considerModuleForAutomaticUpdate reports whether a module path is in scope
+// of automatic updating being done by the golang.org/x repo tagging workflow.
+func (TagXReposTasks) considerModuleForAutomaticUpdate(modulePath string) bool {
+	// At this time, we only apply automatic module version updates to all golang.org/x modules.
+	// We own them fully and can be certain newer versions have gone through our review process.
+	// Skip others.
+	return strings.HasPrefix(modulePath, "golang.org/x/")
 }
 
 // checkCycles returns all the shortest dependency cycles in repos.
@@ -393,25 +396,13 @@ func (x *TagXReposTasks) planRepo(wd *wf.Definition, repo TagRepo, planned map[s
 }
 
 func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, updatedDeps []TagRepo, branch string) (files map[string]string, _ error) {
-	// Update select dependencies of the root module.
-	// For deps that were updated by us to dep.NewerVersion, use that version.
-	// For deps that weren't updated by us, use the "upgrade" module query. See go.dev/issue/73264.
-	var remainingDeps = make(map[string]struct{}) // remainingDeps tracks remaining deps to update. Map key is module path.
-	for _, dep := range repo.DepsToUpdate {
-		remainingDeps[dep.ModPath] = struct{}{}
+	type module struct {
+		Dir          string // Relative to repo root, '/'-separated. For example, "." for root module of x/tools, "gopls" for x/tools/gopls.
+		DepsToUpdate []*TagDep
+		HadToolchain bool // whether the go.mod file had a toolchain directive before our modifications
 	}
-	var script strings.Builder
-	script.WriteString("go get")
-	for _, dep := range updatedDeps {
-		script.WriteString(" " + dep.ModPath + "@" + dep.NewerVersion)
-		delete(remainingDeps, dep.ModPath)
-	}
-	for dep := range remainingDeps {
-		script.WriteString(" " + dep + "@upgrade")
-	}
-	script.WriteString("\n")
+	var modules []module // The root and nested modules in repo.
 
-	// Tidy the root module and nested modules.
 	// Look for the nested modules dynamically. See go.dev/issue/68873.
 	gitRepo, err := gitfs.NewRepo(x.Gerrit.GitilesURL() + "/" + repo.Name)
 	if err != nil {
@@ -426,7 +417,6 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, updatedD
 	if err != nil {
 		return nil, err
 	}
-	var outputs []string
 	if err := fs.WalkDir(rootFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -437,41 +427,94 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, updatedD
 		}
 		if d.Name() == "go.mod" && !d.IsDir() { // A go.mod file.
 			dir := pathpkg.Dir(path)
-			dropToolchain := ""
-			if had, err := hasToolchain(rootFS, path); err != nil {
+			b, err := fs.ReadFile(rootFS, path)
+			if err != nil {
 				return err
-			} else if !had {
-				// Don't introduce a toolchain directive if it wasn't already there.
-				dropToolchain = " && go mod edit -toolchain=none"
 			}
-			script.WriteString(fmt.Sprintf("(cd %v && touch go.sum && go mod tidy%s)\n", dir, dropToolchain))
-			outputs = append(outputs, dir+"/go.mod", dir+"/go.sum")
+			f, err := modfile.Parse("go.mod", b, nil)
+			if err != nil {
+				return err
+			}
+			var depsToUpdate []*TagDep
+			if dir == "." {
+				// Root module.
+				depsToUpdate = repo.DepsToUpdate
+			} else {
+				// Dynamically collect nested module dependencies that are in scope of being updated.
+				for _, req := range f.Require {
+					if !x.considerModuleForAutomaticUpdate(req.Mod.Path) {
+						continue
+					}
+					depsToUpdate = append(depsToUpdate, &TagDep{ModPath: req.Mod.Path})
+				}
+			}
+			modules = append(modules, module{
+				Dir:          dir,
+				DepsToUpdate: depsToUpdate,
+				HadToolchain: f.Toolchain != nil,
+			})
 		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
 
+	var script strings.Builder
+
+	// Update select dependencies of the root and nested modules.
+	// For deps that were updated by us to dep.NewerVersion, use that version.
+	// For deps that weren't updated by us, use the "upgrade" module query. See go.dev/issue/73264.
+	for _, m := range modules {
+		if len(m.DepsToUpdate) == 0 {
+			continue
+		}
+
+		var cdIntoModule struct{ Prefix, Suffix string }
+		if m.Dir != "." {
+			cdIntoModule.Prefix, cdIntoModule.Suffix = fmt.Sprintf("(cd %s && ", m.Dir), ")"
+		}
+
+		var remainingDeps = make(map[string]struct{}) // remainingDeps tracks remaining deps to update. Map key is module path.
+		for _, dep := range m.DepsToUpdate {
+			remainingDeps[dep.ModPath] = struct{}{}
+		}
+		script.WriteString(cdIntoModule.Prefix)
+		script.WriteString("go get")
+		for _, dep := range updatedDeps {
+			if _, ok := remainingDeps[dep.ModPath]; !ok {
+				continue
+			}
+			script.WriteString(" " + dep.ModPath + "@" + dep.NewerVersion)
+			delete(remainingDeps, dep.ModPath)
+		}
+		for dep := range remainingDeps {
+			script.WriteString(" " + dep + "@upgrade")
+		}
+		script.WriteString(cdIntoModule.Suffix)
+		script.WriteString("\n")
+	}
+
+	// Afterwards, tidy the root module and nested modules.
+	for _, m := range modules {
+		dropToolchain := ""
+		if !m.HadToolchain {
+			// Don't introduce a toolchain directive if it wasn't already there.
+			dropToolchain = " && go mod edit -toolchain=none"
+		}
+		fmt.Fprintf(&script, "(cd %v && touch go.sum && go mod tidy%s)\n", m.Dir, dropToolchain)
+	}
+
 	// Execute the script to generate updated go.mod/go.sum files.
+	ctx.Printf("Executing the following script to update go.mod/go.sum files:\n\n%s\n", script.String())
+	var outputs []string
+	for _, m := range modules {
+		outputs = append(outputs, m.Dir+"/go.mod", m.Dir+"/go.sum")
+	}
 	build, err := x.CloudBuild.RunScript(ctx, script.String(), repo.Name, outputs)
 	if err != nil {
 		return nil, err
 	}
 	return buildToOutputs(ctx, x.CloudBuild, build)
-}
-
-// hasToolchain parses the specified go.mod file, and
-// reports whether it has a toolchain directive in it.
-func hasToolchain(fsys fs.FS, goModPath string) (has bool, _ error) {
-	b, err := fs.ReadFile(fsys, goModPath)
-	if err != nil {
-		return false, err
-	}
-	f, err := modfile.Parse(goModPath, b, nil)
-	if err != nil {
-		return false, err
-	}
-	return f.Toolchain != nil, nil
 }
 
 func buildToOutputs(ctx *wf.TaskContext, buildClient CloudBuildClient, build CloudBuild) (map[string]string, error) {
