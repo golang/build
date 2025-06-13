@@ -313,7 +313,25 @@ func TestTagXRepos(t *testing.T) {
 	mod.Tag("v1.0.0", mod1)
 	tools := NewFakeRepo(t, "tools")
 	tools1 := tools.Commit(map[string]string{
-		"go.mod":               "module golang.org/x/tools\nrequire golang.org/x/mod v1.0.0\ngo 1.18\nrequire golang.org/x/sys v0.1.0\nrequire golang.org/x/build v0.0.0\n",
+		"go.mod": `module golang.org/x/tools
+
+go 1.18
+
+require (
+	// The workflow itself tags these.
+	golang.org/x/sys v0.1.0
+	golang.org/x/mod v1.0.0
+
+	// The x/build repo isn't being tagged.
+	golang.org/x/build v0.0.0
+
+	// An example of a tagx:ignore'd repo.
+	golang.org/x/net v0.21.0 // tagx:ignore
+
+	// An example of an external dependency.
+	external.example.com v0.1.0
+)
+`,
 		"go.sum":               "\n",
 		"gopls/go.mod":         "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
 		"gopls/go.sum":         "\n",
@@ -367,6 +385,14 @@ func TestTagXRepos(t *testing.T) {
 	}
 	if !strings.Contains(string(goMod), "sys@v0.2.0") || !strings.Contains(string(goMod), "mod@v1.0.0") {
 		t.Errorf("tools should use sys v0.2.0 and mod v1.0.0. go.mod: %v", string(goMod))
+	}
+	if strings.Contains(string(goMod), "we've upgraded to golang.org/x/build@upgrade") ||
+		strings.Contains(string(goMod), "we've upgraded to golang.org/x/net@upgrade") {
+		// TODO(go.dev/issue/73264): Make it upgrade golang.org/x dependencies, even if they're not being tagged.
+		t.Errorf("tools should not have upgraded x/build and x/net: %v", string(goMod))
+	}
+	if strings.Contains(string(goMod), "we've upgraded to external.example.com") {
+		t.Errorf("tools should not have upgraded external.example.com: %v", string(goMod))
 	}
 	if !strings.Contains(string(goMod), "tidied!") {
 		t.Error("tools go.mod should be tidied")
