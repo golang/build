@@ -22,6 +22,8 @@ import (
 	"text/template"
 
 	"golang.org/x/build/internal/untar"
+
+	goversion "go/version"
 )
 
 // InstallerOptions holds options for constructing the installer.
@@ -78,7 +80,20 @@ if [ -d $GOROOT ]; then
 	rm -r $GOROOT
 fi
 `, "pkg-scripts/preinstall", 0755)
-	put(`#!/bin/bash
+	version := readVERSION("pkg-root/usr/local/go")
+	if goversion.Compare(version, "go1.25rc2") >= 0 {
+		put(`#!/bin/bash
+
+GOROOT=/usr/local/go
+echo "Fixing permissions"
+cd $GOROOT
+find . -exec chmod ugo+r \{\} +
+find bin -exec chmod ugo+rx \{\} +
+find . -type d -exec chmod ugo+rx \{\} +
+chmod o-w .
+`, "pkg-scripts/postinstall", 0755)
+	} else {
+		put(`#!/bin/bash
 
 GOROOT=/usr/local/go
 echo "Fixing permissions"
@@ -88,7 +103,7 @@ find bin -exec chmod ugo+rx \{\} \;
 find . -type d -exec chmod ugo+rx \{\} \;
 chmod o-w .
 `, "pkg-scripts/postinstall", 0755)
-	version := readVERSION("pkg-root/usr/local/go")
+	}
 	run("pkgbuild",
 		"--identifier=org.golang.go",
 		"--version", version,
