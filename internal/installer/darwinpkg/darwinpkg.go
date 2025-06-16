@@ -12,6 +12,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	goversion "go/version"
 	"io"
 	"io/fs"
 	"log"
@@ -22,8 +23,6 @@ import (
 	"text/template"
 
 	"golang.org/x/build/internal/untar"
-
-	goversion "go/version"
 )
 
 // InstallerOptions holds options for constructing the installer.
@@ -121,8 +120,10 @@ chmod o-w .
 	put(string(bg), "pkg-resources/background.png", 0644)
 	var buf bytes.Buffer
 	distData := darwinDistData{
-		HostArchs: map[string]string{"amd64": "x86_64", "arm64": "arm64"}[opt.GOARCH],
-		MinOS:     opt.MinMacOSVersion,
+		HostArchs:                       map[string]string{"amd64": "x86_64", "arm64": "arm64"}[opt.GOARCH],
+		MinOS:                           opt.MinMacOSVersion,
+		GoVersion:                       version,
+		DetectAMD64InstallerOnARM64Host: opt.GOARCH == "amd64" && goversion.Compare(version, "go1.25rc2") >= 0, // See go.dev/issue/59010.
 	}
 	if err := darwinDistTmpl.ExecuteTemplate(&buf, "dist.xml", distData); err != nil {
 		log.Fatalln("darwinDistTmpl.ExecuteTemplate:", err)
@@ -157,6 +158,9 @@ var darwinDistTmpl = template.Must(template.New("").ParseFS(darwinPKGData, "_dat
 type darwinDistData struct {
 	HostArchs string // hostArchitectures option value.
 	MinOS     string // Minimum required system.version.ProductVersion.
+	GoVersion string // Go version string. For example, "go1.25.0".
+
+	DetectAMD64InstallerOnARM64Host bool // Whether to include a check for mismatched installer architecture.
 }
 
 func put(content, dst string, perm fs.FileMode) {

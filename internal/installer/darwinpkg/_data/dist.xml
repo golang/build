@@ -14,6 +14,12 @@
   <installation-check script="installCheck();" />
   <script>
     function installCheck() {
+      {{if .DetectAMD64InstallerOnARM64Host}}if (system.sysctl('sysctl.proc_translated') == '1') {
+        my.result.title = 'Wrong installer for this device';
+        my.result.message = 'This {{.GoVersion}}.darwin-amd64.pkg installer is intended for devices with an Intel 64-bit processor. To install Go on a device with an Apple 64-bit processor, please use {{.GoVersion}}.darwin-arm64.pkg instead.';
+        my.result.type = 'Fatal';
+        return false;
+      }{{end -}}
       if (!(system.compareVersions(system.version.ProductVersion, '{{.MinOS}}') >= 0)) {
         my.result.title = 'Unable to install';
         my.result.message = 'Go requires macOS {{.MinOS}} or later.';

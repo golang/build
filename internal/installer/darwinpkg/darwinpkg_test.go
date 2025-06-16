@@ -26,7 +26,7 @@ func TestConstructInstaller(t *testing.T) {
 
 	out, err := darwinpkg.ConstructInstaller(context.Background(), t.TempDir(), *inFlag, darwinpkg.InstallerOptions{
 		GOARCH:          "arm64",
-		MinMacOSVersion: "11",
+		MinMacOSVersion: "12",
 	})
 	if err != nil {
 		t.Fatal("ConstructInstaller:", err)
