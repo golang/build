@@ -364,7 +364,7 @@ SLOW_HOSTS = {
         scope = ["go", "net", "sys"],  # not tools; see go.dev/issue/72061#issuecomment-2695226251
     ),
     "netbsd-arm64": struct(scale = 2),
-    "openbsd-amd64": struct(scale = 2),
+    "openbsd-amd64": struct(scale = 4),
     "openbsd-arm": struct(scale = 5),
     "openbsd-arm64": struct(scale = 5),
     "openbsd-ppc64": struct(scale = 3),
