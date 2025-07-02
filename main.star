@@ -619,20 +619,20 @@ GO_BRANCHES = {
 # INTERNAL_GO_BRANCHES mirrors GO_BRANCHES, but defines the branches to build
 # and test against for the go-internal/go repository.
 INTERNAL_GO_BRANCHES = {
-    # Testing of private release patches are initially based on the "public"
+    # Testing of internal release patches are initially based on the "public"
     # branch, which tracks MAIN_BRANCH_NAME in the public repository, and
     # branches which are cut immediately before the release in order to submit
     # the patches. These branches take the form "public-release-{month}-{year}".
     # See go/go-security-release-workflow for a discussion of this.
     "gotip": struct(branch_regexps = ["public", "public-release-[a-z]+-\\d+"]),
-    # The private-release-branches are per-point release, rather than
-    # per-major version, since we create them specially for each point
-    # release, and want to maintain that history. We use a regex like
-    # "private-release-branch.go1.23.\\d+" to match all the point branches
-    # so that we don't need to manually update the config each time we issue a point release.
-    NEXTUP_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[NEXTUP_GO].branch + ".\\d+", "private-internal-branch." + NEXTUP_GO + "-vendor"]),
-    LATEST_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[LATEST_GO].branch + ".\\d+", "private-internal-branch." + LATEST_GO + "-vendor"]),
-    SECOND_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[SECOND_GO].branch + ".\\d+", "private-internal-branch." + SECOND_GO + "-vendor"]),
+    # The internal release branches are per-individual release, rather than
+    # per-major version, since we create them specially for each individual
+    # release, and want to maintain that history. We use a regexp like
+    # "internal-release-branch.go1.23.+" to match all the branches so that
+    # we don't need to manually update the config for each next minor or RC.
+    NEXTUP_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[NEXTUP_GO].branch + ".+", "private-internal-branch." + NEXTUP_GO + "-vendor"]),
+    LATEST_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[LATEST_GO].branch + ".+", "private-internal-branch." + LATEST_GO + "-vendor"]),
+    SECOND_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[SECOND_GO].branch + ".+", "private-internal-branch." + SECOND_GO + "-vendor"]),
 }
 
 # TOOLS_GO_BRANCHES are Go branches that aren't used for project-wide testing
