@@ -30,7 +30,7 @@ import (
 //  3. Moves all patches from master onto the new branch
 //  4. Submits the rebased patches
 //  5. Create internal release branches
-//  6. Creates cherry-picks of the submitted patches onto the two release branches,
+//  6. Creates cherry-picks of the submitted patches onto the release branches,
 //     setting Commit-Queue+1
 type SecurityReleaseCoalesceTask struct {
 	PrivateGerrit GerritClient
@@ -94,14 +94,33 @@ func (x *SecurityReleaseCoalesceTask) GetBranchNames(ctx *wf.TaskContext) (branc
 	if err != nil {
 		return branchInfo{}, err
 	}
-
-	return branchInfo{
-		CheckpointName: fmt.Sprintf("%s-and-%s-checkpoint", nextMinors[0], nextMinors[1]),
-		PublicReleaseBranches: []string{
-			fmt.Sprintf("release-branch.%s", nextMinors[0]),
-			fmt.Sprintf("release-branch.%s", nextMinors[1]),
-		},
-	}, nil
+	switch _, err := x.Version.Gerrit.ReadBranchHead(ctx, "go", fmt.Sprintf("release-branch.go1.%d", currentMajor+1)); {
+	case errors.Is(err, gerrit.ErrResourceNotExist):
+		// The next release branch hasn't been cut yet. Include release branches for minors only.
+		return branchInfo{
+			CheckpointName: fmt.Sprintf("%s-%s-checkpoint", nextMinors[0], nextMinors[1]),
+			PublicReleaseBranches: []string{
+				fmt.Sprintf("release-branch.%s", nextMinors[0]),
+				fmt.Sprintf("release-branch.%s", nextMinors[1]),
+			},
+		}, nil
+	case err == nil:
+		// Include release branches for the minors and the next release candidate.
+		nextRC, err := x.Version.GetNextVersion(ctx, currentMajor+1, KindRC)
+		if err != nil {
+			return branchInfo{}, err
+		}
+		return branchInfo{
+			CheckpointName: fmt.Sprintf("%s-%s-%s-checkpoint", nextRC, nextMinors[0], nextMinors[1]),
+			PublicReleaseBranches: []string{
+				fmt.Sprintf("release-branch.%s", nextRC),
+				fmt.Sprintf("release-branch.%s", nextMinors[0]),
+				fmt.Sprintf("release-branch.%s", nextMinors[1]),
+			},
+		}, nil
+	default:
+		return branchInfo{}, err
+	}
 }
 
 func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, clNums []string) ([]*gerrit.ChangeInfo, error) {
@@ -202,9 +221,8 @@ func (x *SecurityReleaseCoalesceTask) WaitAndSubmit(ctx *wf.TaskContext, cls []*
 	return cls, nil
 }
 
-// majorFromMinor converts a release branch name from it's minor version form to
-// it's major version form (i.e. release-branch.go1.2.3 to
-// release-branch.go1.2).
+// majorFromMinor converts a release branch name from its minor version form to
+// its major version form (i.e., release-branch.go1.2.3 to release-branch.go1.2).
 func majorFromMinor(branch string) string {
 	stripped := strings.TrimPrefix(branch, "release-branch.")
 	major := goversion.Lang(stripped)
@@ -215,12 +233,12 @@ var internalReleaseBranchPrefix = "internal-"
 
 func (x *SecurityReleaseCoalesceTask) CreateInternalReleaseBranches(ctx *wf.TaskContext, bi branchInfo) ([]string, error) {
 	var internalBranches []string
-	for _, nextMinor := range bi.PublicReleaseBranches {
-		publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, "go", majorFromMinor(nextMinor))
+	for _, next := range bi.PublicReleaseBranches {
+		publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, "go", majorFromMinor(next))
 		if err != nil {
 			return nil, err
 		}
-		internalReleaseBranch := internalReleaseBranchPrefix + nextMinor
+		internalReleaseBranch := internalReleaseBranchPrefix + next
 		if _, err := x.PrivateGerrit.CreateBranch(ctx, "go", internalReleaseBranch, gerrit.BranchInput{Revision: publicHead}); err != nil {
 			return nil, err
 		}
@@ -230,7 +248,7 @@ func (x *SecurityReleaseCoalesceTask) CreateInternalReleaseBranches(ctx *wf.Task
 }
 
 func (x *SecurityReleaseCoalesceTask) CreateCherryPicks(ctx *wf.TaskContext, releaseBranches []string, cls []*gerrit.ChangeInfo) (map[string][]string, error) {
-	// TODO: this currently assumes we want to cherry-pick everything to both
+	// TODO: this currently assumes we want to cherry-pick everything to all
 	// branches, which is _normally_ the case, but sometimes is not accurate. We
 	// can manually just abandon cherry-picks we don't care about, but probably
 	// we should have a way to indicate which branches we want each patch

@@ -91,31 +91,59 @@ func (g *fakeCoalesceGerrit) GetCommitMessage(ctx context.Context, changeID stri
 
 type securityVersionClient struct {
 	GerritClient
-	tags []string
+	tags, branches []string
 }
 
-func (c *securityVersionClient) ListTags(ctx context.Context, project string) ([]string, error) {
+func (c *securityVersionClient) ListTags(_ context.Context, project string) ([]string, error) {
+	if project != "go" {
+		return nil, nil
+	}
 	return c.tags, nil
 }
 
-func (c *securityVersionClient) GetTag(ctx context.Context, project, tag string) (gerrit.TagInfo, error) {
+func (c *securityVersionClient) GetTag(_ context.Context, project, tag string) (gerrit.TagInfo, error) {
+	if project != "go" {
+		return gerrit.TagInfo{}, gerrit.ErrResourceNotExist
+	}
 	for _, t := range c.tags {
 		if tag == t {
 			return gerrit.TagInfo{Created: gerrit.TimeStamp(time.Now())}, nil
 		}
 	}
-	return gerrit.TagInfo{}, errors.New("not found")
+	return gerrit.TagInfo{}, gerrit.ErrResourceNotExist
+}
+
+func (c *securityVersionClient) ReadBranchHead(_ context.Context, project, branch string) (string, error) {
+	if project != "go" {
+		return "", gerrit.ErrResourceNotExist
+	}
+	if !slices.Contains(c.branches, branch) {
+		return "", gerrit.ErrResourceNotExist
+	}
+	return branch + "-head", nil
 }
 
 func TestSecurityReleaseCoalesceTask(t *testing.T) {
+	t.Run("minors only", func(t *testing.T) {
+		testSecurityReleaseCoalesceTask(t, false)
+	})
+	t.Run("minors with RC", func(t *testing.T) {
+		testSecurityReleaseCoalesceTask(t, true)
+	})
+}
+
+func testSecurityReleaseCoalesceTask(t *testing.T, withNextReleaseBranch bool) {
+	publicTags := []string{"go1.3", "go1.3.1", "go1.4", "go1.4.1"}
+	publicBranches := []string{"release-branch.go1.3", "release-branch.go1.4"}
+	if withNextReleaseBranch {
+		publicBranches = append(publicBranches, "release-branch.go1.5")
+	}
 	privRepo := NewFakeRepo(t, "go")
 	privGerrit := &fakeCoalesceGerrit{FakeGerrit: NewFakeGerrit(t, privRepo), cherryPicks: map[string][]cherryPickedCommit{}, commitMessages: map[string]string{}}
 	task := &SecurityReleaseCoalesceTask{
 		PrivateGerrit: privGerrit,
 		Version: &VersionTasks{
-			Gerrit: &securityVersionClient{
-				tags: []string{"go1.3", "go1.3.1", "go1.4", "go1.4.1"},
-			},
+			Gerrit:    &securityVersionClient{tags: publicTags, branches: publicBranches},
 			GoProject: "go",
 		},
 	}
@@ -152,9 +180,12 @@ other body`,
 	privRepo.Branch("public", head)
 	privRepo.Branch("release-branch.go1.3", head)
 	privRepo.Branch("release-branch.go1.4", head)
+	if withNextReleaseBranch {
+		privRepo.Branch("release-branch.go1.5", head)
+	}
 
 	wd := task.NewDefinition()
-	w, err := wf.Start(wd, map[string]interface{}{
+	w, err := wf.Start(wd, map[string]any{
 		"Security Patch CL Numbers": []string{"1234", "5678"},
 	})
 	if err != nil {
@@ -168,14 +199,18 @@ other body`,
 	}
 
 	// Check checkpoint branch has the expected number of submitted changes
-	commits := len(strings.Split(string(privRepo.runGit("log", "go1.4.2-and-go1.3.2-checkpoint", "--format=%H")), "\n")) - 1
+	checkpointBranch := "go1.4.2-go1.3.2-checkpoint"
+	if withNextReleaseBranch {
+		checkpointBranch = "go1.5rc1-go1.4.2-go1.3.2-checkpoint"
+	}
+	commits := len(strings.Split(string(privRepo.runGit("log", checkpointBranch, "--format=%H")), "\n")) - 1
 	if commits != 3 {
 		t.Errorf("unexpected number of commits on checkpoint branch: got %d, want 3", commits)
 	}
 
 	// Check each internal release branch has the expected cherry-picks
 	expected := map[string][]cherryPickedCommit{
-		"internal-release-branch.go1.4.2": []cherryPickedCommit{
+		"internal-release-branch.go1.4.2": {
 			{
 				changeID: "1234",
 				message: `[release-branch.go1.4] subject: 1234
@@ -189,7 +224,7 @@ body`,
 other body`,
 			},
 		},
-		"internal-release-branch.go1.3.2": []cherryPickedCommit{
+		"internal-release-branch.go1.3.2": {
 			{
 				changeID: "1234",
 				message: `[release-branch.go1.3] subject: 1234
@@ -203,6 +238,22 @@ body`,
 other body`,
 			},
 		},
+	}
+	if withNextReleaseBranch {
+		expected["internal-release-branch.go1.5rc1"] = []cherryPickedCommit{
+			{
+				changeID: "1234",
+				message: `[release-branch.go1.5] subject: 1234
+
+body`,
+			},
+			{
+				changeID: "5678",
+				message: `[release-branch.go1.5] subject: 5678
+
+other body`,
+			},
+		}
 	}
 
 	for branch, commits := range privGerrit.cherryPicks {
