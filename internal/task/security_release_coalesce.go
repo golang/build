@@ -86,11 +86,11 @@ type branchInfo struct {
 }
 
 func (x *SecurityReleaseCoalesceTask) GetBranchNames(ctx *wf.TaskContext) (branchInfo, error) {
-	currentMajor, _, err := x.Version.GetCurrentMajor(ctx.Context)
+	currentMajor, _, err := x.Version.GetCurrentMajor(ctx)
 	if err != nil {
 		return branchInfo{}, err
 	}
-	nextMinors, err := x.Version.GetNextMinorVersions(ctx.Context, []int{currentMajor, currentMajor - 1})
+	nextMinors, err := x.Version.GetNextMinorVersions(ctx, []int{currentMajor, currentMajor - 1})
 	if err != nil {
 		return branchInfo{}, err
 	}
@@ -107,14 +107,14 @@ func (x *SecurityReleaseCoalesceTask) GetBranchNames(ctx *wf.TaskContext) (branc
 func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, clNums []string) ([]*gerrit.ChangeInfo, error) {
 	var cls []*gerrit.ChangeInfo
 	for _, num := range clNums {
-		ci, err := x.PrivateGerrit.GetChange(ctx.Context, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+		ci, err := x.PrivateGerrit.GetChange(ctx, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
 		if err != nil {
 			return nil, err
 		}
 		if !ci.Submittable {
 			return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(num))
 		}
-		ra, err := x.PrivateGerrit.GetRevisionActions(ctx.Context, num, "current")
+		ra, err := x.PrivateGerrit.GetRevisionActions(ctx, num, "current")
 		if err != nil {
 			return nil, err
 		}
@@ -127,11 +127,11 @@ func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, clNums [
 }
 
 func (x *SecurityReleaseCoalesceTask) CreateCheckpoint(ctx *wf.TaskContext, bi branchInfo) (string, error) {
-	publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx.Context, "go", "public")
+	publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, "go", "public")
 	if err != nil {
 		return "", err
 	}
-	if _, err := x.PrivateGerrit.CreateBranch(ctx.Context, "go", bi.CheckpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
+	if _, err := x.PrivateGerrit.CreateBranch(ctx, "go", bi.CheckpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
 		return "", err
 	}
 	return bi.CheckpointName, nil
@@ -139,7 +139,7 @@ func (x *SecurityReleaseCoalesceTask) CreateCheckpoint(ctx *wf.TaskContext, bi b
 
 func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, checkpointBranch string, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
 	for i, ci := range cls {
-		movedCI, err := x.PrivateGerrit.MoveChange(ctx.Context, ci.ID, checkpointBranch)
+		movedCI, err := x.PrivateGerrit.MoveChange(ctx, ci.ID, checkpointBranch)
 		if err != nil {
 			// In case we need to re-run the Move step, tolerate the case where the change
 			// is already on the branch.
@@ -150,7 +150,7 @@ func (x *SecurityReleaseCoalesceTask) MoveAndRebaseChanges(ctx *wf.TaskContext, 
 		} else {
 			cls[i] = &movedCI
 		}
-		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx.Context, movedCI.ID, "")
+		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx, movedCI.ID, "")
 		if err != nil {
 			var httpErr *gerrit.HTTPError
 			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
@@ -216,12 +216,12 @@ var internalReleaseBranchPrefix = "internal-"
 func (x *SecurityReleaseCoalesceTask) CreateInternalReleaseBranches(ctx *wf.TaskContext, bi branchInfo) ([]string, error) {
 	var internalBranches []string
 	for _, nextMinor := range bi.PublicReleaseBranches {
-		publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx.Context, "go", majorFromMinor(nextMinor))
+		publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, "go", majorFromMinor(nextMinor))
 		if err != nil {
 			return nil, err
 		}
 		internalReleaseBranch := internalReleaseBranchPrefix + nextMinor
-		if _, err := x.PrivateGerrit.CreateBranch(ctx.Context, "go", internalReleaseBranch, gerrit.BranchInput{Revision: publicHead}); err != nil {
+		if _, err := x.PrivateGerrit.CreateBranch(ctx, "go", internalReleaseBranch, gerrit.BranchInput{Revision: publicHead}); err != nil {
 			return nil, err
 		}
 		internalBranches = append(internalBranches, internalReleaseBranch)
@@ -239,14 +239,14 @@ func (x *SecurityReleaseCoalesceTask) CreateCherryPicks(ctx *wf.TaskContext, rel
 	cherryPicks := map[string][]string{}
 	for _, ci := range cls {
 		for _, releaseBranch := range releaseBranches {
-			commitMessage, err := x.PrivateGerrit.GetCommitMessage(ctx.Context, ci.ID)
+			commitMessage, err := x.PrivateGerrit.GetCommitMessage(ctx, ci.ID)
 			if err != nil {
 				return nil, err
 			}
 			// TODO: might be cleaner to just pass this information from CreateInternalReleaseBranches
 			commitMessage = fmt.Sprintf("[%s] %s", majorFromMinor(strings.TrimPrefix(releaseBranch, internalReleaseBranchPrefix)), commitMessage)
 
-			cpCI, conflicts, err := x.PrivateGerrit.CreateCherryPick(ctx.Context, ci.ID, releaseBranch, commitMessage)
+			cpCI, conflicts, err := x.PrivateGerrit.CreateCherryPick(ctx, ci.ID, releaseBranch, commitMessage)
 			if err != nil {
 				return nil, err
 			}

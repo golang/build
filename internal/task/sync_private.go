@@ -37,7 +37,7 @@ func (t *PrivateMasterSyncTask) NewDefinition() *wf.Definition {
 		// cherry-picked onto the new base, which should either succeed, or fail
 		// due to a merge conflict, or Gerrit will reject the submission because
 		// something changed underneath it. Either case seems fine.
-		if _, err := repo.RunCommand(ctx.Context, "push", "--force", "origin", fmt.Sprintf("origin/%s:refs/heads/master", t.Ref)); err != nil {
+		if _, err := repo.RunCommand(ctx, "push", "--force", "origin", fmt.Sprintf("origin/%s:refs/heads/master", t.Ref)); err != nil {
 			return "", err
 		}
 

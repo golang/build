@@ -64,7 +64,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		if !changeInfo.Submittable {
 			return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNumber))
 		}
-		ra, err := x.PrivateGerrit.GetRevisionActions(ctx.Context, clNumber, "current")
+		ra, err := x.PrivateGerrit.GetRevisionActions(ctx, clNumber, "current")
 		if err != nil {
 			return nil, err
 		}
@@ -77,12 +77,12 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	// create checkpoint branch
 	checkpointBranch := wf.Task1(wd, "Create checkpoint branch", func(ctx *wf.TaskContext, repoName string) (string, error) {
-		publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx.Context, repoName, "public")
+		publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, repoName, "public")
 		if err != nil {
 			return "", err
 		}
 		checkpointName := fmt.Sprintf("public-%s", time.Now().UTC().Format("2006-01-02-1504"))
-		if _, err := x.PrivateGerrit.CreateBranch(ctx.Context, repoName, checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
+		if _, err := x.PrivateGerrit.CreateBranch(ctx, repoName, checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
 			return "", err
 		}
 		return checkpointName, nil
@@ -90,7 +90,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	// move and rebase change onto checkpoint branch
 	movedChange := wf.Task2(wd, "Move change+rebase onto checkpoint branch", func(ctx *wf.TaskContext, change *gerrit.ChangeInfo, checkpointBranch string) (*gerrit.ChangeInfo, error) {
-		movedCI, err := x.PrivateGerrit.MoveChange(ctx.Context, change.ID, checkpointBranch)
+		movedCI, err := x.PrivateGerrit.MoveChange(ctx, change.ID, checkpointBranch)
 		if err != nil {
 			// In case we need to re-run the Move step, tolerate the case where the change
 			// is already on the branch.
@@ -101,7 +101,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		} else {
 			change = &movedCI
 		}
-		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx.Context, change.ID, "")
+		rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx, change.ID, "")
 		if err != nil {
 			// Don't fail if the branch is already up to date.
 			var httpErr *gerrit.HTTPError
@@ -175,11 +175,11 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		ctx.Printf("cloned repo into %s", repo.dir)
 
 		ctx.Printf("fetching %s from %s", ref, origin)
-		if _, err := repo.RunCommand(ctx.Context, "fetch", origin, ref); err != nil {
+		if _, err := repo.RunCommand(ctx, "fetch", origin, ref); err != nil {
 			return nil, err
 		}
 		ctx.Printf("fetched")
-		if _, err := repo.RunCommand(ctx.Context, "cherry-pick", "FETCH_HEAD"); err != nil {
+		if _, err := repo.RunCommand(ctx, "cherry-pick", "FETCH_HEAD"); err != nil {
 			return nil, err
 		}
 		ctx.Printf("cherry-picked")
@@ -204,7 +204,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		// underlying repo.git.runGitStreamed method, so that we can inspect
 		// stderr in order to extract the new CL number that gerrit sends us.
 		var stdout, stderr bytes.Buffer
-		err = repo.git.runGitStreamed(ctx.Context, &stdout, &stderr, repo.dir, "push", x.PublicRepoURL(repoName), refspec)
+		err = repo.git.runGitStreamed(ctx, &stdout, &stderr, repo.dir, "push", x.PublicRepoURL(repoName), refspec)
 		if err != nil {
 			return nil, fmt.Errorf("git push failed: %v, stdout: %q stderr: %q", err, stdout.String(), stderr.String())
 		}
