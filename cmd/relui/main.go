@@ -338,6 +338,9 @@ func main() {
 	}
 	dh.RegisterDefinition("Update x/crypto NSS root bundle", bundleTasks.NewDefinition())
 
+	// Register a workflow for announcing a blog post.
+	dh.RegisterDefinition("Announce blog post", relui.NewAnnounceBlogPostWorkflow(commTasks.SocialMediaTasks))
+
 	releaseVSCodeGoTasks := task.ReleaseVSCodeGoTasks{
 		GitHub:             githubClient,
 		Gerrit:             gerritClient,

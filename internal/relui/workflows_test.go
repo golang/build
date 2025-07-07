@@ -9,6 +9,9 @@ import (
 	"database/sql"
 	"errors"
 	"flag"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -172,6 +175,107 @@ func TestCheckTaskApproved(t *testing.T) {
 	if err != nil || !got {
 		t.Errorf("checkTaskApproved(_, %v, %q) = %t, %v wanted %t, %v", p, gtg.Name, got, err, true, nil)
 	}
+}
+
+func TestAnnounceBlogPostWorkflow(t *testing.T) {
+	cases := []struct {
+		name        string
+		atomXML     string
+		blogURL     string
+		wantErr     bool
+		wantOutputs map[string]interface{}
+	}{
+		{
+			name:    "success",
+			atomXML: `<AtomFeed><entry><title>Test Post</title><link rel="alternate" href="https://go.dev/blog/hello-world"></link><author><name>Test Author</name></author></entry></AtomFeed>`,
+			blogURL: "https://go.dev/blog/hello-world",
+			wantOutputs: map[string]interface{}{
+				"Blog Post": task.BlogPost{
+					Author: "Test Author",
+					Title:  "Test Post",
+					URL:    "https://go.dev/blog/hello-world",
+				},
+				"Bluesky URL":  "https://bluesky.com/status/123",
+				"Mastodon URL": "https://mastodon.com/status/123",
+				"Tweet URL":    "https://twitter.com/status/123",
+			},
+		},
+		{
+			name:    "not found",
+			atomXML: `<AtomFeed><entry><title>Test Post</title><link rel="alternate" href="https://go.dev/blog/some-other-post"></link><author><name>Test Author</name></author></entry></AtomFeed>`,
+			blogURL: "https://go.dev/blog/not-found",
+			wantErr: true,
+		},
+		{
+			name:    "malformed xml",
+			atomXML: `this is not xml`,
+			blogURL: "https://go.dev/blog/hello-world",
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte(tc.atomXML))
+			}))
+			defer ts.Close()
+
+			twitter := &mockPoster{service: "twitter"}
+			mastodon := &mockPoster{service: "mastodon"}
+			bluesky := &mockPoster{service: "bluesky"}
+			comm := task.SocialMediaTasks{
+				TwitterClient:             twitter,
+				MastodonClient:            mastodon,
+				BlueskyClient:             bluesky,
+				OverrideGoBlogPostAtomURL: ts.URL,
+			}
+			wd := NewAnnounceBlogPostWorkflow(comm)
+			w, err := workflow.Start(wd, map[string]interface{}{
+				"Blog Post URL": tc.blogURL,
+			})
+			if err != nil {
+				t.Fatalf("workflow.Start() = _, %v; want no error", err)
+			}
+			if tc.wantErr {
+				runToFailure(t, context.Background(), w, "retrieve-blog-post", &verboseListener{t: t})
+				return
+			}
+			outputs, err := runWorkflow(t, context.Background(), w, nil)
+			if err != nil {
+				t.Fatalf("runWorkflow() = _, %v; want no error", err)
+			}
+			wantText := "“Test Post” by Test Author — https://go.dev/blog/hello-world\n\n#golang"
+			if twitter.post != wantText {
+				t.Errorf("twitter.post = %q; want %q", twitter.post, wantText)
+			}
+			if mastodon.post != wantText {
+				t.Errorf("mastodon.post = %q; want %q", mastodon.post, wantText)
+			}
+			if diff := cmp.Diff(tc.wantOutputs, outputs); diff != "" {
+				t.Errorf("runWorkflow() outputs mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+type mockPoster struct {
+	service      string
+	post         string
+	postTweet    string
+	postTweetPNG []byte
+	altText      string
+}
+
+func (m *mockPoster) Post(text string) (string, error) {
+	m.post = text
+	return fmt.Sprintf("https://%s.com/status/123", m.service), nil
+}
+
+func (m *mockPoster) PostTweet(text string, imagePNG []byte, altText string) (string, error) {
+	m.postTweet = text
+	m.postTweetPNG = imagePNG
+	m.altText = altText
+	return fmt.Sprintf("https://%s.com/status/123", m.service), nil
 }
 
 func runWorkflow(t *testing.T, ctx context.Context, w *workflow.Workflow, listener workflow.Listener) (map[string]interface{}, error) {

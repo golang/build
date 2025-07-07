@@ -369,6 +369,38 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 	return nil
 }
 
+func NewAnnounceBlogPostWorkflow(comm task.SocialMediaTasks) *wf.Definition {
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
+
+	url := wf.Param(wd, wf.ParamDef[string]{
+		Name: "Blog Post URL",
+		Doc:  `URL of the blog post to announce.`,
+		Check: func(url string) error {
+			if !strings.HasPrefix(url, "https://go.dev/blog/") {
+				return fmt.Errorf("URL must be a go.dev blog post")
+			}
+			return nil
+		},
+	})
+
+	// allow for overriding the URL in tests
+	atomURL := "https://go.dev/blog/feed.atom"
+	if comm.OverrideGoBlogPostAtomURL != "" {
+		atomURL = comm.OverrideGoBlogPostAtomURL
+	}
+
+	blogPost := wf.Task2(wd, "retrieve-blog-post", task.GetBlogPostMetadata, wf.Const(atomURL), url)
+	tweetURL := wf.Task1(wd, "post-tweet", comm.TweetBlogPost, blogPost)
+	mastodonURL := wf.Task1(wd, "post-mastodon", comm.TrumpetBlogPost, blogPost)
+	blueskyURL := wf.Task1(wd, "post-bluesky", comm.SkeetBlogPost, blogPost)
+
+	wf.Output(wd, "Blog Post", blogPost)
+	wf.Output(wd, "Tweet URL", tweetURL)
+	wf.Output(wd, "Mastodon URL", mastodonURL)
+	wf.Output(wd, "Bluesky URL", blueskyURL)
+	return wd
+}
+
 func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks) error {
 	currentMajor, majorReleaseTime, err := version.GetCurrentMajor(ctx)
 	if err != nil {

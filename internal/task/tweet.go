@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	goversion "go/version"
 	"image"
@@ -34,6 +35,7 @@ import (
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
+	"golang.org/x/net/context/ctxhttp"
 )
 
 // releaseTweet describes a tweet that announces a Go release.
@@ -73,6 +75,8 @@ type releaseTweet struct {
 }
 
 type Poster interface {
+	// Post posts a tweet with the given text, and returns the tweet URL.
+	Post(text string) (tweetURL string, _ error)
 	// PostTweet posts a tweet with the given text and PNG image,
 	// both of which must be non-empty, and returns the tweet URL.
 	//
@@ -87,6 +91,10 @@ type SocialMediaTasks struct {
 	TwitterClient  Poster
 	MastodonClient Poster
 	BlueskyClient  Poster
+
+	// OverrideGoBlogPostAtomURL can be set when you want to override the default Go
+	// atom feed URL. This is useful for tests.
+	OverrideGoBlogPostAtomURL string
 
 	// RandomSeed is the pseudo-random number generator seed to use for presentational
 	// choices, such as selecting one out of many available emoji or release archives.
@@ -177,6 +185,67 @@ func (t SocialMediaTasks) SkeetRelease(ctx *workflow.TaskContext, kind ReleaseKi
 	return t.BlueskyClient.PostTweet(postText, imagePNG, imageText)
 }
 
+func (t SocialMediaTasks) blogPostText(ctx *workflow.TaskContext, url, title, author string) (string, error) {
+	b := struct {
+		URL    string
+		Title  string
+		Author string
+	}{
+		URL:    url,
+		Title:  title,
+		Author: author,
+	}
+	tpl, err := template.New("").Parse(blogPostTmpl)
+	if err != nil {
+		return "", err
+	}
+	var tweetText bytes.Buffer
+	if err := tpl.Execute(&tweetText, b); err != nil {
+		return "", err
+	}
+	ctx.Printf("post text:\n%s\n", tweetText.String())
+	return tweetText.String(), nil
+}
+
+// TweetBlogPost posts a tweet announcing a blog post.
+func (t SocialMediaTasks) TweetBlogPost(ctx *workflow.TaskContext, bp BlogPost) (string, error) {
+	tweetText, err := t.blogPostText(ctx, bp.URL, bp.Title, bp.Author)
+	if err != nil {
+		return "", err
+	}
+	if t.TwitterClient == nil {
+		return "(dry-run)", nil
+	}
+	ctx.DisableRetries()
+	return t.TwitterClient.Post(tweetText)
+}
+
+// TrumpetBlogPost posts a message on Mastodon announcing a blog post.
+func (t SocialMediaTasks) TrumpetBlogPost(ctx *workflow.TaskContext, bp BlogPost) (string, error) {
+	tweetText, err := t.blogPostText(ctx, bp.URL, bp.Title, bp.Author)
+	if err != nil {
+		return "", err
+	}
+	if t.MastodonClient == nil {
+		return "(dry-run)", nil
+	}
+	ctx.DisableRetries()
+	return t.MastodonClient.Post(tweetText)
+}
+
+// SkeetBlogPost posts a message on Bluesky announcing a blog post.
+func (t SocialMediaTasks) SkeetBlogPost(ctx *workflow.TaskContext, bp BlogPost) (string, error) {
+	tweetText, err := t.blogPostText(ctx, bp.URL, bp.Title, bp.Author)
+	if err != nil {
+		return "", err
+	}
+	if t.BlueskyClient == nil {
+		return "(dry-run)", nil
+	}
+	ctx.DisableRetries()
+	return t.BlueskyClient.Post(tweetText)
+}
+
 // tweetText generates the text to use in the announcement
 // tweet for release r.
 func (r *releaseTweet) tweetText(rnd *rand.Rand) (string, error) {
@@ -242,6 +311,10 @@ func (r *releaseTweet) tweetText(rnd *rand.Rand) (string, error) {
 	}
 	return buf.String(), nil
 }
+
+const blogPostTmpl = `“{{.Title}}”{{with .Author}} by {{.}}{{end}} — {{.URL}}
+
+#golang`
 
 const tweetTextTmpl = `{{define "minor" -}}
 {{emoji "release"}} Go {{.Version|short}} {{with .SecondaryVersion}}and {{.|short}} are{{else}}is{{end}} released!
@@ -540,6 +613,16 @@ type realBlueskyClient struct {
 	client *ltbsky.Client
 }
 
+func (c realBlueskyClient) Post(text string) (postURI string, _ error) {
+	postBuilder := ltbsky.NewPostBuilder(text)
+	postBuilder.AddLang("en")
+	postURI, err := c.client.Post(postBuilder)
+	if err != nil {
+		return "", err
+	}
+	return postURI, nil
+}
+
 func (c realBlueskyClient) PostTweet(text string, imagePNG []byte, altText string) (postURI string, _ error) {
 	postBuilder := ltbsky.NewPostBuilder(text)
 	postBuilder.AddLang("en")
@@ -554,6 +637,25 @@ func (c realBlueskyClient) PostTweet(text string, imagePNG []byte, altText strin
 type realMastodonClient struct {
 	client        *madon.Client
 	testRecipient string
+}
+
+// Post implements the Poster interface.
+func (c realMastodonClient) Post(text string) (tweetURL string, _ error) {
+	visibility := "public"
+	if c.testRecipient != "" {
+		text = c.testRecipient + "\n" + text
+		visibility = "direct"
+	}
+	status, err := c.client.PostStatus(madon.PostStatusParams{
+		Text:        text,
+		Visibility:  visibility,
+		Sensitive:   false,
+		SpoilerText: "",
+	})
+	if err != nil {
+		return "", err
+	}
+	return status.URL, nil
 }
 
 // PostTweet posts a message to a Mastodon account, with specified text, image, and image alt text.
@@ -575,7 +677,7 @@ func (c realMastodonClient) PostTweet(text string, imagePNG []byte, altText stri
 	// that matters.
 	att, err := client.UploadMediaReader(bytes.NewReader(imagePNG), "upload.png", altText, "")
 	if err != nil {
-		return "upload failure", err
+		return "", fmt.Errorf("upload failure: %w", err)
 	}
 	postParams := madon.PostStatusParams{
 		Text:        text,
@@ -587,13 +689,49 @@ func (c realMastodonClient) PostTweet(text string, imagePNG []byte, altText stri
 
 	status, err := client.PostStatus(postParams)
 	if err != nil {
-		return "post failure", err
+		return "", fmt.Errorf("post failure: %w", err)
 	}
 	return status.URL, nil
 }
 
 type realTwitterClient struct {
 	twitterAPI *http.Client
+}
+
+// Post implements the Poster interface.
+func (c realTwitterClient) Post(text string) (string, error) {
+	var tweetReq struct {
+		Text string `json:"text"`
+	}
+	tweetReq.Text = text
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(tweetReq); err != nil {
+		return "", err
+	}
+	resp, err := c.twitterAPI.Post("https://api.twitter.com/2/tweets", "application/json", &buf)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		if isTweetTooLong(resp, body) {
+			// A friendlier error for a common error type.
+			return "", ErrTweetTooLong
+		}
+		return "", fmt.Errorf("POST /2/tweets: non-201 Created status code: %v body: %q", resp.Status, body)
+	}
+	var tweetResp struct {
+		Data struct {
+			ID string
+		}
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tweetResp); err != nil {
+		return "", err
+	}
+	// Use a generic "username" in the URL since finding it needs another API call.
+	// As long as the URL has this format, it will redirect to the canonical username.
+	return "https://twitter.com/username/status/" + tweetResp.Data.ID, nil
 }
 
 // PostTweet implements the TweetTasks.TwitterClient interface.
@@ -724,4 +862,47 @@ func NewTestMastodonClient(config secret.MastodonCredentials, pmTarget string) (
 func NewBlueskyClient(config secret.BlueskyCredentials) (realBlueskyClient, error) {
 	client, err := ltbsky.NewClient(config.Server, config.Handle, config.AccessToken)
 	return realBlueskyClient{client: client}, err
+}
+
+type BlogPost struct {
+	Author string
+	Title  string
+	URL    string
+}
+
+func GetBlogPostMetadata(ctx *workflow.TaskContext, atomURL string, blogPostURL string) (blogPost BlogPost, err error) {
+	resp, err := ctxhttp.Get(ctx, http.DefaultClient, atomURL)
+	if err != nil {
+		return BlogPost{}, fmt.Errorf("unable to query atom feed for blog post entries: %s", err)
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return BlogPost{}, fmt.Errorf("unexpected status for GET %q: %d", blogPostURL, resp.StatusCode)
+	}
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return BlogPost{}, fmt.Errorf("unable to read the body from HTTP get request: %s", err)
+	}
+	var feed struct {
+		Entry []struct {
+			Title string `xml:"title"`
+			Link  struct {
+				Href string `xml:"href,attr"`
+			} `xml:"link"`
+			Author struct {
+				Name string `xml:"name"`
+			} `xml:"author"`
+		} `xml:"entry"`
+	}
+	if err = xml.Unmarshal(b, &feed); err != nil {
+		return BlogPost{}, fmt.Errorf("unable to unmarshal XML: %s", err)
+	}
+	for _, entry := range feed.Entry {
+		if blogPostURL == entry.Link.Href {
+			return BlogPost{entry.Author.Name, entry.Title, blogPostURL}, nil
+		}
+	}
+	ctx.DisableRetries()
+	return BlogPost{}, fmt.Errorf("blog post %q not found", blogPostURL)
 }
