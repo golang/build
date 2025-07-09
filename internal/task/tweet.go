@@ -26,6 +26,7 @@ import (
 	"github.com/McKael/madon/v3"
 	"github.com/dghubble/oauth1"
 	"github.com/esimov/stackblur-go"
+	"github.com/fflewddur/ltbsky"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/maintner/maintnerd/maintapi/version"
@@ -85,6 +86,7 @@ type SocialMediaTasks struct {
 	// TwitterClient can be used to post a tweet.
 	TwitterClient  Poster
 	MastodonClient Poster
+	BlueskyClient  Poster
 
 	// RandomSeed is the pseudo-random number generator seed to use for presentational
 	// choices, such as selecting one out of many available emoji or release archives.
@@ -158,6 +160,21 @@ func (t SocialMediaTasks) TrumpetRelease(ctx *workflow.TaskContext, kind Release
 	}
 	ctx.DisableRetries()
 	return t.MastodonClient.PostTweet(tweetText, imagePNG, imageText)
+}
+
+// SkeetRelease posts an announcement to Bluesky that a Go release has been published.
+func (t SocialMediaTasks) SkeetRelease(ctx *workflow.TaskContext, kind ReleaseKind, published []Published, security string, announcement string) (_ string, _ error) {
+	postText, imagePNG, imageText, err := t.textAndImage(ctx, kind, published, security, announcement)
+	if err != nil {
+		return "", err
+	}
+
+	// When running tests, don't actually post
+	if t.BlueskyClient == nil {
+		return "(dry-run)", nil
+	}
+	ctx.DisableRetries()
+	return t.BlueskyClient.PostTweet(postText, imagePNG, imageText)
 }
 
 // tweetText generates the text to use in the announcement
@@ -519,8 +536,19 @@ var (
 	shadowColor = color.NRGBA{0, 0, 0, 140} // #0000008c.
 )
 
-type realTwitterClient struct {
-	twitterAPI *http.Client
+type realBlueskyClient struct {
+	client *ltbsky.Client
+}
+
+func (c realBlueskyClient) PostTweet(text string, imagePNG []byte, altText string) (postURI string, _ error) {
+	postBuilder := ltbsky.NewPostBuilder(text)
+	postBuilder.AddLang("en")
+	postBuilder.AddImageFromBytes(imagePNG, altText)
+	postURI, err := c.client.Post(postBuilder)
+	if err != nil {
+		return "", err
+	}
+	return postURI, nil
 }
 
 type realMastodonClient struct {
@@ -562,6 +590,10 @@ func (c realMastodonClient) PostTweet(text string, imagePNG []byte, altText stri
 		return "post failure", err
 	}
 	return status.URL, nil
+}
+
+type realTwitterClient struct {
+	twitterAPI *http.Client
 }
 
 // PostTweet implements the TweetTasks.TwitterClient interface.
@@ -687,4 +719,9 @@ func NewTestMastodonClient(config secret.MastodonCredentials, pmTarget string) (
 	mc, err := NewMastodonClient(config)
 	mc.testRecipient = pmTarget
 	return mc, err
+}
+
+func NewBlueskyClient(config secret.BlueskyCredentials) (realBlueskyClient, error) {
+	client, err := ltbsky.NewClient(config.Server, config.Handle, config.AccessToken)
+	return realBlueskyClient{client: client}, err
 }

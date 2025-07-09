@@ -100,6 +100,8 @@ func main() {
 	var mastodonAPI secret.MastodonCredentials
 	secret.JSONVarFlag(&mastodonAPI, "mastodon-api-secret", "Mastodon API secret to use for workflows involving posting.")
 	masterKey := secret.Flag("builder-master-key", "Builder master key")
+	var blueskyAPI secret.BlueskyCredentials
+	secret.JSONVarFlag(&blueskyAPI, "bluesky-api-secret", "Bluesky API secret to use for workflows involving posting.")
 	githubToken := secret.Flag("github-token", "GitHub API token")
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
@@ -149,6 +151,14 @@ func main() {
 			log.Fatalln("task.NewMastodonClient:", err)
 		}
 	}
+	var blueskyClient task.Poster
+	if blueskyAPI != (secret.BlueskyCredentials{}) {
+		var err error
+		blueskyClient, err = task.NewBlueskyClient(blueskyAPI)
+		if err != nil {
+			log.Fatalln("task.NewBlueskyClient:", err)
+		}
+	}
 	commTasks := task.CommunicationTasks{
 		AnnounceMailTasks: task.AnnounceMailTasks{
 			SendMail:           mailFunc,
@@ -157,6 +167,7 @@ func main() {
 		SocialMediaTasks: task.SocialMediaTasks{
 			TwitterClient:  task.NewTwitterClient(twitterAPI),
 			MastodonClient: mastodonClient,
+			BlueskyClient:  blueskyClient,
 		},
 	}
 	dh := relui.NewDefinitionHolder()

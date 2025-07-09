@@ -99,6 +99,10 @@ const (
 	// encoding of the MastodonCredentials.
 	NameMastodonAPISecret = "mastodon-api-secret"
 
+	// NameBlueskyAPISecret is the secret name for Bluesky API credentials.
+	// The secret value is a JSON encoding of the BlueskyCredentials.
+	NameBlueskyAPISecret = "bluesky-api-secret"
+
 	// NameMacServiceAPIKey is the secret name for the MacService API key.
 	NameMacServiceAPIKey = "macservice-api-key"
 
@@ -106,6 +110,20 @@ const (
 	// Marketplace publisher key.
 	NameVSCodeMarketplacePublishToken = "vscode-marketplace-token"
 )
+
+type BlueskyCredentials struct {
+	Handle      string // e.g., "golang.org"
+	Server      string // e.g., "https://bsky.social"
+	AccessToken string // App password (from Bluesky's Settings page for this handle)
+}
+
+func (t BlueskyCredentials) String() string {
+	return fmt.Sprintf("{%s %s (redacted)}", t.Handle, t.Server)
+}
+
+func (t BlueskyCredentials) GoString() string {
+	return fmt.Sprintf("secret.BlueskyCredentials{Handle:%q Server:%q AccessToken:(redacted)}", t.Handle, t.Server)
+}
 
 // TwitterCredentials holds Twitter API credentials.
 type TwitterCredentials struct {

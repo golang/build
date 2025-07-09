@@ -453,3 +453,24 @@ func mustWrite(w io.Writer, s string) {
 		panic(err)
 	}
 }
+
+func TestPostSkeet(t *testing.T) {
+	for _, tc := range postTests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Call the post task function in dry-run mode so it
+			// doesn't actually try to post, but capture its log.
+			var buf bytes.Buffer
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: fmtWriter{&buf}}
+			postURL, err := (SocialMediaTasks{RandomSeed: tc.randomSeed}).SkeetRelease(ctx, tc.kind, tc.published, tc.security, tc.announcement)
+			if err != nil {
+				t.Fatal("got a non-nil error:", err)
+			}
+			if got, want := postURL, "(dry-run)"; got != want {
+				t.Errorf("unexpected skeetURL: got = %q, want %q", got, want)
+			}
+			if diff := cmp.Diff(tc.wantLog, buf.String()); diff != "" {
+				t.Errorf("log mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

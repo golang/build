@@ -469,10 +469,12 @@ func addCommTasks(
 	announcementURL := wf.Task1(wd, "await-announcement", comm.AwaitAnnounceMail, sentMail)
 	tweetURL := wf.Task4(wd, "post-tweet", comm.TweetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 	mastodonURL := wf.Task4(wd, "post-mastodon", comm.TrumpetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
+	blueskyURL := wf.Task4(wd, "post-bluesky", comm.SkeetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)
 	wf.Output(wd, "Mastodon URL", mastodonURL)
+	wf.Output(wd, "Bluesky URL", blueskyURL)
 }
 
 func now(_ context.Context) (time.Time, error) {

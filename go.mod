@@ -25,6 +25,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dghubble/oauth1 v0.7.0
 	github.com/esimov/stackblur-go v1.1.0
+	github.com/fflewddur/ltbsky v0.3.0
 	github.com/gliderlabs/ssh v0.3.9-0.20241212082318-d137aad99cd6
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3

@@ -45,6 +45,7 @@ spec:
             - "--vscode-go-announce-mail-to=go-builders-alerts@google.com"
             - "--twitter-api-secret=secret:symbolic-datum-552/twitter-api-secret"
             - "--mastodon-api-secret=secret:symbolic-datum-552/mastodon-api-secret"
+            - "--bluesky-api-secret=secret:symbolic-datum-552/bluesky-api-secret"
             - "--builder-master-key=secret:symbolic-datum-552/builder-master-key"
             - "--github-token=secret:symbolic-datum-552/maintner-github-token"
             - "--scratch-files-base=gs://golang-release-staging/relui-scratch"
