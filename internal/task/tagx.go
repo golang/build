@@ -201,7 +201,10 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		}
 		wait := true
 		if !isXRoot(req.Mod.Path) {
-			ctx.Printf("not waiting on %v: not a golang.org/x root module", project)
+			ctx.Printf("not waiting on %v's requirement on %v: not a golang.org/x root module", project, req.Mod.Path)
+			wait = false
+		} else if x.IgnoreProjects[strings.TrimPrefix(req.Mod.Path, "golang.org/x/")] {
+			ctx.Printf("not waiting on %v's requirement on %v: dependency is marked as ignored", project, req.Mod.Path)
 			wait = false
 		} else {
 			// We have cycles in the x repo dependency graph. Allow a magic
@@ -211,7 +214,7 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 			// not worth renaming all of its instances.
 			for _, c := range req.Syntax.Comments.Suffix {
 				if strings.Contains(c.Token, "tagx:ignore") {
-					ctx.Printf("not waiting on %v's requirement on %v: %q", project, req.Mod, c.Token)
+					ctx.Printf("not waiting on %v's requirement on %v: %q", project, req.Mod.Path, c.Token)
 					wait = false
 					break
 				}

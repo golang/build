@@ -269,7 +269,7 @@ func (x *SecurityReleaseCoalesceTask) CreateCherryPicks(ctx *wf.TaskContext, rel
 				return nil, err
 			}
 			if conflicts {
-				ctx.Logger.Printf("Cherry-pick of %d has merge conflicts against %s: %s", internalGerritChangeURL(ci.ChangeNumber), releaseBranch, internalGerritChangeURL(cpCI.ChangeNumber))
+				ctx.Printf("Cherry-pick of %s has merge conflicts against %s: %s", internalGerritChangeURL(ci.ChangeNumber), releaseBranch, internalGerritChangeURL(cpCI.ChangeNumber))
 			}
 			cherryPicks[releaseBranch] = append(cherryPicks[releaseBranch], internalGerritChangeURL(cpCI.ChangeNumber))
 		}
