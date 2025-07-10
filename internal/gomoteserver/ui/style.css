@@ -39,6 +39,10 @@ h1 > a:hover,
 h2 > a:hover {
   text-decoration: underline;
 }
+a,
+a:visited {
+  color: black;
+}
 pre {
   font-family: monospace;
   font-size: 9pt;

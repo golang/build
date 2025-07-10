@@ -52,7 +52,7 @@ func TestHandleCertificateAuthFunc(t *testing.T) {
 	defer s.Close()
 
 	ownerID := "accounts.google.com:userIDvalue"
-	sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+	sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", "", &buildlet.FakeClient{})
 	certSigner := parsePrivateKey(t, []byte(devCertCAPrivate))
 	clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID, ownerID, time.Minute)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestHandleCertificateAuthFuncErrors(t *testing.T) {
 		defer s.Close()
 
 		ownerID := "accounts.google.com:userIDvalue"
-		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", "", &buildlet.FakeClient{})
 		clientSigner := parsePrivateKey(t, []byte(devCertClientPrivate))
 		clientConfig := &ssh.ClientConfig{
 			User: sessionID,
@@ -116,7 +116,7 @@ func TestHandleCertificateAuthFuncErrors(t *testing.T) {
 		defer s.Close()
 
 		ownerID := "accounts.google.com:userIDvalue"
-		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", "", &buildlet.FakeClient{})
 		certSigner := parsePrivateKey(t, []byte(devCertAlternateClientPrivate))
 		clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID, ownerID, time.Minute)
 		if err != nil {
@@ -154,7 +154,7 @@ func TestHandleCertificateAuthFuncErrors(t *testing.T) {
 		defer s.Close()
 
 		ownerID := "accounts.google.com:userIDvalue"
-		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", "", &buildlet.FakeClient{})
 		certSigner := parsePrivateKey(t, []byte(devCertCAPrivate))
 		clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID, ownerID, time.Minute)
 		if err != nil {
@@ -192,7 +192,7 @@ func TestHandleCertificateAuthFuncErrors(t *testing.T) {
 		defer s.Close()
 
 		ownerID := "accounts.google.com:userIDvalue"
-		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", "", &buildlet.FakeClient{})
 		certSigner := parsePrivateKey(t, []byte(devCertCAPrivate))
 		clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID+"WRONG", ownerID, time.Minute)
 		if err != nil {
@@ -230,7 +230,7 @@ func TestHandleCertificateAuthFuncErrors(t *testing.T) {
 		defer s.Close()
 
 		ownerID := "accounts.google.com:userIDvalue"
-		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", &buildlet.FakeClient{})
+		sessionID := sp.AddSession(ownerID, "maria", "linux-amd64", "xyz", "", &buildlet.FakeClient{})
 		certSigner := parsePrivateKey(t, []byte(devCertCAPrivate))
 		clientPubKey, err := SignPublicSSHKey(ctx, certSigner, []byte(devCertClientPublic), sessionID, ownerID+"WRONG", time.Minute)
 		if err != nil {

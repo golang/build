@@ -26,6 +26,7 @@
       <th>Name</th>
       <th>Created</th>
       <th>Expires</th>
+      <th>Swarming Task</th>
     </tr>
   </thead>
   <tbody>
@@ -34,11 +35,16 @@
       <td>{{ .Name }}</td>
       <td>{{ .Created }} ago</td>
       <td>in {{ .Expires }}</td>
+      {{ if ne .SwarmingTaskID "" }}
+      <td><a href="https://chromium-swarm.appspot.com/task?id={{ .SwarmingTaskID }}">{{ .SwarmingTaskID }}</a></td>
+      {{ else }}
+      <td></td>
+      {{ end }}
     </tr>
     {{ end }}
   </tbody>
 </table>
 
-<div class="footer"><strong>Version: </strong>{{ .Version }}</div>
+<div class="footer"><strong>Version: </strong>{{ .Version }} | <a href="https://go.dev/s/gomote-swarming-tasks">go.dev/s/gomote-swarming-tasks</a></div>
 </body>
 </html>

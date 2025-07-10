@@ -170,7 +170,7 @@ func (s *Server) CreateInstance(req *protos.CreateInstanceRequest, stream protos
 
 				return status.Errorf(codes.Unknown, "gomote creation failed: %s", r.err)
 			}
-			gomoteID := s.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), bconf.HostType, r.buildletClient)
+			gomoteID := s.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), bconf.HostType, "", r.buildletClient)
 			log.Printf("created buildlet %v for %v (%s)", gomoteID, userName, r.buildletClient.String())
 			session, err := s.buildlets.Session(gomoteID)
 			if err != nil {

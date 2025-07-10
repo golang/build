@@ -31,9 +31,10 @@ func HandleStatusFunc(pool interface{ List() []*remote.Session }, version string
 			return
 		}
 		type Instance struct {
-			Name    string
-			Created time.Duration
-			Expires time.Duration
+			Name           string
+			Created        time.Duration
+			Expires        time.Duration
+			SwarmingTaskID string
 		}
 		type Status struct {
 			Instances []Instance
@@ -43,9 +44,10 @@ func HandleStatusFunc(pool interface{ List() []*remote.Session }, version string
 		sessions := pool.List()
 		for _, s := range sessions {
 			instances = append(instances, Instance{
-				Name:    html.EscapeString(s.ID),
-				Created: time.Since(s.Created),
-				Expires: time.Until(s.Expires),
+				Name:           html.EscapeString(s.ID),
+				Created:        time.Since(s.Created),
+				Expires:        time.Until(s.Expires),
+				SwarmingTaskID: s.SwarmingTaskID,
 			})
 		}
 		statusHTMLTmpl.Execute(w, Status{

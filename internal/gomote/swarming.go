@@ -172,6 +172,7 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 	}
 	type result struct {
 		buildletClient buildlet.Client
+		taskID         string
 		err            error
 	}
 	rc := make(chan result, 1)
@@ -193,11 +194,11 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 	}
 	useGolangbuild := !slices.Contains(req.GetExperimentOption(), expDisableGolangbuild)
 	go func() {
-		bc, err := ss.startNewSwarmingTask(stream.Context(), name, dimensions, cp, &SwarmOpts{}, useGolangbuild)
+		bc, taskID, err := ss.startNewSwarmingTask(stream.Context(), name, dimensions, cp, &SwarmOpts{}, useGolangbuild)
 		if err != nil {
 			log.Printf("startNewSwarmingTask() = %s", err)
 		}
-		rc <- result{bc, err}
+		rc <- result{buildletClient: bc, taskID: taskID, err: err}
 	}()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -218,7 +219,7 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 				log.Printf("error creating gomote buildlet instance=%s: %s", name, r.err)
 				return status.Errorf(codes.Internal, "gomote creation failed instance=%s", name)
 			}
-			gomoteID := ss.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), req.GetBuilderType(), r.buildletClient)
+			gomoteID := ss.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), req.GetBuilderType(), r.taskID, r.buildletClient)
 			log.Printf("created buildlet %s for %s (%s)", gomoteID, userName, r.buildletClient.String())
 			session, err := ss.buildlets.Session(gomoteID)
 			if err != nil {
@@ -783,17 +784,18 @@ type SwarmOpts struct {
 }
 
 // startNewSwarmingTask starts a new swarming task on a bot with the buildlet
-// running on it. It returns a buildlet client configured to speak to it.
-// The request will last as long as the lifetime of the context. The dimensions
-// are a set of key value pairs used to describe what instance type to create.
-func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts, useGolangbuild bool) (buildlet.Client, error) {
+// running on it. It returns a buildlet client configured to speak to it as well
+// the swarming task ID used to initiate the gomote task. The request will last
+// as long as the lifetime of the context. The dimensions are a set of key value
+// pairs used to describe what instance type to create.
+func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts, useGolangbuild bool) (buildlet.Client, string, error) {
 	ss.rendezvous.RegisterInstance(ctx, name, 10*time.Minute)
 	condRun(opts.OnInstanceRegistration)
 
 	taskID, err := ss.newSwarmingTask(ctx, name, dimensions, properties, opts, useGolangbuild)
 	if err != nil {
 		ss.rendezvous.DeregisterInstance(ctx, name)
-		return nil, err
+		return nil, "", err
 	}
 	log.Printf("gomote: swarming task requested name=%s taskID=%s", name, taskID)
 	condRun(opts.OnInstanceRequested)
@@ -823,16 +825,16 @@ func (ss *SwarmingServer) startNewSwarmingTask(ctx context.Context, name string,
 	})
 	if !taskUp {
 		ss.rendezvous.DeregisterInstance(ctx, name)
-		return nil, fmt.Errorf("unable to create swarming task name=%s taskID=%s", name, taskID)
+		return nil, "", fmt.Errorf("unable to create swarming task name=%s taskID=%s", name, taskID)
 	}
 	condRun(opts.OnInstanceCreated)
 
 	bc, err := ss.waitForInstanceOrFailure(ctx, taskID, name)
 	if err != nil {
 		ss.rendezvous.DeregisterInstance(ctx, name)
-		return nil, err
+		return nil, "", err
 	}
-	return bc, nil
+	return bc, taskID, nil
 }
 
 // waitForInstanceOrFailure waits for either the swarming task to enter a failed state or the successful connection from

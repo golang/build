@@ -25,13 +25,14 @@ const (
 
 // Session stores the metadata for a remote buildlet Session.
 type Session struct {
-	BuilderType string // default builder config to use if not overwritten
-	Created     time.Time
-	Expires     time.Time
-	HostType    string
-	ID          string // unique identifier for instance "user-bradfitz-linux-amd64-0"
-	OwnerID     string // identity aware proxy user id: "accounts.google.com:userIDvalue"
-	buildlet    buildlet.Client
+	BuilderType    string // default builder config to use if not overwritten
+	Created        time.Time
+	Expires        time.Time
+	HostType       string
+	ID             string // unique identifier for instance "user-bradfitz-linux-amd64-0"
+	OwnerID        string // identity aware proxy user id: "accounts.google.com:userIDvalue"
+	SwarmingTaskID string // swarming task ID (if the session is a swarming task).
+	buildlet       buildlet.Client
 }
 
 // renew extends the expiration timestamp for a session.
@@ -75,7 +76,7 @@ func NewSessionPool(ctx context.Context) *SessionPool {
 }
 
 // AddSession adds the provided session to the session pool.
-func (sp *SessionPool) AddSession(ownerID, username, builderType, hostType string, bc buildlet.Client) (name string) {
+func (sp *SessionPool) AddSession(ownerID, username, builderType, hostType, swarmingTaskID string, bc buildlet.Client) (name string) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 
@@ -84,13 +85,14 @@ func (sp *SessionPool) AddSession(ownerID, username, builderType, hostType strin
 		if _, ok := sp.m[name]; !ok {
 			now := time.Now()
 			sp.m[name] = &Session{
-				BuilderType: builderType,
-				buildlet:    bc,
-				Created:     now,
-				Expires:     now.Add(remoteBuildletIdleTimeout),
-				HostType:    hostType,
-				ID:          name,
-				OwnerID:     ownerID,
+				BuilderType:    builderType,
+				buildlet:       bc,
+				Created:        now,
+				Expires:        now.Add(remoteBuildletIdleTimeout),
+				HostType:       hostType,
+				ID:             name,
+				OwnerID:        ownerID,
+				SwarmingTaskID: swarmingTaskID,
 			}
 			return name
 		}
@@ -165,12 +167,13 @@ func (sp *SessionPool) List() []*Session {
 	var ss []*Session
 	for _, s := range sp.m {
 		ss = append(ss, &Session{
-			BuilderType: s.BuilderType,
-			Expires:     s.Expires,
-			HostType:    s.HostType,
-			ID:          s.ID,
-			OwnerID:     s.OwnerID,
-			Created:     s.Created,
+			BuilderType:    s.BuilderType,
+			Expires:        s.Expires,
+			HostType:       s.HostType,
+			ID:             s.ID,
+			OwnerID:        s.OwnerID,
+			Created:        s.Created,
+			SwarmingTaskID: s.SwarmingTaskID,
 		})
 	}
 	sort.Slice(ss, func(i, j int) bool { return ss[i].ID < ss[j].ID })
@@ -193,11 +196,12 @@ func (sp *SessionPool) Session(buildletName string) (*Session, error) {
 	if s, ok := sp.m[buildletName]; ok {
 		s.renew()
 		return &Session{
-			BuilderType: s.BuilderType,
-			Expires:     s.Expires,
-			HostType:    s.HostType,
-			ID:          s.ID,
-			OwnerID:     s.OwnerID,
+			BuilderType:    s.BuilderType,
+			Expires:        s.Expires,
+			HostType:       s.HostType,
+			ID:             s.ID,
+			OwnerID:        s.OwnerID,
+			SwarmingTaskID: s.SwarmingTaskID,
 		}, nil
 	}
 	return nil, fmt.Errorf("remote buildlet does not exist=%s", buildletName)

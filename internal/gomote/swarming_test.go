@@ -1173,7 +1173,7 @@ func TestStartNewSwarmingTask(t *testing.T) {
 	}
 	id := "task-123"
 	errCh := make(chan error, 2)
-	if _, err := ss.startNewSwarmingTask(ctx, id, map[string]string{"cipd_platform": "linux-amd64"}, &configProperties{}, &SwarmOpts{
+	if _, _, err := ss.startNewSwarmingTask(ctx, id, map[string]string{"cipd_platform": "linux-amd64"}, &configProperties{}, &SwarmOpts{
 		OnInstanceRegistration: func() {
 			client := ts.Client()
 			req, err := http.NewRequest("GET", ts.URL, nil)

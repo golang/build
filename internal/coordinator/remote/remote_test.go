@@ -54,7 +54,7 @@ func TestSessionPool(t *testing.T) {
 
 	wantInstances := 4
 	for i := 0; i < wantInstances; i++ {
-		sp.AddSession("accounts.google.com:user-xyz-124", "test-user", "builder-type-x", "host-type-x", &buildlet.FakeClient{})
+		sp.AddSession("accounts.google.com:user-xyz-124", "test-user", "builder-type-x", "host-type-x", "", &buildlet.FakeClient{})
 	}
 	sp.destroyExpiredSessions(context.Background())
 	if sp.Len() != wantInstances {
@@ -68,7 +68,7 @@ func TestSessionPoolList(t *testing.T) {
 
 	wantCount := 4
 	for i := 0; i < wantCount; i++ {
-		sp.AddSession("accounts.google.com:user-xyz-124", fmt.Sprintf("user-%d", i), "builder", "host", &buildlet.FakeClient{})
+		sp.AddSession("accounts.google.com:user-xyz-124", fmt.Sprintf("user-%d", i), "builder", "host", "", &buildlet.FakeClient{})
 	}
 	got := sp.List()
 	if len(got) != wantCount {
@@ -88,7 +88,7 @@ func TestSessionPoolDestroySession(t *testing.T) {
 
 	var sn []string
 	for i := 0; i < 4; i++ {
-		name := sp.AddSession("accounts.google.com:user-xyz-124", fmt.Sprintf("user-%d", i), "builder", "host", &buildlet.FakeClient{})
+		name := sp.AddSession("accounts.google.com:user-xyz-124", fmt.Sprintf("user-%d", i), "builder", "host", "", &buildlet.FakeClient{})
 		sn = append(sn, name)
 	}
 	for _, name := range sn {
@@ -102,7 +102,7 @@ func TestRenewTimeout(t *testing.T) {
 	sp := NewSessionPool(context.Background())
 	defer sp.Close()
 
-	name := sp.AddSession("accounts.google.com:user-xyz-124", "user-x", "builder", "host", &buildlet.FakeClient{})
+	name := sp.AddSession("accounts.google.com:user-xyz-124", "user-x", "builder", "host", "", &buildlet.FakeClient{})
 	if err := sp.RenewTimeout(name); err != nil {
 		t.Errorf("SessionPool.RenewTimeout(%q) = %s; want no error", name, err)
 	}
@@ -112,7 +112,7 @@ func TestRenewTimeoutError(t *testing.T) {
 	sp := NewSessionPool(context.Background())
 	defer sp.Close()
 
-	name := sp.AddSession("accounts.google.com:user-xyz-124", "user-x", "builder", "host", &buildlet.FakeClient{})
+	name := sp.AddSession("accounts.google.com:user-xyz-124", "user-x", "builder", "host", "", &buildlet.FakeClient{})
 	if err := sp.RenewTimeout(name + "-wrong"); err == nil {
 		t.Errorf("SessionPool.RenewTimeout(%q) = %s; want error", name, err)
 	}
