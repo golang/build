@@ -45,8 +45,8 @@ func HandleStatusFunc(pool interface{ List() []*remote.Session }, version string
 		for _, s := range sessions {
 			instances = append(instances, Instance{
 				Name:           html.EscapeString(s.ID),
-				Created:        time.Since(s.Created),
-				Expires:        time.Until(s.Expires),
+				Created:        time.Since(s.Created).Truncate(time.Second), // Truncate the duration to seconds to make it more readable.
+				Expires:        time.Until(s.Expires).Truncate(time.Second), // Truncate the duration to seconds to make it more readable.
 				SwarmingTaskID: s.SwarmingTaskID,
 			})
 		}
