@@ -1,0 +1,33 @@
+# Copyright 2025 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+steps:
+# First, clone the repository. The default directory is /workspace.
+- name: 'gcr.io/cloud-builders/git'
+  args: ['clone', 'https://go.googlesource.com/build', '/workspace']
+# Then, check out the specific commit SHA provided.
+- name: 'gcr.io/cloud-builders/git'
+  args: ['checkout', '${_SHA}']
+# Now, build the Docker image from the checked-out source.
+# The Docker build context is the root of the repository (/workspace).
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '-f'
+    - 'cmd/gomoteserver/Dockerfile'
+    - '--build-arg'
+    - 'version=${_SHA}'
+    - '-t'
+    - 'gcr.io/symbolic-datum-552/gomoteserver:${_SHA}'
+    - '-t'
+    - 'gcr.io/symbolic-datum-552/gomoteserver:latest'
+    - '.'
+# Finally, push the version-specific image.
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/symbolic-datum-552/gomoteserver:${_SHA}']
+images:
+- 'gcr.io/symbolic-datum-552/gomoteserver:${_SHA}'
+- 'gcr.io/symbolic-datum-552/gomoteserver:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY
