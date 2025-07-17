@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -375,6 +376,13 @@ func generateDeltaTgz(goroot string, files []string) (*bytes.Buffer, error) {
 			return nil, err
 		}
 		header.Name = file // forward slash
+		if runtime.GOOS == "windows" && (strings.HasSuffix(file, ".bash") || strings.HasSuffix(file, ".rc")) {
+			// On Windows, the FileInfo won't have an executable mode bit, so if we
+			// send the mode as-is to the gomote, we'd lose the executable bit.
+			// Add the executable bit back for .bash and .rc files. As of 2025-07-17
+			// all those files have the executable bit set in git.
+			header.Mode |= 0100
+		}
 		if err := tw.WriteHeader(header); err != nil {
 			f.Close()
 			return nil, err
