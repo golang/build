@@ -217,6 +217,9 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 		case r := <-rc:
 			if r.err != nil {
 				log.Printf("error creating gomote buildlet instance=%s: %s", name, r.err)
+				if cp.KnownIssue != 0 {
+					return status.Errorf(codes.Internal, "gomote creation failed: note that builder has known issue go.dev/issue/%d", cp.KnownIssue)
+				}
 				return status.Errorf(codes.Internal, "gomote creation failed instance=%s", name)
 			}
 			gomoteID := ss.buildlets.AddSession(creds.ID, userName, req.GetBuilderType(), req.GetBuilderType(), r.taskID, r.buildletClient)
@@ -1143,6 +1146,7 @@ func tryThenPeriodicallyDo(ctx context.Context, period time.Duration, f func(con
 type configProperties struct {
 	BootstrapVersion string `json:"bootstrap_version"`
 	Mode             int    `json:"mode"`
+	KnownIssue       int    `json:"known_issue"`
 	BuilderId        string // <project>/<bucket>/<builder>
 }
 
