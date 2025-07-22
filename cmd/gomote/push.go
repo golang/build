@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -337,6 +338,21 @@ func isEditorBackup(path string) bool {
 	return false
 }
 
+// gomoteDevelVersion returns the Go version to put in the dummy VERSION file, using go major release
+// version in the file src/internal/goversion/goversion.go. This logic was adapted from the logic
+// in cmd/dist that writes the devel VERSION file if a VERSION file is not present.
+func gomoteDevelVersion(goroot string) (string, error) {
+	goversionSource, err := os.ReadFile(filepath.Join(goroot, "src/internal/goversion/goversion.go"))
+	if err != nil {
+		return "", err
+	}
+	m := regexp.MustCompile(`(?m)^const Version = (\d+)`).FindSubmatch(goversionSource)
+	if m == nil {
+		return "", errors.New("internal/goversion/goversion.go does not contain 'const Version = ...'")
+	}
+	return fmt.Sprintf("go1.%s-devel_gomote", m[1]), nil
+}
+
 // file is forward-slash separated
 func generateDeltaTgz(goroot string, files []string) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
@@ -345,11 +361,11 @@ func generateDeltaTgz(goroot string, files []string) (*bytes.Buffer, error) {
 	for _, file := range files {
 		// Special.
 		if file == "VERSION" && !localFileExists(filepath.Join(goroot, file)) {
-			// TODO(bradfitz): a dummy VERSION file's contents to make things
-			// happy. Notably it starts with "devel ". Do we care about it
-			// being accurate beyond that?
-			version := "devel gomote.XXXXX"
-			if err := tw.WriteHeader(&tar.Header{
+			version, err := gomoteDevelVersion(goroot)
+			if err != nil {
+				return nil, err
+			}
+			if err = tw.WriteHeader(&tar.Header{
 				Name: "VERSION",
 				Mode: 0644,
 				Size: int64(len(version)),
