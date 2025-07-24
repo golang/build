@@ -68,6 +68,7 @@ var (
 	nigeltao      = gh("nigeltao")
 	prattmic      = gh("prattmic")
 	pjw           = gh("pjweinb")
+	qmuntal       = gh("qmuntal")
 	r             = gh("robpike")
 	roland        = gh("rolandshoemaker")
 	rsc           = gh("rsc")
@@ -90,6 +91,7 @@ var (
 	telemetryTeam   = gh("golang/telemetry")
 	toolsTeam       = gh("golang/tools-team")
 	vulndbTeam      = gh("golang/vulndb")
+	windowsTeam     = gh("golang/windows")
 )
 
 // entries is a map of <repo name>/<path>, <domain>, or <branch> to Owner
@@ -321,7 +323,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{iant},
 	},
 	"go/src/debug/pe": {
-		Primary: []Owner{alexbrainman},
+		Primary:   []Owner{windowsTeam},
+		Secondary: []Owner{qmuntal, alexbrainman},
 	},
 	"go/src/embed": {
 		Primary: []Owner{toolsTeam},
@@ -632,16 +635,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{tklauser},
 	},
 	"go/src/internal/syscall/windows": {
-		Primary:   []Owner{alexbrainman},
-		Secondary: []Owner{bradfitz},
-	},
-	"go/src/internal/syscall/windows/registry": {
-		Primary:   []Owner{alexbrainman},
-		Secondary: []Owner{bradfitz},
-	},
-	"go/src/internal/syscall/windows/sysdll": {
-		Primary:   []Owner{alexbrainman},
-		Secondary: []Owner{bradfitz},
+		Primary:   []Owner{runtimeTeam, windowsTeam},
+		Secondary: []Owner{qmuntal, alexbrainman, bradfitz},
 	},
 	"go/src/internal/sysinfo": {
 		Primary:   []Owner{runtimeTeam},
@@ -983,8 +978,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{iant, bradfitz, tklauser},
 	},
 	"sys/windows": {
-		Primary:   []Owner{runtimeTeam, alexbrainman},
-		Secondary: []Owner{bradfitz},
+		Primary:   []Owner{runtimeTeam, windowsTeam},
+		Secondary: []Owner{qmuntal, alexbrainman, bradfitz},
 	},
 	"text": {
 		Primary: []Owner{mpvl},

@@ -2345,6 +2345,7 @@ func init() {
 	addPerson("Quentin Smith", "quentin@golang.org")
 	addPerson("Quentin Smith", "quentin@golang.org", "13020@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Quentin Smith", "quentin@golang.org", "@quentinmit")
+	addPerson("Quim Muntal", "quimmuntal@gmail.com", "@qmuntal")
 	addPerson("Quinn Slack", "sqs@sourcegraph.com", "@sqs")
 	addPerson("Quoc-Viet Nguyen", "afelion@gmail.com", "@nqv")
 	addPerson("R Primus", "rprimus@gmail.com")
