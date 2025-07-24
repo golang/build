@@ -51,6 +51,7 @@ var (
 	katie         = gh("katiehockman")
 	kevinburke    = gh("kevinburke")
 	khr           = gh("randall77")
+	markfreeman   = gh("mrkfrmn")
 	martisch      = gh("martisch")
 	matloob       = gh("matloob")
 	mauri870      = gh("mauri870")
@@ -332,6 +333,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{filippo, roland, cpu, securityTeam},
 	},
 	"go/src/encoding/binary": {
+		// Same as internal/byteorder.
 		Primary: []Owner{gri},
 	},
 	"go/src/encoding/csv": {
@@ -356,6 +358,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{r},
 	},
 	"go/src/fmt": {
+		// Same as internal/fmtsort.
 		Primary:   []Owner{r},
 		Secondary: []Owner{martisch},
 	},
@@ -424,19 +427,66 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{compilerTeam, runtimeTeam},
 		Secondary: []Owner{mknyszek, cherryyz},
 	},
+	"go/src/internal/asan": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, cherryyz, mauri870},
+	},
+	"go/src/internal/bisect": {
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{drchase, rsc},
+	},
 	"go/src/internal/buildcfg": {
 		Primary: []Owner{compilerTeam},
 	},
 	"go/src/internal/bytealg": {
 		Primary: []Owner{khr},
 	},
-	"go/src/internal/cpu": {
+	"go/src/internal/byteorder": {
+		// Same as encoding/binary.
+		Primary: []Owner{gri},
+	},
+	"go/src/internal/cfg": {
+		Primary: []Owner{commandlineTeam},
+	},
+	"go/src/internal/cgrouptest": {
 		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{khr, martisch},
+		Secondary: []Owner{prattmic},
+	},
+	"go/src/internal/chacha8rand": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{filippo, rsc, securityTeam},
+	},
+	"go/src/internal/copyright": {
+		Primary:   []Owner{releaseTeam},
+		Secondary: []Owner{dmitshur},
 	},
 	"go/src/internal/coverage": {
 		Primary:   []Owner{thanm},
 		Secondary: []Owner{compilerTeam},
+	},
+	"go/src/internal/cpu": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{khr, martisch},
+	},
+	"go/src/internal/dag": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{austin, rsc},
+	},
+	"go/src/internal/diff": {
+		Primary: []Owner{commandlineTeam},
+	},
+	"go/src/internal/exportdata": {
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{gri, markfreeman},
+	},
+	"go/src/internal/filepathlite": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{neild},
+	},
+	"go/src/internal/fmtsort": {
+		// Same as fmt.
+		Primary:   []Owner{r},
+		Secondary: []Owner{martisch},
 	},
 	"go/src/internal/fuzz": {
 		Primary:   []Owner{fuzzingTeam},
@@ -450,6 +500,10 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{mknyszek, prattmic},
 	},
+	"go/src/internal/godebugs": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{mknyszek, prattmic},
+	},
 	"go/src/internal/goexperiment": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{austin, mknyszek},
@@ -458,8 +512,47 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{mknyszek, prattmic},
 	},
+	"go/src/internal/goroot": {
+		Primary: []Owner{commandlineTeam},
+	},
+	"go/src/internal/gover": {
+		Primary: []Owner{commandlineTeam},
+	},
+	"go/src/internal/goversion": {
+		Primary: []Owner{releaseTeam},
+	},
+	"go/src/internal/itoa": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic},
+	},
+	"go/src/internal/lazyregexp": {
+		Primary: []Owner{commandlineTeam},
+	},
+	"go/src/internal/lazytemplate": {
+		Primary: []Owner{commandlineTeam},
+	},
+	"go/src/internal/msan": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, cherryyz, mauri870},
+	},
+	"go/src/internal/nettrace": {
+		// Same as net/http.
+		Primary:   []Owner{neild},
+		Secondary: []Owner{rsc},
+	},
+	"go/src/internal/obscuretestdata": {
+		Primary:   []Owner{releaseTeam},
+		Secondary: []Owner{rsc},
+	},
+	"go/src/internal/oserror": {
+		// Same as os.
+		Primary: []Owner{rsc, iant, bradfitz, gri},
+	},
 	"go/src/internal/pkgbits": {
 		Primary: []Owner{compilerTeam},
+	},
+	"go/src/internal/platform": {
+		Primary: []Owner{releaseTeam},
 	},
 	"go/src/internal/poll": {
 		Primary:   []Owner{runtimeTeam},
@@ -469,6 +562,10 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{cherryyz, prattmic},
 	},
+	"go/src/internal/profilerecord": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, mknyszek},
+	},
 	"go/src/internal/race": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{dvyukov, iant},
@@ -477,9 +574,26 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{rsc, iant},
 	},
+	"go/src/internal/routebsd": {
+		// Same as net.
+		Primary: []Owner{iant, neild},
+	},
+	// Fallback for subpackages not listed below.
+	"go/src/internal/runtime": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, mknyszek, amedee, cherryyz},
+	},
 	"go/src/internal/runtime/atomic": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{austin, khr, mknyszek, mauri870},
+	},
+	"go/src/internal/runtime/gc": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{mknyszek},
+	},
+	"go/src/internal/runtime/maps": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, khr},
 	},
 	"go/src/internal/runtime/sys": {
 		Primary:   []Owner{runtimeTeam},
@@ -489,8 +603,29 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{prattmic, mknyszek, austin},
 	},
+	"go/src/internal/saferio": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, iant},
+	},
 	"go/src/internal/singleflight": {
 		Primary: []Owner{bradfitz, iant},
+	},
+	"go/src/internal/stringslite": {
+		// Same as strings.
+		Primary:   []Owner{gri},
+		Secondary: []Owner{iant, bradfitz},
+	},
+	"go/src/internal/sync": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{mknyszek, prattmic},
+	},
+	"go/src/internal/synctest": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{neild, prattmic},
+	},
+	"go/src/internal/syscall": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, mknyszek},
 	},
 	"go/src/internal/syscall/unix": {
 		Primary:   []Owner{iant, bradfitz},
@@ -508,15 +643,51 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{alexbrainman},
 		Secondary: []Owner{bradfitz},
 	},
+	"go/src/internal/sysinfo": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{martisch, prattmic},
+	},
+	"go/src/internal/syslist": {
+		// Same as internal/platform.
+		Primary: []Owner{releaseTeam},
+	},
 	"go/src/internal/testenv": {
 		Primary: []Owner{bradfitz, iant},
+	},
+	"go/src/internal/testhash": {
+		Primary:   []Owner{securityTeam},
+		Secondary: []Owner{roland, austin},
+	},
+	"go/src/internal/testlog": {
+		Primary: []Owner{commandlineTeam},
+	},
+	"go/src/internal/testpty": {
+		// Same as internal/testpty.
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{iant, prattmic},
 	},
 	"go/src/internal/trace": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{mknyszek, prattmic},
 	},
+	"go/src/internal/texttar": {
+		Primary: []Owner{commandlineTeam},
+	},
+	"go/src/internal/types": {
+		// Same as go/types.
+		Primary: []Owner{gri, findleyr},
+	},
 	"go/src/internal/xcoff": {
 		Primary: []Owner{compilerTeam},
+	},
+	"go/src/internal/unsafeheader": {
+		Primary:   []Owner{runtimeTeam},
+		Secondary: []Owner{prattmic, mknyszek},
+	},
+	"go/src/internal/zstd": {
+		// Same as debug/elf.
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{iant},
 	},
 	"go/src/io": {
 		Primary:   []Owner{gri},
@@ -556,9 +727,11 @@ var entries = map[string]*Entry{
 		Primary: []Owner{neild, minux},
 	},
 	"go/src/net": {
+		// Same as internal/routebsd.
 		Primary: []Owner{iant, neild},
 	},
 	"go/src/net/http": {
+		// Same as internal/nettrace.
 		Primary:   []Owner{neild},
 		Secondary: []Owner{rsc},
 	},
@@ -590,12 +763,14 @@ var entries = map[string]*Entry{
 		Primary: []Owner{neild, rsc},
 	},
 	"go/src/os": {
+		// Same as internal/oserror.
 		Primary: []Owner{rsc, iant, bradfitz, gri},
 	},
 	"go/src/os/exec": {
 		Primary: []Owner{bradfitz, iant},
 	},
 	"go/src/os/signal": {
+		// Same as internal/testpty.
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{iant, prattmic},
 	},
@@ -626,7 +801,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/runtime": {
 		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{austin, khr, mknyszek, prattmic, iant, dvyukov, martisch},
+		Secondary: []Owner{austin, khr, mknyszek, prattmic, amedee, iant, dvyukov, martisch},
 	},
 	"go/src/runtime/cgo": {
 		Primary:   []Owner{runtimeTeam},

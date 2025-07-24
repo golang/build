@@ -1826,6 +1826,7 @@ func init() {
 	addPerson("Marius Nuennerich", "mnu@google.com")
 	addPerson("Mark Adams", "mark@markadams.me", "@mark-adams")
 	addPerson("Mark Bucciarelli", "mkbucc@gmail.com", "@mbucc")
+	addPerson("Mark Freeman", "mark@golang.org", "markfreeman@google.com", "@mrkfrmn")
 	addPerson("Mark Harrison", "marhar@google.com")
 	addPerson("Mark Lee", "code0x9@gmail.com")
 	addPerson("Mark Pulford", "mark@kyne.com.au", "15920@62eb7196-b449-3ce5-99f1-c037f21e1705")
