@@ -21,6 +21,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # python3.12: for bootstrapswarm
 # nano: for interactive debugging convenience
 # unzip: used by racebuild
+# vim-tiny: for interactive debugging convenience
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	libcrypt1 \
@@ -50,6 +51,7 @@ RUN apt-get update && apt-get install -y \
 	python3.12 \
 	nano \
 	unzip \
+	vim-tiny \
 	&& rm -rf /var/lib/apt/lists/*
 
 # bootstrapswarming requires a 'python3' binary in PATH, so add one that points to the python3.12 installed above.
