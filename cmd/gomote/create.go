@@ -297,7 +297,25 @@ func createInstances(ctx context.Context, builderType string, cfg *createConfig)
 			} else {
 				log.Printf("Running %q on %q...\n", cmd, inst)
 			}
-			return doRun(ctx, inst, cmd, []string{}, runWriters(outputs...))
+			err = doRun(ctx, inst, cmd, []string{}, runWriters(outputs...))
+			if !strings.Contains(builderType, "-perf_vs_") {
+				return err
+			}
+
+			// This is a perf_vs_ gomote. Also build sweet and get its assets.
+			buildSweetCmd := []string{"go/bin/go", "build", "./cmd/sweet"}
+			buildSweetDir := "benchmarks/sweet"
+			if !detailedProgress {
+				log.Printf("Running %q from directory %q on %q...\n", strings.Join(buildSweetCmd, " "), buildSweetDir, inst)
+			}
+			if err = doRun(ctx, inst, buildSweetCmd[0], buildSweetCmd[1:], runWriters(outputs...), runDir(buildSweetDir)); err != nil {
+				return err
+			}
+			sweetGetCmd := []string{"benchmarks/sweet/sweet", "get"}
+			if !detailedProgress {
+				log.Printf("Running %q on %q...\n", strings.Join(sweetGetCmd, " "), inst)
+			}
+			return doRun(ctx, inst, sweetGetCmd[0], sweetGetCmd[1:], runWriters(outputs...))
 		})
 	}
 	if err := eg.Wait(); err != nil {
