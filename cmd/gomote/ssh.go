@@ -19,10 +19,6 @@ import (
 )
 
 func ssh(args []string) error {
-	if activeGroup != nil {
-		return fmt.Errorf("command does not support groups")
-	}
-
 	fs := flag.NewFlagSet("ssh", flag.ContinueOnError)
 	fs.Usage = func() {
 		usageLogger.Print("ssh usage: gomote ssh <instance>")
@@ -30,11 +26,19 @@ func ssh(args []string) error {
 		os.Exit(1)
 	}
 	fs.Parse(args)
-	if fs.NArg() != 1 {
+
+	var name string
+	if fs.NArg() == 1 {
+		name = fs.Arg(0)
+	} else if activeGroup != nil {
+		if len(activeGroup.Instances) != 1 {
+			return fmt.Errorf("command only supports groups with exactly one member")
+		}
+		name = activeGroup.Instances[0]
+	} else {
 		fs.Usage()
 	}
 
-	name := fs.Arg(0)
 	sshKeyDir, err := sshConfigDirectory()
 	if err != nil {
 		return err
