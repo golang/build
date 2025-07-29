@@ -812,18 +812,23 @@ Please visit Gerrit at %s.
 		}
 		problems := rules.Check(change)
 		if len(problems) > 0 {
-			summary := rules.FormatResults(problems)
-			// If needed, summary contains advice for how to edit the commit message.
-			msg := fmt.Sprintf("I spotted some possible problems.\n\n"+
-				"These findings are based on simple heuristics. If a finding appears wrong, briefly reply here saying so. "+
-				"Otherwise, please address any problems and update the GitHub PR. "+
-				"When complete, mark this comment as 'Done' and click the [blue 'Reply' button](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) above.\n\n"+
-				"%s\n\n"+
+			findings, notes := rules.FormatResults(problems)
+			// When applicable, notes contains advice for how to edit the commit message.
+			if notes != "" {
+				notes += "\n"
+			}
+			// TODO(thepudds): it might be better to push this text down to the internal/rules package.
+			msg := fmt.Sprintf("I spotted some possible problems with your PR:\n\n"+
+				"%s\n"+ // markdown-formatted list of findings
+				"Please address any problems by updating the GitHub PR.\n\n"+
+				"When complete, mark this comment as 'Done' and click the [blue 'Reply' button](https://go.dev/wiki/GerritBot#i-left-a-reply-to-a-comment-in-gerrit-but-no-one-but-me-can-see-it) above. "+
+				"These findings are based on heuristics; if a finding does not apply, briefly reply here saying so.\n\n"+
+				"%s"+ // notes or empty string
 				"(In general for Gerrit code reviews, the change author is expected to [log in to Gerrit](https://go-review.googlesource.com/login/) "+
 				"with a Gmail or other Google account and then close out each piece of feedback by "+
 				"marking it as 'Done' if implemented as suggested or otherwise reply to each review comment. "+
 				"See the [Review](https://go.dev/doc/contribute#review) section of the Contributing Guide for details.)",
-				summary)
+				findings, notes)
 
 			gcl, err := b.gerritChangeForPR(pr)
 			if err != nil {

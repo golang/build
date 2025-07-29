@@ -13,53 +13,57 @@ import (
 
 func TestFormatRuleResults(t *testing.T) {
 	tests := []struct {
-		title string
-		repo  string // if empty string, treated as "go" repo
-		body  string
-		want  string
+		title        string
+		repo         string // if empty string, treated as "go" repo
+		body         string
+		wantFindings string
+		wantNotes    string
 	}{
 		{
-			title: `fmt: improve some things`, // We consider this a good commit message title.
-			body:  goodCommitBody,
-			want:  ``,
+			title:        `fmt: improve some things`, // We consider this a good commit message title.
+			body:         goodCommitBody,
+			wantFindings: ``,
+			wantNotes:    ``,
 		},
 		{
 			title: `a bad commit message title.`,
 			body:  goodCommitBody,
-			want: `Possible problems detected:
-  1. The commit title should start with the primary affected package name followed by a colon, like "net/http: improve [...]".
+			wantFindings: `  1. The commit title should start with the primary affected package name followed by a colon, like "net/http: improve [...]".
   2. The first word in the commit title after the package should be a lowercase English word (usually a verb).
   3. The commit title should not end with a period.
-
-The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
 `,
+			wantNotes: commitMessageAdvice,
 		},
 		{
 			title: `A bad vscode-go commit title`, // This verifies we complain about a "component" rather than "package".
 			repo:  "vscode-go",
 			body:  "This includes a bad bug format for vscode-go repo.\nFixes #1234",
-			want: `Possible problems detected:
-  1. The commit title should start with the primary affected component name followed by a colon, like "src/goInstallTools: improve [...]".
+			wantFindings: `  1. The commit title should start with the primary affected component name followed by a colon, like "src/goInstallTools: improve [...]".
   2. The first word in the commit title after the component should be a lowercase English word (usually a verb).
   3. Do you have the right bug reference format? For the vscode-go repo, the format is usually 'Fixes golang/vscode-go#1234' or 'Updates golang/vscode-go#1234' at the end of the commit message.
-
-The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
 `,
+			wantNotes: commitMessageAdvice,
 		},
 		{
-			title: `A bad wiki commit title we allow`, // We ignore the wiki repo.
-			repo:  "wiki",
-			body:  "A bad body we allow",
-			want:  "",
+			title:        `A bad wiki commit title we allow`, // We ignore the wiki repo.
+			repo:         "wiki",
+			body:         "A bad body we allow",
+			wantFindings: "",
+			wantNotes:    "",
+		},
+		{
+			title:        goodCommitTitle,
+			body:         "This commit body is missing a bug reference.",
+			wantFindings: "  1. You usually need to reference a bug number for all but trivial or cosmetic fixes. For this repo, the format is usually 'Fixes #12345' or 'Updates #12345' at the end of the commit message. Should you have a bug reference?\n",
+			wantNotes:    commitMessageAdvice,
 		},
 		{
 			title: goodCommitTitle,
-			body:  "This commit body is missing a bug reference.",
-			want: `Possible problems detected:
-  1. You usually need to reference a bug number for all but trivial or cosmetic fixes. For this repo, the format is usually 'Fixes #12345' or 'Updates #12345' at the end of the commit message. Should you have a bug reference?
-
-The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages).
+			body:  "Some `backticks`\n" + strings.Repeat("long line", 20) + "\n" + goodCommitBody,
+			wantFindings: `  1. You have a long 180 character line in the commit message body. Please add line breaks to long lines that should be wrapped. Lines in the commit message body should be wrapped at ~76 characters unless needed for things like URLs or tables. (Note: GitHub might render long lines as soft-wrapped, so double-check in the Gerrit commit message shown above.)
+  2. It looks like you are using markdown in the commit message. If so, please remove it. Be sure to double-check the plain text shown in the Gerrit commit message above for any markdown backticks, markdown links, or other markdown formatting.
 `,
+			wantNotes: commitMessageAdvice,
 		},
 	}
 	for _, tt := range tests {
@@ -74,10 +78,14 @@ The commit title and commit message body come from the GitHub PR title and descr
 				t.Fatalf("ParseCommitMessage failed: %v", err)
 			}
 			results := Check(change)
-			got := FormatResults(results)
-			t.Log("FormatResults:\n" + got)
-			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("checkRules() mismatch (-want +got):\n%s", diff)
+			gotFindings, gotNotes := FormatResults(results)
+			t.Log("FormatResults:\n" + gotFindings)
+
+			if diff := cmp.Diff(tt.wantFindings, gotFindings); diff != "" {
+				t.Errorf("checkRules() findings mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantNotes, gotNotes); diff != "" {
+				t.Errorf("checkRules() notes mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

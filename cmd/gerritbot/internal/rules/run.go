@@ -103,24 +103,20 @@ func Check(change Change) (results []Result) {
 	return results
 }
 
-// FormatResults returns a string ready to be placed in a CL comment,
+// FormatResults returns the findings and notes ready to be placed in a CL comment,
 // formatted as simple markdown.
-func FormatResults(results []Result) string {
+func FormatResults(results []Result) (findings string, notes string) {
 	if len(results) == 0 {
-		return ""
+		return "", ""
 	}
 	var b strings.Builder
-	b.WriteString("Possible problems detected:\n")
 	cnt := 1
 	for _, r := range results {
 		fmt.Fprintf(&b, "  %d. %s\n", cnt, r.Finding)
 		cnt++
 	}
 	advice := formatAdvice(results)
-	if advice != "" {
-		b.WriteString("\n" + advice + "\n")
-	}
-	return b.String()
+	return b.String(), advice
 }
 
 // formatAdvice returns a deduplicated string containing all the advice in results.

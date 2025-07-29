@@ -201,9 +201,10 @@ var ruleGroups = [][]rule{
 			f: func(change Change) (finding string, note string) {
 				finding = "Are you describing the change in complete sentences with correct punctuation in the commit message body, including ending sentences with periods?"
 				if !mightBeTrivial(change) && !match("[a-zA-Z0-9\"'`)][.:?!)]( |\\n|$)", change.Body) {
-					// A complete English sentence usually ends with an alphanumeric immediately followed by a terminating punctuation.
-					// (This is an approximate test, but currently has a very low false positive rate. Brief manual checking suggests
-					// ~zero false positives in a corpus of 1000 CLs).
+					// A complete English sentence usually ends with an alphanumeric or quote immediately followed by a terminating punctuation.
+					// This is an approximate test, but currently has a very low false positive rate. Brief manual checking suggests
+					// ~zero false positives in a corpus of 1000 CLs.
+					// (Sorry, currently our ugliest regexp).
 					return finding, commitMessageAdvice
 				}
 				return "", ""
@@ -214,7 +215,10 @@ var ruleGroups = [][]rule{
 		{
 			name: "body: long lines",
 			f: func(change Change) (finding string, note string) {
-				finding = "Lines in the commit message should be wrapped at ~76 characters unless needed for things like URLs or tables. You have a %d character line."
+				finding = "You have a long %d character line in the commit message body. " +
+					"Please add line breaks to long lines that should be wrapped. " +
+					"Lines in the commit message body should be wrapped at ~76 characters unless needed for things like URLs or tables. " +
+					"(Note: GitHub might render long lines as soft-wrapped, so double-check in the Gerrit commit message shown above.)"
 				// Check if something smells like a table, ASCII art, or benchstat output.
 				if match("----|____|[\u2500-\u257F]", change.Body) || match(` ± [0-9.]+%`, change.Body) {
 					// This might be something that is allowed to be wide.
@@ -246,7 +250,10 @@ var ruleGroups = [][]rule{
 		{
 			name: "body: might use markdown",
 			f: func(change Change) (finding string, note string) {
-				finding = "Are you using markdown? Markdown should not be used to augment text in the commit message."
+				// In practice, this rule has had close to zero false positives, though it cannot be perfect.
+				finding = "It looks like you are using markdown in the commit message. If so, please remove it. " +
+					"Be sure to double-check the plain text shown in the Gerrit commit message above for any " +
+					"markdown backticks, markdown links, or other markdown formatting."
 				if match(`(?i)markdown`, change.Title) || match(`(?i)markdown`, change.Body) {
 					// Could be a markdown-related fix.
 					return "", ""
@@ -272,7 +279,7 @@ var ruleGroups = [][]rule{
 					}
 				}
 				if match(`\[.+]\(https?://.+\)`, change.Body) {
-					// Looks like a markdown link. (Sorry, currently our ugliest regexp).
+					// Looks like a markdown link.
 					return finding, commitMessageAdvice
 				}
 				return "", ""
@@ -385,9 +392,13 @@ var ruleGroups = [][]rule{
 }
 
 // Auxiliary advice.
-var commitMessageAdvice = "The commit title and commit message body come from the GitHub PR title and description, and must be edited in the GitHub web interface (not via git). " +
-	"For instructions, see [here](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message). " +
-	"For guidelines on commit messages for the Go project, see [here](https://go.dev/doc/contribute#commit_messages)."
+var commitMessageAdvice = "To update the commit title or commit message body shown here in Gerrit, " +
+	"you must edit the GitHub PR title and PR description (the first comment) in the " +
+	"GitHub web interface using the 'Edit' button or 'Edit' menu entry there. " +
+	"Note: pushing a new commit to the PR will not automatically update the commit message used by Gerrit.\n\n" +
+	"For more details, see:\n" +
+	"* [how to update commit messages](https://go.dev/wiki/GerritBot/#how-does-gerritbot-determine-the-final-commit-message) for PRs imported into Gerrit.\n" +
+	"* the Go project's [conventions for commit messages](https://go.dev/doc/contribute#commit_messages) that you should follow.\n"
 
 // mightBeTrivial reports if a change looks like something
 // where a commit body is often allowed to be skipped, such
