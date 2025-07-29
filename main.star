@@ -1364,8 +1364,8 @@ def dimensions_of(host_type):
     if suffix != "":
         if goos == "linux" and "debian" in suffix:
             # linux-amd64_debian11  -> Debian-11
-            # linux-amd64_debiansid -> Debian-trixie/sid
-            os = suffix.replace("debian", "Debian-").replace("sid", "trixie/sid")
+            # linux-amd64_debiansid -> Debian-13
+            os = suffix.replace("debian", "Debian-").replace("sid", "13")
         elif goos == "linux" and suffix in ["c2s16", "c3h88", "c4as16", "c4ah72"]:
             # Performance test machines.
             os = "Debian-12"
