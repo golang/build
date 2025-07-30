@@ -43,6 +43,7 @@ require (
 	github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
+	github.com/mailjet/mailjet-apiv3-go/v4 v4.0.7
 	github.com/mattn/go-sqlite3 v1.14.14
 	github.com/robfig/cron/v3 v3.0.2-0.20210106135023-bc59245fe10e
 	github.com/sendgrid/sendgrid-go v3.11.1+incompatible

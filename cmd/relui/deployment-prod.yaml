@@ -32,6 +32,7 @@ spec:
             # Define the site header and external service configuration.
             - "--site-title=Go Releases"
             - "--site-header-css=Site-header--production"
+            - "--mailjet-api-key=secret:symbolic-datum-552/mailjet-api-key"
             - "--announce-mail-from=announce@golang.org"
             - "--announce-mail-to=golang-nuts@googlegroups.com"
             - "--announce-mail-bcc=golang-announce@googlegroups.com, golang-dev@googlegroups.com"

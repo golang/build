@@ -81,7 +81,9 @@ func main() {
 	if err := secret.InitFlagSupport(context.Background()); err != nil {
 		log.Fatalln(err)
 	}
-	sendgridAPIKey := secret.Flag("sendgrid-api-key", "SendGrid API key for workflows involving sending email.")
+	sendgridAPIKey := secret.Flag("sendgrid-api-key", "SendGrid API key for workflows involving sending email (can't be used if -mailjet-api-key is set).")
+	var mailjetAPIKey secret.MailjetCredentials
+	secret.JSONVarFlag(&mailjetAPIKey, "mailjet-api-key", "Mailjet API key for workflows involving sending email (can't be used if -sendgrid-api-key is set).")
 	var annMail task.MailHeader
 	addressVarFlag(&annMail.From, "announce-mail-from", "The From address to use for the (pre-)announcement mail.")
 	addressVarFlag(&annMail.To, "announce-mail-to", "The To address to use for the (pre-)announcement mail.")
@@ -153,8 +155,12 @@ func main() {
 	gitClient.UseOAuth2Auth(creds.TokenSource)
 	var mailFunc func(*workflow.TaskContext, task.MailHeader, task.MailContent) error
 	switch {
+	case *sendgridAPIKey != "" && mailjetAPIKey != (secret.MailjetCredentials{}):
+		log.Fatalln("at most one of -sendgrid-api-key and -mailjet-api-key can be set at once")
 	case *sendgridAPIKey != "":
 		mailFunc = task.NewSendGridMailClient(*sendgridAPIKey).SendMail
+	case mailjetAPIKey != (secret.MailjetCredentials{}):
+		mailFunc = task.NewMailjetMailClient(mailjetAPIKey).SendMail
 	default:
 		mailFunc = task.ReleaseCoordinatorAsTheMailSender{ApproveAction: relui.ApproveActionDep(dbPool)}.SendMail
 	}

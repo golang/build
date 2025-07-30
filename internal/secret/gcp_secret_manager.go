@@ -72,6 +72,10 @@ const (
 	// This API key only allows sending email.
 	NameSendGridAPIKey = "sendgrid-sendonly-api-key"
 
+	// nameMailjetAPIKey is the secret name for a Go project Mailjet API key.
+	// The secret value is a JSON encoding of the MailjetCredentials.
+	nameMailjetAPIKey = "mailjet-api-key"
+
 	// NameTwitterAPISecret is the secret name for Twitter API credentials for
 	// posting tweets from the Go project's Twitter account (twitter.com/golang).
 	//
@@ -158,6 +162,19 @@ func (t MastodonCredentials) String() string {
 }
 func (t MastodonCredentials) GoString() string {
 	return fmt.Sprintf("secret.MastodonCredentials{Instance:%q Application:%q ClientKey:(redacted) ClientSecret:(redacted) AccessToken:(redacted)}", t.Instance, t.Application)
+}
+
+// MailjetCredentials holds Mailjet API credentials.
+type MailjetCredentials struct {
+	APIKeyPublic  string
+	APIKeyPrivate string
+}
+
+func (t MailjetCredentials) String() string {
+	return fmt.Sprintf("{%s (redacted)}", t.APIKeyPublic)
+}
+func (t MailjetCredentials) GoString() string {
+	return fmt.Sprintf("secret.MailjetCredentials{APIKeyPublic:%q APIKeyPrivate:(redacted)}", t.APIKeyPublic)
 }
 
 type secretClient interface {

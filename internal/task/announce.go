@@ -19,6 +19,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/mailjet/mailjet-apiv3-go/v4"
 	sendgrid "github.com/sendgrid/sendgrid-go"
 	sendgridmail "github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/yuin/goldmark"
@@ -28,6 +29,7 @@ import (
 	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
 	goldmarktext "github.com/yuin/goldmark/text"
 	"golang.org/x/build/internal/gophers"
+	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/maintner/maintnerd/maintapi/version"
 	"golang.org/x/net/html"
@@ -550,8 +552,7 @@ type realSendGridMailClient struct {
 	sg *sendgrid.Client
 }
 
-// NewSendGridMailClient creates a SendGrid mail client
-// authenticated with the given API key.
+// NewSendGridMailClient creates a SendGrid mail client authenticated with the given API key.
 func NewSendGridMailClient(sendgridAPIKey string) realSendGridMailClient {
 	return realSendGridMailClient{sg: sendgrid.NewSendClient(sendgridAPIKey)}
 }
@@ -578,6 +579,48 @@ func (c realSendGridMailClient) SendMail(_ *workflow.TaskContext, h MailHeader, 
 		return err
 	} else if resp.StatusCode != http.StatusAccepted {
 		return fmt.Errorf("unexpected status %d %s, want 202 Accepted; body = %s", resp.StatusCode, http.StatusText(resp.StatusCode), resp.Body)
+	}
+	return nil
+}
+
+type realMailjetMailClient struct {
+	cl *mailjet.Client
+}
+
+// NewMailjetMailClient creates a Mailjet mail client authenticated with the given API key.
+func NewMailjetMailClient(key secret.MailjetCredentials) realMailjetMailClient {
+	return realMailjetMailClient{cl: mailjet.NewMailjetClient(key.APIKeyPublic, key.APIKeyPrivate)}
+}
+
+// SendMail sends an email by making an authenticated request to the Mailjet API.
+func (c realMailjetMailClient) SendMail(_ *workflow.TaskContext, h MailHeader, m MailContent) error {
+	recipient := func(a mail.Address) *mailjet.RecipientV31 {
+		return &mailjet.RecipientV31{Email: a.Address, Name: a.Name}
+	}
+	recipients := func(as []mail.Address) *mailjet.RecipientsV31 {
+		var r mailjet.RecipientsV31
+		for _, a := range as {
+			r = append(r, *recipient(a))
+		}
+		return &r
+	}
+	resp, err := c.cl.SendMailV31(&mailjet.MessagesV31{Info: []mailjet.InfoMessagesV31{{
+		From:     recipient(h.From),
+		To:       recipients([]mail.Address{h.To}),
+		Bcc:      recipients(h.BCC),
+		Subject:  m.Subject,
+		TextPart: m.BodyText,
+		HTMLPart: m.BodyHTML,
+	}}})
+	if err != nil {
+		return err
+	} else if len(resp.ResultsV31) == 0 {
+		return fmt.Errorf("no results; resp = %#v", resp)
+	}
+	for i, r := range resp.ResultsV31 {
+		if r.Status != "success" {
+			return fmt.Errorf("unexpected %dth result status %q, want 'success'; resp = %#v", i+1, r.Status, resp)
+		}
 	}
 	return nil
 }
