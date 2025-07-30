@@ -913,6 +913,16 @@ def define_for_go_starting_at(x, presubmit = True, postsubmit = True):
 
     return f
 
+# define the builder only for the go project at versions in [first, last]
+# (inclusive), useful for non-default build modes that were created at first
+# and removed at last+1. tip is never included.
+def define_for_go_range(first, last, presubmit = True, postsubmit = True):
+    def f(port, project, go_branch_short):
+        run = project == "go" and go_branch_short >= first and go_branch_short <= last
+        return (run, run and presubmit, run and postsubmit, [])
+
+    return f
+
 # define the builder only for postsubmit for the specified projects.
 #
 # Note: it will still be defined for optional inclusion in presubmit.
@@ -1199,10 +1209,11 @@ RUN_MODS = dict(
 
     # Build and test with the swissmap GOEXPERIMENT disabled.
     #
-    # This can be deleted when GOEXPERIMENT=swissmap is removed.
+    # GOEXPERIMENT=swissmap was deleted in Go 1.26. This can be deleted when Go
+    # 1.25 is no longer supported.
     noswissmap = make_run_mod(
         add_env = {"GOEXPERIMENT": "noswissmap"},
-        enabled = define_for_go_starting_at("go1.24", presubmit = False),
+        enabled = define_for_go_range("go1.24", "go1.25", presubmit = False),
     ),
 
     # Build and test with go.mod upgraded to the latest version.
