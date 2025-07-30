@@ -722,7 +722,7 @@ esac`, tc.wantVersion)
 						1: fmt.Sprintf("gopls/%s", tc.release.String()),
 					},
 				},
-				SendMail: func(h MailHeader, c MailContent) error {
+				SendMail: func(_ *workflow.TaskContext, h MailHeader, c MailContent) error {
 					gotSubject = c.Subject
 					return nil
 				},
@@ -1240,7 +1240,7 @@ esac
 						},
 					},
 				},
-				SendMail: func(h MailHeader, c MailContent) error {
+				SendMail: func(_ *workflow.TaskContext, h MailHeader, c MailContent) error {
 					gotSubject = c.Subject
 					return nil
 				},

@@ -60,7 +60,7 @@ type ReleaseVSCodeGoTasks struct {
 	GitHub             GitHubClientInterface
 	CloudBuild         CloudBuildClient
 	ApproveAction      func(*wf.TaskContext) error
-	SendMail           func(MailHeader, MailContent) error
+	SendMail           func(*wf.TaskContext, MailHeader, MailContent) error
 	AnnounceMailHeader MailHeader
 }
 
@@ -733,7 +733,7 @@ func (r *ReleaseVSCodeGoTasks) mailAnnouncement(ctx *wf.TaskContext, release rel
 	ctx.Printf("announcement subject: %s\n\n", content.Subject)
 	ctx.Printf("announcement body HTML:\n%s\n", content.BodyHTML)
 	ctx.Printf("announcement body text:\n%s", content.BodyText)
-	return r.SendMail(r.AnnounceMailHeader, content)
+	return r.SendMail(ctx, r.AnnounceMailHeader, content)
 }
 
 func versionString(release releaseVersion, prerelease string) string {

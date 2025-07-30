@@ -43,6 +43,7 @@ import (
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/task"
+	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/repos"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -120,6 +121,14 @@ func main() {
 		return
 	}
 
+	var dbPool db.PGDBTX
+	dbPool, err := pgxpool.Connect(ctx, *pgConnect)
+	if err != nil {
+		log.Fatalln("pgxpool.Connect:", err)
+	}
+	defer dbPool.Close()
+	dbPool = &relui.MetricsDB{PGDBTX: dbPool}
+
 	// Define the site header and external service configuration.
 	// The site header communicates to humans what will happen
 	// when workflows run.
@@ -142,7 +151,13 @@ func main() {
 	}
 	gitClient := &task.Git{}
 	gitClient.UseOAuth2Auth(creds.TokenSource)
-	mailFunc := task.NewSendGridMailClient(*sendgridAPIKey).SendMail
+	var mailFunc func(*workflow.TaskContext, task.MailHeader, task.MailContent) error
+	switch {
+	case *sendgridAPIKey != "":
+		mailFunc = task.NewSendGridMailClient(*sendgridAPIKey).SendMail
+	default:
+		mailFunc = task.ReleaseCoordinatorAsTheMailSender{ApproveAction: relui.ApproveActionDep(dbPool)}.SendMail
+	}
 	var mastodonClient task.Poster
 	if mastodonAPI != (secret.MastodonCredentials{}) {
 		var err error
@@ -220,14 +235,6 @@ func main() {
 			}),
 		}
 	}
-
-	var dbPool db.PGDBTX
-	dbPool, err = pgxpool.Connect(ctx, *pgConnect)
-	if err != nil {
-		log.Fatalln("pgxpool.Connect:", err)
-	}
-	defer dbPool.Close()
-	dbPool = &relui.MetricsDB{PGDBTX: dbPool}
 
 	var gr *metrics.MonitoredResource
 	if metadata.OnGCE() {
@@ -397,7 +404,7 @@ func main() {
 		DB:                        dbPool,
 		BaseURL:                   base,
 		ScheduleFailureMailHeader: schedMail,
-		SendMail:                  mailFunc,
+		SendMail:                  nil, // TODO(go.dev/issue/74777): Restore email notifications about workflow failures.
 	}
 	w := relui.NewWorker(dh, dbPool, l)
 	go w.Run(ctx)

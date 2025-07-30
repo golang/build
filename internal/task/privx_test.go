@@ -132,7 +132,7 @@ echo`), 0777); err != nil {
 		},
 
 		ApproveAction: func(*workflow.TaskContext) error { return nil },
-		SendMail: func(mh MailHeader, mc MailContent) error {
+		SendMail: func(_ *workflow.TaskContext, mh MailHeader, mc MailContent) error {
 			announcementHeader, announcementMessage = mh, mc
 			return nil
 		},

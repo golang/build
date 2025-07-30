@@ -29,13 +29,19 @@ type PGListener struct {
 	BaseURL *url.URL
 
 	ScheduleFailureMailHeader task.MailHeader
-	SendMail                  func(task.MailHeader, task.MailContent) error
+	SendMail                  func(task.MailHeader, task.MailContent) error // Optional.
 
 	templ *template.Template
 }
 
 // WorkflowStalled is called when no tasks are runnable.
 func (l *PGListener) WorkflowStalled(workflowID uuid.UUID) error {
+	if l.SendMail == nil {
+		// Not configured to send mail. Nothing to do.
+		return nil
+	}
+
+	// Send mail notifying about workflow failure.
 	wf, err := db.New(l.DB).Workflow(context.Background(), workflowID)
 	if err != nil || wf.ScheduleID.Int32 == 0 {
 		return err

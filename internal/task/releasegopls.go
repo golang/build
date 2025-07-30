@@ -35,7 +35,7 @@ type ReleaseGoplsTasks struct {
 	Github             GitHubClientInterface
 	Gerrit             GerritClient
 	CloudBuild         CloudBuildClient
-	SendMail           func(MailHeader, MailContent) error
+	SendMail           func(*wf.TaskContext, MailHeader, MailContent) error
 	AnnounceMailHeader MailHeader
 	ApproveAction      func(*wf.TaskContext) error
 }
@@ -484,7 +484,7 @@ func (r *ReleaseGoplsTasks) mailPrereleaseAnnouncement(ctx *wf.TaskContext, rele
 	ctx.Printf("pre-announcement subject: %s\n\n", content.Subject)
 	ctx.Printf("pre-announcement body HTML:\n%s\n", content.BodyHTML)
 	ctx.Printf("pre-announcement body text:\n%s", content.BodyText)
-	return r.SendMail(r.AnnounceMailHeader, content)
+	return r.SendMail(ctx, r.AnnounceMailHeader, content)
 }
 
 type goplsReleaseAnnouncement struct {
@@ -513,7 +513,7 @@ func (r *ReleaseGoplsTasks) mailReleaseAnnouncement(ctx *wf.TaskContext, release
 	ctx.Printf("announcement subject: %s\n\n", content.Subject)
 	ctx.Printf("announcement body HTML:\n%s\n", content.BodyHTML)
 	ctx.Printf("announcement body text:\n%s", content.BodyText)
-	return r.SendMail(r.AnnounceMailHeader, content)
+	return r.SendMail(ctx, r.AnnounceMailHeader, content)
 }
 
 func (r *ReleaseGoplsTasks) isValidReleaseVersion(ctx *wf.TaskContext, ver string) error {

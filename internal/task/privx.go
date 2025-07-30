@@ -28,7 +28,7 @@ type PrivXPatch struct {
 	PublicRepoURL func(repo string) string
 
 	ApproveAction      func(*wf.TaskContext) error
-	SendMail           func(MailHeader, MailContent) error
+	SendMail           func(*wf.TaskContext, MailHeader, MailContent) error
 	AnnounceMailHeader MailHeader
 }
 
@@ -265,7 +265,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		ctx.Printf("announcement body text:\n%s", mc.BodyText)
 
 		ctx.DisableRetries()
-		err = x.SendMail(x.AnnounceMailHeader, mc)
+		err = x.SendMail(ctx, x.AnnounceMailHeader, mc)
 		if err != nil {
 			return "", err
 		}

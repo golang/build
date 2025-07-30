@@ -296,7 +296,7 @@ Heschi and Dmitri for the Go team` + "\n",
 				To:   mail.Address{Address: "to-address@golang.test"},
 			}
 			tasks := AnnounceMailTasks{
-				SendMail: func(h MailHeader, c MailContent) error {
+				SendMail: func(_ *workflow.TaskContext, h MailHeader, c MailContent) error {
 					if diff := cmp.Diff(annMail, h); diff != "" {
 						t.Errorf("mail header mismatch (-want +got):\n%s", diff)
 					}
@@ -384,7 +384,7 @@ Tatiana for the Go team` + "\n",
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			tasks := AnnounceMailTasks{
-				SendMail:    func(h MailHeader, c MailContent) error { return nil },
+				SendMail:    func(_ *workflow.TaskContext, h MailHeader, c MailContent) error { return nil },
 				testHookNow: func() time.Time { return time.Date(2022, time.July, 7, 0, 0, 0, 0, time.UTC) },
 			}
 			var buf bytes.Buffer
@@ -507,7 +507,7 @@ Roland for the Go team` + "\n",
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			tasks := AnnounceMailTasks{
-				SendMail:    func(h MailHeader, c MailContent) error { return nil },
+				SendMail:    func(_ *workflow.TaskContext, h MailHeader, c MailContent) error { return nil },
 				testHookNow: func() time.Time { return time.Date(2022, time.July, 7, 0, 0, 0, 0, time.UTC) },
 			}
 			var buf bytes.Buffer

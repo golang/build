@@ -136,8 +136,10 @@ type AnnounceMailTasks struct {
 	//
 	// Email delivery happens asynchronously, so SendMail returns a nil error
 	// if the transmission was started successfully, but that error value
-	// doesn't indicate anything about the status of the delivery.
-	SendMail func(MailHeader, MailContent) error
+	// doesn't indicate anything about the status of the delivery. Even after
+	// delivery, some mail may need to be reviewed and approved out of band
+	// (e.g., a Google Groups mailing list configured with moderated posting).
+	SendMail func(*workflow.TaskContext, MailHeader, MailContent) error
 
 	// AnnounceMailHeader is the header to use for the release (pre-)announcement email.
 	AnnounceMailHeader MailHeader
@@ -504,6 +506,46 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 //go:embed template
 var tmplDir embed.FS
 
+// ReleaseCoordinatorAsTheMailSender implements the manual strategy
+// of asking the release coordinator to handle sending the email.
+// It's used as a fallback when a more automated solution can't be used.
+type ReleaseCoordinatorAsTheMailSender struct {
+	ApproveAction func(*workflow.TaskContext) error // non-nil
+}
+
+// SendMail prompts the release coordinator to send an email
+// and awaits them to approve the task after they've done so.
+func (r ReleaseCoordinatorAsTheMailSender) SendMail(ctx *workflow.TaskContext, h MailHeader, m MailContent) error {
+	addressListString := func(as []mail.Address) string {
+		if len(as) == 0 {
+			return "(empty address list)"
+		}
+		var b strings.Builder
+		for i, a := range as {
+			if i != 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(a.String())
+		}
+		return b.String()
+	}
+
+	ctx.Printf(`ReleaseCoordinatorAsTheMailSender.SendMail running...
+
+* * * * *
+
+Please send the following email using your @golang.org or @google.com email,
+then approve this task as completed.
+
+To: %s
+BCC: %s
+Subject: %s
+Body Text:
+
+%s`, &h.To, addressListString(h.BCC), m.Subject, m.BodyText)
+	return r.ApproveAction(ctx)
+}
+
 type realSendGridMailClient struct {
 	sg *sendgrid.Client
 }
@@ -515,7 +557,7 @@ func NewSendGridMailClient(sendgridAPIKey string) realSendGridMailClient {
 }
 
 // SendMail sends an email by making an authenticated request to the SendGrid API.
-func (c realSendGridMailClient) SendMail(h MailHeader, m MailContent) error {
+func (c realSendGridMailClient) SendMail(_ *workflow.TaskContext, h MailHeader, m MailContent) error {
 	from, to := sendgridmail.Email(h.From), sendgridmail.Email(h.To)
 	req := sendgridmail.NewSingleEmail(&from, m.Subject, &to, m.BodyText, m.BodyHTML)
 	if len(req.Personalizations) != 1 {
@@ -833,7 +875,7 @@ func (t AnnounceMailTasks) generateAndSendAnnouncementMail(ctx *workflow.TaskCon
 		return SentMail{"[dry-run] " + m.Subject, sentMailKeywords}, nil
 	}
 	ctx.DisableRetries()
-	err = t.SendMail(t.AnnounceMailHeader, m)
+	err = t.SendMail(ctx, t.AnnounceMailHeader, m)
 	if err != nil {
 		return SentMail{}, err
 	}
