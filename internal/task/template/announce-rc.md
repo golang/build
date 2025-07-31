@@ -22,7 +22,7 @@ $ {{.Version}} download
 You can download binary and source distributions from the usual place:
 https://go.dev/dl/#{{.Version}}
 
-{{/* TODO(rfindley): update the go1.23rc1 sections once Go 1.23 is out. */ -}}
+{{/* TODO(rfindley,dmitshur): Remove the go1.23rc1-specific section now that Go 1.23.0 is out. */ -}}
 
 {{ if eq .Version "go1.23rc1" }}
 To help validate the release, consider opting in to [Go toolchain telemetry](https://go.dev/doc/telemetry).
