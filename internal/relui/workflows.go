@@ -430,7 +430,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 
 		securitySummary := wf.Const("")
 		securityFixes := wf.Slice[string]()
-		if r.kind == task.KindMinor {
+		if r.kind == task.KindMinor || r.kind == task.KindRC {
 			securitySummary = wf.Param(wd, securitySummaryParameter)
 			securityFixes = wf.Param(wd, securityFixesParameter)
 		}

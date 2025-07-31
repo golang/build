@@ -159,6 +159,39 @@ $ go1.17rc2 version
 go version go1.17rc2 windows/arm64` + "\n",
 	},
 	{
+		name: "rc-with-security",
+		kind: KindRC,
+		published: []Published{{Version: "go1.25rc2", Files: []WebsiteFile{{
+			OS: "linux", Arch: "386",
+			Filename: "go1.25rc2.linux-386.tar.gz", Size: 58362781, Kind: "archive"}},
+		}},
+		announcement: "https://groups.google.com/g/golang-announce/c/VDM1-NOZTQM/m/xDmH3HCCBQAJ",
+		security:     "Includes a security fix for the Go toolchain (CVE-2025-4674).",
+		randomSeed:   123,
+		wantLog: `tweet text:
+🎊 Go 1.25 Release Candidate 2 is released!
+
+🔐 Security: Includes a security fix for the Go toolchain (CVE-2025-4674).
+
+🏃‍♂️ Run it in dev! Run it in prod! File bugs! https://go.dev/issue/new
+
+📡 Announcement: https://groups.google.com/g/golang-announce/c/VDM1-NOZTQM/m/xDmH3HCCBQAJ
+
+🚚 Download: https://go.dev/dl/#go1.25rc2
+
+#golang
+tweet image:
+$ go install golang.org/dl/go1.25rc2@latest
+$ go1.25rc2 download
+Downloaded   0.0% (       0 / 58362781 bytes) ...
+Downloaded  50.0% (29181390 / 58362781 bytes) ...
+Downloaded 100.0% (58362781 / 58362781 bytes)
+Unpacking go1.25rc2.linux-386.tar.gz ...
+Success. You may now run 'go1.25rc2'
+$ go1.25rc2 version
+go version go1.25rc2 linux/386` + "\n",
+	},
+	{
 		name: "major",
 		kind: KindMajor,
 		published: []Published{{Version: "go1.21.0", Files: []WebsiteFile{{

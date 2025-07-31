@@ -10,9 +10,9 @@ We have just released Go version {{short .Version}}, a minor point release.
 {{- end}}
 
 {{if .Security}}{{if .SecondaryVersion -}}
-These minor releases include
+These releases include
 {{- else -}}
-This minor release includes{{end}} {{len .Security}} security fixes following the [security policy](https://go.dev/security):
+This release includes{{end}} {{len .Security}} security fix{{if gt (len .Security) 1}}es{{end}} following the [security policy](https://go.dev/doc/security/policy):
 {{range .Security}}
 -{{indent .}}
 {{end}}

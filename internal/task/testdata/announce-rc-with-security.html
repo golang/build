@@ -1,0 +1,25 @@
+<p>Hello gophers,</p>
+<p>We have just released go1.25rc2, a release candidate version of Go 1.25.<br>
+It is cut from release-branch.go1.25 at the revision tagged go1.25rc2.</p>
+<p>This release includes 1 security fix following the <a href="https://go.dev/doc/security/policy">security policy</a>:</p>
+<ul>
+<li>
+<p>cmd/go: unexpected command execution in untrusted VCS repositories</p>
+<p>This is CVE-2025-4674 and <a href="https://go.dev/issue/74380">https://go.dev/issue/74380</a>.</p>
+</li>
+</ul>
+<p>Please try your production load tests and unit tests with the new version.<br>
+Your help testing these pre-release versions is invaluable.</p>
+<p>Report any problems using the issue tracker:<br>
+<a href="https://go.dev/issue/new">https://go.dev/issue/new</a></p>
+<p>If you have Go installed already, an easy way to try go1.25rc2<br>
+is by using the go command:</p>
+<pre><code>$ go install golang.org/dl/go1.25rc2@latest
+$ go1.25rc2 download
+</code></pre>
+<p>You can download binary and source distributions from the usual place:<br>
+<a href="https://go.dev/dl/#go1.25rc2">https://go.dev/dl/#go1.25rc2</a></p>
+<p>To find out what has changed in Go 1.25, read the draft release notes:<br>
+<a href="https://tip.golang.org/doc/go1.25">https://tip.golang.org/doc/go1.25</a></p>
+<p>Cheers,<br>
+Bob for the Go team</p>

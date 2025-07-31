@@ -365,13 +365,9 @@ func announcementMail(data any) (_ MailContent, sentMailKeywords []string, _ err
 		default:
 			return MailContent{}, nil, fmt.Errorf("unknown release kind: %v", r.Kind)
 		}
-		if len(r.Security) > 0 && name != "announce-minor.md" {
-			// The Security field isn't supported in templates other than minor,
+		if len(r.Security) > 0 && (name != "announce-minor.md" && name != "announce-rc.md") {
+			// The Security field isn't supported in templates other than minor and RC,
 			// so report an error instead of silently dropping it.
-			//
-			// Note: Maybe in the future we'd want to consider support for including sentences like
-			// "This beta release includes the same security fixes as in Go X.Y.Z and Go A.B.C.",
-			// but we'll have a better idea after these initial templates get more practical use.
 			return MailContent{}, nil, fmt.Errorf("email template %q doesn't support the Security field; this field can only be used in minor releases", name)
 		} else if r.SecondaryVersion != "" && name != "announce-minor.md" {
 			return MailContent{}, nil, fmt.Errorf("email template %q doesn't support more than one release; the SecondaryVersion field can only be used in minor releases", name)
@@ -447,7 +443,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 	"subjectPrefix": func(r releaseAnnouncement) string {
 		switch {
 		case len(r.Security) > 0:
-			// Include a security prefix as documented at https://go.dev/security#receiving-security-updates:
+			// Include a security prefix as documented at https://go.dev/doc/security/policy#receiving-security-updates:
 			//
 			//	> The best way to receive security announcements is to subscribe to the golang-announce mailing list.
 			//	> Any messages pertaining to a security issue will be prefixed with [security].
@@ -869,8 +865,8 @@ func (markdownToTextRenderer) Render(w io.Writer, source []byte, n ast.Node) err
 			case *ast.Link:
 				// Append the link's URL after its text.
 				//
-				// For example, the Markdown "[security policy](https://go.dev/security)"
-				// is rendered as plain text "security policy <https://go.dev/security>".
+				// For example, the Markdown "[CL 456](https://go.dev/cl/456)"
+				// is rendered as plain text "CL 456 <https://go.dev/cl/456>".
 				fmt.Fprintf(w, " <%s>", n.Destination)
 			case *ast.List:
 				// Pop list marker off the stack.

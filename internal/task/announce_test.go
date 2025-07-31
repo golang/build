@@ -109,6 +109,18 @@ This is CVE-2022-27536 and https://go.dev/issue/51759.`,
 			wantSubject: "Go 1.25 Release Candidate 1 is released",
 		},
 		{
+			name: "announce-rc-with-security",
+			in: releaseAnnouncement{
+				Kind:    KindRC,
+				Version: "go1.25rc2",
+				Security: []string{`cmd/go: unexpected command execution in untrusted VCS repositories
+
+This is CVE-2025-4674 and https://go.dev/issue/74380.`},
+				Names: []string{"Bob"},
+			},
+			wantSubject: "[security] Go 1.25 Release Candidate 2 is released",
+		},
+		{
 			name: "announce-major",
 			in: releaseAnnouncement{
 				Kind:    KindMajor,

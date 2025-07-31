@@ -2,7 +2,7 @@ Hello gophers,
 
 We have just released Go version 1.11.1, a minor point release.
 
-This minor release includes 2 security fixes following the security policy <https://go.dev/security>:
+This release includes 2 security fixes following the security policy <https://go.dev/doc/security/policy>:
 
 -	abc: security fix 1
 

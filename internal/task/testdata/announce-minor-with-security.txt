@@ -2,7 +2,7 @@ Hello gophers,
 
 We have just released Go versions 1.18.1 and 1.17.9, minor point releases.
 
-These minor releases include 3 security fixes following the security policy <https://go.dev/security>:
+These releases include 3 security fixes following the security policy <https://go.dev/doc/security/policy>:
 
 -	encoding/pem: fix stack overflow in Decode
 
