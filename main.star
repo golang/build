@@ -993,11 +993,12 @@ def define_for_issue68798():
 
 # define_for_issue69121 is a custom policy for go.dev/issue/69121.
 # It shouldn't be needed beyond Go 1.25.
+# TODO: delete when Go 1.24 is end of support.
 def define_for_issue69121():
     def f(port, project, go_branch_short):
         exists, presubmit, postsubmit = False, True, True
         if project in ["go", "tools"]:
-            exists = go_branch_short == "gotip" or go_branch_short >= "go1.24"
+            exists = go_branch_short == "go1.24"
         return (exists, presubmit, postsubmit, [])
 
     return f
