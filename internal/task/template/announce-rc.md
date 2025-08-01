@@ -18,6 +18,14 @@ Your help testing these pre-release versions is invaluable.
 Report any problems using the issue tracker:
 https://go.dev/issue/new
 
+Please consider opting in to [Go telemetry](https://go.dev/doc/telemetry) if you haven't already.
+Go telemetry helps validate this release candidate and future Go releases.
+You can opt in by running the following command:
+
+```
+$ go telemetry on
+```
+
 If you have Go installed already, an easy way to try {{.Version}}
 is by using the go command:
 
