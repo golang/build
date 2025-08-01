@@ -88,6 +88,18 @@ func TestDependencyError(t *testing.T) {
 	}
 }
 
+func TestTaskPanic(t *testing.T) {
+	wd := wf.New(wf.ACL{})
+	wf.Output(wd, "output", wf.Task0(wd, "panicking task", func(context.Context) (string, error) {
+		panic("pretend unexpected panic")
+	}))
+	w := startWorkflow(t, wd, nil)
+	if got, wantPrefix := runToFailure(t, w, nil, "panicking task"), "task unexpectedly panicked: "+
+		"internal panic: pretend unexpected panic\n\n"; !strings.HasPrefix(got, wantPrefix) {
+		t.Errorf("got error %q, want prefix %q", got, wantPrefix)
+	}
+}
+
 func TestSub(t *testing.T) {
 	hi := func(ctx context.Context) (string, error) {
 		return "hi", nil
@@ -249,6 +261,18 @@ func TestExpansion(t *testing.T) {
 	outputs := runWorkflow(t, w, nil)
 	if got, want := outputs["final value"], "hey there friend"; got != want {
 		t.Errorf("joined output = %q, want %q", got, want)
+	}
+}
+
+func TestExpansionPanic(t *testing.T) {
+	wd := wf.New(wf.ACL{})
+	wf.Output(wd, "output", wf.Expand0(wd, "panicking expansion", func(*wf.Definition) (wf.Value[string], error) {
+		panic("pretend unexpected panic")
+	}))
+	w := startWorkflow(t, wd, nil)
+	if got, wantPrefix := runToFailure(t, w, nil, "panicking expansion"), "expansion unexpectedly panicked: "+
+		"internal panic: pretend unexpected panic\n\n"; !strings.HasPrefix(got, wantPrefix) {
+		t.Errorf("got error %q, want prefix %q", got, wantPrefix)
 	}
 }
 

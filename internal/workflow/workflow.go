@@ -48,6 +48,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -944,10 +945,28 @@ func runTask(ctx context.Context, workflowID uuid.UUID, listener Listener, state
 
 	in := append([]reflect.Value{reflect.ValueOf(tctx)}, args...)
 	fv := reflect.ValueOf(state.def.f)
-	out := fv.Call(in)
+	var (
+		out       []reflect.Value
+		taskPanic error // whether the task panicked
+	)
+	func() {
+		defer func() {
+			if e := recover(); e != nil {
+				taskPanic = fmt.Errorf("internal panic: %v\n\n%s", e, debug.Stack())
+			}
+		}()
+		out = fv.Call(in)
+	}()
 
-	if !tctx.watchdogTimer.Stop() {
-		state.err = fmt.Errorf("task did not log for %v, assumed hung", WatchdogDelay)
+	watchdogTimerAlreadyExpired := !tctx.watchdogTimer.Stop()
+	if taskPanic != nil {
+		state.err = fmt.Errorf("task unexpectedly panicked: %v", taskPanic)
+
+		// A task that panicked always needs a human to review, and if it's deemed safe
+		// to retry, do so manually. So, always disable any remaining automatic retries.
+		tctx.disableRetries = true
+	} else if watchdogTimerAlreadyExpired {
+		state.err = fmt.Errorf("task did not log for %v, assumed hung", WatchdogDelay*time.Duration(tctx.watchdogScale))
 	} else if errIdx := len(out) - 1; !out[errIdx].IsNil() {
 		state.err = out[errIdx].Interface().(error)
 	}
@@ -976,13 +995,26 @@ func runTask(ctx context.Context, workflowID uuid.UUID, listener Listener, state
 func runExpansion(d *Definition, state taskState, args []reflect.Value) taskState {
 	in := append([]reflect.Value{reflect.ValueOf(d)}, args...)
 	fv := reflect.ValueOf(state.def.f)
-	out := fv.Call(in)
+	var (
+		out            []reflect.Value
+		expansionPanic error // whether the expansion panicked
+	)
+	func() {
+		defer func() {
+			if e := recover(); e != nil {
+				expansionPanic = fmt.Errorf("internal panic: %v\n\n%s", e, debug.Stack())
+			}
+		}()
+		out = fv.Call(in)
+	}()
 	state.finished = true
-	if out[1].IsNil() {
+	if expansionPanic != nil {
+		state.err = fmt.Errorf("expansion unexpectedly panicked: %v", expansionPanic)
+	} else if !out[1].IsNil() {
+		state.err = out[1].Interface().(error)
+	} else {
 		state.expanded = d
 		state.resultValue = out[0].Interface().(metaValue)
-	} else {
-		state.err = out[1].Interface().(error)
 	}
 	return state
 }
