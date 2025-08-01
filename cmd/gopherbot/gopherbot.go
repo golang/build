@@ -1736,6 +1736,11 @@ func (b *gopherbot) fetchReleases(ctx context.Context) (major []string, nextMino
 	return major, nextMinor, nil
 }
 
+// multiBackportRequestCutoff is the date after which we consider follow-up backport
+// cherry pick issue creation requests. We do this to avoid backfilling requests
+// that are no longer relevant.
+var multiBackportRequestCutoff = time.Date(2025, 8, 1, 0, 0, 0, 0, time.UTC)
+
 // openCherryPickIssues opens CherryPickCandidate issues for backport when
 // asked on the main issue.
 func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
@@ -1749,10 +1754,16 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 			return nil
 		}
 		var backportComment *maintner.GitHubComment
+		var previousRequests []*maintner.GitHubComment
 		if err := gi.ForeachComment(func(c *maintner.GitHubComment) error {
-			if strings.HasPrefix(c.Body, "Backport issue(s) opened") {
+			if c.User.Login == "gopherbot" && strings.HasPrefix(c.Body, "Backport issue(s) opened") {
+				// Assume a strict ordering of request and response comments,
+				// such that if we already saw a backportComment, we assumne
+				// this comment is the one that fulfills that request. As such
+				// ignore the previous backportComment and look for a new one.
 				backportComment = nil
-				return errStopIteration
+				previousRequests = append(previousRequests, c)
+				return nil
 			}
 			body := strings.ToLower(c.Body)
 			if strings.Contains(body, "@gopherbot") &&
@@ -1765,6 +1776,12 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 			return err
 		}
 		if backportComment == nil {
+			return nil
+		}
+
+		if len(previousRequests) > 0 && backportComment.Created.Before(multiBackportRequestCutoff) {
+			// We don't want to backfill old requests, only consider backport comments
+			// that happened after August 1st 2025.
 			return nil
 		}
 
@@ -1783,6 +1800,21 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 			// Only backport to major releases unless explicitly
 			// asked to backport to the upcoming release.
 			selectedReleases = majorReleases[:len(majorReleases)-1]
+		}
+
+		// Remove any releases that we've already opened backport
+		// issues for.
+		selectedReleases = slices.DeleteFunc(selectedReleases, func(r string) bool {
+			for _, previousRequest := range previousRequests {
+				if strings.Contains(previousRequest.Body, r) {
+					return true
+				}
+			}
+			return false
+		})
+		if len(selectedReleases) == 0 {
+			// Nothing to do.
+			return nil
 		}
 
 		// Figure out extra labels to include from the main issue.
