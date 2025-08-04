@@ -117,10 +117,13 @@ popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race/internal/amd64v1/race_darwin.syso
+# The generated syso file contains a malformed LC_DYSYMTAB, which new Apple linker doesn't
+# like and emits an annoying warning https://github.com/golang/go/issues/61229#issuecomment-1988965927 .
+# Pass through "ld -r" to remove LC_DYSYMTAB as a workaround.
+ld -r llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso -o go/src/runtime/race/internal/amd64v1/race_darwin.syso
 # work around gomote gettar issue #64195
 mkdir outdir
-cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso outdir/race_darwin.syso
+cp go/src/runtime/race/internal/amd64v1/race_darwin.syso outdir/race_darwin.syso
 # free some disk space
 rm -r llvm.zip llvm-project-${REV}
 (cd go/src && GO_TEST_TIMEOUT_SCALE=4 ./race.bash)
@@ -141,10 +144,13 @@ popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang GOAMD64=v3 ./buildgo.sh)
-cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso go/src/runtime/race/internal/amd64v3/race_darwin.syso
+# The generated syso file contains a malformed LC_DYSYMTAB, which new Apple linker doesn't
+# like and emits an annoying warning https://github.com/golang/go/issues/61229#issuecomment-1988965927 .
+# Pass through "ld -r" to remove LC_DYSYMTAB as a workaround.
+ld -r llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso -o go/src/runtime/race/internal/amd64v3/race_darwin.syso
 # work around gomote gettar issue #64195
 mkdir outdir
-cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_amd64.syso outdir/race_darwin.syso
+cp go/src/runtime/race/internal/amd64v3/race_darwin.syso outdir/race_darwin.syso
 # free some disk space
 rm -r llvm.zip llvm-project-${REV}
 (cd go/src && GO_TEST_TIMEOUT_SCALE=4 GOAMD64=v3 ./race.bash)
@@ -167,10 +173,13 @@ popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
-cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_arm64.syso go/src/runtime/race
+# The generated syso file contains a malformed LC_DYSYMTAB, which new Apple linker doesn't
+# like and emits an annoying warning https://github.com/golang/go/issues/61229#issuecomment-1988965927 .
+# Pass through "ld -r" to remove LC_DYSYMTAB as a workaround.
+ld -r llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_arm64.syso -o go/src/runtime/race/race_darwin_arm64.syso
 # work around gomote gettar issue #64195
 mkdir outdir
-cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_darwin_arm64.syso outdir/race_darwin_arm64.syso
+cp go/src/runtime/race/race_darwin_arm64.syso outdir/race_darwin_arm64.syso
 # free some disk space
 rm -r llvm.zip llvm-project-${REV}
 (cd go/src && GO_TEST_TIMEOUT_SCALE=4 ./race.bash)
