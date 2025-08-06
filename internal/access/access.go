@@ -215,7 +215,7 @@ func FakeIAPAuthFunc() grpcauth.AuthFunc {
 			Subject:  iap.ID,
 		}
 		if iap.Email != "" {
-			payload.Claims =  map[string]any{
+			payload.Claims = map[string]any{
 				"email": iap.Email,
 			}
 		}

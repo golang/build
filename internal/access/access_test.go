@@ -33,7 +33,7 @@ func TestIAPAuthFunc(t *testing.T) {
 	wantJWTToken := "eyJhb.eyJzdDIyfQ.Bh17Fl2gFjyLh6mo1GjqSPnGUg8MRLAE1Vdo3Z3gvdI"
 	wantAudience := "foo/bar/zar"
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-		iapHeaderJWT:   wantJWTToken,
+		iapHeaderJWT: wantJWTToken,
 	}))
 	testValidator := func(ctx context.Context, token, audience string) (*idtoken.Payload, error) {
 		if token != wantJWTToken || audience != wantAudience {
@@ -45,7 +45,7 @@ func TestIAPAuthFunc(t *testing.T) {
 			Expires:  time.Now().Add(time.Minute).Unix(),
 			IssuedAt: time.Now().Add(-time.Minute).Unix(),
 			Subject:  want.ID,
-			Claims:   map[string]any{
+			Claims: map[string]any{
 				"email": want.Email,
 			},
 		}, nil
@@ -81,7 +81,7 @@ func TestIAPAuthFuncError(t *testing.T) {
 					Expires:  time.Now().Add(time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-time.Minute).Unix(),
 					Subject:  "chaz-service.moo",
-					Claims:   map[string]any{
+					Claims: map[string]any{
 						"email": "mary@foo.com",
 					},
 				}, nil
@@ -99,12 +99,12 @@ func TestIAPAuthFuncError(t *testing.T) {
 					Expires:  time.Now().Add(time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-time.Minute).Unix(),
 					Subject:  "chaz-service.moo",
-					Claims:   map[string]any{
+					Claims: map[string]any{
 						"email": "mary@foo.com",
 					},
 				}, nil
 			},
-			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{})),
+			ctx:      metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
 		},
@@ -114,7 +114,7 @@ func TestIAPAuthFuncError(t *testing.T) {
 				return nil, errors.New("validation failed")
 			},
 			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-				iapHeaderJWT:   "xyz",
+				iapHeaderJWT: "xyz",
 			})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
@@ -128,13 +128,13 @@ func TestIAPAuthFuncError(t *testing.T) {
 					Expires:  time.Now().Add(time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-time.Minute).Unix(),
 					Subject:  "chaz-service.moo",
-					Claims:   map[string]any{
+					Claims: map[string]any{
 						"email": "mary@foo.com",
 					},
 				}, nil
 			},
 			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-				iapHeaderJWT:   "xyz",
+				iapHeaderJWT: "xyz",
 			})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
@@ -148,13 +148,13 @@ func TestIAPAuthFuncError(t *testing.T) {
 					Expires:  time.Now().Add(-time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-10 * time.Minute).Unix(),
 					Subject:  "chaz-service.moo",
-					Claims:   map[string]any{
+					Claims: map[string]any{
 						"email": "mary@foo.com",
 					},
 				}, nil
 			},
 			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-				iapHeaderJWT:   "xyz",
+				iapHeaderJWT: "xyz",
 			})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
@@ -167,13 +167,13 @@ func TestIAPAuthFuncError(t *testing.T) {
 					Audience: audience,
 					Expires:  time.Now().Add(time.Minute).Unix(),
 					IssuedAt: time.Now().Add(-time.Minute).Unix(),
-					Claims:   map[string]any{
+					Claims: map[string]any{
 						"email": "mary@foo.com",
 					},
 				}, nil
 			},
 			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-				iapHeaderJWT:   "xyz",
+				iapHeaderJWT: "xyz",
 			})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
@@ -190,7 +190,7 @@ func TestIAPAuthFuncError(t *testing.T) {
 				}, nil
 			},
 			ctx: metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
-				iapHeaderJWT:   "xyz",
+				iapHeaderJWT: "xyz",
 			})),
 			audience: "foo/bar/zar",
 			wantErr:  codes.Unauthenticated,
