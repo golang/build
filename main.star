@@ -468,6 +468,8 @@ BUILDER_TYPES = [
     "linux-amd64-tiplang",
     "linux-amd64-typesalias",
     "linux-amd64-aliastypeparams",
+    "linux-amd64_avx512",
+    "linux-amd64_avx512-greenteagc",
     "linux-amd64_c2s16-perf_pgo_vs_oldest_stable",
     "linux-amd64_c2s16-perf_vs_gopls_0_11",
     "linux-amd64_c2s16-perf_vs_parent",
@@ -1377,8 +1379,8 @@ def dimensions_of(host_type):
             # linux-amd64_debian11  -> Debian-11
             # linux-amd64_debiansid -> Debian-13
             os = suffix.replace("debian", "Debian-").replace("sid", "13")
-        elif goos == "linux" and suffix in ["c2s16", "c3h88", "c4as16", "c4ah72"]:
-            # Performance test machines.
+        elif goos == "linux" and suffix in ["avx512", "c2s16", "c3h88", "c4as16", "c4ah72"]:
+            # Machines with special architecture and performance test machines.
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
             cpu = goarch + "-64-" + suffix.replace("power", "POWER")
@@ -1410,6 +1412,8 @@ def dimensions_of(host_type):
                 machine_type = "c2-standard-16"
             elif suffix == "c3h88":
                 machine_type = "c3-highcpu-88"
+            elif suffix == "avx512":
+                machine_type = "c3-standard-8"
             else:
                 machine_type = "n1-standard-16"
         elif goarch == "arm64":
@@ -2070,6 +2074,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     if suffix == "docker" and project != "vscode-go":
         return False, PRESUBMIT.DISABLED, False, []
     if suffix != "docker" and project == "vscode-go":
+        return False, PRESUBMIT.DISABLED, False, []
+
+    # Only run avx512 builders on the main Go repository, there's little value gained elsewhere.
+    if suffix == "avx512" and project != "go":
         return False, PRESUBMIT.DISABLED, False, []
 
     # Apply basic policies about which projects run on what machine types,
