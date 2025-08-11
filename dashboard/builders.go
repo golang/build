@@ -127,7 +127,7 @@ var Builders = map[string]*BuildConfig{}
 // usually uploaded by 'genbootstrap -upload windows-*'.
 // However, as of 2024-08-16 all existing coordinator builders for Windows have migrated
 // to LUCI, so nothing needs to be done for Windows after all.
-const GoBootstrap = "go1.22.6"
+const GoBootstrap = "go1.24.6"
 
 // Hosts contains the names and configs of all the types of
 // buildlets. They can be VMs, containers, or dedicated machines.
