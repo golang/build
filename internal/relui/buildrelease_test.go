@@ -95,10 +95,6 @@ case "$1" in
   ls go.mod go.sum >/dev/null
   echo "tidied!" >> go.mod
   ;;
-"generate")
-  mkdir -p internal/stdlib
-  cd internal/stdlib && echo "package stdlib" >> manifest.go
-  ;;
 *)
   echo unexpected command $@
   exit 1
@@ -163,9 +159,10 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	})
 	toolsRepo := task.NewFakeRepo(t, "tools")
 	toolsRepo.Commit(map[string]string{
-		"go.mod":                       "module golang.org/x/tools\n",
-		"go.sum":                       "\n",
-		"internal/imports/mkstdlib.go": "package imports\nconst C=1",
+		"go.mod":                    "module golang.org/x/tools\n",
+		"go.sum":                    "\n",
+		"internal/stdlib/stdlib.go": "//go:generate cp gen.out manifest.go\n\npackage stdlib\n",
+		"internal/stdlib/gen.out":   "package stdlib\n\n// manifest.go was generated!\n",
 	})
 	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo, buildRepo, toolsRepo)
 
@@ -403,6 +400,16 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		if string(version) != versionFile {
 			t.Errorf("VERSION file is %q, expected %q", version, versionFile)
 		}
+	}
+
+	// Check for go.dev/issue/54377.
+	wantUpdateStdlibIndex := kind == task.KindMajor
+	switch b, err := deps.gerrit.ReadFile(deps.ctx, "tools", "HEAD", "internal/stdlib/manifest.go"); {
+	case wantUpdateStdlibIndex && err == nil && string(b) == "package stdlib\n\n// manifest.go was generated!\n",
+		!wantUpdateStdlibIndex && errors.Is(err, gerrit.ErrResourceNotExist):
+		// OK.
+	default:
+		t.Errorf("unexpected x/tools/internal/stdlib/manifest.go file: read error = %v, content = %q", err, b)
 	}
 
 	// Check for go.dev/issue/69095.

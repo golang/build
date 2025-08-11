@@ -217,20 +217,15 @@ func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit str
 }
 
 func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, reviewers []string, version string) (string, error) {
-	build, err := t.CloudBuild.RunScript(ctx, "go generate ./internal/stdlib", "tools", []string{"internal/stdlib/manifest.go"})
-	if err != nil {
-		return "", err
-	}
-
-	files, err := buildToOutputs(ctx, t.CloudBuild, build)
-	if err != nil {
-		return "", err
-	}
-
-	changeInput := gerrit.ChangeInput{
+	return t.CloudBuild.GenerateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: "tools",
-		Subject: fmt.Sprintf("internal/stdlib: update stdlib index for %s\n\nFor golang/go#38706.", strings.Replace(version, "go", "Go ", 1)),
-		Branch:  "master",
-	}
-	return t.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
+		Subject: fmt.Sprintf(`internal/stdlib: update stdlib index for %s
+
+For golang/go#38706.
+
+[git-generate]
+go generate ./internal/stdlib
+`, strings.Replace(version, "go", "Go ", 1)),
+		Branch: "master",
+	}, reviewers)
 }

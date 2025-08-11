@@ -901,13 +901,13 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 		wd = cb.t.TempDir()
 	}
 
-	tempDir := cb.t.TempDir()
 	cmd := exec.Command("bash", "-eux")
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Dir = wd
-	cmd.Env = os.Environ()
-	cmd.Env = append(cmd.Env, "TEMP="+tempDir, "TMP="+tempDir, "TEMPDIR="+tempDir, "TMPDIR="+tempDir)
-	cmd.Env = append(cmd.Env, "PATH="+cb.toolDir+string(filepath.ListSeparator)+os.Getenv("PATH"))
+	tempDir := cb.t.TempDir()
+	cmd.Env = append(os.Environ(),
+		"TEMP="+tempDir, "TMP="+tempDir, "TEMPDIR="+tempDir, "TMPDIR="+tempDir,
+		"PATH="+cb.toolDir+string(filepath.ListSeparator)+os.Getenv("PATH"))
 
 	buf := &bytes.Buffer{}
 	cmd.Stdout = buf
@@ -956,8 +956,20 @@ func (cb *FakeCloudBuild) GenerateAutoSubmitChange(ctx *wf.TaskContext, input ge
 	r.runGit("commit", "--allow-empty", "-m", input.Subject)
 
 	// Run git-generate.
+	//
+	// Note: The upside of go run here is that it's more like the real GenerateAutoSubmitChange implementation,
+	// but an unintentional side-effect is that it breaks our ability to provide a fake go binary. This is because
+	// go run always prepends its own GOROOT/bin to PATH to override any other preexisting 'go' in PATH (issue 68005).
+	// To make it possible to use a fake go binary with tasks that use GenerateAutoSubmitChange this probably
+	// needs to switch to using go install. Resolving this hasn't been a priority so far because it worked
+	// okay to stay with the normal go binary, since most GenerateAutoSubmitChange-using tasks can be faked
+	// by providing a fake go:generate directive.
 	cmd := exec.CommandContext(ctx, "go", "run", "rsc.io/rf/git-generate@"+gitGenerateVersion)
 	cmd.Dir = r.dir.dir
+	tempDir := cb.t.TempDir()
+	cmd.Env = append(os.Environ(),
+		"TEMP="+tempDir, "TMP="+tempDir, "TEMPDIR="+tempDir, "TMPDIR="+tempDir,
+		"PATH="+cb.toolDir+string(filepath.ListSeparator)+os.Getenv("PATH"))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git-generate failed: %v output:\n%s", err, out)
