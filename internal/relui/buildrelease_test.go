@@ -179,7 +179,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	}
 	milestoneTasks := &task.MilestoneTasks{
 		Client: &task.FakeGitHub{
-			Milestones:       map[int]string{0: "Go1.18", 1: "Go1.25", 2: "Go1.24.1"},
+			Milestones:       map[int]string{0: "Go1.25", 1: "Go1.24.1"},
 			DisallowComments: true,
 		},
 		RepoOwner: "golang",
@@ -430,7 +430,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 }
 
 func testSecurity(t *testing.T, mergeFixes bool) {
-	deps := newReleaseTestDeps(t, "go1.17", 18, "go1.18rc1")
+	deps := newReleaseTestDeps(t, "go1.24.0", 24, "go1.24.1")
 
 	// Set up the fake merge process. Once we stop to ask for approval, commit
 	// the fix to the public server.
@@ -447,14 +447,14 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	defaultApprove := deps.buildTasks.ApproveAction
 	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext) error {
 		if mergeFixes {
-			deps.goRepo.CommitOnBranch("release-branch.go1.18", securityFix)
+			deps.goRepo.CommitOnBranch("release-branch.go1.24", securityFix)
 		}
 		return defaultApprove(tc)
 	}
 
 	// Run the release.
 	wd := workflow.New(workflow.ACL{})
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC, workflow.Slice[string]())
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 24, task.KindMinor, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
@@ -484,7 +484,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 }
 
 func TestAdvisoryTestsFail(t *testing.T) {
-	deps := newReleaseTestDeps(t, "go1.17", 18, "go1.18rc1")
+	deps := newReleaseTestDeps(t, "go1.24.0", 24, "go1.24.1")
 	deps.buildBucket.FailBuilds = append(deps.buildBucket.FailBuilds, "linux-amd64-longtest")
 	defaultApprove := deps.buildTasks.ApproveAction
 	var testApprovals atomic.Int32
@@ -498,7 +498,7 @@ func TestAdvisoryTestsFail(t *testing.T) {
 
 	// Run the release.
 	wd := workflow.New(workflow.ACL{})
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 18, task.KindRC, workflow.Slice[string]())
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 24, task.KindMinor, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
