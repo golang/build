@@ -44,7 +44,7 @@ func TestRelease(t *testing.T) {
 		// These release tests are pretty thorough and
 		// take upwards of 50 seconds as of 2025-02-21.
 		//
-		// Also, the major release kind involves doing
+		// Also, the RC & major releases involve doing
 		// a 'go run git-generate@version' which needs
 		// the internet if that version isn't in cache.
 		//
@@ -403,7 +403,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 	}
 
 	// Check for go.dev/issue/54377.
-	wantUpdateStdlibIndex := kind == task.KindMajor
+	wantUpdateStdlibIndex := kind == task.KindRC || kind == task.KindMajor
 	switch b, err := deps.gerrit.ReadFile(deps.ctx, "tools", "HEAD", "internal/stdlib/manifest.go"); {
 	case wantUpdateStdlibIndex && err == nil && string(b) == "package stdlib\n\n// manifest.go was generated!\n",
 		!wantUpdateStdlibIndex && errors.Is(err, gerrit.ErrResourceNotExist):

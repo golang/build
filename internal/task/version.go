@@ -225,7 +225,7 @@ For golang/go#38706.
 
 [git-generate]
 go generate ./internal/stdlib
-`, strings.Replace(version, "go", "Go ", 1)),
+`, strings.NewReplacer("go", "Go ", "rc", " Release Candidate ").Replace(version)),
 		Branch: "master",
 	}, reviewers)
 }
