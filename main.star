@@ -605,17 +605,16 @@ MAIN_BRANCH_NAME = "master"
 #
 # These need to be updated every 6 months after a major Go release is made.
 # Keep bootstrap versions tracked inside GO_BRANCHES in mind when updating.
-NEXTUP_GO = "go1.25"
-LATEST_GO = "go1.24"
-SECOND_GO = "go1.23"
+NEXTUP_GO = "go1.26"
+LATEST_GO = "go1.25"
+SECOND_GO = "go1.24"
 
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
     "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.24.6"),
-    NEXTUP_GO: struct(branch = "release-branch." + NEXTUP_GO, bootstrap = "1.22.6"),
     LATEST_GO: struct(branch = "release-branch." + LATEST_GO, bootstrap = "1.22.6"),
-    SECOND_GO: struct(branch = "release-branch." + SECOND_GO, bootstrap = "1.20.6"),
+    SECOND_GO: struct(branch = "release-branch." + SECOND_GO, bootstrap = "1.22.6"),
 }
 
 # INTERNAL_GO_BRANCHES mirrors GO_BRANCHES, but defines the branches to build
@@ -632,7 +631,6 @@ INTERNAL_GO_BRANCHES = {
     # release, and want to maintain that history. We use a regexp like
     # "internal-release-branch.go1.23.+" to match all the branches so that
     # we don't need to manually update the config for each next minor or RC.
-    NEXTUP_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[NEXTUP_GO].branch + ".+", "private-internal-branch." + NEXTUP_GO + "-vendor"]),
     LATEST_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[LATEST_GO].branch + ".+", "private-internal-branch." + LATEST_GO + "-vendor"]),
     SECOND_GO: struct(branch_regexps = ["internal-" + GO_BRANCHES[SECOND_GO].branch + ".+", "private-internal-branch." + SECOND_GO + "-vendor"]),
 }
