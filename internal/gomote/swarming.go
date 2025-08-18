@@ -956,9 +956,9 @@ func createStringPairs(m map[string]string) []*swarmpb.StringPair {
 
 func (ss *SwarmingServer) newSwarmingTask(ctx context.Context, name string, dimensions map[string]string, properties *configProperties, opts *SwarmOpts, useGolangbuild bool) (string, error) {
 	if useGolangbuild {
-
 		return ss.newSwarmingTaskWithGolangbuild(ctx, name, dimensions, properties, opts)
 	}
+
 	cipdPlatform, ok := dimensions["cipd_platform"]
 	if !ok {
 		return "", fmt.Errorf("dimensions require cipd_platform: instance=%s", name)
@@ -1069,6 +1069,9 @@ func (ss *SwarmingServer) newSwarmingTaskWithGolangbuild(ctx context.Context, na
 	}
 	packages := []*swarmpb.CipdPackage{
 		{Path: "tools/bin", PackageName: "infra/experimental/golangbuild/" + cipdPlatform, Version: "latest"},
+		{Path: "tools/bin", PackageName: "infra/tools/bb/" + cipdPlatform, Version: "latest"},
+		{Path: "tools/bin", PackageName: "infra/tools/rdb/" + cipdPlatform, Version: "latest"},
+		{Path: "tools/bin", PackageName: "infra/tools/luci/cas/" + cipdPlatform, Version: "latest"},
 		{Path: "tools/bin", PackageName: "infra/tools/cipd/" + cipdPlatform, Version: "latest"},
 		{Path: "tools/bin", PackageName: "infra/tools/luci-auth/" + cipdPlatform, Version: "latest"},
 	}
