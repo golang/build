@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -105,10 +106,8 @@ func (c *securityVersionClient) GetTag(_ context.Context, project, tag string) (
 	if project != "go" {
 		return gerrit.TagInfo{}, gerrit.ErrResourceNotExist
 	}
-	for _, t := range c.tags {
-		if tag == t {
-			return gerrit.TagInfo{Created: gerrit.TimeStamp(time.Now())}, nil
-		}
+	if slices.Contains(c.tags, tag) {
+		return gerrit.TagInfo{Created: gerrit.TimeStamp(time.Now())}, nil
 	}
 	return gerrit.TagInfo{}, gerrit.ErrResourceNotExist
 }
@@ -132,14 +131,25 @@ func TestSecurityReleaseCoalesceTask(t *testing.T) {
 	})
 }
 
+const milestoneYAML = `buganizer_id: 100001
+security_patches:
+    - is_toolchain: false
+      package: runtime
+      changelists:
+        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/1234
+        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/5678
+      target_releases:
+        - go1.3.1
+        - go1.4.1`
+
 func testSecurityReleaseCoalesceTask(t *testing.T, withNextReleaseBranch bool) {
 	publicTags := []string{"go1.3", "go1.3.1", "go1.4", "go1.4.1"}
 	publicBranches := []string{"release-branch.go1.3", "release-branch.go1.4"}
 	if withNextReleaseBranch {
 		publicBranches = append(publicBranches, "release-branch.go1.5")
 	}
-	privRepo := NewFakeRepo(t, "go")
-	privGerrit := &fakeCoalesceGerrit{FakeGerrit: NewFakeGerrit(t, privRepo), cherryPicks: map[string][]cherryPickedCommit{}, commitMessages: map[string]string{}}
+	privGoRepo, smRepo := NewFakeRepo(t, "go"), NewFakeRepo(t, "security-metadata")
+	privGerrit := &fakeCoalesceGerrit{FakeGerrit: NewFakeGerrit(t, privGoRepo, smRepo), cherryPicks: map[string][]cherryPickedCommit{}, commitMessages: map[string]string{}}
 	task := &SecurityReleaseCoalesceTask{
 		PrivateGerrit: privGerrit,
 		Version: &VersionTasks{
@@ -176,17 +186,21 @@ body`,
 other body`,
 	}
 
-	head := privRepo.History()[0]
-	privRepo.Branch("public", head)
-	privRepo.Branch("release-branch.go1.3", head)
-	privRepo.Branch("release-branch.go1.4", head)
+	head := privGoRepo.History()[0]
+	privGoRepo.Branch("public", head)
+	privGoRepo.Branch("release-branch.go1.3", head)
+	privGoRepo.Branch("release-branch.go1.4", head)
 	if withNextReleaseBranch {
-		privRepo.Branch("release-branch.go1.5", head)
+		privGoRepo.Branch("release-branch.go1.5", head)
 	}
+
+	head = smRepo.History()[0]
+	smRepo.Branch("main", head)
+	smRepo.CommitOnBranch("main", map[string]string{path.Join("data", "milestones", "100001.yaml"): milestoneYAML})
 
 	wd := task.NewDefinition()
 	w, err := wf.Start(wd, map[string]any{
-		"Security Patch CL Numbers": []string{"1234", "5678"},
+		"Release Milestone": "100001",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +217,7 @@ other body`,
 	if withNextReleaseBranch {
 		checkpointBranch = "go1.5rc1-go1.4.2-go1.3.2-checkpoint"
 	}
-	commits := len(strings.Split(string(privRepo.runGit("log", checkpointBranch, "--format=%H")), "\n")) - 1
+	commits := len(strings.Split(string(privGoRepo.runGit("log", checkpointBranch, "--format=%H")), "\n")) - 1
 	if commits != 3 {
 		t.Errorf("unexpected number of commits on checkpoint branch: got %d, want 3", commits)
 	}

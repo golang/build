@@ -5,10 +5,12 @@
 package task
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	goversion "go/version"
 	"net/http"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
+	yaml "gopkg.in/yaml.v3"
 )
 
 // SecurityReleaseCoalesceTask is the workflow used to preparing patches for
@@ -46,23 +49,21 @@ func (x *SecurityReleaseCoalesceTask) NewDefinition() *wf.Definition {
 	var numOnlyRe = regexp.MustCompile(`^\d+$`)
 
 	wd := wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
-	clNums := wf.Param(wd, wf.ParamDef[[]string]{
-		Name:      "Security Patch CL Numbers",
-		ParamType: wf.SliceShort,
-		Doc:       `Gerrit CL numbers for each security patch in a release`,
+	milestoneNum := wf.Param(wd, wf.ParamDef[string]{
+		Name:      "Release Milestone",
+		ParamType: wf.BasicString,
+		Doc:       `Release milestone for the security patch(es) being released.`,
 		Example:   "123456",
-		Check: func(nums []string) error {
-			for _, num := range nums {
-				if !numOnlyRe.MatchString(num) {
-					return errors.New("CL numbers must contain only numbers")
-				}
+		Check: func(num string) error {
+			if !numOnlyRe.MatchString(num) {
+				return errors.New("Milestone number must contain only numbers")
 			}
 			return nil
 		},
 	})
 
 	// check CLs are ready
-	cls := wf.Task1(wd, "Check changes", x.CheckChanges, clNums)
+	cls := wf.Task1(wd, "Check changes", x.CheckChanges, milestoneNum)
 	// look up branch names
 	branchInfo := wf.Task0(wd, "Get branch names", x.GetBranchNames, wf.After(cls))
 	// create checkpoint branch
@@ -86,6 +87,8 @@ type branchInfo struct {
 }
 
 func (x *SecurityReleaseCoalesceTask) GetBranchNames(ctx *wf.TaskContext) (branchInfo, error) {
+	// TODO: consider using the release milestone to derive
+	// the active version patch and backports?
 	currentMajor, _, err := x.Version.GetCurrentMajor(ctx)
 	if err != nil {
 		return branchInfo{}, err
@@ -123,24 +126,60 @@ func (x *SecurityReleaseCoalesceTask) GetBranchNames(ctx *wf.TaskContext) (branc
 	}
 }
 
-func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, clNums []string) ([]*gerrit.ChangeInfo, error) {
+// ReleaseMilestone contains all
+// patches and their respective
+// metadata for a given release.
+type ReleaseMilestone struct {
+	BuganizerID int              `yaml:"buganizer_id"`
+	Patches     []*SecurityPatch `yaml:"security_patches"`
+}
+
+// SecurityPatch is a subset of the
+// required metadata to release all
+// patches contained by a milestone.
+type SecurityPatch struct {
+	Changelists      []string `yaml:"changelists"`
+	TargetedReleases []string `yaml:"target_releases"`
+}
+
+func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, milestoneNum string) ([]*gerrit.ChangeInfo, error) {
+	const project = "security-metadata"
 	var cls []*gerrit.ChangeInfo
-	for _, num := range clNums {
-		ci, err := x.PrivateGerrit.GetChange(ctx, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
-		if err != nil {
-			return nil, err
+
+	head, err := x.PrivateGerrit.ReadBranchHead(ctx, project, "main")
+	if err != nil {
+		return nil, err
+	}
+
+	buf, err := x.PrivateGerrit.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
+	if err != nil {
+		return nil, err
+	}
+
+	var rm ReleaseMilestone
+	if err := yaml.NewDecoder(bytes.NewReader(buf)).Decode(&rm); err != nil {
+		return nil, fmt.Errorf("cannot read milestone: %v", err)
+	}
+
+	for _, patch := range rm.Patches {
+		for _, url := range patch.Changelists {
+			_, num, _ := strings.Cut(url, "/+/")
+			ci, err := x.PrivateGerrit.GetChange(ctx, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+			if err != nil {
+				return nil, err
+			}
+			if !ci.Submittable {
+				return nil, fmt.Errorf("change %s is not submittable", internalGerritChangeURL(num))
+			}
+			ra, err := x.PrivateGerrit.GetRevisionActions(ctx, num, "current")
+			if err != nil {
+				return nil, err
+			}
+			if ra["submit"] == nil || !ra["submit"].Enabled {
+				return nil, fmt.Errorf("change %s is not submittable", internalGerritChangeURL(num))
+			}
+			cls = append(cls, ci)
 		}
-		if !ci.Submittable {
-			return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(num))
-		}
-		ra, err := x.PrivateGerrit.GetRevisionActions(ctx, num, "current")
-		if err != nil {
-			return nil, err
-		}
-		if ra["submit"] == nil || !ra["submit"].Enabled {
-			return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(num))
-		}
-		cls = append(cls, ci)
 	}
 	return cls, nil
 }
@@ -232,6 +271,9 @@ func majorFromMinor(branch string) string {
 var internalReleaseBranchPrefix = "internal-"
 
 func (x *SecurityReleaseCoalesceTask) CreateInternalReleaseBranches(ctx *wf.TaskContext, bi branchInfo) ([]string, error) {
+	// TODO: update step to commit the metadata
+	// about the submitted changes and their
+	// branch hashes to security-metadata.
 	var internalBranches []string
 	for _, next := range bi.PublicReleaseBranches {
 		publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, "go", majorFromMinor(next))
