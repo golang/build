@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM golang:1.23-bookworm AS build
+FROM golang:1.25-trixie AS build
 
 COPY go.mod /app/go.mod
 COPY go.sum /app/go.sum
@@ -15,7 +15,7 @@ COPY . /app
 
 RUN go build golang.org/x/build/cmd/relui
 
-FROM debian:bookworm
+FROM debian:trixie
 
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
