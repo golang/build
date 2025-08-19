@@ -199,6 +199,15 @@ func (x *TagXReposTasks) readRepo(ctx *wf.TaskContext, project string) (*TagRepo
 		if !x.considerModuleForAutomaticUpdate(req.Mod.Path) {
 			continue
 		}
+		if project == "pkgsite-metrics" && req.Mod.Path == "golang.org/x/exp/event" {
+			// The golang.org/x/exp/event dependency is updated as far as it can be
+			// in CL 697176, and further updates require adapting to upstream API changes.
+			// Automatically updating this dependency won't work until this is resolved,
+			// so skip it.
+			//
+			// TODO(go.dev/issue/74596): Delete this skip after the repository is updated.
+			continue
+		}
 		wait := true
 		if !isXRoot(req.Mod.Path) {
 			ctx.Printf("not waiting on %v's requirement on %v: not a golang.org/x root module", project, req.Mod.Path)
