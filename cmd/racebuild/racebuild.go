@@ -419,6 +419,36 @@ rm -r llvm.zip llvm-project-${REV}
 (cd go/src && ./race.bash)
 			`,
 	},
+	{
+		OS:   "linux",
+		Arch: "riscv64",
+		Type: "gotip-linux-riscv64",
+		// Needs git, g++, unzip, golang-bin on the builder.
+		Script: `#!/usr/bin/env bash
+set -e
+uname -a
+cat /etc/os-release
+git clone https://go.googlesource.com/go
+pushd go
+ls -al
+git checkout $GOREV
+if [ "$GOGITOP" != "" ]; then
+  git fetch https://go.googlesource.com/go "$GOSRCREF"
+  git $GOGITOP FETCH_HEAD
+fi
+popd
+curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
+unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_riscv64.syso go/src/runtime/race
+# work around gomote gettar issue #64195
+mkdir outdir
+cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_riscv64.syso outdir/race_linux_riscv64.syso
+# free some disk space
+rm -r llvm.zip llvm-project-${REV}
+(cd go/src && ./race.bash)
+			`,
+	},
 }
 
 func init() {
