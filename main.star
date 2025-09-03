@@ -2105,15 +2105,31 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         presubmit = presubmit and os not in ["js", "wasip1"]
 
     # Apply policies for each run mod.
-    presubmit_filters = []
+    presubmit_filters = None
     for mod in run_mods:
         ex, pre, post, prefilt = RUN_MODS[mod].enabled(port_of(builder_type), project, go_branch_short)
         if not ex:
             return False, False, False, []
         presubmit = presubmit and pre
         postsubmit = postsubmit and post
-        if prefilt:
-            presubmit_filters.extend(prefilt)
+
+        # Intersect the presubmit filters to be conservative about where
+        # builders run in presubmit.
+        #
+        # This is a fairly rudimentary and overly conservative intersection.
+        # Ideally we'd also intersect the filter regexps, but that's more complex.
+        if prefilt and presubmit_filters == None:
+            presubmit_filters = set(prefilt)
+        elif not prefilt:
+            presubmit_filters = set()  # Intersection with nothing is nothing.
+        else:
+            presubmit_filters = presubmit_filters.intersection(prefilt)
+
+    # Convert presubmit filters to a list, which the caller expects.
+    if presubmit_filters:
+        presubmit_filters = list(presubmit_filters)
+    else:
+        presubmit_filters = []
 
     # Disable presubmit and postsubmit if given (project, Go branch) pair is out of scope of slow hosts.
     if builder_type in SLOW_HOSTS and hasattr(SLOW_HOSTS[builder_type], "scope"):
