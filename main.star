@@ -2099,6 +2099,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     presubmit = postsubmit  # Default to running in presubmit if and only if running in postsubmit.
     presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
     presubmit = presubmit and not host_timeout_scale(host_type) > 1  # Speed.
+    presubmit = presubmit and not ("longtest" in run_mods and "race" in run_mods)  # Speed.
     presubmit = presubmit and not builder_type in known_issue_builder_types  # Known issues.
     presubmit = presubmit and (is_first_class(os, arch) or arch == "wasm")  # Only first-class ports or wasm.
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
