@@ -1710,11 +1710,11 @@ def define_builder(env, project, go_branch_short, builder_type):
     if builder_type in NO_NETWORK_BUILDERS:
         base_props["no_network"] = True
 
-    # Set GOEXPERIMENT=synctest in x/net for go1.24 and above.
+    # Set GOEXPERIMENT=synctest in x/net for go1.24. (Go 1.25+ includes it by default.)
     #
     # N.B. This must come before applying run mods, which may add more
     # GOEXPERIMENTs.
-    if project == "net" and (go_branch_short == "gotip" or go_branch_short >= "go1.24"):
+    if project == "net" and go_branch_short == "go1.24":
         base_props["env"]["GOEXPERIMENT"] = "synctest"
 
     for mod in run_mods:
