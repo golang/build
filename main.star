@@ -648,9 +648,10 @@ INTERNAL_GO_BRANCHES = {
 # because they're out of scope per https://go.dev/doc/devel/release#policy,
 # but are used by only by the golang.org/x/tools repository for a while longer.
 #
-# TODO(go.dev/issue/75338): Follow up as needed.
+# This was removed after Go 1.23.0 was released per go.dev/issue/65917 and
+# after the special case for the go1.23 branch covered remaining needs for
+# gopls v0.17.0 and all of its minor releases.
 TOOLS_GO_BRANCHES = {
-    "go1.23": struct(branch = "release-branch.go1.23", bootstrap = "1.20.6"),
 }
 
 # We set build priorities by environment. These should always be lower than the
