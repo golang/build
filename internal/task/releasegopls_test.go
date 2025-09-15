@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
 )

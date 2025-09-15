@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"github.com/gregjones/httpcache"
 	"golang.org/x/build/maintner/maintpb"
 	"golang.org/x/oauth2"
@@ -1023,15 +1023,15 @@ var issueDiffMethods = []func(githubIssueDiffer, *maintpb.GithubIssueMutation) b
 }
 
 func (d githubIssueDiffer) diffCreatedAt(m *maintpb.GithubIssueMutation) bool {
-	return d.diffTimeField(&m.Created, d.a.getCreatedAt(), d.b.GetCreatedAt())
+	return d.diffTimeField(&m.Created, d.a.getCreatedAt(), d.b.GetCreatedAt().Time)
 }
 
 func (d githubIssueDiffer) diffUpdatedAt(m *maintpb.GithubIssueMutation) bool {
-	return d.diffTimeField(&m.Updated, d.a.getUpdatedAt(), d.b.GetUpdatedAt())
+	return d.diffTimeField(&m.Updated, d.a.getUpdatedAt(), d.b.GetUpdatedAt().Time)
 }
 
 func (d githubIssueDiffer) diffClosedAt(m *maintpb.GithubIssueMutation) bool {
-	return d.diffTimeField(&m.ClosedAt, d.a.getClosedAt(), d.b.GetClosedAt())
+	return d.diffTimeField(&m.ClosedAt, d.a.getClosedAt(), d.b.GetClosedAt().Time)
 }
 
 func (d githubIssueDiffer) diffTimeField(dst **timestamppb.Timestamp, memTime, githubTime time.Time) bool {
@@ -1698,7 +1698,8 @@ func (p *githubRepoPoller) foreachItem(
 }
 
 func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) error {
-	page := 1
+	page := 0
+	after := ""
 	seen := make(map[int64]bool)
 	keepGoing := true
 	owner, repo := p.gr.id.Owner, p.gr.id.Repo
@@ -1711,8 +1712,8 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 			State:     "all",
 			Sort:      "updated",
 			Direction: "desc",
-			ListOptions: github.ListOptions{
-				Page:    page,
+			ListCursorOptions: github.ListCursorOptions{
+				After:   after,
 				PerPage: 100,
 			},
 		})
@@ -1803,6 +1804,7 @@ func (p *githubRepoPoller) syncIssues(ctx context.Context, expectChanges bool) e
 		p.logf("After page %d: %v issues, %v changes, %v issues in memory", page, len(issues), changes, num)
 
 		page++
+		after = res.After
 	}
 
 	missing := p.gr.missingIssues()
@@ -1941,9 +1943,9 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 				p.logf("bogus comment: %v", ic)
 				continue
 			}
-			created := timestamppb.New(*ic.CreatedAt)
-			updated := timestamppb.New(*ic.UpdatedAt)
-			since = *ic.UpdatedAt // for next round
+			created := timestamppb.New(ic.CreatedAt.Time)
+			updated := timestamppb.New(ic.UpdatedAt.Time)
+			since = ic.UpdatedAt.Time // for next round
 
 			id := int64(*ic.ID)
 			cur := issue.comments[id]
@@ -1961,11 +1963,11 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 					Created: created,
 					Updated: updated,
 				}
-			} else if !cur.Updated.Equal(*ic.UpdatedAt) || cur.Body != *ic.Body {
+			} else if !cur.Updated.Equal(ic.UpdatedAt.Time) || cur.Body != *ic.Body {
 				cmut = &maintpb.GithubIssueCommentMutation{
 					Id: id,
 				}
-				if !cur.Updated.Equal(*ic.UpdatedAt) {
+				if !cur.Updated.Equal(ic.UpdatedAt.Time) {
 					cmut.Updated = updated
 				}
 				if cur.Body != *ic.Body {

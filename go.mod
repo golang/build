@@ -29,8 +29,8 @@ require (
 	github.com/gliderlabs/ssh v0.3.9-0.20241212082318-d137aad99cd6
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3
-	github.com/google/go-cmp v0.6.0
-	github.com/google/go-github/v48 v48.1.0
+	github.com/google/go-cmp v0.7.0
+	github.com/google/go-github/v74 v74.0.0
 	github.com/google/safehtml v0.0.3-0.20220430015336-00016cfeca15
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.12.0

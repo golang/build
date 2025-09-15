@@ -18,6 +18,7 @@ require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v48 v48.1.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect

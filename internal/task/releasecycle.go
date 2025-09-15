@@ -17,7 +17,7 @@ import (
 	texttemplate "text/template"
 	"time"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gitfs"
 	wf "golang.org/x/build/internal/workflow"

@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/metadata"
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"github.com/gregjones/httpcache"
 	"golang.org/x/build/cmd/gerritbot/internal/rules"
 	"golang.org/x/build/gerrit"

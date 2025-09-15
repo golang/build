@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/cloudbuild/apiv1/v2/cloudbuildpb"
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
 	"golang.org/x/build/internal/secret"

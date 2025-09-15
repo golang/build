@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/maintner/maintpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -163,8 +163,8 @@ func TestProcessMutation_Github(t *testing.T) {
 func TestNewMutationsFromIssue(t *testing.T) {
 	gh := &github.Issue{
 		Number:    github.Int(5),
-		CreatedAt: &t1,
-		UpdatedAt: &t2,
+		CreatedAt: &github.Timestamp{Time: t1},
+		UpdatedAt: &github.Timestamp{Time: t2},
 		Body:      github.String("body of the issue"),
 		State:     github.String("closed"),
 	}

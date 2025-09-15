@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/maintner/maintpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )

@@ -21,7 +21,7 @@ WORKDIR /go/src/golang.org/x/build
 # Optimization for iterative docker build speed, not necessary for correctness:
 # TODO: write a tool to make writing Go module-friendly Dockerfiles easier.
 RUN go install cloud.google.com/go/compute/metadata
-RUN go install github.com/google/go-github/v48/github
+RUN go install github.com/google/go-github/v74/github
 RUN go install golang.org/x/oauth2
 COPY autocertcache /go/src/golang.org/x/build/autocertcache
 COPY gerrit /go/src/golang.org/x/build/gerrit

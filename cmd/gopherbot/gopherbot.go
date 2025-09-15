@@ -32,7 +32,7 @@ import (
 	"unicode"
 
 	"cloud.google.com/go/compute/metadata"
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"github.com/shurcooL/githubv4"
 	"go4.org/strutil"
 	"golang.org/x/build/devapp/owners"

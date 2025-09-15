@@ -32,7 +32,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/cloudbuild/apiv1/v2/cloudbuildpb"
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v74/github"
 	"github.com/google/uuid"
 	"github.com/shurcooL/githubv4"
 	pb "go.chromium.org/luci/buildbucket/proto"
