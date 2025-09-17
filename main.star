@@ -445,6 +445,7 @@ BUILDER_TYPES = [
     "linux-386_debiansid",
     "linux-386-longtest",
     "linux-386-greenteagc",
+    "linux-386-sizespecializedmalloc",
     "linux-386-softfloat",
     "linux-amd64",
     "linux-amd64-asan-clang15",
@@ -463,6 +464,7 @@ BUILDER_TYPES = [
     "linux-amd64-noopt",
     "linux-amd64-race",
     "linux-amd64-racecompile",
+    "linux-amd64-sizespecializedmalloc",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
     "linux-amd64-tiplang",
@@ -492,6 +494,7 @@ BUILDER_TYPES = [
     "linux-arm64-longtest",
     "linux-arm64-msan-clang15",
     "linux-arm64-race",
+    "linux-arm64-sizespecializedmalloc",
     "linux-arm64_c4as16-perf_vs_gopls_0_11",
     "linux-arm64_c4as16-perf_vs_parent",
     "linux-arm64_c4as16-perf_vs_release",
@@ -1038,6 +1041,12 @@ RUN_MODS = dict(
     # Build and test with GOEXPERIMENT=greenteagc.
     greenteagc = make_run_mod(
         add_env = {"GOEXPERIMENT": "greenteagc"},
+        enabled = define_for_gotip_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
+    ),
+
+    # Build and test with GOEXPERIMENT=sizespecializedmalloc.
+    sizespecializedmalloc = make_run_mod(
+        add_env = {"GOEXPERIMENT": "sizespecializedmalloc"},
         enabled = define_for_gotip_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
     ),
 
