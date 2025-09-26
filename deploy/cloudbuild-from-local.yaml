@@ -2,23 +2,25 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+# Build from a local git checkout of https://go.googlesource.com/build.
+
 steps:
 - name: 'gcr.io/cloud-builders/docker'
   args:
     - 'build'
     - '-f'
-    - 'cmd/coordinator/Dockerfile'
+    - 'cmd/${_SERVICE_NAME}/Dockerfile'
     - '--build-arg'
     - 'version=${TAG_NAME}'
     - '-t'
-    - 'gcr.io/symbolic-datum-552/coordinator:${TAG_NAME}'
+    - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${TAG_NAME}'
     - '-t'
-    - 'gcr.io/symbolic-datum-552/coordinator:latest'
+    - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
     - '.'
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/symbolic-datum-552/coordinator:${TAG_NAME}']
+  args: ['push', 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${TAG_NAME}']
 images:
-- 'gcr.io/symbolic-datum-552/coordinator:${TAG_NAME}'
-- 'gcr.io/symbolic-datum-552/coordinator:latest'
+- 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${TAG_NAME}'
+- 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
 options:
   logging: CLOUD_LOGGING_ONLY

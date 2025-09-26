@@ -22,7 +22,8 @@ docker: *.go Dockerfile
 # push-prod builds and pushes the gomoteserver image using the local source code.
 # The image is tagged with a version generated from the current git state.
 push-prod:
-	gcloud builds submit --project $(GCP_PROJECT_PROD) --config ./cloudbuild.yaml --substitutions=TAG_NAME="$(VERSION)" ../../
+	gcloud builds submit --project=$(GCP_PROJECT_PROD) --config=../../deploy/cloudbuild-from-local.yaml \
+	  --substitutions="_SERVICE_NAME=gomoteserver,TAG_NAME=$(VERSION)" ../..
 
 # deploy-prod deploys the version of the gomoteserver that was just pushed by the push-prod target.
 deploy-prod: push-prod
@@ -38,7 +39,8 @@ push-prod-version:
 ifndef SHA
 	$(error SHA is not set. Please provide a commit SHA. Usage: make push-prod-version SHA=<commit-sha>)
 endif
-	gcloud builds submit --project $(GCP_PROJECT_PROD) --config ./cloudbuild-version.yaml --substitutions=_SHA=$(SHA) --no-source
+	gcloud builds submit --project=$(GCP_PROJECT_PROD) --config=../../deploy/cloudbuild-from-googlesource.yaml \
+	  --substitutions="_SERVICE_NAME=gomoteserver,_SHA=$(SHA)" --no-source
 
 # deploy-prod-version deploys a specific version of the gomoteserver based on a git commit SHA.
 # It first builds and pushes the image using the push-prod-version target, then deploys it.

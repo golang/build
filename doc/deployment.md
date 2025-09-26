@@ -7,30 +7,19 @@ that follows the process described below.
 
 ### First-time setup
 
-Install the `docker`, `kubectl`, and `gcloud` utilities.
-
-Verify that `docker run hello-world` works without `sudo`. (You may need to run
-`sudo adduser $USER docker`, then either log out and back in or run `newgrp
-docker`.)
-
-Then run:
-
-```sh
-$ gcloud auth configure-docker
-```
-
-Install the App Engine Go SDK: [instructions](https://cloud.google.com/sdk/docs/quickstart-debian-ubuntu)
+Install the Google Cloud CLI. See [instructions](https://cloud.google.com/sdk/docs/install-sdk).
+You should have `gcloud` and `kubectl` available in PATH.
 
 ### Prod
 
-First, configure `gcloud`:
+First, configure `gcloud` to target our production environment:
 
 ```sh
 $ gcloud config set project symbolic-datum-552
 $ gcloud container clusters get-credentials --zone=us-central1 services
 ```
 
-Then to deploy, run:
+Afterwards, each time you wish to deploy a service, cd into its directory and run:
 
 ```sh
 $ make deploy-prod

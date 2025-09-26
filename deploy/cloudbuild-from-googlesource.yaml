@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+# Build by cloning https://go.googlesource.com/build at the given ${_SHA} commit.
+
 steps:
 # First, clone the repository. The default directory is /workspace.
 - name: 'gcr.io/cloud-builders/git'
@@ -15,19 +17,19 @@ steps:
   args:
     - 'build'
     - '-f'
-    - 'cmd/gomoteserver/Dockerfile'
+    - 'cmd/${_SERVICE_NAME}/Dockerfile'
     - '--build-arg'
     - 'version=${_SHA}'
     - '-t'
-    - 'gcr.io/symbolic-datum-552/gomoteserver:${_SHA}'
+    - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${_SHA}'
     - '-t'
-    - 'gcr.io/symbolic-datum-552/gomoteserver:latest'
+    - 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
     - '.'
 # Finally, push the version-specific image.
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/symbolic-datum-552/gomoteserver:${_SHA}']
+  args: ['push', 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${_SHA}']
 images:
-- 'gcr.io/symbolic-datum-552/gomoteserver:${_SHA}'
-- 'gcr.io/symbolic-datum-552/gomoteserver:latest'
+- 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:${_SHA}'
+- 'gcr.io/${PROJECT_ID}/${_SERVICE_NAME}:latest'
 options:
   logging: CLOUD_LOGGING_ONLY

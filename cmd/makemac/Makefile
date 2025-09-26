@@ -5,15 +5,16 @@
 MUTABLE_VERSION ?= latest
 VERSION ?= $(shell git rev-parse --short HEAD)
 
-IMAGE_PROD := gcr.io/symbolic-datum-552/makemac
+GCP_PROJECT_PROD := symbolic-datum-552
+IMAGE_PROD := gcr.io/$(GCP_PROJECT_PROD)/makemac
 
 docker-prod:
 	docker build -f Dockerfile --force-rm --tag=$(IMAGE_PROD):$(VERSION) ../..
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
 
-push-prod: docker-prod
-	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
-	docker push $(IMAGE_PROD):$(VERSION)
+push-prod:
+	gcloud builds submit --project=$(GCP_PROJECT_PROD) --config=../../deploy/cloudbuild-from-local.yaml \
+	  --substitutions="_SERVICE_NAME=makemac,TAG_NAME=$(VERSION)" ../..
 
 deploy-prod: push-prod
 	go install golang.org/x/build/cmd/xb

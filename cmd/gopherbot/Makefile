@@ -5,8 +5,9 @@
 MUTABLE_VERSION ?= latest
 VERSION ?= $(shell git rev-parse --short HEAD)
 
+GCP_PROJECT_PROD := symbolic-datum-552
 IMAGE_STAGING := gcr.io/go-dashboard-dev/gopherbot
-IMAGE_PROD := gcr.io/symbolic-datum-552/gopherbot
+IMAGE_PROD := gcr.io/$(GCP_PROJECT_PROD)/gopherbot
 
 docker-image: Dockerfile *.go
 	docker build --force-rm -f Dockerfile --tag=$(IMAGE_PROD):$(VERSION) ../..
@@ -14,9 +15,9 @@ docker-image: Dockerfile *.go
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_STAGING):$(VERSION)
 	docker tag $(IMAGE_PROD):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
-push-prod: docker-image
-	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
-	docker push $(IMAGE_PROD):$(VERSION)
+push-prod:
+	gcloud builds submit --project=$(GCP_PROJECT_PROD) --config=../../deploy/cloudbuild-from-local.yaml \
+	  --substitutions="_SERVICE_NAME=gopherbot,TAG_NAME=$(VERSION)" ../..
 push-staging: docker-image
 	docker push $(IMAGE_STAGING):$(MUTABLE_VERSION)
 	docker push $(IMAGE_STAGING):$(VERSION)

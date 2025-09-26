@@ -25,7 +25,8 @@ docker-staging: docker
 	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_STAGING):$(MUTABLE_VERSION)
 
 push-prod:
-	gcloud builds submit --project $(GCP_PROJECT_PROD) --config ./cloudbuild.yaml --substitutions=TAG_NAME="$(VERSION)" ../../
+	gcloud builds submit --project=$(GCP_PROJECT_PROD) --config=../../deploy/cloudbuild-from-local.yaml \
+	  --substitutions="_SERVICE_NAME=coordinator,TAG_NAME=$(VERSION)" ../..
 
 push-staging: docker-staging
 	docker push $(IMAGE_STAGING):$(VERSION)

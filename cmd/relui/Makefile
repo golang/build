@@ -42,8 +42,9 @@ migrate-down-up: docker
 test: postgres-dev docker-test
 	docker run --rm --name=relui-test -v $(POSTGRES_RUN_DEV) -e PGUSER=$(POSTGRES_USER) -e PGDATABASE=relui-test golang/relui-test:$(VERSION)
 
+GCP_PROJECT_PROD := symbolic-datum-552
 DOCKER_IMAGE := golang/relui
-IMAGE_PROD := gcr.io/symbolic-datum-552/relui
+IMAGE_PROD := gcr.io/$(GCP_PROJECT_PROD)/relui
 MUTABLE_VERSION := latest
 
 .PHONY: docker
@@ -60,9 +61,9 @@ docker-prod: docker
 	docker tag $(DOCKER_IMAGE):$(VERSION) $(IMAGE_PROD):$(MUTABLE_VERSION)
 
 .PHONY: push-prod
-push-prod: docker-prod
-	docker push $(IMAGE_PROD):$(VERSION)
-	docker push $(IMAGE_PROD):$(MUTABLE_VERSION)
+push-prod:
+	gcloud builds submit --project=$(GCP_PROJECT_PROD) --config=../../deploy/cloudbuild-from-local.yaml \
+	  --substitutions="_SERVICE_NAME=relui,TAG_NAME=$(VERSION)" ../..
 
 .PHONY: deploy-prod
 deploy-prod: push-prod
