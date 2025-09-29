@@ -2107,7 +2107,7 @@ func labelCommands(s, action string, created time.Time) []labelCommand {
 	f := func(c rune) bool {
 		return c != '-' && !unicode.IsLetter(c) && !unicode.IsNumber(c) && !unicode.IsSpace(c)
 	}
-	for _, label := range strings.FieldsFunc(s, f) {
+	for label := range strings.FieldsFuncSeq(s, f) {
 		label = strings.TrimSpace(label)
 		if label == "" {
 			continue
