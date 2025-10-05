@@ -303,8 +303,7 @@ type constant[T any] struct {
 
 func (c *constant[T]) valueType(T) {}
 func (c *constant[T]) typ() reflect.Type {
-	var zero []T
-	return reflect.TypeOf(zero)
+	return reflect.TypeFor[[]T]()
 }
 func (c *constant[T]) value(_ *Workflow) reflect.Value { return reflect.ValueOf(c.v) }
 func (c *constant[T]) ready(_ *Workflow) bool          { return true }
@@ -322,8 +321,7 @@ type slice[T any] struct {
 func (s *slice[T]) valueType([]T) {}
 
 func (s *slice[T]) typ() reflect.Type {
-	var zero []T
-	return reflect.TypeOf(zero)
+	return reflect.TypeFor[[]T]()
 }
 
 func (s *slice[T]) value(w *Workflow) reflect.Value {
@@ -436,8 +434,7 @@ type expansionResult[T any] struct {
 func (er *expansionResult[T]) valueType(T) {}
 
 func (er *expansionResult[T]) typ() reflect.Type {
-	var zero []T
-	return reflect.TypeOf(zero)
+	return reflect.TypeFor[[]T]()
 }
 
 func (er *expansionResult[T]) value(w *Workflow) reflect.Value {
@@ -625,8 +622,7 @@ type taskResult[T any] struct {
 func (tr *taskResult[T]) valueType(T) {}
 
 func (tr *taskResult[T]) typ() reflect.Type {
-	var zero []T
-	return reflect.TypeOf(zero)
+	return reflect.TypeFor[[]T]()
 }
 
 func (tr *taskResult[T]) value(w *Workflow) reflect.Value {
