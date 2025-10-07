@@ -2418,7 +2418,7 @@ def _define_go_ci():
         )
 
 def _define_go_internal_ci():
-    for project_name in ["go", "net", "crypto", "oauth2"]:
+    for project_name in ["go", "net", "crypto", "oauth2", "build"]:
         for go_branch_short, go_branch in INTERNAL_GO_BRANCHES.items():
             cq_group_name = ("go-internal_%s_%s" % (project_name, go_branch_short)).replace(".", "-")
             luci.cq_group(
