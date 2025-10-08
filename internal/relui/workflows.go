@@ -293,7 +293,7 @@ func RegisterReleaseWorkflows(ctx context.Context, h *DefinitionHolder, build *B
 
 	// Register pre-announcement workflow for golang.org/x/ fixes.
 	{
-		wd := wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
+		wd := wf.New(wf.ACL{Groups: []string{groups.SecurityTeam, groups.ReleaseTeam}})
 
 		module := wf.Param(wd, wf.ParamDef[string]{Name: "Module path", ParamType: wf.BasicString})
 		pkgs := wf.Param(wd, wf.ParamDef[[]string]{Name: "Packages affected", ParamType: wf.SliceShort})

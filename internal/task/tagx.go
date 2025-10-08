@@ -46,7 +46,7 @@ func (x *TagXReposTasks) NewDefinition() *wf.Definition {
 }
 
 func (x *TagXReposTasks) NewSingleDefinition() *wf.Definition {
-	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
+	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam, groups.SecurityTeam}})
 	reviewers := wf.Param(wd, reviewersParam)
 	repos := wf.Task0(wd, "Load all repositories", x.SelectRepos)
 	name := wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "tools"})
