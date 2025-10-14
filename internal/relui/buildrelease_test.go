@@ -155,7 +155,8 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	dlRepo := task.NewFakeRepo(t, "dl")
 	buildRepo := task.NewFakeRepo(t, "build")
 	buildRepo.Commit(map[string]string{
-		"go.mod": "module golang.org/x/build\n",
+		"go.mod":   "module golang.org/x/build\n",
+		"build.go": "package build\n",
 	})
 	toolsRepo := task.NewFakeRepo(t, "tools")
 	toolsRepo.Commit(map[string]string{
