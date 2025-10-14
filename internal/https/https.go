@@ -47,6 +47,9 @@ type Options struct {
 	HTTPAddr string
 	// If non-empty, respond unconditionally with 200 OK to requests on this path.
 	HealthPath string
+	// CrossOriginProtection controls protections against Cross-Site Request Forgery (CSRF) to use.
+	// If nil, the default [http.NewCrossOriginProtection] is used.
+	CrossOriginProtection *CrossOriginProtection
 }
 
 var DefaultOptions = &Options{}
@@ -85,8 +88,6 @@ func ListenAndServe(ctx context.Context, handler http.Handler) error {
 // ListenAndServeOpts runs the servers configured by opts. It always
 // returns a non-nil error.
 func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options) error {
-	errc := make(chan error, 3)
-
 	if opts.HealthPath != "" {
 		wrapped := handler
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +99,14 @@ func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options
 			}
 		})
 	}
+
+	protect := opts.CrossOriginProtection
+	if protect == nil {
+		protect = new(CrossOriginProtection)
+	}
+	handler = protect.Handler(handler)
+
+	errc := make(chan error, 3)
 
 	if opts.HTTPAddr != "" {
 		server := &http.Server{Addr: opts.HTTPAddr, Handler: handler}
