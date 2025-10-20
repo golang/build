@@ -98,7 +98,7 @@ func buildletClient(ctx context.Context, buildletURL, ipPort string, opts *VMOpt
 	for !opts.SkipEndpointVerification {
 		try++
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("unable to probe buildet at %s after %d attempts", buildletURL, try)
+			return nil, fmt.Errorf("unable to probe buildlet at %s after %d attempts", buildletURL, try)
 		}
 		err := probeBuildlet(ctx, buildletURL, opts)
 		if err == nil {
@@ -137,7 +137,7 @@ func probeBuildlet(ctx context.Context, buildletURL string, opts *VMOpts) error 
 		fn(res, err)
 	}
 	if err != nil {
-		return fmt.Errorf("error probe buildlet %s: %w", buildletURL, err)
+		return fmt.Errorf("error probing buildlet %s: %w", buildletURL, err)
 	}
 	io.ReadAll(res.Body)
 	res.Body.Close()

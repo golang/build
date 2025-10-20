@@ -146,13 +146,13 @@ func (fc *FakeClient) Put(ctx context.Context, r io.Reader, path string, mode os
 	return nil
 }
 
-// PutTar fakes putting  a tar zipped file on a buildldet.
+// PutTar fakes putting a tar zipped file on a buildlet.
 func (fc *FakeClient) PutTar(ctx context.Context, r io.Reader, dir string) error {
 	// TODO(go.dev/issue/48742) add a file system implementation which would enable proper testing.
 	return errUnimplemented
 }
 
-// PutTarFromURL fakes putting a tar zipped file on a builelt.
+// PutTarFromURL fakes putting a tar zipped file on a buildlet.
 func (fc *FakeClient) PutTarFromURL(ctx context.Context, tarURL, dir string) error {
 	return nil
 }

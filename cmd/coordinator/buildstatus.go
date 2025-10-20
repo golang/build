@@ -210,7 +210,7 @@ func (st *buildStatus) buildletPool() pool.Buildlet {
 
 func (st *buildStatus) expectedMakeBashDuration() time.Duration {
 	// TODO: base this on historical measurements, instead of statically configured.
-	// TODO: move this to dashboard/builders.go? But once we based on on historical
+	// TODO: move this to dashboard/builders.go? But once we base on historical
 	// measurements, it'll need GCE services (bigtable/bigquery?), so it's probably
 	// better in this file.
 	goos, goarch := st.conf.GOOS(), st.conf.GOARCH()
@@ -225,7 +225,7 @@ func (st *buildStatus) expectedMakeBashDuration() time.Duration {
 }
 
 func (st *buildStatus) expectedBuildletStartDuration() time.Duration {
-	// TODO: move this to dashboard/builders.go? But once we based on on historical
+	// TODO: move this to dashboard/builders.go? But once we base on historical
 	// measurements, it'll need GCE services (bigtable/bigquery?), so it's probably
 	// better in this file.
 	p := st.buildletPool()

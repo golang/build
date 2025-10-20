@@ -105,7 +105,7 @@ func (cc *CoordinatorClient) CreateBuildletWithStatus(builderType string, status
 		strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(cc.Auth.Username, cc.Auth.Password)
-	// TODO: accept a context for deadline/cancelation
+	// TODO: accept a context for deadline/cancellation
 	res, err := hc.Do(req)
 	if err != nil {
 		return nil, err

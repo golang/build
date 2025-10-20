@@ -680,7 +680,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 		for _, b := range builders {
 			// Note: We can consider adding an "is_first_class" property into builder config
 			// and using it to display whether the builder is for a first class port or not.
-			// Until then, it's up to the release coordinator to make this distintinction when
+			// Until then, it's up to the release coordinator to make this distinction when
 			// approving any failures.
 			res := wf.Task3(wd, "Run advisory builder "+b, tasks.runAdvisoryBuildBucket, wf.Const(b), skipTests, sourceSpec)
 			results = append(results, res)
@@ -691,7 +691,7 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 	blockers = append(blockers, buildersApproved)
 
 	signedAndTested := wf.Task2(wd, "Wait for signing and tests", func(ctx *wf.TaskContext, artifacts []artifact, version string) ([]artifact, error) {
-		// Note: Note this needs to happen somewhere, doesn't matter where. Maybe move it to a nicer place later.
+		// Note: This needs to happen somewhere, doesn't matter where. Maybe move it to a nicer place later.
 		for i, a := range artifacts {
 			if a.Target != nil {
 				artifacts[i].Filename = version + "." + a.Target.Name + "." + a.Suffix
