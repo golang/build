@@ -424,7 +424,7 @@ func (a *GitHubLabel) GenMutationDiff(b *github.Label) *maintpb.GithubLabel {
 	return &maintpb.GithubLabel{Id: id, Name: b.GetName()}
 }
 
-func (lb *GitHubLabel) processMutation(mut maintpb.GithubLabel) {
+func (lb *GitHubLabel) processMutation(mut *maintpb.GithubLabel) {
 	if lb.ID == 0 {
 		panic("bogus label ID 0")
 	}
@@ -480,7 +480,7 @@ func (a *GitHubMilestone) GenMutationDiff(b *github.Milestone) *maintpb.GithubMi
 	return ret
 }
 
-func (ms *GitHubMilestone) processMutation(mut maintpb.GithubMilestone) {
+func (ms *GitHubMilestone) processMutation(mut *maintpb.GithubMilestone) {
 	if ms.ID == 0 {
 		panic("bogus milestone ID 0")
 	}
@@ -1231,11 +1231,11 @@ func (c *Corpus) processGithubMutation(m *maintpb.GithubMutation) {
 	}
 	for _, lp := range m.Labels {
 		lb := gr.getOrCreateLabel(lp.Id)
-		lb.processMutation(*lp)
+		lb.processMutation(lp)
 	}
 	for _, mp := range m.Milestones {
 		ms := gr.getOrCreateMilestone(mp.Id)
-		ms.processMutation(*mp)
+		ms.processMutation(mp)
 	}
 }
 
@@ -1296,7 +1296,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		gi.Milestone = noMilestone
 	} else if m.MilestoneId != 0 {
 		ms := gr.getOrCreateMilestone(m.MilestoneId)
-		ms.processMutation(maintpb.GithubMilestone{
+		ms.processMutation(&maintpb.GithubMilestone{
 			Id:     m.MilestoneId,
 			Title:  m.MilestoneTitle,
 			Number: m.MilestoneNum,
@@ -1336,7 +1336,7 @@ func (c *Corpus) processGithubIssueMutation(m *maintpb.GithubIssueMutation) {
 		}
 		for _, lp := range m.AddLabel {
 			lb := gr.getOrCreateLabel(lp.Id)
-			lb.processMutation(*lp)
+			lb.processMutation(lp)
 			gi.Labels[lp.Id] = lb
 		}
 	}
@@ -2465,7 +2465,7 @@ func parseRate(r *http.Response) github.Rate {
 	}
 	if reset := r.Header.Get("X-RateLimit-Reset"); reset != "" {
 		if v, _ := strconv.ParseInt(reset, 10, 64); v != 0 {
-			rate.Reset = github.Timestamp{time.Unix(v, 0)}
+			rate.Reset = github.Timestamp{Time: time.Unix(v, 0)}
 		}
 	}
 	return rate

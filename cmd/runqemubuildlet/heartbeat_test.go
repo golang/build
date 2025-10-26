@@ -36,7 +36,7 @@ func TestCheckBuildletHealth(t *testing.T) {
 			m := http.NewServeMux()
 			m.HandleFunc("/healthz", func(w http.ResponseWriter, req *http.Request) {
 				w.WriteHeader(c.respCode)
-				fmt.Sprintln(w, "ok")
+				fmt.Fprintln(w, "ok")
 			})
 			s := httptest.NewServer(m)
 			defer s.Close()

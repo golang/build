@@ -134,7 +134,7 @@ func TestTryWorkItem(t *testing.T) {
 			{"refs/heads/release-branch.go1.15", gitHash("72ccabc99449b2cb5bb1438eb90244d55f7b02f5")},
 		},
 	}
-	develVersion := apipb.MajorMinor{
+	develVersion := &apipb.MajorMinor{
 		Major: 1, Minor: 17,
 	}
 	supportedReleases := []*apipb.GoRelease{

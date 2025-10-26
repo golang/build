@@ -113,7 +113,7 @@ var tryCommentRx = regexp.MustCompile(`(?m)^TRY=(.*)$`)
 // supportedReleases are the supported Go releases per https://go.dev/doc/devel/release#policy.
 func tryWorkItem(
 	cl *maintner.GerritCL, ci *gerrit.ChangeInfo, comments map[string][]gerrit.CommentInfo,
-	goProj refer, develVersion apipb.MajorMinor, supportedReleases []*apipb.GoRelease,
+	goProj refer, develVersion *apipb.MajorMinor, supportedReleases []*apipb.GoRelease,
 ) (*apipb.GerritTryWorkItem, error) {
 	w := &apipb.GerritTryWorkItem{
 		Project:     cl.Project.Project(),
@@ -181,7 +181,7 @@ func tryWorkItem(
 			// There isn't a way to determine the version from its name,
 			// so use the development Go version until we need to do more.
 			// TODO(go.dev/issue/42376): This can be made more precise.
-			w.GoVersion = []*apipb.MajorMinor{&develVersion}
+			w.GoVersion = []*apipb.MajorMinor{develVersion}
 		}
 	} else {
 		// TryBot on a subrepo.
@@ -203,7 +203,7 @@ func tryWorkItem(
 			// use the default policy of testing it with Go tip and the supported releases.
 			w.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
 			w.GoBranch = []string{"master"}
-			w.GoVersion = []*apipb.MajorMinor{&develVersion}
+			w.GoVersion = []*apipb.MajorMinor{develVersion}
 			for _, r := range supportedReleases {
 				w.GoCommit = append(w.GoCommit, r.BranchCommit)
 				w.GoBranch = append(w.GoBranch, r.BranchName)
@@ -215,7 +215,7 @@ func tryWorkItem(
 			// Test it against Go tip only until we want to do more.
 			w.GoCommit = []string{goProj.Ref("refs/heads/master").String()}
 			w.GoBranch = []string{"master"}
-			w.GoVersion = []*apipb.MajorMinor{&develVersion}
+			w.GoVersion = []*apipb.MajorMinor{develVersion}
 		}
 	}
 
@@ -318,7 +318,7 @@ func goFindTryWork(ctx context.Context, gerritc *gerrit.Client, maintc *maintner
 	}
 	// If Go X.Y is the latest supported release, the version in development is likely Go X.(Y+1).
 	// TODO(go.dev/issue/42376): This can be made more precise.
-	develVersion := apipb.MajorMinor{
+	develVersion := &apipb.MajorMinor{
 		Major: supportedReleases[0].Major,
 		Minor: supportedReleases[0].Minor + 1,
 	}
