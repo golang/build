@@ -444,15 +444,15 @@ BUILDER_TYPES = [
     "linux-386-clang15",
     "linux-386_debiansid",
     "linux-386-longtest",
-    "linux-386-greenteagc",
-    "linux-386-sizespecializedmalloc",
+    "linux-386-nogreenteagc",
+    "linux-386-nosizespecializedmalloc",
     "linux-386-softfloat",
     "linux-amd64",
     "linux-amd64-asan-clang15",
     "linux-amd64-boringcrypto",
     "linux-amd64-clang15",
     "linux-amd64-goamd64v3",
-    "linux-amd64-greenteagc",
+    "linux-amd64-nogreenteagc",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-longtest-noswissmap",
@@ -464,14 +464,13 @@ BUILDER_TYPES = [
     "linux-amd64-noopt",
     "linux-amd64-race",
     "linux-amd64-racecompile",
-    "linux-amd64-sizespecializedmalloc",
+    "linux-amd64-nosizespecializedmalloc",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
     "linux-amd64-tiplang",
     "linux-amd64-typesalias",
     "linux-amd64-aliastypeparams",
     "linux-amd64_avx512",
-    "linux-amd64_avx512-greenteagc",
     "linux-amd64_c2s16-perf_pgo_vs_oldest_stable",
     "linux-amd64_c2s16-perf_vs_gopls_0_11",
     "linux-amd64_c2s16-perf_vs_parent",
@@ -490,11 +489,11 @@ BUILDER_TYPES = [
     "linux-arm64-asan-clang15",
     "linux-arm64-boringcrypto",
     "linux-arm64-clang15",
-    "linux-arm64-greenteagc",
+    "linux-arm64-nogreenteagc",
     "linux-arm64-longtest",
     "linux-arm64-msan-clang15",
     "linux-arm64-race",
-    "linux-arm64-sizespecializedmalloc",
+    "linux-arm64-nosizespecializedmalloc",
     "linux-arm64_c4as16-perf_vs_gopls_0_11",
     "linux-arm64_c4as16-perf_vs_parent",
     "linux-arm64_c4as16-perf_vs_release",
@@ -1040,16 +1039,16 @@ RUN_MODS = dict(
         enabled = define_for_postsubmit(["go"]),
     ),
 
-    # Build and test with GOEXPERIMENT=greenteagc.
-    greenteagc = make_run_mod(
-        add_env = {"GOEXPERIMENT": "greenteagc"},
-        enabled = define_for_gotip_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
+    # Build and test with GOEXPERIMENT=nogreenteagc.
+    nogreenteagc = make_run_mod(
+        add_env = {"GOEXPERIMENT": "nogreenteagc"},
+        enabled = define_for_postsubmit(["go"], ["gotip"]),
     ),
 
-    # Build and test with GOEXPERIMENT=sizespecializedmalloc.
-    sizespecializedmalloc = make_run_mod(
-        add_env = {"GOEXPERIMENT": "sizespecializedmalloc"},
-        enabled = define_for_gotip_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
+    # Build and test with GOEXPERIMENT=nosizespecializedmalloc.
+    nosizespecializedmalloc = make_run_mod(
+        add_env = {"GOEXPERIMENT": "nosizespecializedmalloc"},
+        enabled = define_for_postsubmit(["go"], ["gotip"]),
     ),
 
     # Run a larger set of tests.
