@@ -29,8 +29,6 @@ func TestUpdateProxyTestRepo(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fakeRepo := NewFakeRepo(t, "fake")
 			fakeGerrit := NewFakeGerrit(t, fakeRepo)
-			// We need to do this so we can push to the branch we checked out.
-			fakeRepo.runGit("config", "receive.denyCurrentBranch", "updateInstead")
 
 			fakeRepo.CommitOnBranch("master", map[string]string{
 				"go.mod": fmt.Sprintf("module test\n\ngo %s\n", tt.old),
@@ -38,13 +36,16 @@ func TestUpdateProxyTestRepo(t *testing.T) {
 			fakeRepo.Tag("v1.0.0", "master")
 
 			upgradeGoVersion := &UpdateProxyTestRepoTasks{
-				Git:       &Git{},
-				GerritURL: fakeRepo.dir.dir,
-				Branch:    "master",
+				Gerrit:  fakeGerrit,
+				Project: fakeRepo.name,
+				Branch:  "master",
 			}
 
-			ctx := context.Background()
-			if _, err := upgradeGoVersion.UpdateProxyTestRepo(&workflow.TaskContext{Context: ctx}, Published{Version: "go" + tt.new}); err != nil {
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+			if err := upgradeGoVersion.UpdateProxyTestRepo(ctx, Published{Version: "go" + tt.new}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -70,7 +71,6 @@ func TestUpdateProxyTestRepo(t *testing.T) {
 				if string(value) != want {
 					t.Errorf("expected %q, got %q", want, string(value))
 				}
-
 			}
 
 			tag, err := fakeGerrit.GetTag(ctx, fakeRepo.name, "v1.0.0")

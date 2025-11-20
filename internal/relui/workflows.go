@@ -436,9 +436,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		}
 		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators)
 		if r.major >= currentMajor {
-			// Add a task for updating the module proxy test repo that makes sure modules containing go directives
-			// of the latest published version are fetchable.
-			wf.Task1(wd, "update-proxy-test", version.UpdateProxyTestRepo, published)
+			wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, published)
 		}
 
 		h.RegisterDefinition(fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
@@ -485,7 +483,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	securitySummary := wf.Param(wd, securitySummaryParameter)
 	securityFixes := wf.Param(wd, securityFixesParameter)
 	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators)
-	wf.Task1(wd, "update-proxy-test", version.UpdateProxyTestRepo, currPublished)
+	wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, currPublished)
 
 	return wd, nil
 }

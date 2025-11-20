@@ -24,6 +24,7 @@ import (
 type GerritClient interface {
 	// GitilesURL returns the URL to the Gitiles server for this Gerrit instance.
 	GitilesURL() string
+
 	// CreateAutoSubmitChange creates a change with the given metadata and
 	// contents, starts trybots with auto-submit enabled, and returns its change ID.
 	// If the content of a file is empty, that file will be deleted from the repository.
@@ -40,13 +41,15 @@ type GerritClient interface {
 	// Submitted checks if the specified change has been submitted or failed
 	// trybots. If the CL is submitted, returns the submitted commit hash.
 	// If parentCommit is non-empty, the submitted CL's parent must match it.
-	Submitted(ctx context.Context, changeID, parentCommit string) (string, bool, error)
+	Submitted(ctx context.Context, changeID, parentCommit string) (commit string, submitted bool, _ error)
+
 	// GetTag returns tag information for a specified tag.
 	GetTag(ctx context.Context, project, tag string) (gerrit.TagInfo, error)
 	// Tag creates a tag on project at the specified commit.
 	Tag(ctx context.Context, project, tag, commit string) error
 	// ListTags returns all the tags on project.
 	ListTags(ctx context.Context, project string) ([]string, error)
+
 	// ReadBranchHead returns the head of a branch in project.
 	// If the branch doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
 	ReadBranchHead(ctx context.Context, project, branch string) (string, error)
@@ -54,24 +57,27 @@ type GerritClient interface {
 	ListBranches(ctx context.Context, project string) ([]gerrit.BranchInfo, error)
 	// CreateBranch create the given branch and returns the created branch's revision.
 	CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error)
+
 	// ListProjects lists all the projects on the server.
 	ListProjects(ctx context.Context) ([]string, error)
+
 	// ReadFile reads a file from project at the specified commit.
 	// If the file doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
 	ReadFile(ctx context.Context, project, commit, file string) ([]byte, error)
 	// ReadDir reads a directory from project at the specified commit.
 	// If the directory doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
 	ReadDir(ctx context.Context, project, commit, dir string) ([]struct{ Name string }, error)
-	// GetCommitsInRefs gets refs in which the specified commits were merged into.
-	GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error)
+
 	// QueryChanges gets changes which match the query.
 	QueryChanges(ctx context.Context, query string) ([]*gerrit.ChangeInfo, error)
-	// SetHashtags modifies the hashtags for a CL.
-	SetHashtags(ctx context.Context, changeID string, hashtags gerrit.HashtagsInput) error
 	// GetChange gets information about a specific change.
 	GetChange(ctx context.Context, changeID string, opts ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error)
 	// SubmitChange submits a specific change.
 	SubmitChange(ctx context.Context, changeID string) (gerrit.ChangeInfo, error)
+
+	// SetHashtags modifies the hashtags for a CL.
+	SetHashtags(ctx context.Context, changeID string, hashtags gerrit.HashtagsInput) error
+
 	// CreateCherryPick creates a cherry-pick change. If there are no merge
 	// conflicts, it starts trybots. If commitMessage is provided, the commit
 	// message is updated, otherwise it is taken from the original change.
@@ -86,6 +92,18 @@ type GerritClient interface {
 	GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error)
 	// GetCommitMessage retrieves the commit message for a change.
 	GetCommitMessage(ctx context.Context, changeID string) (string, error)
+	// GetCommitsInRefs gets refs in which the specified commits were merged into.
+	GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error)
+}
+
+// DestructiveGerritClient is a Gerrit client with destructive operations included.
+// It's intended to be used in contexts where it's safe, such as test repositories.
+type DestructiveGerritClient interface {
+	GerritClient
+
+	// ForceTag forcibly creates a tag on project at the specified commit,
+	// even if the tag already exists and points to a different commit.
+	ForceTag(ctx context.Context, project, tag, commit string) error
 }
 
 type RealGerritClient struct {
@@ -212,6 +230,39 @@ func (c *RealGerritClient) Tag(ctx context.Context, project, tag, commit string)
 		}
 	}
 
+	_, err = c.Client.CreateTag(ctx, project, tag, gerrit.TagInput{
+		Revision: commit,
+	})
+	return err
+}
+
+func (c *RealGerritClient) ForceTag(ctx context.Context, project, tag, commit string) error {
+	var needToDeleteExistingTag bool
+
+	// Check for an existing tag.
+	info, err := c.Client.GetTag(ctx, project, tag)
+	if errors.Is(err, gerrit.ErrResourceNotExist) {
+		// OK. We'll be creating it below.
+	} else if err != nil {
+		return fmt.Errorf("error checking if tag %q already exists: %v", tag, err)
+	} else {
+		if info.Revision == commit {
+			// Nothing to do.
+			return nil
+		}
+		// The tag exists but points elsewhere, so it needs to be deleted before being recreated.
+		needToDeleteExistingTag = true
+	}
+
+	// Delete its previous version if needed.
+	if needToDeleteExistingTag {
+		err := c.Client.DeleteTag(ctx, project, tag)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Create new tag.
 	_, err = c.Client.CreateTag(ctx, project, tag, gerrit.TagInput{
 		Revision: commit,
 	})

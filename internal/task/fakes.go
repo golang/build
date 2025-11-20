@@ -377,6 +377,15 @@ func (g *FakeGerrit) Tag(ctx context.Context, project, tag, commit string) error
 	return nil
 }
 
+func (g *FakeGerrit) ForceTag(ctx context.Context, project, tag, commit string) error {
+	repo, err := g.repo(project)
+	if err != nil {
+		return err
+	}
+	repo.runGit("tag", "--force", tag, commit)
+	return nil
+}
+
 func (g *FakeGerrit) GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error) {
 	repo, err := g.repo(project)
 	if err != nil {

@@ -1007,6 +1007,12 @@ func (c *Client) CreateTag(ctx context.Context, project, tag string, input TagIn
 	return res, err
 }
 
+// DeleteTag deletes a tag on project.
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#delete-tag.
+func (c *Client) DeleteTag(ctx context.Context, project, tag string) error {
+	return c.do(ctx, nil, http.MethodDelete, fmt.Sprintf("/projects/%s/tags/%s", project, url.PathEscape(tag)), wantResStatus(http.StatusNoContent))
+}
+
 // GetAccountInfo gets the specified account's information from Gerrit.
 // For the API call, see https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#get-account
 // The accountID is https://gerrit-review.googlesource.com/Documentation/rest-api-accounts.html#account-id

@@ -151,6 +151,10 @@ func main() {
 		Gitiles: "https://go-internal.googlesource.com",
 		Client:  gerrit.NewClient("https://go-internal-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
+	modproxyTestGerritClient := &task.RealGerritClient{
+		Gitiles: "https://golang-modproxy-test.googlesource.com",
+		Client:  gerrit.NewClient("https://golang-modproxy-test-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
+	}
 	gitClient := &task.Git{}
 	gitClient.UseOAuth2Auth(creds.TokenSource)
 	var mailFunc func(*workflow.TaskContext, task.MailHeader, task.MailContent) error
@@ -311,9 +315,15 @@ func main() {
 			CloudBuild: cloudBuildClient,
 		},
 		UpdateProxyTestRepoTasks: task.UpdateProxyTestRepoTasks{
-			Git:       gitClient,
-			GerritURL: "https://golang-modproxy-test.googlesource.com/latest-go-version",
-			Branch:    "main",
+			Gerrit:  modproxyTestGerritClient,
+			Project: "latest-go-version", Branch: "main",
+			ChangeLink: func(changeID string) string {
+				parts := strings.SplitN(changeID, "~", 3)
+				if len(parts) != 2 {
+					return fmt.Sprintf("(unparseable change ID %q)", changeID)
+				}
+				return "https://golang-modproxy-test-review.googlesource.com/c/latest-go-version/+/" + parts[1]
+			},
 		},
 	}
 	cycleTasks := task.ReleaseCycleTasks{
