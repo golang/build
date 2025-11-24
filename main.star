@@ -359,6 +359,7 @@ SLOW_HOSTS = {
     "linux-ppc64le_power8": struct(scale = 2),
     "linux-ppc64le_power9": struct(scale = 2),
     "linux-riscv64": struct(scale = 2),
+    "linux-s390x": struct(scale = 2),  # see go.dev/issue/60413
     "netbsd-arm": struct(
         scale = 5,
         scope = ["go", "net", "sys"],  # not tools; see go.dev/issue/72061#issuecomment-2695226251
