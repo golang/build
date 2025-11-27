@@ -1213,7 +1213,7 @@ func (c *FakeBuildBucketClient) Completed(ctx context.Context, id int64) (string
 	result, ok := c.results[id]
 	c.mu.Unlock()
 	if !ok {
-		return "", false, fmt.Errorf("unknown task ID %q", id)
+		return "", false, fmt.Errorf("unknown task ID %d", id)
 	}
 	return "here's some build detail", true, result
 }

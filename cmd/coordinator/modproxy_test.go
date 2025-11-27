@@ -48,7 +48,7 @@ func TestProxyURL(t *testing.T) {
 	got := rr.Result()
 	gotBody := rr.Body.String()
 	if got.StatusCode != 200 {
-		t.Errorf("status = %q; want 200", got.StatusCode)
+		t.Errorf("status = %d; want 200", got.StatusCode)
 	}
 	if gotBody != content {
 		t.Errorf("content = %q; want %q", gotBody, content)

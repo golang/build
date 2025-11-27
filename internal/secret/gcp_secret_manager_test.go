@@ -228,7 +228,7 @@ func TestJSONFlag(t *testing.T) {
 				t.Fatalf("flag parsing failed: %v", err)
 			}
 			if !reflect.DeepEqual(value, tt.wantValue) {
-				t.Errorf("flag value = %q, want %q", value, tt.wantValue)
+				t.Errorf("flag value = %#v, want %#v", value, tt.wantValue)
 			}
 		})
 	}

@@ -573,7 +573,7 @@ func prereleaseNumber(prerelease string) (int, error) {
 
 	pre, err := strconv.Atoi(parts[1])
 	if err != nil {
-		return 0, fmt.Errorf("failed to convert pre-release version to int %q: %w", pre, err)
+		return 0, fmt.Errorf("failed to convert pre-release version %q to int: %w", parts[1], err)
 	}
 
 	if pre <= 0 {
