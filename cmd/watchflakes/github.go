@@ -295,7 +295,6 @@ func updateText(issue *Issue) string {
 	fmt.Fprintf(&b, "Found new dashboard test flakes for:\n\n%s", indent(spaces[:4], issue.ScriptText))
 	for _, f := range issue.Post {
 		b.WriteString("\n")
-		_ = f
 		b.WriteString(f.Markdown())
 	}
 	return b.String()
@@ -397,7 +396,7 @@ func readComments(issue *Issue) {
 // postNew creates a new issue with the given title and body,
 // setting the NeedsInvestigation label and placing the issue in
 // the Test Flakes project.
-// It automatically adds signature to the body.
+// It automatically caps issue body length and adds signature to it.
 func postNew(title, body string) *github.Issue {
 	var args []any
 	if lab := labels["NeedsInvestigation"]; lab != nil {
@@ -405,6 +404,10 @@ func postNew(title, body string) *github.Issue {
 	}
 	args = append(args, testFlakes)
 
+	if len(body) > 50000 {
+		// As of 2025-11-27, GitHub GraphQL API limits body length to 65536.
+		body = body[:50000] + "\n</details>\n(... long body truncated ...)\n"
+	}
 	issue, err := gh.CreateIssue(repo, title, body+signature, args...)
 	if err != nil {
 		log.Fatal(err)
@@ -431,16 +434,11 @@ func postNewBrokenBot(title, body string) (*github.Issue, error) {
 }
 
 // postComment posts a new comment on the issue.
-// It automatically adds signature to the comment.
+// It automatically caps comment body length and adds signature to it.
 func postComment(issue *Issue, body string) error {
-	if len(body) > 50000 {
-		// Apparently GitHub GraphQL API limits comment length to 65536.
-		body = body[:50000] + "\n</details>\n(... long comment truncated ...)\n"
-	}
 	if issue.Issue.Closed {
 		reopen := false
 		for _, p := range issue.Post {
-			_ = p
 			if p.Time.After(issue.ClosedAt) {
 				reopen = true
 				break
@@ -451,6 +449,10 @@ func postComment(issue *Issue, body string) error {
 				return err
 			}
 		}
+	}
+	if len(body) > 50000 {
+		// As of 2025-11-27, GitHub GraphQL API limits comment length to 65536.
+		body = body[:50000] + "\n</details>\n(... long comment truncated ...)\n"
 	}
 	return gh.AddIssueComment(issue.Issue, body+signature)
 }
