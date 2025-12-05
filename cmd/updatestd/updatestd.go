@@ -163,7 +163,7 @@ func (w Work) UpdateModule(dir string) error {
 	main, deps := buildList(dir)
 
 	// Determine module versions to get.
-	goGet := []string{goCmd, "get", "-d"}
+	goGet := []string{goCmd, "get"}
 	for _, m := range deps {
 		if !strings.HasPrefix(m.Path, "golang.org/x/") {
 			log.Printf("skipping %s (out of scope, it's not a golang.org/x dependency)\n", m.Path)
