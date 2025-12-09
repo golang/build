@@ -9,7 +9,7 @@ require (
 	github.com/shurcooL/httpgzip v0.0.0-20230704072819-d1585fc322fa
 	github.com/shurcooL/issues v0.0.0-20230810033912-5ed542b06cb5
 	github.com/shurcooL/issuesapp v0.0.0-20230810034243-80666a8809f4
-	golang.org/x/build v0.0.0-20251112180309-0774d0c48ea0
+	golang.org/x/build v0.0.0-20251205213135-77797900ecb4
 )
 
 require (
@@ -50,13 +50,13 @@ require (
 	github.com/sourcegraph/go-diff v0.7.0 // indirect
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
 	go4.org v0.0.0-20180809161055-417644f6feb5 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/oauth2 v0.33.0 // indirect
-	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/oauth2 v0.34.0 // indirect
+	golang.org/x/sync v0.19.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
-	golang.org/x/tools v0.39.0 // indirect
+	golang.org/x/tools v0.40.0 // indirect
 	golang.org/x/tools/godoc v0.1.0-deprecated // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
