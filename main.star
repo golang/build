@@ -1257,7 +1257,7 @@ EXTRA_DEPENDENCIES = [
     struct(
         applies = lambda project, port, run_mods: project == "protobuf" and port == "linux-amd64" and "longtest" in run_mods,
         test_deps = """@Subdir bin
-golang/third_party/protoc_with_conformance/${platform} version:v31.0
+golang/third_party/protoc_with_conformance/${platform} version:v33.2
 """,
     ),
 ]
