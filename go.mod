@@ -1,6 +1,6 @@
 module golang.org/x/build
 
-go 1.24.0
+go 1.24.9
 
 require (
 	cloud.google.com/go/bigquery v1.53.0
@@ -106,6 +106,7 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v2.0.8+incompatible // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/google/pprof v0.0.0-20251213031049-b05bdaca462f // indirect
 	github.com/google/s2a-go v0.1.4 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.5 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
