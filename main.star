@@ -288,12 +288,7 @@ TBD_CAPACITY_HOSTS = [
     "ios-amd64",
     "ios-arm64",
     "linux-mips",
-    "linux-mips",
     "linux-mips64",
-    "linux-mips64",
-    "linux-mips64le",
-    "linux-mips64le",
-    "linux-mipsle",
     "linux-mipsle",
     "netbsd-386",
     "netbsd-amd64",
@@ -306,6 +301,7 @@ LOW_CAPACITY_HOSTS = GOOGLE_LOW_CAPACITY_HOSTS + TBD_CAPACITY_HOSTS + [
     "aix-ppc64",
     "freebsd-riscv64",
     "linux-loong64",
+    "linux-mips64le",
     "linux-ppc64_power10",
     "linux-ppc64_power8",
     "linux-ppc64le_power10",
@@ -556,6 +552,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
     "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
     "openbsd-riscv64": known_issue(issue_number = 73569, hide_from_presubmit = False),
+    "linux-mips64le": known_issue(issue_number = 67306),
 
     # The known issue for these builder types tracks the work of starting to add them.
     # Skip the builder definitions for x/ repos to reduce noise.
@@ -575,7 +572,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "ios-arm64": known_issue(issue_number = 66360, skip_x_repos = True),
     "linux-mips": known_issue(issue_number = 67303, skip_x_repos = True),
     "linux-mips64": known_issue(issue_number = 67305, skip_x_repos = True),
-    "linux-mips64le": known_issue(issue_number = 67306, skip_x_repos = True),
     "linux-mipsle": known_issue(issue_number = 67304, skip_x_repos = True),
     "netbsd-386": known_issue(issue_number = 61120, skip_x_repos = True),
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
