@@ -33,6 +33,7 @@ type CloudBuildClient interface {
 	// GenerateAutoSubmitChange generates a change with the given metadata and
 	// contents generated via the [git-generate] script that must be in the commit message,
 	// starts trybots with auto-submit enabled, and returns its change ID.
+	// The script will have the latest stable version of Go on $PATH.
 	// If the requested contents match the state of the repository, no change
 	// is created and the returned change ID will be empty.
 	//
@@ -41,7 +42,7 @@ type CloudBuildClient interface {
 
 	// RunScript runs the given script under bash -eux -o pipefail in
 	// ScriptProject. Outputs are collected into the build's ResultURL,
-	// readable with ResultFS. The script will have the latest version of Go
+	// readable with ResultFS. The script will have the latest stable version of Go
 	// and some version of gsutil on $PATH.
 	// If gerritProject is provided, the script operates within a checkout of the
 	// latest commit on the default branch of that repository.

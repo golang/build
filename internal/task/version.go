@@ -217,6 +217,15 @@ func (t *VersionTasks) TagRelease(ctx *workflow.TaskContext, version, commit str
 }
 
 func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, reviewers []string, version string) (string, error) {
+	script := "go generate ./internal/stdlib"
+	if strings.Contains(version, "rc") {
+		// For release candidate versions, we can't leave go version
+		// selection to GenerateAutoSubmitChange. It uses the latest
+		// stable Go release, which is ok when this task runs during
+		// major releases, but not when it runs during RCs.
+		script = fmt.Sprintf(`go run golang.org/dl/%s@latest download
+go run golang.org/dl/%[1]s@latest generate ./internal/stdlib`, version)
+	}
 	return t.CloudBuild.GenerateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: "tools",
 		Subject: fmt.Sprintf(`internal/stdlib: update stdlib index for %s
@@ -224,8 +233,8 @@ func (t *VersionTasks) CreateUpdateStdlibIndexCL(ctx *workflow.TaskContext, revi
 For golang/go#38706.
 
 [git-generate]
-go generate ./internal/stdlib
-`, strings.NewReplacer("go", "Go ", "rc", " Release Candidate ").Replace(version)),
+%s
+`, strings.NewReplacer("go", "Go ", "rc", " Release Candidate ").Replace(version), script),
 		Branch: "master",
 	}, reviewers)
 }
