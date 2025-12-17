@@ -75,6 +75,7 @@ var BuildersPortedToLUCI = map[string]bool{
 	"windows-arm-zx2c4":      true, // Intentionally chosen not to keep running in LUCI at this time. Deemed as ported so it can be stopped.
 	"windows-arm64-11":       true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-windows-arm64.
 
+	"linux-mips64le-rtrk":      true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-mips64le.
 	"linux-riscv64-jsing":      true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-riscv64.
 	"linux-riscv64-unmatched":  true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-riscv64 (this builder is testing the same port as on the line above).
 	"linux-ppc64le-buildlet":   true, // Available as https://ci.chromium.org/p/golang/builders/ci/gotip-linux-ppc64le_power8.
