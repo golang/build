@@ -44,6 +44,7 @@ const timeLimit = 45 * 24 * time.Hour
 const maxFailPerBuild = 3
 
 const tooManyToBeFlakes = 4
+const consistentFailureTitleSuffix = " [consistent failure]"
 
 var (
 	build   = flag.String("build", "", "a particular build ID or URL to analyze (mainly for debugging)")
@@ -267,7 +268,7 @@ Repeat:
 				}
 			}
 			if top >= tooManyToBeFlakes {
-				issue.Title += " [consistent failure]"
+				issue.Title += consistentFailureTitleSuffix
 			}
 		}
 	}

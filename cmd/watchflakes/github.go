@@ -394,12 +394,14 @@ func readComments(issue *Issue) {
 }
 
 // postNew creates a new issue with the given title and body,
-// setting the NeedsInvestigation label and placing the issue in
-// the Test Flakes project.
+// setting the NeedsInvestigation label (unless it's a consistent failure)
+// and placing the issue in the Test Flakes project.
 // It automatically caps issue body length and adds signature to it.
 func postNew(title, body string) *github.Issue {
 	var args []any
-	if lab := labels["NeedsInvestigation"]; lab != nil {
+	if strings.HasSuffix(title, consistentFailureTitleSuffix) {
+		// No label.
+	} else if lab := labels["NeedsInvestigation"]; lab != nil {
 		args = append(args, lab)
 	}
 	args = append(args, testFlakes)
