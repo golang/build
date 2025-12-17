@@ -292,7 +292,6 @@ TBD_CAPACITY_HOSTS = [
     "linux-mipsle",
     "netbsd-386",
     "netbsd-amd64",
-    "windows-arm",
 ]
 
 # LOW_CAPACITY_HOSTS lists "hosts" that have fixed, relatively low capacity.
@@ -534,7 +533,6 @@ BUILDER_TYPES = [
     "windows-amd64",
     "windows-amd64-longtest",
     "windows-amd64-race",
-    "windows-arm",
     "windows-arm64",
 ]
 
@@ -577,7 +575,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
     "openbsd-arm64": known_issue(issue_number = 67104, skip_x_repos = True),
-    "windows-arm": known_issue(issue_number = 67308, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
