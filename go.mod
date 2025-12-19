@@ -31,6 +31,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-github/v74 v74.0.0
+	github.com/google/pprof v0.0.0-20251213031049-b05bdaca462f
 	github.com/google/safehtml v0.0.3-0.20220430015336-00016cfeca15
 	github.com/google/uuid v1.6.0
 	github.com/googleapis/gax-go/v2 v2.12.0
@@ -72,7 +73,7 @@ require (
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v3 v3.0.1
-	rsc.io/github v0.3.1-0.20240418182958-01bebb0c456a
+	rsc.io/github v0.5.1-0.20251219203017-254465a43dfe
 	rsc.io/markdown v0.0.0-20240306144322-0bf8f97ee8ef
 )
 
@@ -106,7 +107,6 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v2.0.8+incompatible // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/pprof v0.0.0-20251213031049-b05bdaca462f // indirect
 	github.com/google/s2a-go v0.1.4 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.5 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect

@@ -1378,8 +1378,8 @@ modernc.org/z v1.0.1-0.20210308123920-1f282aa71362/go.mod h1:8/SRk5C/HgiQWCgXdfp
 modernc.org/z v1.0.1/go.mod h1:8/SRk5C/HgiQWCgXdfpb+1RvhORdkz5sw72d3jjtyqA=
 modernc.org/zappy v1.0.0/go.mod h1:hHe+oGahLVII/aTTyWK/b53VDHMAGCBYYeZ9sn83HC4=
 rsc.io/binaryregexp v0.2.0/go.mod h1:qTv7/COck+e2FymRvadv62gMdZztPaShugOCi3I+8D8=
-rsc.io/github v0.3.1-0.20240418182958-01bebb0c456a h1:nL7IfptuTYRttdK05UjWL6zvtx26DMIX403ypCrWai8=
-rsc.io/github v0.3.1-0.20240418182958-01bebb0c456a/go.mod h1:sfdP6cCYDjTBOwHSu579zk9KnSkyBCryjecSeffMKXs=
+rsc.io/github v0.5.1-0.20251219203017-254465a43dfe h1:qSe5fJYEULJVcJ+df4lvfUZjUvPmhDoTquKdquxrIzs=
+rsc.io/github v0.5.1-0.20251219203017-254465a43dfe/go.mod h1:O+mjyPFYgj/EdC2kTQT2oG8hmB2+K30YW//KcICRUxI=
 rsc.io/markdown v0.0.0-20240306144322-0bf8f97ee8ef h1:mqLYrXCXYEZOop9/Dbo6RPX11539nwiCNBb1icVPmw8=
 rsc.io/markdown v0.0.0-20240306144322-0bf8f97ee8ef/go.mod h1:8xcPgWmwlZONN1D9bjxtHEjrUtSEa3fakVF8iaewYKQ=
 rsc.io/quote/v3 v3.1.0/go.mod h1:yEA65RcK8LyAZtP9Kv3t0HmxON59tX3rD+tICJqUlj0=
