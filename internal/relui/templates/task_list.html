@@ -76,7 +76,7 @@
             {{if .Error.Valid}}
               <div class="TaskList-retryTask">
                 <form
-                  action="{{baseLink (printf "/workflows/%s/tasks/%s/retry" $workflow.ID .Name)}}"
+                  action="{{baseLink (printf "/workflows/%s/tasks/%s/retry" $workflow.ID (.Name|urlPathEscape))}}"
                   method="post">
                   <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
                   <input
@@ -90,7 +90,7 @@
             {{else if and (not .ApprovedAt.Valid) (.ReadyForApproval)}}
               <div class="TaskList-approveTask">
                 <form
-                  action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID .Name)}}"
+                  action="{{baseLink (printf "/workflows/%s/tasks/%s/approve" $workflow.ID (.Name|urlPathEscape))}}"
                   method="post">
                   <input type="hidden" id="workflow.id" name="workflow.id" value="{{$workflow.ID}}" />
                   <input

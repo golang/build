@@ -1026,3 +1026,36 @@ func TestWorkflowACL(t *testing.T) {
 	}
 	t.Run("unacld workflow", func(t *testing.T) { testWorkflowACL(t, true, false, false) })
 }
+
+// Test that it's possible to retry a task whose name includes characters
+// such as "/" that become different after URL path segment escaping.
+func TestRetryHandlerEscaping(t *testing.T) {
+	s := &Server{m: &metricsRouter{mux: http.NewServeMux()}}
+	var gotTaskName string
+	s.m.HandleFunc("POST /workflows/{id}/tasks/{name}/retry", func(w http.ResponseWriter, req *http.Request) {
+		gotTaskName = req.PathValue("name")
+	})
+	cl := &http.Client{Transport: localRoundTripper{s.m}}
+	resp, err := cl.Post("/workflows/123/tasks/update%20x%2Fbuild/retry", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := resp.StatusCode, http.StatusOK; got != want {
+		t.Fatalf("status code mismatch: got %d, want %d", got, want)
+	}
+	if got, want := gotTaskName, "update x/build"; got != want {
+		t.Errorf("task name mismatch: got %q, want %q", got, want)
+	}
+}
+
+// localRoundTripper is an http.RoundTripper that executes HTTP transactions
+// by using handler directly, instead of going over an HTTP connection.
+type localRoundTripper struct {
+	handler http.Handler
+}
+
+func (l localRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	w := httptest.NewRecorder()
+	l.handler.ServeHTTP(w, req)
+	return w.Result(), nil
+}

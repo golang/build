@@ -88,6 +88,7 @@ func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *
 		"prettySize":            prettySize,
 		"sidebarWorkflows":      s.sidebarWorkflows,
 		"unmarshalResultDetail": unmarshalResultDetail,
+		"urlPathEscape":         url.PathEscape,
 	}
 	s.templates = template.Must(template.New("").Funcs(helpers).ParseFS(templates, "templates/*.html"))
 	s.homeTmpl = s.mustLookup("home.html")
