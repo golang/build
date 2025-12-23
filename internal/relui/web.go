@@ -24,7 +24,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
-	"github.com/julienschmidt/httprouter"
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/criadb"
 	"golang.org/x/build/internal/metrics"
@@ -71,7 +70,7 @@ type Server struct {
 func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *metrics.Service, cria *criadb.AuthDatabase) *Server {
 	s := &Server{
 		db:        p,
-		m:         &metricsRouter{router: httprouter.New()},
+		m:         &metricsRouter{mux: http.NewServeMux()},
 		w:         w,
 		scheduler: NewScheduler(p, w),
 		baseURL:   baseURL,
@@ -93,16 +92,16 @@ func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *
 	s.templates = template.Must(template.New("").Funcs(helpers).ParseFS(templates, "templates/*.html"))
 	s.homeTmpl = s.mustLookup("home.html")
 	s.newWorkflowTmpl = s.mustLookup("new_workflow.html")
-	s.m.GET("/workflows/:id", s.showWorkflowHandler)
-	s.m.POST("/workflows/:id/stop", s.stopWorkflowHandler)
-	s.m.POST("/workflows/:id/tasks/:name/retry", s.retryTaskHandler)
-	s.m.POST("/workflows/:id/tasks/:name/approve", s.approveTaskHandler)
-	s.m.POST("/schedules/:id/delete", s.deleteScheduleHandler)
-	s.m.Handler(http.MethodGet, "/metrics", ms)
-	s.m.Handler(http.MethodGet, "/new_workflow", http.HandlerFunc(s.newWorkflowHandler))
-	s.m.Handler(http.MethodPost, "/workflows", http.HandlerFunc(s.createWorkflowHandler))
-	s.m.ServeFiles("/static/*filepath", http.FS(static))
-	s.m.Handler(http.MethodGet, "/", http.HandlerFunc(s.homeHandler))
+	s.m.HandleFunc("GET /workflows/{id}", s.showWorkflowHandler)
+	s.m.HandleFunc("POST /workflows/{id}/stop", s.stopWorkflowHandler)
+	s.m.HandleFunc("POST /workflows/{id}/tasks/{name}/retry", s.retryTaskHandler)
+	s.m.HandleFunc("POST /workflows/{id}/tasks/{name}/approve", s.approveTaskHandler)
+	s.m.HandleFunc("POST /schedules/{id}/delete", s.deleteScheduleHandler)
+	s.m.Handle("GET /metrics", ms)
+	s.m.HandleFunc("GET /new_workflow", s.newWorkflowHandler)
+	s.m.HandleFunc("POST /workflows", s.createWorkflowHandler)
+	s.m.ServeFiles("GET /static/", static)
+	s.m.HandleFunc("GET /{$}", s.homeHandler)
 	if baseURL != nil && baseURL.Path != "/" && baseURL.Path != "" {
 		nosuffix := strings.TrimSuffix(baseURL.Path, "/")
 		s.bm = new(http.ServeMux)
@@ -254,10 +253,10 @@ type showWorkflowResponse struct {
 	TaskLogs map[string][]db.TaskLog
 }
 
-func (s *Server) showWorkflowHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	id, err := uuid.Parse(params.ByName("id"))
+func (s *Server) showWorkflowHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		log.Printf("showWorkflowHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
+		log.Printf("showWorkflowHandler: uuid.Parse(%q): %v", r.PathValue("id"), err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -444,10 +443,10 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, s.BaseLink("/workflows", id.String()), http.StatusSeeOther)
 }
 
-func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	id, err := uuid.Parse(params.ByName("id"))
+func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		log.Printf("retryTaskHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
+		log.Printf("retryTaskHandler: uuid.Parse(%q): %v", r.PathValue("id"), err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -457,7 +456,7 @@ func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	} else if err != nil {
-		log.Printf("retryTaskHandler(_, _, %v): Workflow(%d): %v", params, id, err)
+		log.Printf("retryTaskHandler: Workflow(%v): %v", id, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -470,16 +469,16 @@ func (s *Server) retryTaskHandler(w http.ResponseWriter, r *http.Request, params
 		// authorizedForWorkflow writes errors to w itself.
 		return
 	}
-	if err := s.w.RetryTask(r.Context(), id, params.ByName("name")); err != nil {
+	if err := s.w.RetryTask(r.Context(), id, r.PathValue("name")); err != nil {
 		log.Printf("s.w.RetryTask(_, %q): %v", id, err)
 	}
 	http.Redirect(w, r, s.BaseLink("/workflows", id.String()), http.StatusSeeOther)
 }
 
-func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	id, err := uuid.Parse(params.ByName("id"))
+func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		log.Printf("approveTaskHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
+		log.Printf("approveTaskHandler: uuid.Parse(%q): %v", r.PathValue("id"), err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -489,7 +488,7 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	} else if err != nil {
-		log.Printf("approveTaskHandler(_, _, %v): Workflow(%d): %v", params, id, err)
+		log.Printf("approveTaskHandler: Workflow(%v): %v", id, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -504,7 +503,7 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 	}
 	t, err := q.ApproveTask(r.Context(), db.ApproveTaskParams{
 		WorkflowID: id,
-		Name:       params.ByName("name"),
+		Name:       r.PathValue("name"),
 		ApprovedAt: sql.NullTime{Time: time.Now(), Valid: true},
 	})
 	if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
@@ -519,10 +518,10 @@ func (s *Server) approveTaskHandler(w http.ResponseWriter, r *http.Request, para
 	http.Redirect(w, r, s.BaseLink("/workflows", id.String()), http.StatusSeeOther)
 }
 
-func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	id, err := uuid.Parse(params.ByName("id"))
+func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
-		log.Printf("stopWorkflowHandler(_, _, %v) uuid.Parse(%v): %v", params, params.ByName("id"), err)
+		log.Printf("stopWorkflowHandler: uuid.Parse(%q): %v", r.PathValue("id"), err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -532,7 +531,7 @@ func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	} else if err != nil {
-		log.Printf("stopWorkflowHandler(_, _, %v): Workflow(%d): %v", params, id, err)
+		log.Printf("stopWorkflowHandler: Workflow(%v): %v", id, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -552,10 +551,10 @@ func (s *Server) stopWorkflowHandler(w http.ResponseWriter, r *http.Request, par
 	http.Redirect(w, r, s.BaseLink("/"), http.StatusSeeOther)
 }
 
-func (s *Server) deleteScheduleHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	id, err := strconv.Atoi(params.ByName("id"))
+func (s *Server) deleteScheduleHandler(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
-		log.Printf("deleteScheduleHandler(_, _, %v) strconv.Atoi(%q) = %d, %v", params, params.ByName("id"), id, err)
+		log.Printf("deleteScheduleHandler: strconv.Atoi(%q): %v", r.PathValue("id"), err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -590,7 +589,7 @@ func (s *Server) deleteScheduleHandler(w http.ResponseWriter, r *http.Request, p
 		http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 		return
 	} else if err != nil {
-		log.Printf("deleteScheduleHandler(_, _, %v) s.scheduler.Delete(_, %d) = %v", params, id, err)
+		log.Printf("deleteScheduleHandler: s.scheduler.Delete(_, %v) = %v", id, err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

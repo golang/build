@@ -6,16 +6,13 @@ package relui
 
 import (
 	"context"
-	"fmt"
-	"mime"
+	"io/fs"
 	"net/http"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
-	"github.com/julienschmidt/httprouter"
 	"go.opencensus.io/plugin/ochttp"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -54,92 +51,34 @@ var Views = []*view.View{
 	},
 }
 
-// metricsRouter wraps an *httprouter.Router with telemetry.
+// metricsRouter wraps an *http.ServeMux with telemetry.
 type metricsRouter struct {
-	router *httprouter.Router
+	mux *http.ServeMux
 }
 
-// GET is shorthand for Handle(http.MethodGet, path, handle)
-func (r *metricsRouter) GET(path string, handle httprouter.Handle) {
-	r.Handle(http.MethodGet, path, handle)
+// Handle is like (*http.ServeMux).Handle but with additional metrics reporting.
+func (r *metricsRouter) Handle(pattern string, handler http.Handler) {
+	r.mux.Handle(pattern, ochttp.WithRouteTag(handler, pattern))
 }
 
-// HEAD is shorthand for Handle(http.MethodHead, path, handle)
-func (r *metricsRouter) HEAD(path string, handle httprouter.Handle) {
-	r.Handle(http.MethodHead, path, handle)
+// HandleFunc is like (*http.ServeMux).HandleFunc but with additional metrics reporting.
+func (r *metricsRouter) HandleFunc(pattern string, handler http.HandlerFunc) {
+	r.Handle(pattern, handler)
 }
 
-// OPTIONS is shorthand for Handle(http.MethodOptions, path, handle)
-func (r *metricsRouter) OPTIONS(path string, handle httprouter.Handle) {
-	r.Handle(http.MethodOptions, path, handle)
-}
-
-// POST is shorthand for Handle(http.MethodPost, path, handle)
-func (r *metricsRouter) POST(path string, handle httprouter.Handle) {
-	r.Handle(http.MethodPost, path, handle)
-}
-
-// PUT is shorthand for Handle(http.MethodPut, path, handle)
-func (r *metricsRouter) PUT(path string, handle httprouter.Handle) {
-	r.Handle(http.MethodPut, path, handle)
-}
-
-// PATCH is shorthand for Handle(http.MethodPatch, path, handle)
-func (r *metricsRouter) PATCH(path string, handle httprouter.Handle) {
-	r.Handle(http.MethodPatch, path, handle)
-}
-
-// DELETE is shorthand for Handle(http.MethodDelete, path, handle)
-func (r *metricsRouter) DELETE(path string, handle httprouter.Handle) {
-	r.Handle(http.MethodDelete, path, handle)
-}
-
-// Handler wraps *httprouter.Handler with recorded metrics.
-func (r *metricsRouter) Handler(method, path string, handler http.Handler) {
-	r.router.Handler(method, path, ochttp.WithRouteTag(handler, path))
-}
-
-// HandlerFunc wraps *httprouter.HandlerFunc with recorded metrics.
-func (r *metricsRouter) HandlerFunc(method, path string, handler http.HandlerFunc) {
-	r.Handler(method, path, handler)
-}
-
-// ServeFiles serves files at the specified root. The provided path
-// must end in /*filepath.
-//
-// Unlike *httprouter.ServeFiles, this method sets a Content-Type and
-// Cache-Control to "no-cache, private, max-age=0". This handler
-// also does not strip the prefix of the request path.
-func (r *metricsRouter) ServeFiles(p string, root http.FileSystem) {
-	if len(p) < 10 || p[len(p)-10:] != "/*filepath" {
-		panic(fmt.Sprintf("p must end with /*filepath in path %q", p))
-	}
-
-	s := http.FileServer(root)
-	r.GET(p, func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(req.URL.Path)))
+// ServeFiles serves files at the specified root with the
+// Cache-Control header set to "no-cache, private, max-age=0".
+func (r *metricsRouter) ServeFiles(pattern string, root fs.FS) {
+	fs := http.FileServerFS(root)
+	r.mux.HandleFunc(pattern, func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, private, max-age=0")
-		s.ServeHTTP(w, req)
+		fs.ServeHTTP(w, req)
 	})
 }
 
-// Lookup wraps *httprouter.Lookup.
-func (r *metricsRouter) Lookup(method, path string) (httprouter.Handle, httprouter.Params, bool) {
-	return r.router.Lookup(method, path)
-}
-
-// ServeHTTP wraps *httprouter.ServeHTTP.
+// ServeHTTP implements http.Handler.
 func (r *metricsRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	r.router.ServeHTTP(w, req)
-}
-
-// Handle calls *httprouter.ServeHTTP with additional metrics reporting.
-func (r *metricsRouter) Handle(method, path string, handle httprouter.Handle) {
-	r.router.Handle(method, path, func(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-		ochttp.WithRouteTag(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			handle(w, r, params)
-		}), path).ServeHTTP(w, r)
-	})
+	r.mux.ServeHTTP(w, req)
 }
 
 type MetricsDB struct {

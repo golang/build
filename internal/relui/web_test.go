@@ -28,7 +28,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/julienschmidt/httprouter"
 	"golang.org/x/build/internal/access"
 	"golang.org/x/build/internal/criadb"
 	"golang.org/x/build/internal/releasetargets"
@@ -76,8 +75,8 @@ func TestFileServerHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, c.path, nil)
 			w := httptest.NewRecorder()
 
-			m := &metricsRouter{router: httprouter.New()}
-			m.ServeFiles("/*filepath", http.FS(testStatic))
+			m := &metricsRouter{mux: http.NewServeMux()}
+			m.ServeFiles("GET /", testStatic)
 			m.ServeHTTP(w, req)
 			resp := w.Result()
 			defer resp.Body.Close()
@@ -895,13 +894,14 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 			t.Fatalf("FailUnfinishedTasks(_, %v) = _, %v, wanted no error", fail, err)
 		}
 
-		params := httprouter.Params{{Key: "id", Value: wfID.String()}, {Key: "name", Value: "beep"}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "tasks", "beep", "retry"), nil)
+		req.SetPathValue("id", wfID.String())
+		req.SetPathValue("name", "beep")
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
-		s.retryTaskHandler(rec, req, params)
+		s.retryTaskHandler(rec, req)
 		resp := rec.Result()
 
 		if resp.StatusCode != expectedStatus {
@@ -936,13 +936,14 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 			t.Fatalf("CreateTask(_, %v) = _, %v, wanted no error", gtg, err)
 		}
 
-		params := httprouter.Params{{Key: "id", Value: wfID.String()}, {Key: "name", Value: "approve"}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "tasks", "approve", "approve"), nil)
+		req.SetPathValue("id", wfID.String())
+		req.SetPathValue("name", "approve")
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
-		s.approveTaskHandler(rec, req, params)
+		s.approveTaskHandler(rec, req)
 		resp := rec.Result()
 
 		if resp.StatusCode != expectedStatus {
@@ -968,13 +969,13 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 		}
 		s.w.markRunning(&workflow.Workflow{ID: wfID}, func() {})
 
-		params := httprouter.Params{{Key: "id", Value: wfID.String()}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/workflows/", wfID.String(), "stop"), nil)
+		req.SetPathValue("id", wfID.String())
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
-		s.stopWorkflowHandler(rec, req, params)
+		s.stopWorkflowHandler(rec, req)
 		resp := rec.Result()
 
 		if resp.StatusCode != expectedStatus {
@@ -992,13 +993,13 @@ func testWorkflowACL(t *testing.T, acld bool, authorized bool, wantSucceed bool)
 			t.Fatalf("Scheduler.Create() = _, %v, wanted no error", err)
 		}
 
-		params := httprouter.Params{{Key: "id", Value: strconv.Itoa(int(sched.ID))}}
 		req := httptest.NewRequest(http.MethodPost, path.Join("/schedules/", strconv.Itoa(int(sched.ID)), "delete"), nil)
+		req.SetPathValue("id", strconv.Itoa(int(sched.ID)))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req = req.WithContext(access.ContextWithIAP(req.Context(), iap))
 		rec := httptest.NewRecorder()
 
-		s.deleteScheduleHandler(rec, req, params)
+		s.deleteScheduleHandler(rec, req)
 		resp := rec.Result()
 
 		if resp.StatusCode != expectedStatus {
