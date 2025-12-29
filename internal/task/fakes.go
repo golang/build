@@ -1233,6 +1233,10 @@ type FakeGitHub struct {
 	// does not attach to milestone.
 	Issues map[int]*github.Issue
 
+	// Releases stores releases created via CreateRelease so we can validate
+	// the content during testing.
+	Releases []*github.RepositoryRelease
+
 	// The following fields modify behavior of the fake to test
 	// certain special scenarios.
 
@@ -1303,8 +1307,9 @@ func (*FakeGitHub) UploadReleaseAsset(ctx context.Context, owner, repo string, r
 	return nil, nil
 }
 
-func (*FakeGitHub) CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
-	return nil, nil
+func (f *FakeGitHub) CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
+	f.Releases = append(f.Releases, release)
+	return release, nil
 }
 
 func (*FakeGitHub) PublishRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {

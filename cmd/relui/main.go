@@ -376,7 +376,7 @@ func main() {
 	dh.RegisterDefinition("Tag a new version of x/telemetry/config (if necessary)", tagTelemetryTasks.NewDefinition())
 
 	goplsTasks := task.ReleaseGoplsTasks{
-		Github:             githubClient,
+		GitHub:             githubClient,
 		Gerrit:             gerritClient,
 		CloudBuild:         cloudBuildClient,
 		SendMail:           mailFunc,

@@ -32,7 +32,7 @@ All users will be added as reviewers for automatically generated CLs.`,
 
 // ReleaseGoplsTasks provides workflow definitions and tasks for releasing gopls.
 type ReleaseGoplsTasks struct {
-	Github             GitHubClientInterface
+	GitHub             GitHubClientInterface
 	Gerrit             GerritClient
 	CloudBuild         CloudBuildClient
 	SendMail           func(*wf.TaskContext, MailHeader, MailContent) error
@@ -159,19 +159,19 @@ func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, release
 	versionString := release.String()
 	milestoneName := fmt.Sprintf("gopls/%s", versionString)
 	// All milestones and issues resides under go repo.
-	milestoneID, err := r.Github.FetchMilestone(ctx, "golang", "go", milestoneName, false)
+	milestoneID, err := r.GitHub.FetchMilestone(ctx, "golang", "go", milestoneName, false)
 	if err != nil {
 		return 0, err
 	}
 	ctx.Printf("found release milestone %v", milestoneID)
-	issues, err := r.Github.FetchMilestoneIssues(ctx, "golang", "go", milestoneID)
+	issues, err := r.GitHub.FetchMilestoneIssues(ctx, "golang", "go", milestoneID)
 	if err != nil {
 		return 0, err
 	}
 
 	title := fmt.Sprintf("x/tools/gopls: release version %s", versionString)
 	for id := range issues {
-		issue, _, err := r.Github.GetIssue(ctx, "golang", "go", id)
+		issue, _, err := r.GitHub.GetIssue(ctx, "golang", "go", id)
 		if err != nil {
 			return 0, err
 		}
@@ -205,7 +205,7 @@ func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, release
 	if err != nil {
 		return 0, fmt.Errorf("failed to find the coordinator %q", coordinators[0])
 	}
-	issue, _, err := r.Github.CreateIssue(ctx, "golang", "go", &github.IssueRequest{
+	issue, _, err := r.GitHub.CreateIssue(ctx, "golang", "go", &github.IssueRequest{
 		Title:     github.String(title),
 		Body:      github.String(content),
 		Labels:    &[]string{"gopls", "Tools"},
@@ -654,6 +654,7 @@ func (r *ReleaseGoplsTasks) NewReleaseDefinition() *wf.Definition {
 	vscodeGoChange := wf.Task4(wd, "update gopls settings in vscode-go", r.updateVSCodeGoGoplsSetting, coordinators, issue, release, wf.Const(""), wf.After(tagged))
 	_ = wf.Task1(wd, "await gopls settings update CLs submission in vscode-go", clAwaiter{r.Gerrit}.awaitSubmission, vscodeGoChange)
 
+	_ = wf.Action1(wd, "create GitHub release", r.createGitHubRelease, release, wf.After(tagged))
 	return wd
 }
 
@@ -886,6 +887,30 @@ go mod tidy -compat=1.19
 
 	ctx.Printf("creating auto-submit change under master branch in x/tools repo.")
 	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changed)
+}
+
+// createGitHubRelease creates a new release on GitHub. It constructs the
+// release body by linking to the official release notes on go.dev.
+func (r *ReleaseGoplsTasks) createGitHubRelease(ctx *wf.TaskContext, release releaseVersion) error {
+	version := release.String()
+	tagName := fmt.Sprintf("gopls/%s", version)
+	body := fmt.Sprintf("See full release notes: https://go.dev/gopls/release/%s", version)
+
+	ctx.DisableRetries()
+	_, err := r.GitHub.CreateRelease(ctx, "golang", "tools", &github.RepositoryRelease{
+		TagName:              github.Ptr(tagName),
+		Name:                 github.Ptr(fmt.Sprintf("gopls %s", version)),
+		Body:                 github.Ptr(body), // body is pre-pended to the automatically generated release notes
+		Prerelease:           github.Ptr(false),
+		Draft:                github.Ptr(false), // publish immediately instead of creating a draft
+		GenerateReleaseNotes: github.Ptr(true),  // automatically generates contributor list
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create GitHub release: %w", err)
+	}
+
+	ctx.Printf("Published release %s", tagName)
+	return nil
 }
 
 // executeAndMonitorChange runs the specified script on the designated branch,

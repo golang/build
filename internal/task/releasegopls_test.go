@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -436,7 +437,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 		name       string
 		version    string
 		create     bool
-		fakeGithub FakeGitHub
+		fakeGitHub FakeGitHub
 		wantErr    bool
 		wantIssue  int64
 	}{
@@ -451,7 +452,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			name:    "irrelevant milestone exist",
 			version: "v0.16.2",
 			create:  true,
-			fakeGithub: FakeGitHub{
+			fakeGitHub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.1"},
 			},
 			wantErr:   true,
@@ -461,7 +462,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			name:    "milestone exist, issue is missing, create true, workflow should create this issue",
 			version: "v0.16.2",
 			create:  true,
-			fakeGithub: FakeGitHub{
+			fakeGitHub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
 			},
 			wantErr:   false,
@@ -471,7 +472,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			name:    "milestone exist, issue is missing, create false, workflow error out",
 			version: "v0.16.2",
 			create:  false,
-			fakeGithub: FakeGitHub{
+			fakeGitHub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
 			},
 			wantErr:   true,
@@ -481,7 +482,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			name:    "milestone exist, issue exist, create true, workflow should reuse the issue",
 			version: "v0.16.2",
 			create:  true,
-			fakeGithub: FakeGitHub{
+			fakeGitHub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
 				Issues:     map[int]*github.Issue{2: {Number: github.Int(2), Title: github.String("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			},
@@ -492,7 +493,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			name:    "milestone exist, issue exist, create false, workflow should reuse the issue",
 			version: "v0.16.2",
 			create:  false,
-			fakeGithub: FakeGitHub{
+			fakeGitHub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
 				Issues:     map[int]*github.Issue{2: {Number: github.Int(2), Title: github.String("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			},
@@ -504,7 +505,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			tasks := &ReleaseGoplsTasks{
-				Github: &tc.fakeGithub,
+				GitHub: &tc.fakeGitHub,
 			}
 
 			release, _, ok := parseVersion(tc.version)
@@ -717,7 +718,7 @@ esac`, tc.wantVersion)
 			tasks := &ReleaseGoplsTasks{
 				Gerrit:     gerrit,
 				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
-				Github: &FakeGitHub{
+				GitHub: &FakeGitHub{
 					Milestones: map[int]string{
 						1: fmt.Sprintf("gopls/%s", tc.release.String()),
 					},
@@ -1228,7 +1229,7 @@ esac
 			tasks := &ReleaseGoplsTasks{
 				Gerrit:     gerrit,
 				CloudBuild: NewFakeCloudBuild(t, gerrit, "", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
-				Github: &FakeGitHub{
+				GitHub: &FakeGitHub{
 					Milestones: map[int]string{
 						1: fmt.Sprintf("gopls/%s", tc.release),
 					},
@@ -1376,6 +1377,22 @@ esac
 				}
 				if string(got) != check.want {
 					t.Errorf("Content of %q = %q, want %q", check.path, got, check.want)
+				}
+			}
+
+			// Verify that a GitHub release was created.
+			fakeGitHub := tasks.GitHub.(*FakeGitHub)
+			if len(fakeGitHub.Releases) != 1 {
+				t.Errorf("created %d GitHub releases, want 1", len(fakeGitHub.Releases))
+			} else {
+				got := fakeGitHub.Releases[0]
+				wantTag := fmt.Sprintf("gopls/%s", tc.release)
+				if got.GetTagName() != wantTag {
+					t.Errorf("created release tag %q, want %q", got.GetTagName(), wantTag)
+				}
+				wantBody := fmt.Sprintf("See full release notes: https://go.dev/gopls/release/%s", tc.release)
+				if !strings.Contains(got.GetBody(), wantBody) {
+					t.Errorf("release body %q does not contain release notes", got.GetBody())
 				}
 			}
 
