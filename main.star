@@ -1813,6 +1813,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     # Determine if we should be sharding tests, and how many shards.
     compile_only = "compile_only" in base_props
     misccompile = "misccompile" in run_mods
+    longtest = "longtest" in run_mods
     perfmode = "perf_mode" in base_props
     if compile_only:
         if misccompile:
@@ -1827,7 +1828,10 @@ def define_builder(env, project, go_branch_short, builder_type):
     elif perfmode:
         test_shards = 1
     elif project == "go" and not capacity_constrained:
-        test_shards = 4
+        if longtest:
+            test_shards = 8
+        else:
+            test_shards = 4
     else:
         test_shards = 1
 
