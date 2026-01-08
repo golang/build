@@ -448,7 +448,6 @@ BUILDER_TYPES = [
     "linux-amd64-boringcrypto",
     "linux-amd64-clang15",
     "linux-amd64-goamd64v3",
-    "linux-amd64-nogreenteagc",
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-longtest-noswissmap",
@@ -457,10 +456,12 @@ BUILDER_TYPES = [
     "linux-amd64-msan-clang15",
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
+    "linux-amd64-nogreenteagc",
     "linux-amd64-noopt",
+    "linux-amd64-nosizespecializedmalloc",
     "linux-amd64-race",
     "linux-amd64-racecompile",
-    "linux-amd64-nosizespecializedmalloc",
+    "linux-amd64-runtimefreegc",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
     "linux-amd64-tiplang",
@@ -1034,18 +1035,6 @@ RUN_MODS = dict(
         enabled = define_for_postsubmit(["go"]),
     ),
 
-    # Build and test with GOEXPERIMENT=nogreenteagc.
-    nogreenteagc = make_run_mod(
-        add_env = {"GOEXPERIMENT": "nogreenteagc"},
-        enabled = define_for_postsubmit(["go"], ["gotip"]),
-    ),
-
-    # Build and test with GOEXPERIMENT=nosizespecializedmalloc.
-    nosizespecializedmalloc = make_run_mod(
-        add_env = {"GOEXPERIMENT": "nosizespecializedmalloc"},
-        enabled = define_for_postsubmit(["go"], ["gotip"]),
-    ),
-
     # Run a larger set of tests.
     longtest = make_run_mod(
         add_props = {"long_test": True},
@@ -1099,10 +1088,31 @@ RUN_MODS = dict(
         enabled = define_for_postsubmit(projects_of_type([PT.CORE, PT.LIBRARY])),
     ),
 
+    # Build and test with GOEXPERIMENT=nogreenteagc.
+    nogreenteagc = make_run_mod(
+        add_env = {"GOEXPERIMENT": "nogreenteagc"},
+        enabled = define_for_postsubmit(["go"], ["gotip"]),
+    ),
+
     # Build and test with optimizations disabled.
     noopt = make_run_mod(
         add_env = {"GO_GCFLAGS": "-N -l"},
         enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Build and test with GOEXPERIMENT=nosizespecializedmalloc.
+    nosizespecializedmalloc = make_run_mod(
+        add_env = {"GOEXPERIMENT": "nosizespecializedmalloc"},
+        enabled = define_for_postsubmit(["go"], ["gotip"]),
+    ),
+
+    # Build and test with the swissmap GOEXPERIMENT disabled.
+    #
+    # GOEXPERIMENT=swissmap was deleted in Go 1.26. This can be deleted when Go
+    # 1.25 is no longer supported.
+    noswissmap = make_run_mod(
+        add_env = {"GOEXPERIMENT": "noswissmap"},
+        enabled = define_for_go_range("go1.24", "go1.25", presubmit = False),
     ),
 
     # Run performance tests with PGO against the oldest stable Go release.
@@ -1191,6 +1201,18 @@ RUN_MODS = dict(
         enabled = define_for_postsubmit(["go"]),
     ),
 
+    # Build and test with GOEXPERIMENT=runtimefreegc.
+    #
+    # This is an experiment for new functionality in 2026.
+    # This builder is useful while the experiment is still
+    # in progress, but should be removed if nobody else is
+    # working on it, or we remove the experiment. We'll
+    # re-evaluate the need for this builder mid-year.
+    runtimefreegc = make_run_mod(
+        add_env = {"GOEXPERIMENT": "runtimefreegc"},
+        enabled = define_for_postsubmit(["go"], ["gotip"]),
+    ),
+
     # Build and test with GO386=softfloat, which makes the compiler emit non-floating-point
     # CPU instructions to perform floating point operations.
     softfloat = make_run_mod(
@@ -1210,15 +1232,6 @@ RUN_MODS = dict(
     staticlockranking = make_run_mod(
         add_env = {"GOEXPERIMENT": "staticlockranking"},
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
-    ),
-
-    # Build and test with the swissmap GOEXPERIMENT disabled.
-    #
-    # GOEXPERIMENT=swissmap was deleted in Go 1.26. This can be deleted when Go
-    # 1.25 is no longer supported.
-    noswissmap = make_run_mod(
-        add_env = {"GOEXPERIMENT": "noswissmap"},
-        enabled = define_for_go_range("go1.24", "go1.25", presubmit = False),
     ),
 
     # Build and test with go.mod upgraded to the latest version.
