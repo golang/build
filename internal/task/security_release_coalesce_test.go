@@ -123,12 +123,16 @@ func (c *securityVersionClient) ReadBranchHead(_ context.Context, project, branc
 }
 
 func TestSecurityReleaseCoalesceTask(t *testing.T) {
-	t.Run("minors only", func(t *testing.T) {
-		testSecurityReleaseCoalesceTask(t, false)
-	})
-	t.Run("minors with RC", func(t *testing.T) {
-		testSecurityReleaseCoalesceTask(t, true)
-	})
+	for _, useMetadata := range []bool{false, true} {
+		t.Run(fmt.Sprintf("withMetadata=%v", useMetadata), func(t *testing.T) {
+			t.Run("minors only", func(t *testing.T) {
+				testSecurityReleaseCoalesceTask(t, false, useMetadata)
+			})
+			t.Run("minors with RC", func(t *testing.T) {
+				testSecurityReleaseCoalesceTask(t, true, useMetadata)
+			})
+		})
+	}
 }
 
 const milestoneYAML = `buganizer_id: 100001
@@ -142,7 +146,7 @@ security_patches:
         - go1.3.1
         - go1.4.1`
 
-func testSecurityReleaseCoalesceTask(t *testing.T, withNextReleaseBranch bool) {
+func testSecurityReleaseCoalesceTask(t *testing.T, withNextReleaseBranch bool, withMetadata bool) {
 	publicTags := []string{"go1.3", "go1.3.1", "go1.4", "go1.4.1"}
 	publicBranches := []string{"release-branch.go1.3", "release-branch.go1.4"}
 	if withNextReleaseBranch {
@@ -194,14 +198,24 @@ other body`,
 		privGoRepo.Branch("release-branch.go1.5", head)
 	}
 
-	head = smRepo.History()[0]
-	smRepo.Branch("main", head)
-	smRepo.CommitOnBranch("main", map[string]string{path.Join("data", "milestones", "100001.yaml"): milestoneYAML})
+	if withMetadata {
+		head = smRepo.History()[0]
+		smRepo.Branch("main", head)
+		smRepo.CommitOnBranch("main", map[string]string{path.Join("data", "milestones", "100001.yaml"): milestoneYAML})
+	}
 
-	wd := task.NewDefinition()
-	w, err := wf.Start(wd, map[string]any{
-		"Release Milestone": "100001",
-	})
+	wd := task.NewDefinition(withMetadata)
+	var params map[string]any
+	if withMetadata {
+		params = map[string]any{
+			"Release Milestone": "100001",
+		}
+	} else {
+		params = map[string]any{
+			"Security Patch CL Numbers": []string{"1234", "5678"},
+		}
+	}
+	w, err := wf.Start(wd, params)
 	if err != nil {
 		t.Fatal(err)
 	}
