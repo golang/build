@@ -1721,6 +1721,12 @@ def define_builder(env, project, go_branch_short, builder_type):
     if project == "net" and go_branch_short == "go1.24":
         base_props["env"]["GOEXPERIMENT"] = "synctest"
 
+    # Increase the timeout for vscode-go tests to accommodate significant setup
+    # overhead, including building Docker images and initializing the VS Code
+    # extension host.
+    if project == "vscode-go":
+        base_props["test_timeout_scale"] = 2
+
     for mod in run_mods:
         if not mod in RUN_MODS:
             fail("unknown run mod: %s" % mod)
