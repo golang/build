@@ -28,7 +28,7 @@ type Change struct {
 	// spot check for something that looks like test files in the changed file list.
 }
 
-// ParseCommitMessage parses the commit message, returning an error if there 
+// ParseCommitMessage parses the commit message, returning an error if there
 // isn't a blank second line or if there aren't footers after the body.
 func ParseCommitMessage(repo string, text string) (Change, error) {
 	change := Change{Repo: repo}
