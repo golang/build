@@ -351,7 +351,7 @@ body {
 	<p>Reviews are automatically assigned to primary owners.</p>
 	<p>Alter these entries at
 	<a href="https://go.googlesource.com/build/+/master/devapp/owners"
-		target="_blank" rel="noopener">golang.org/x/build/devapp/owners</a></p>
+		target="_blank" rel="noopener">golang.org/x/build/devapp/owners</a>.</p>
 </header>
 <main>
 <div class="table-header">

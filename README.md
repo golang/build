@@ -111,12 +111,12 @@ The main components of the Go build system are:
 
 
 * The Go **gopherbot** bot logic runs on GKE. The code is in
-  [cmd/gopherbot](https://dev.golang.org/dir/build/cmd/gopherbot). It
+  [cmd/gopherbot/](https://dev.golang.org/dir/build/cmd/gopherbot). It
   depends on maintner via the godata package.
 
 
 * The **developer dashboard** at https://dev.golang.org/ runs on GKE.
-  Its code is in [devapp/](https://dev.golang.org/dir/build/devapp/).
+  Its code is in [cmd/devapp/](https://dev.golang.org/dir/build/cmd/devapp/).
   It also depends on maintner via the godata package.
 
 

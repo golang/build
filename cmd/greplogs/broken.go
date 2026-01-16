@@ -39,7 +39,7 @@ func listBrokenBuilders() (broken []string, err error) {
 	// 	   x/build/dashboard package, not in external configuration files.)
 	//
 	// 	3. Avoid the need to redeploy a production x/build/cmd/coordinator or
-	// 	   x/build/devapp to pick up changes. (A user triaging test failures might
+	// 	   x/build/cmd/devapp to pick up changes. (A user triaging test failures might
 	// 	   not have access to deploy the coordinator, or might not want to disrupt
 	// 	   running tests or active gomotes by pushing it.)
 	//

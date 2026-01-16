@@ -19,7 +19,7 @@ RUN go mod download
 
 COPY . /go/src/golang.org/x/build/
 # Install binary to /go/bin:
-RUN go install golang.org/x/build/devapp
+RUN go install golang.org/x/build/cmd/devapp
 
 FROM debian:trixie
 LABEL maintainer="golang-dev@googlegroups.com"
@@ -38,6 +38,6 @@ RUN apt-get update && apt-get install -y \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /go/bin/devapp /
-COPY devapp/static /static
-COPY devapp/templates /templates
+COPY cmd/devapp/static /static
+COPY cmd/devapp/templates /templates
 ENTRYPOINT ["/devapp"]

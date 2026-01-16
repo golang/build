@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	devapp "golang.org/x/build/devapp"
+	devapp "golang.org/x/build/cmd/devapp"
 )
 
 func TestParsePrefixedChangeTitle(t *testing.T) {
