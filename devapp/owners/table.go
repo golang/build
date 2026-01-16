@@ -1059,10 +1059,6 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{adonovan},
 		Secondary: []Owner{toolsTeam},
 	},
-	"tools/internal/apidiff": {
-		Primary:   []Owner{jba},
-		Secondary: []Owner{matloob},
-	},
 	"tools/internal/fastwalk": {
 		Primary: []Owner{toolsTeam},
 	},
