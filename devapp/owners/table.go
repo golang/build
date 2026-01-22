@@ -405,7 +405,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/go/types": {
-		Primary: []Owner{gri, findleyr},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{findleyr},
 	},
 	"go/src/hash": {
 		Primary: []Owner{securityTeam},
@@ -670,7 +671,8 @@ var entries = map[string]*Entry{
 	},
 	"go/src/internal/types": {
 		// Same as go/types.
-		Primary: []Owner{gri, findleyr},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{findleyr},
 	},
 	"go/src/internal/xcoff": {
 		Primary: []Owner{compilerTeam},
@@ -1029,12 +1031,12 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/gcexportdata": {
-		Primary:   []Owner{gri, findleyr},
-		Secondary: []Owner{toolsTeam},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{toolsTeam, findleyr},
 	},
 	"tools/go/internal/gcimporter": {
-		Primary:   []Owner{gri, findleyr},
-		Secondary: []Owner{toolsTeam},
+		Primary:   []Owner{gri},
+		Secondary: []Owner{toolsTeam, findleyr},
 	},
 	"tools/go/internal/packagesdriver": {
 		Primary:   []Owner{adonovan},
@@ -1049,8 +1051,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{matloob},
 	},
 	"tools/go/ssa": {
-		Primary:   []Owner{adonovan, findleyr},
-		Secondary: []Owner{toolsTeam},
+		Primary:   []Owner{adonovan},
+		Secondary: []Owner{toolsTeam, findleyr},
 	},
 	"tools/imports": {
 		Primary: []Owner{toolsTeam},
@@ -1072,16 +1074,13 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/jsonrpc2": {
-		Primary:   []Owner{findleyr},
-		Secondary: []Owner{adonovan, jba},
+		Secondary: []Owner{adonovan, jba, findleyr},
 	},
 	"tools/internal/tool": {
-		Primary:   []Owner{findleyr},
-		Secondary: []Owner{toolsTeam},
+		Secondary: []Owner{toolsTeam, findleyr},
 	},
 	"tools/internal/xcontext": {
-		Primary:   []Owner{findleyr},
-		Secondary: []Owner{toolsTeam},
+		Secondary: []Owner{toolsTeam, findleyr},
 	},
 	"tools/playground": {
 		Primary: []Owner{toolsTeam},
@@ -1100,7 +1099,6 @@ var entries = map[string]*Entry{
 		Primary: []Owner{pkgsiteTeam},
 	},
 	"playground": {
-		Primary:   []Owner{findleyr},
 		Secondary: []Owner{toolsTeam},
 	},
 	"vuln": {
@@ -1186,5 +1184,5 @@ var wasmOwners = []Owner{neelance, cherryyz}
 
 var modProxyOwners = &Entry{
 	Primary:   []Owner{toolsTeam},
-	Secondary: []Owner{samthanawalla, findleyr},
+	Secondary: []Owner{samthanawalla},
 }
