@@ -1074,12 +1074,15 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/jsonrpc2": {
-		Secondary: []Owner{adonovan, jba, findleyr},
+		Primary:   []Owner{adonovan},
+		Secondary: []Owner{jba, findleyr},
 	},
 	"tools/internal/tool": {
+		Primary:   []Owner{adonovan},
 		Secondary: []Owner{toolsTeam, findleyr},
 	},
 	"tools/internal/xcontext": {
+		Primary:   []Owner{adonovan},
 		Secondary: []Owner{toolsTeam, findleyr},
 	},
 	"tools/playground": {
