@@ -2079,20 +2079,12 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out old OS versions from new branches.
-    if os == "darwin" and suffix == "11" and go_branch_short not in ["go1.23", "go1.24"]:
+    if os == "darwin" and suffix == "11" and go_branch_short not in ["go1.24"]:
         # Go 1.24 is last to support macOS 11. See go.dev/doc/go1.24#darwin.
         return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out new ports on old release branches.
-    if os == "freebsd" and arch == "amd64" and go_branch_short in ["go1.23"]:
-        freebsd_version = suffix
-        if freebsd_version == "":
-            freebsd_version = DEFAULT_HOST_SUFFIX[host_type]
-        if "14." in freebsd_version:
-            # The 14.* freebsd/amd64 LUCI builders need fixes that aren't available on old branches.
-            # Just disable the builder on these branches.
-            return False, PRESUBMIT.DISABLED, False, []
-    if os == "freebsd" and arch == "amd64" and "race" in run_mods and go_branch_short in ["go1.23", "go1.24"]:
+    if os == "freebsd" and arch == "amd64" and "race" in run_mods and go_branch_short in ["go1.24"]:
         # The freebsd-amd64-race LUCI builders may need fixes that aren't available on old branches.
         return False, PRESUBMIT.DISABLED, False, []
 
