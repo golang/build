@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/oauth2"
 )
 
 type GerritClient interface {
@@ -107,8 +108,9 @@ type DestructiveGerritClient interface {
 }
 
 type RealGerritClient struct {
-	Gitiles string // Gitiles server URL, without trailing slash. For example, "https://go.googlesource.com".
-	Client  *gerrit.Client
+	Gitiles     string             // Gitiles server URL, without trailing slash. For example, "https://go.googlesource.com".
+	GitilesAuth oauth2.TokenSource // Token source to use for authenticating with the Gitiles server. Optional.
+	Client      *gerrit.Client
 }
 
 func (c *RealGerritClient) GitilesURL() string {
@@ -330,17 +332,24 @@ func (c *RealGerritClient) ReadDir(ctx context.Context, project, commit, dir str
 	var resp struct {
 		Entries []struct{ Name string }
 	}
-	err := fetchGitilesJSON(ctx, c.Gitiles+"/"+url.PathEscape(project)+"/+/"+url.PathEscape(commit)+"/"+url.PathEscape(dir)+"?format=JSON", &resp)
+	err := fetchGitilesJSON(ctx, c.GitilesAuth, c.Gitiles+"/"+url.PathEscape(project)+"/+/"+url.PathEscape(commit)+"/"+url.PathEscape(dir)+"?format=JSON", &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Entries, nil
 }
 
-func fetchGitilesJSON(ctx context.Context, url string, v any) error {
+func fetchGitilesJSON(ctx context.Context, auth oauth2.TokenSource, url string, v any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
+	}
+	if auth != nil {
+		t, err := auth.Token()
+		if err != nil {
+			return err
+		}
+		t.SetAuthHeader(req)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

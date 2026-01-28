@@ -144,16 +144,16 @@ func main() {
 		log.Fatalf("reading GCP credentials: %v", err)
 	}
 	gerritClient := &task.RealGerritClient{
-		Gitiles: "https://go.googlesource.com",
-		Client:  gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
+		Gitiles: "https://go.googlesource.com", GitilesAuth: creds.TokenSource,
+		Client: gerrit.NewClient("https://go-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
 	privateGerritClient := &task.RealGerritClient{
-		Gitiles: "https://go-internal.googlesource.com",
-		Client:  gerrit.NewClient("https://go-internal-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
+		Gitiles: "https://go-internal.googlesource.com", GitilesAuth: creds.TokenSource,
+		Client: gerrit.NewClient("https://go-internal-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
 	modproxyTestGerritClient := &task.RealGerritClient{
-		Gitiles: "https://golang-modproxy-test.googlesource.com",
-		Client:  gerrit.NewClient("https://golang-modproxy-test-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
+		Gitiles: "https://golang-modproxy-test.googlesource.com", GitilesAuth: creds.TokenSource,
+		Client: gerrit.NewClient("https://golang-modproxy-test-review.googlesource.com", gerrit.OAuth2Auth(creds.TokenSource)),
 	}
 	gitClient := &task.Git{}
 	gitClient.UseOAuth2Auth(creds.TokenSource)
