@@ -269,6 +269,7 @@ func (t AnnounceMailTasks) PreAnnounceXFix(ctx *workflow.TaskContext, module str
 	return t.generateAndSendAnnouncementMail(ctx, r)
 }
 
+func CoordinatorEmails(users []string) ([]string, error) { return coordinatorEmails(users) }
 func coordinatorEmails(users []string) ([]string, error) {
 	return mapCoordinators(users, func(p *gophers.Person) string {
 		return p.Gerrit

@@ -32,6 +32,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	pb "go.chromium.org/luci/buildbucket/proto"
 	"golang.org/x/build/dashboard"
+	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/gcsfs"
 	"golang.org/x/build/internal/installer/darwinpkg"
 	"golang.org/x/build/internal/installer/windowsmsi"
@@ -464,7 +465,7 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 	versionFile := wf.Task2(wd, "Generate VERSION file", version.GenerateVersionFile, nextVersion, timestamp)
 	wf.Output(wd, "VERSION file", versionFile)
 	head := wf.Task1(wd, "Read branch head", version.ReadBranchHead, branchVal)
-	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, head, wf.Const(""), versionFile)
+	srcSpec := wf.Task3(wd, "Select source spec", build.getGitSourceForcePublicOnly, branchVal, head, versionFile)
 	source, artifacts, mods := build.addBuildTasks(wd, major, kind, nextVersion, timestamp, srcSpec)
 	wf.Output(wd, "Source", source)
 	wf.Output(wd, "Artifacts", artifacts)
@@ -529,30 +530,194 @@ func addSingleReleaseWorkflow(
 	versionFile := wf.Task2(wd, "Generate VERSION file", version.GenerateVersionFile, nextVersion, timestamp)
 	wf.Output(wd, "VERSION file", versionFile)
 	milestones := wf.Task2(wd, "Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
-	checked := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
+	checkedStartingBlockingIssues := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
 
-	securityRef := wf.Param(wd, wf.ParamDef[string]{
-		Name: "Ref from the private repository to build from (optional)",
-		Doc: `This optional parameter controls where to build from.
+	// Look up the prepared security commit for this release, if any.
+	securityCommit := wf.Task1(wd, "Read security ref", build.readSecurityRef, nextVersion)
+	confirmPrivateSecurityFixes := wf.Action4(wd, "Confirm PRIVATE-track security CLs", func(ctx *wf.TaskContext,
+		version, targetBranch, startingHead, securityCommit string,
+	) error {
+		if securityCommit == "" {
+			var summary strings.Builder
+			fmt.Fprintf(&summary, "No PRIVATE-track security fix CLs. Will build from public %s as is.\n", targetBranch)
 
-The default workflow behavior, if this value is the empty string,
-is to build from the head of the corresponding release branch
-in the public Go repository (go.googlesource.com/go).
-This is intended for releases with no PRIVATE-track security fixes.
+			ctx.Printf("\n\n%s\nApprove this task if that is expected.", &summary)
+			return build.ApproveAction(ctx)
+		}
 
-If a non-empty string is entered, it must correspond to a ref
-in the private repository (go-internal.googlesource.com/go).
-The ref can be a branch name (e.g., "private-release-branch.go1.23.4")
-or a commit hash (e.g., "8890e8372e12d3b595e0e8fec29f8d7783ab2daf").
-This is intended for releases with 1+ PRIVATE-track security fixes.`,
-	})
-	securityCommit := wf.Task1(wd, "Read security ref", build.readSecurityRef, securityRef)
-	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, startingHead, securityCommit, versionFile, wf.After(checked))
+		if kind == task.KindBeta {
+			// It's not viable to include PRIVATE-track security fixes in beta releases,
+			// not as long as they're built from the main development branch and that branch
+			// can't be frozen for the beta release. But it doesn't matter since we don't do
+			// beta releases now anyway.
+			return fmt.Errorf("PRIVATE-track security CLs for beta release kind is not supported")
+		} else if !strings.HasPrefix(targetBranch, "release-branch.go1.") {
+			return fmt.Errorf("upstreaming PRIVATE-track security CLs to branch %q is not supported", targetBranch)
+		}
+
+		// Fetch a list of security commits, run some checks on it and present a summary.
+		commits, err := build.PrivateGerritClient.ListCommits(ctx, build.PrivateGerritProject, securityCommit, startingHead)
+		if err != nil {
+			return err
+		}
+		if len(commits) == 0 {
+			return fmt.Errorf("a security commit was specified, but the list of commits to be upstreamed is empty")
+		}
+		if bottomSecurityCL := commits[len(commits)-1]; len(bottomSecurityCL.Parents) != 1 {
+			return fmt.Errorf("bottom-most security commit %q has %d parents, want 1 parent", bottomSecurityCL.Commit, len(bottomSecurityCL.Parents))
+		} else if bottomSecurityCL.Parents[0] != startingHead {
+			return fmt.Errorf("bottom-most security commit %q's parent is %q, want %q", bottomSecurityCL.Commit, bottomSecurityCL.Parents[0], startingHead)
+		}
+		var summary strings.Builder
+		fmt.Fprintf(&summary, "Will build with %d security fix CL(s) on top of public %s:\n\n", len(commits), targetBranch)
+		for _, c := range commits {
+			fmt.Fprintf(&summary, "• %.8s %s\n", c.Commit, c.Title())
+		}
+
+		ctx.Printf("\n\n%s\nApprove this task if that is expected.", &summary)
+		return build.ApproveAction(ctx)
+	}, nextVersion, branchVal, startingHead, securityCommit)
+	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, startingHead, securityCommit, versionFile, wf.After(checkedStartingBlockingIssues), wf.After(confirmPrivateSecurityFixes))
 
 	// Build, test, and sign release.
 	source, signedAndTestedArtifacts, modules := build.addBuildTasks(wd, major, kind, nextVersion, timestamp, srcSpec)
+
+	// Wait for planned release day,
+	// then re-check release-blocking issues
+	// and upstream PRIVATE-track security fixes, if any.
 	waitReleaseApproval := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
-	okayToTagAndPublish := wf.Action3(wd, "Re-check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal, wf.After(waitReleaseApproval))
+	recheckedBlockingIssues := wf.Action3(wd, "Re-check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal, wf.After(waitReleaseApproval))
+	upstreamedPrivateSecurityCLs := wf.Task5(wd, "Publicize PRIVATE-track security fixes (if any)", func(ctx *wf.TaskContext,
+		version, targetBranch, startingHead, securityCommit string, reviewers []string,
+	) (changeIDs []string, _ error) {
+		if securityCommit == "" {
+			ctx.Printf("No PRIVATE-track security fix CLs to upstream.")
+			return nil, nil
+		}
+
+		// Detect and handle the unexpected case of either the public or internal release branches
+		// changing from the time the workflow was started.
+		if releaseDayPublicHead, err := build.GerritClient.ReadBranchHead(ctx, build.GerritProject, targetBranch); err != nil {
+			return nil, err
+		} else if releaseDayPublicHead != startingHead {
+			// Something is unexpected if the public release branch now doesn't match what it was
+			// when the workflow started. Whether or not it's possible to proceed depends on what
+			// exactly happened. For now handle this by refusing to proceed, but if we learn that
+			// it's worth handling this differently, we'll revisit this.
+			return nil, fmt.Errorf("head of public %q branch %q unexpectedly differs from head at workflow start %q", targetBranch, releaseDayPublicHead, startingHead)
+		}
+		internalBranch := fmt.Sprintf("internal-release-branch.%s", version)
+		if releaseDayPrivateHead, err := build.PrivateGerritClient.ReadBranchHead(ctx, build.PrivateGerritProject, internalBranch); err != nil {
+			return nil, err
+		} else if releaseDayPrivateHead != securityCommit {
+			// Something is unexpected if the internal release branch now doesn't match what it was
+			// when the workflow started. Whether or not it's possible to proceed depends on what
+			// exactly happened. For now handle this by refusing to proceed, but if we learn that
+			// it's worth handling this differently, we'll revisit this.
+			return nil, fmt.Errorf("head of private %q branch %q unexpectedly differs from head at workflow start %q", internalBranch, releaseDayPrivateHead, securityCommit)
+		}
+
+		/*
+			At this point we want to fetch the security commit and then upstream it to the public instance.
+			At a high-level what we're doing is:
+
+				git push {publicOrigin} {securityCommit}:refs/for/{targetBranch}
+
+			In practice we need to setup a temporary git repository that has securityCommit
+			available. It turns out not to be hard to use cherry-pick on a commit range to rewrite
+			the committer to be that of relui, so do that (it might be more clear and accurate,
+			and it also means no need to grant forgeCommitter permission to relui).
+			So the low-level git commands we run look like this:
+
+				git clone -b release-branch.go1.N https://go.googlesource.com/go
+				git fetch https://go-internal.googlesource.com/go internal-release-branch.go1.N.M
+				git cherry-pick {startingHead}..{securityCommit}
+				git push {publicOrigin} HEAD:refs/for/{targetBranch}%l=Auto-Submit+1,l=TryBot-Bypass+1,r=reviewer@golang.org
+
+			Finally we parse out the newly created CL numbers and return those to be awaited for.
+		*/
+		publicOrigin := build.GerritClient.GitRepoURL(build.GerritProject)
+		repo, err := build.Git.CloneBranch(ctx, publicOrigin, targetBranch)
+		if err != nil {
+			return nil, err
+		}
+		defer repo.Close()
+		ctx.Printf("cloned public repo")
+
+		privateOrigin, privateRef := build.PrivateGerritClient.GitRepoURL(build.PrivateGerritProject), "refs/heads/"+internalBranch
+		ctx.Printf("fetching %s from %s", privateRef, privateOrigin)
+		if _, err := repo.RunCommand(ctx, "fetch", privateOrigin, privateRef); err != nil {
+			return nil, err
+		}
+		ctx.Printf("fetched")
+		if _, err := repo.RunCommand(ctx, "cherry-pick", startingHead+".."+securityCommit); err != nil {
+			return nil, err
+		}
+		ctx.Printf("cherry-picked")
+		refspec := fmt.Sprintf("HEAD:refs/for/%s%%l=Auto-Submit+1,l=TryBot-Bypass+1", targetBranch)
+		reviewerEmails, err := task.CoordinatorEmails(reviewers)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range reviewerEmails {
+			refspec += ",r=" + r
+		}
+
+		// What's coming up next involves side-effects in external systems,
+		// so beyond this point of the task we want manual retries only, not automated ones.
+		ctx.DisableRetries()
+
+		ctx.Printf("pushing %s to %s", refspec, publicOrigin)
+		gitPushOutput, err := repo.RunGitPush(ctx, publicOrigin, refspec)
+		if err != nil {
+			return nil, err
+		}
+		ctx.Printf("git push output:\n%s\n", gitPushOutput)
+
+		// Extract the CL numbers from the output using a simple regexp.
+		re := regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/c\/go\/\+\/(\d+)`)
+		matches := re.FindAllSubmatch(gitPushOutput, -1)
+		if matches == nil {
+			return nil, fmt.Errorf("no matches for successful mail of CL in git push output:\n%s", gitPushOutput)
+		}
+		for i, match := range matches {
+			if len(match) != 2 {
+				return nil, fmt.Errorf("bad match %d for successful mail of CL in git push output:\n%s", i, gitPushOutput)
+			}
+			changeIDs = append(changeIDs, "go~"+string(match[1]))
+		}
+		ctx.Printf("Mailed %d changes to await for:", len(changeIDs))
+		for _, c := range changeIDs {
+			ctx.Printf("• %s", task.ChangeLink(c))
+		}
+
+		return changeIDs, nil
+	}, nextVersion, branchVal, startingHead, securityCommit, coordinators, wf.After(waitReleaseApproval), wf.After(recheckedBlockingIssues))
+	okayToTagAndPublish := wf.Action1(wd, "Wait for submission of upstreamed PRIVATE-track security CLs (if any)", func(ctx *wf.TaskContext, changeIDs []string) error {
+		if len(changeIDs) == 0 {
+			ctx.Printf("No CLs were necessary.")
+			return nil
+		}
+		ctx.Printf("Awaiting review/submit of %d changes.", len(changeIDs))
+		for _, c := range changeIDs {
+			ctx.Printf("• %s", task.ChangeLink(c))
+		}
+		_, err := task.AwaitCondition(ctx, time.Minute, func() (struct{}, bool, error) {
+			for _, c := range changeIDs {
+				_, submitted, err := build.GerritClient.Submitted(ctx, c, "")
+				if err != nil {
+					return struct{}{}, false, err
+				}
+				if !submitted {
+					// At least one CL hasn't been submitted yet.
+					return struct{}{}, false, nil
+				}
+			}
+			// All CLs submitted.
+			return struct{}{}, true, nil
+		})
+		return err
+	}, upstreamedPrivateSecurityCLs)
 
 	dlcl := wf.Task5(wd, "Mail DL CL", version.MailDLCL, wf.Const(major), kindVal, nextVersion, coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
 	dlclCommit := wf.Task2(wd, "Wait for DL CL submission", version.AwaitCL, dlcl, wf.Const(""))
@@ -599,8 +764,19 @@ This is intended for releases with 1+ PRIVATE-track security fixes.`,
 
 // sourceSpec encapsulates all the information that describes a source archive.
 type sourceSpec struct {
+	// GitilesURL, Project, Revision specify where the source archive comes from.
+	// It either points to the public Gerrit host ('go'), a project in it ('go'), and a revision in it,
+	// or to the internal Gerrit host ('go-internal'), a project in it ('go'), and a revision in it.
+	//
+	// Branch does not specify where the source archive came exactly from but rather
+	// records the corresponding public branch, such as "release-branch.go1.nn".
+	// Even when the revision in go-internal is located on an internal release branch, the value
+	// of Branch is still the public branch where the revision will eventually be upstreamed to.
+	// Its value is used when triggering LUCI builders, and golangbuild currently assumes the branch
+	// name is one of the public variants (e.g., "master", "release-branch.go1.nn", and so on).
 	GitilesURL, Project, Branch, Revision string
-	VersionFile                           string
+	// VersionFile specifies content for the VERSION file at the repository root.
+	VersionFile string
 }
 
 func (s *sourceSpec) ArchiveURL() string {
@@ -710,6 +886,7 @@ type BuildReleaseTasks struct {
 	GerritHTTPClient         *http.Client // GerritHTTPClient is an HTTP client that authenticates to Gerrit instances. (Both public and private.)
 	PrivateGerritClient      task.GerritClient
 	PrivateGerritProject     string
+	Git                      *task.Git
 	GCSClient                *storage.Client
 	ScratchFS                *task.ScratchFS
 	SignedURL                string // SignedURL is a gs:// or file:// URL, no trailing slash.
@@ -726,22 +903,34 @@ type BuildReleaseTasks struct {
 	ApproveAction            func(*wf.TaskContext) error
 }
 
-var commitRE = regexp.MustCompile(`[a-f0-9]{40}`)
-
-func (b *BuildReleaseTasks) readSecurityRef(ctx *wf.TaskContext, ref string) (string, error) {
-	if ref == "" {
+// readSecurityRef reads the head of the internal release branch that corresponds
+// to the specified Go version. If the branch doesn't exist (as is the case when
+// there aren't PRIVATE-track security fixes for a release), an empty string and
+// no error is returned.
+func (b *BuildReleaseTasks) readSecurityRef(ctx *wf.TaskContext, version string) (string, error) {
+	if b.PrivateGerritClient == nil || b.PrivateGerritProject == "" {
+		ctx.Printf("Private Gerrit fields are unset, defaulting to non-security release only.")
 		return "", nil
 	}
-	if commitRE.MatchString(ref) {
-		return ref, nil
-	}
-	commit, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, ref)
-	if err != nil {
-		return "", fmt.Errorf("%q doesn't appear to be a commit hash, but resolving it as a branch failed: %v", ref, err)
+
+	// Read the internal release branch prepared by the 'Prepare internal security release branches'
+	// workflow for this version, if any.
+	internalBranch := fmt.Sprintf("internal-release-branch.%s", version)
+	commit, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, internalBranch)
+	if errors.Is(err, gerrit.ErrResourceNotExist) {
+		// The internal release branch doesn't exist.
+		//
+		// This is okay. It happens when there are no PRIVATE-track security fixes for this release,
+		// and the public release branch is used as the source. Proceed without a security commit.
+		return "", nil
+	} else if err != nil {
+		return "", fmt.Errorf("error reading private Gerrit project's branch %q head: %v", internalBranch, err)
 	}
 	return commit, nil
 }
 
+// getGitSource selects a source spec from the provided inputs.
+// If securityCommit is a non-empty string, it takes precedence over the public commit.
 func (b *BuildReleaseTasks) getGitSource(ctx *wf.TaskContext, branch, commit, securityCommit, versionFile string) (sourceSpec, error) {
 	client, project, rev := b.GerritClient, b.GerritProject, commit
 	if securityCommit != "" {
@@ -756,15 +945,27 @@ func (b *BuildReleaseTasks) getGitSource(ctx *wf.TaskContext, branch, commit, se
 	}, nil
 }
 
+// getGitSourceForcePublicOnly is like getGitSource, except it forcibly always uses the public commit.
+func (b *BuildReleaseTasks) getGitSourceForcePublicOnly(ctx *wf.TaskContext, branch, commit, versionFile string) (sourceSpec, error) {
+	client, project, rev := b.GerritClient, b.GerritProject, commit
+	return sourceSpec{
+		GitilesURL:  client.GitilesURL(),
+		Project:     project,
+		Branch:      branch,
+		Revision:    rev,
+		VersionFile: versionFile,
+	}, nil
+}
+
 func (b *BuildReleaseTasks) buildSource(ctx *wf.TaskContext, source sourceSpec) (artifact, error) {
 	resp, err := b.GerritHTTPClient.Get(source.ArchiveURL())
 	if err != nil {
 		return artifact{}, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return artifact{}, fmt.Errorf("failed to fetch %q: %v", source.ArchiveURL(), resp.Status)
 	}
-	defer resp.Body.Close()
 	return b.runBuildStep(ctx, nil, artifact{}, "src.tar.gz", func(_ io.Reader, w io.Writer) error {
 		return b.buildSourceGCB(ctx, resp.Body, source.VersionFile, w)
 	})
@@ -812,12 +1013,18 @@ mv go/pkg/distpack/*.src.tar.gz src.tar.gz
 	return err
 }
 
+// checkSourceMatch reads the branch HEAD and checks that its content matches
+// that of source. It returns the branch HEAD it read, and an error if it finds
+// any mismatch.
+//
+// As a special case, mismatches in the content of the VERSION file at the root are ignored.
+// TODO(go.dev/issue/62481): Make it detect a mismatch in the the VERSION file at the root, too.
 func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, branch, versionFile string, source artifact) (head string, _ error) {
 	head, err := b.GerritClient.ReadBranchHead(ctx, b.GerritProject, branch)
 	if err != nil {
 		return "", err
 	}
-	spec, err := b.getGitSource(ctx, branch, head, "", versionFile)
+	spec, err := b.getGitSourceForcePublicOnly(ctx, branch, head, versionFile)
 	if err != nil {
 		return "", err
 	}
@@ -1488,7 +1695,7 @@ func (b *BuildReleaseTasks) runAdvisoryTest(ctx *wf.TaskContext, name string, sk
 		}
 	}
 	if err != nil {
-		ctx.Printf("Advisory test failed. Check the logs and approve this task if it's okay:\n")
+		ctx.Printf("Advisory test failed. Check the test failure logs and approve this task if it's okay:\n")
 		return testResult{name, false}, b.ApproveAction(ctx)
 	}
 	return testResult{name, true}, nil

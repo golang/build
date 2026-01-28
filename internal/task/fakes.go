@@ -100,8 +100,9 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{repo}/+archive/{archive}", result.serveArchive) // Serve a revision tarball (.tar.gz) like Gerrit does.
 	mux.HandleFunc("GET /{repo}/+/{rev}/{path...}", result.serveGitiles)
-	mux.HandleFunc("GET /{repo}/info/refs", result.serveGitInfoRefsUploadPack) // Serve a git repository over HTTP like Gerrit does.
+	mux.HandleFunc("GET /{repo}/info/refs", result.serveGitInfoRefs) // Serve a git repository over HTTP like Gerrit does.
 	mux.HandleFunc("POST /{repo}/git-upload-pack", result.serveGitUploadPack)
+	mux.HandleFunc("POST /{repo}/git-receive-pack", result.serveGitReceivePack) // Receive pushes to "refs/for/" over HTTP like Gerrit does.
 	server := httptest.NewServer(mux)
 	result.serverURL = server.URL
 	t.Cleanup(server.Close)
@@ -146,8 +147,39 @@ func NewFakeRepo(t *testing.T, name string) *FakeRepo {
 	return r
 }
 
+// CloneFakeRepo initializes a fresh fake repo by cloning the content of
+// another fake repo. It returns the fresh fake repo without any remotes.
+func CloneFakeRepo(t *testing.T, name string, from *FakeRepo) *FakeRepo {
+	if _, err := exec.LookPath("git"); errors.Is(err, exec.ErrNotFound) {
+		t.Skip("test requires git")
+	}
+
+	tmpDir := t.TempDir()
+	repoDir := filepath.Join(tmpDir, name)
+	if err := os.Mkdir(repoDir, 0700); err != nil {
+		t.Fatalf("failed to create repository directory: %s", err)
+	}
+	r := &FakeRepo{
+		t:    t,
+		name: name,
+		dir:  &GitDir{&Git{}, repoDir},
+	}
+	t.Cleanup(func() { r.dir.Close() })
+	r.runGit("clone", from.dir.dir, ".")
+	r.runGit("remote", "remove", "origin")
+	return r
+}
+
 // TODO(rfindley): probably every method on FakeRepo should invoke
 // repo.t.Helper(), otherwise it's impossible to see where the test failed.
+
+// SetHook sets a git hook in the fake repo.
+func (repo *FakeRepo) SetHook(hook, script string) {
+	repo.t.Helper()
+	if err := os.WriteFile(filepath.Join(repo.dir.dir, ".git", "hooks", hook), []byte(script), 0777); err != nil {
+		repo.t.Fatalf("failed to write git %s hook: %s", hook, err)
+	}
+}
 
 func (repo *FakeRepo) runGit(args ...string) []byte {
 	repo.t.Helper()
@@ -232,6 +264,10 @@ func (g *FakeGerrit) GitilesURL() string {
 	return g.serverURL
 }
 
+func (g *FakeGerrit) GitRepoURL(project string) string {
+	return g.serverURL + "/" + project
+}
+
 func (g *FakeGerrit) ListProjects(ctx context.Context) ([]string, error) {
 	var names []string
 	for k := range g.repos {
@@ -313,6 +349,50 @@ func (g *FakeGerrit) ReadDir(ctx context.Context, project, commit, dir string) (
 	return repo.ReadDir(commit, dir)
 }
 
+func (g *FakeGerrit) ListCommits(ctx context.Context, project, head, base string) ([]CommitInfo, error) {
+	switch {
+	case head == "":
+		return nil, fmt.Errorf("head is empty")
+	case base == "":
+		return nil, fmt.Errorf("base is empty")
+	}
+	repo, err := g.repo(project)
+	if err != nil {
+		return nil, err
+	}
+	out, err := repo.dir.RunCommand(ctx, "log",
+		"--format=tformat:%H%x00%P%x00%B",
+		"-z",
+		base+".."+head)
+	if err != nil {
+		return nil, err
+	}
+	var cis []CommitInfo
+	for b := out; len(b) != 0; {
+		var (
+			// Calls to readLine match exactly what is specified in --format.
+			commitHash = readLine(&b)
+			parents    = readLine(&b)
+			body       = readLine(&b)
+		)
+		cis = append(cis, CommitInfo{
+			Commit:  commitHash,
+			Parents: strings.Split(parents, " "),
+			Message: body,
+		})
+	}
+	return cis, nil
+}
+
+// readLine reads a line until zero byte, then updates b to the byte that immediately follows.
+// A zero byte must exist in b, otherwise readLine panics.
+func readLine(b *[]byte) string {
+	i := bytes.IndexByte(*b, 0)
+	s := string((*b)[:i])
+	*b = (*b)[i+1:]
+	return s
+}
+
 func (g *FakeGerrit) ListTags(ctx context.Context, project string) ([]string, error) {
 	repo, err := g.repo(project)
 	if err != nil {
@@ -359,6 +439,15 @@ func (g *FakeGerrit) considerCommitSubmitted(repo *FakeRepo, commit string) (cha
 	g.changes[changeID] = commit
 	g.changesMu.Unlock()
 	return changeID
+}
+
+func (g *FakeGerrit) ConsiderChangeSubmitted(repo *FakeRepo, changeID string) {
+	if g.repos[repo.name] != repo {
+		repo.t.Fatalf("FakeGerrit.ConsiderChangeSubmitted: provided repo %q isn't a part of this FakeGerrit instance", repo.name)
+	}
+	g.changesMu.Lock()
+	g.changes[changeID] = "unknown submitted commit"
+	g.changesMu.Unlock()
 }
 
 func (g *FakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
@@ -416,29 +505,44 @@ func (g *FakeGerrit) GerritURL() string {
 	return g.serverURL
 }
 
-func (g *FakeGerrit) serveGitInfoRefsUploadPack(w http.ResponseWriter, req *http.Request) {
+func (g *FakeGerrit) serveGitInfoRefs(w http.ResponseWriter, req *http.Request) {
 	repo, err := g.repo(req.PathValue("repo"))
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if req.URL.RawQuery != "service=git-upload-pack" {
+	switch req.URL.RawQuery {
+	case "service=git-upload-pack":
+		cmd := exec.CommandContext(req.Context(), "git", "upload-pack", "--strict", "--advertise-refs", ".")
+		cmd.Dir = filepath.Join(repo.dir.dir, ".git")
+		cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		err = cmd.Run()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
+		io.WriteString(w, "001e# service=git-upload-pack\n0000")
+		io.Copy(w, &buf)
+	case "service=git-receive-pack":
+		cmd := exec.CommandContext(req.Context(), "git", "receive-pack", "--advertise-refs", ".")
+		cmd.Dir = filepath.Join(repo.dir.dir, ".git")
+		cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		err = cmd.Run()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-git-receive-pack-advertisement")
+		io.WriteString(w, "001f# service=git-receive-pack\n0000")
+		io.Copy(w, &buf)
+	default:
 		w.WriteHeader(http.StatusNotFound)
-		return
 	}
-	cmd := exec.CommandContext(req.Context(), "git", "upload-pack", "--strict", "--advertise-refs", ".")
-	cmd.Dir = filepath.Join(repo.dir.dir, ".git")
-	cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	err = cmd.Run()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
-	io.WriteString(w, "001e# service=git-upload-pack\n0000")
-	io.Copy(w, &buf)
 }
 func (g *FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request) {
 	repo, err := g.repo(req.PathValue("repo"))
@@ -462,6 +566,30 @@ func (g *FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
+	io.Copy(w, &buf)
+}
+func (g *FakeGerrit) serveGitReceivePack(w http.ResponseWriter, req *http.Request) {
+	repo, err := g.repo(req.PathValue("repo"))
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if req.Header.Get("Content-Type") != "application/x-git-receive-pack-request" {
+		http.Error(w, "unexpected Content-Type", http.StatusBadRequest)
+		return
+	}
+	cmd := exec.CommandContext(req.Context(), "git", "receive-pack", "--stateless-rpc", ".")
+	cmd.Dir = filepath.Join(repo.dir.dir, ".git")
+	cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
+	cmd.Stdin = req.Body
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	err = cmd.Run()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-git-receive-pack-result")
 	io.Copy(w, &buf)
 }
 

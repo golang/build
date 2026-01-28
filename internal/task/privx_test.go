@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"net/mail"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -106,7 +105,7 @@ func TestPrivXPatch(t *testing.T) {
 	privCommit := privRepo.CommitOnBranch("master", map[string]string{"hi.go": ":)"})
 	privRepo.runGit("update-ref", "refs/changes/1234/5", privCommit)
 
-	if err := os.WriteFile(filepath.Join(pubRepo.dir.dir, ".git/hooks/pre-receive"), []byte(`#!/bin/sh
+	pubRepo.SetHook("pre-receive", `#!/bin/sh
 echo "Resolving deltas: 100% (5/5)"
 echo "Waiting for private key checker: 1/1 objects left"
 echo "Processing changes: refs: 1, new: 1, done"
@@ -114,9 +113,7 @@ echo
 echo "SUCCESS"
 echo
 echo "  https://go-review.googlesource.com/c/net/+/558675 net/mail: remove obsolete comment [NEW]"
-echo`), 0777); err != nil {
-		t.Fatalf("failed to write git pre-receive hook: %s", err)
-	}
+echo`)
 
 	pubBase, _ := strings.CutSuffix(pubRepo.dir.dir, filepath.Base(pubRepo.dir.dir))
 

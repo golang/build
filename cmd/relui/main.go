@@ -269,6 +269,7 @@ func main() {
 		GerritHTTPClient:     oauth2.NewClient(ctx, creds.TokenSource),
 		PrivateGerritClient:  privateGerritClient,
 		PrivateGerritProject: "go",
+		Git:                  gitClient,
 		SignService:          signServer,
 		GCSClient:            gcsClient,
 		ScratchFS: &task.ScratchFS{

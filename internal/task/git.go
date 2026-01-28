@@ -42,7 +42,39 @@ func (g *Git) Clone(ctx context.Context, origin string) (*GitDir, error) {
 	if _, err := g.run(ctx, "", "clone", origin, dir); err != nil {
 		return nil, err
 	}
-	return &GitDir{g, dir}, err
+	return &GitDir{g, dir}, nil
+}
+
+// CloneBranch checks out the specified branch of the repository at origin
+// into a temporary directory owned by the resulting GitDir.
+//
+// See https://git-scm.com/docs/git-clone#Documentation/git-clone.txt---branchname
+// for details about the state and contents of the clone repository.
+func (g *Git) CloneBranch(ctx context.Context, origin, branch string) (*GitDir, error) {
+	dir, err := os.MkdirTemp("", "relui-git-clone-*")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := g.run(ctx, "", "clone", "--branch="+branch, origin, dir); err != nil {
+		return nil, err
+	}
+	return &GitDir{g, dir}, nil
+}
+
+// CloneRevision checks out the specified ref of the repository at origin
+// into a temporary directory owned by the resulting GitDir.
+//
+// See https://git-scm.com/docs/git-clone#Documentation/git-clone.txt---revisionrev
+// for details about the state and contents of the clone repository.
+func (g *Git) CloneRevision(ctx context.Context, origin, ref string) (*GitDir, error) {
+	dir, err := os.MkdirTemp("", "relui-git-clone-*")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := g.run(ctx, "", "clone", "--revision="+ref, origin, dir); err != nil {
+		return nil, err
+	}
+	return &GitDir{g, dir}, nil
 }
 
 func (g *Git) run(ctx context.Context, dir string, args ...string) ([]byte, error) {
@@ -89,6 +121,24 @@ type GitDir struct {
 // error containing its stderr if it fails.
 func (g *GitDir) RunCommand(ctx context.Context, args ...string) ([]byte, error) {
 	return g.git.run(ctx, g.dir, args...)
+}
+
+// RunGitPush runs a git push command with the given origin and refspec,
+// and returns the remote server's response on success.
+func (g *GitDir) RunGitPush(ctx context.Context, origin, refspec string) ([]byte, error) {
+	// We are unable to use repo.RunCommand here, because of strange I/O
+	// changes that git made. The messages sent by the remote are printed by
+	// git to stderr, and no matter what combination of options you pass it
+	// (--verbose, --porcelain, etc.), you cannot reasonably convince it to
+	// print those messages to stdout. Because of this we need to use the
+	// underlying repo.git.runGitStreamed method, so that we can inspect
+	// stderr in order to extract the new CL number that Gerrit sends us.
+	var stdout, stderr bytes.Buffer
+	err := g.git.runGitStreamed(ctx, &stdout, &stderr, g.dir, "push", origin, refspec)
+	if err != nil {
+		return nil, fmt.Errorf("git push failed: %v, stdout: %q stderr: %q", err, stdout.String(), stderr.String())
+	}
+	return stderr.Bytes(), nil
 }
 
 // Close cleans up the repository.

@@ -22,9 +22,24 @@ import (
 	"golang.org/x/oauth2"
 )
 
+type CommitInfo struct {
+	Commit  string
+	Parents []string
+	Message string
+}
+
+func (c CommitInfo) Title() string {
+	// See https://git-scm.com/docs/git-commit#_discussion.
+	titleLines, _, _ := strings.Cut(c.Message, "\n\n")
+	return strings.ReplaceAll(titleLines, "\n", " ")
+}
+
 type GerritClient interface {
 	// GitilesURL returns the URL to the Gitiles server for this Gerrit instance.
 	GitilesURL() string
+	// GitRepoURL returns the git repository URL for the specified Gerrit project name.
+	// This URL can be used in the context of a git clone or a git remote.
+	GitRepoURL(project string) string
 
 	// CreateAutoSubmitChange creates a change with the given metadata and
 	// contents, starts trybots with auto-submit enabled, and returns its change ID.
@@ -56,8 +71,17 @@ type GerritClient interface {
 	ReadBranchHead(ctx context.Context, project, branch string) (string, error)
 	// ListBranches returns the branch info for all the branch in a project.
 	ListBranches(ctx context.Context, project string) ([]gerrit.BranchInfo, error)
-	// CreateBranch create the given branch and returns the created branch's revision.
+	// CreateBranch creates the given branch and returns the created branch's revision.
 	CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error)
+
+	// ListCommits lists commits in project between head and base (including head, not including base).
+	// Both head and base must be non-empty strings, otherwise an error is returned.
+	// If either head or base refers to a commit that doesn't exist,
+	// an error matching gerrit.ErrResourceNotExist is returned.
+	// The commits are returned in order from head to base (i.e., first element is newest commit, last element is oldest comit),
+	// capped in length to an implementation-defined page size. The caller can inspect
+	// the parents of the last commit if it needs to detect the page size being insufficient.
+	ListCommits(ctx context.Context, project, head, base string) ([]CommitInfo, error)
 
 	// ListProjects lists all the projects on the server.
 	ListProjects(ctx context.Context) ([]string, error)
@@ -115,6 +139,10 @@ type RealGerritClient struct {
 
 func (c *RealGerritClient) GitilesURL() string {
 	return c.Gitiles
+}
+
+func (c *RealGerritClient) GitRepoURL(project string) string {
+	return c.Gitiles + "/" + project
 }
 
 func (c *RealGerritClient) CreateAutoSubmitChange(ctx *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, files map[string]string) (_ string, err error) {
@@ -337,6 +365,23 @@ func (c *RealGerritClient) ReadDir(ctx context.Context, project, commit, dir str
 		return nil, err
 	}
 	return resp.Entries, nil
+}
+
+func (c *RealGerritClient) ListCommits(ctx context.Context, project, head, base string) ([]CommitInfo, error) {
+	switch {
+	case head == "":
+		return nil, fmt.Errorf("head is empty")
+	case base == "":
+		return nil, fmt.Errorf("base is empty")
+	}
+	var resp struct {
+		Log []CommitInfo
+	}
+	err := fetchGitilesJSON(ctx, c.GitilesAuth, c.Gitiles+"/"+url.PathEscape(project)+"/+log/"+url.PathEscape(base)+".."+url.PathEscape(head)+"?format=JSON", &resp)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Log, nil
 }
 
 func fetchGitilesJSON(ctx context.Context, auth oauth2.TokenSource, url string, v any) error {

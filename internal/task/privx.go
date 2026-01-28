@@ -172,6 +172,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		if err != nil {
 			return nil, err
 		}
+		defer repo.Close()
 		ctx.Printf("cloned repo into %s", repo.dir)
 
 		ctx.Printf("fetching %s from %s", ref, origin)
@@ -195,18 +196,10 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		// Beyond this point we don't want to retry any of the following steps.
 		ctx.DisableRetries()
 
-		ctx.Printf("pushing to %s", x.PublicRepoURL(repoName))
-		// We are unable to use repo.RunCommand here, because of strange i/o
-		// changes that git made. The messages sent by the remote are printed by
-		// git to stderr, and no matter what combination of options you pass it
-		// (--verbose, --porcelain, etc), you cannot reasonably convince it to
-		// print those messages to stdout. Because of this we need to use the
-		// underlying repo.git.runGitStreamed method, so that we can inspect
-		// stderr in order to extract the new CL number that gerrit sends us.
-		var stdout, stderr bytes.Buffer
-		err = repo.git.runGitStreamed(ctx, &stdout, &stderr, repo.dir, "push", x.PublicRepoURL(repoName), refspec)
+		ctx.Printf("pushing %s to %s", refspec, x.PublicRepoURL(repoName))
+		gitPushOutput, err := repo.RunGitPush(ctx, x.PublicRepoURL(repoName), refspec)
 		if err != nil {
-			return nil, fmt.Errorf("git push failed: %v, stdout: %q stderr: %q", err, stdout.String(), stderr.String())
+			return nil, err
 		}
 
 		// Extract the CL number from the output using a simple regexp.
@@ -214,7 +207,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		if err != nil {
 			return nil, fmt.Errorf("failed to compile regexp: %s", err)
 		}
-		matches := re.FindSubmatch(stderr.Bytes())
+		matches := re.FindSubmatch(gitPushOutput)
 		if len(matches) != 2 {
 			return nil, errors.New("unable to find CL number")
 		}

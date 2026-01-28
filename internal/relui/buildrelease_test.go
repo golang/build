@@ -199,6 +199,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		GerritClient:             gerrit,
 		GerritProject:            "go",
 		GerritHTTPClient:         http.DefaultClient,
+		Git:                      new(task.Git),
 		GCSClient:                nil,
 		ScratchFS:                &task.ScratchFS{BaseURL: "file://" + scratchDir},
 		SignedURL:                "file://" + scratchDir + "/signed/outputs",
@@ -213,10 +214,13 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		CloudBuildClient:         task.NewFakeCloudBuild(t, fakeGerrit, dockerProject, map[string]map[string]string{dockerTrigger: {"_GO_VERSION": wantVersion[2:]}}),
 		SwarmingClient:           task.NewFakeSwarmingClient(t, fakeGo),
 		ApproveAction: func(ctx *workflow.TaskContext) error {
-			if strings.Contains(ctx.TaskName, "Release Coordinator Approval") {
+			switch ctx.TaskName {
+			case "Confirm PRIVATE-track security CLs",
+				"Wait for Release Coordinator Approval":
 				return nil
+			default:
+				return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 			}
-			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 		},
 	}
 	// Cleanups are called in reverse order, and we need to cancel the context
@@ -250,7 +254,6 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 			"js-wasm-node18", // Builder used on 1.21 and newer.
 			"js-wasm",        // Builder used on 1.20 and older.
 		},
-		"Ref from the private repository to build from (optional)": "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -433,25 +436,60 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 func testSecurity(t *testing.T, mergeFixes bool) {
 	deps := newReleaseTestDeps(t, "go1.24.0", 24, "go1.24.1")
 
-	// Set up the fake merge process. Once we stop to ask for approval, commit
-	// the fix to the public server.
-	privateRepo := task.NewFakeRepo(t, "go-private")
-	privateRepo.Commit(goFiles)
-	securityFix := map[string]string{"security.txt": "This file makes us secure"}
-	privateRef := privateRepo.Commit(securityFix)
+	// Set up a fake private repository with a stack of prepared security fixes
+	// on top of the fake public repo content. The workflow will upstream these
+	// commits to the fake public repo.
+	privateRepo := task.CloneFakeRepo(t, "go-private", deps.goRepo)
+	securityFix1 := map[string]string{"security.txt": "This file makes us secure"}
+	securityFix2 := map[string]string{"security2.txt": "This file makes us more secure"}
+	securityFix3 := map[string]string{"security3.txt": "This file makes us even more secure"}
+	privateRepo.Branch("internal-release-branch.go1.24.1", privateRepo.Commit(securityFix1))
+	privateRepo.CommitOnBranch("internal-release-branch.go1.24.1", securityFix2)
+	privateRepo.CommitOnBranch("internal-release-branch.go1.24.1", securityFix3)
 	privateGerrit := task.NewFakeGerrit(t, privateRepo)
 	deps.buildBucket.GerritURL = privateGerrit.GerritURL()
 	deps.buildBucket.Projects = []string{"go-private"}
 	deps.buildTasks.PrivateGerritClient = privateGerrit
 	deps.buildTasks.PrivateGerritProject = "go-private"
 
-	defaultApprove := deps.buildTasks.ApproveAction
-	deps.buildTasks.ApproveAction = func(tc *workflow.TaskContext) error {
-		if mergeFixes {
-			deps.goRepo.CommitOnBranch("release-branch.go1.24", securityFix)
-		}
-		return defaultApprove(tc)
+	// Set up the fake CL receival and submission process.
+	deps.goRepo.SetHook("pre-receive", `#!/bin/bash -eu
+read old new refname
+case "$refname $old" in
+"refs/for/release-branch.go1.24%l=Auto-Submit+1,l=TryBot-Bypass+1 0000000000000000000000000000000000000000")
+	echo "Processing changes: refs: 1, new: 3, done"
+	echo
+	echo "SUCCESS"
+	echo
+	echo "  https://go-review.googlesource.com/c/go/+/789 add security3.txt [NEW]"
+	echo "  https://go-review.googlesource.com/c/go/+/456 add security2.txt [NEW]"
+	echo "  https://go-review.googlesource.com/c/go/+/123 add security.txt [NEW]"
+	echo
+	;;
+*)
+	echo "unexpected input $@"
+	exit 1
+	;;
+esac
+`)
+	if mergeFixes {
+		deps.goRepo.SetHook("post-receive", `#!/bin/bash -eu
+read old new refname
+case "$refname $old" in
+"refs/for/release-branch.go1.24%l=Auto-Submit+1,l=TryBot-Bypass+1 0000000000000000000000000000000000000000")
+	git update-ref -d "$refname"
+	git update-ref refs/heads/release-branch.go1.24 "$new"
+	;;
+*)
+	echo "unexpected input $@"
+	exit 1
+	;;
+esac
+`)
 	}
+	deps.gerrit.ConsiderChangeSubmitted(deps.goRepo, "go~123")
+	deps.gerrit.ConsiderChangeSubmitted(deps.goRepo, "go~456")
+	deps.gerrit.ConsiderChangeSubmitted(deps.goRepo, "go~789")
 
 	// Run the release.
 	wd := workflow.New(workflow.ACL{})
@@ -459,8 +497,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Targets to skip testing (or 'all') (optional)":            []string{"js-wasm"},
-		"Ref from the private repository to build from (optional)": privateRef,
+		"Targets to skip testing (or 'all') (optional)": []string{"js-wasm"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -480,7 +517,9 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 		Arch: "",
 		Kind: "source",
 	}, map[string]string{
-		"go/security.txt": "This file makes us secure",
+		"go/security.txt":  "This file makes us secure",
+		"go/security2.txt": "This file makes us more secure",
+		"go/security3.txt": "This file makes us even more secure",
 	})
 }
 
@@ -503,8 +542,7 @@ func TestAdvisoryTestsFail(t *testing.T) {
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]interface{}{
-		"Targets to skip testing (or 'all') (optional)":            []string(nil),
-		"Ref from the private repository to build from (optional)": "",
+		"Targets to skip testing (or 'all') (optional)": []string(nil),
 	})
 	if err != nil {
 		t.Fatal(err)

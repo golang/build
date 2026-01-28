@@ -394,6 +394,10 @@ func Task5[C context.Context, I1, I2, I3, I4, I5, O1 any](d *Definition, name st
 	return addTask[O1](d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
 }
 
+func Task6[C context.Context, I1, I2, I3, I4, I5, I6, O1 any](d *Definition, name string, f func(C, I1, I2, I3, I4, I5, I6) (O1, error), i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], i6 Value[I6], opts ...TaskOption) Value[O1] {
+	return addTask[O1](d, name, f, []metaValue{i1, i2, i3, i4, i5, i6}, opts)
+}
+
 func addFunc(d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *taskDefinition {
 	name = d.name(name)
 	td := &taskDefinition{name: name, f: f, args: inputs}
@@ -471,6 +475,10 @@ func Action5[C context.Context, I1, I2, I3, I4, I5 any](d *Definition, name stri
 	return addAction(d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
 }
 
+func Action6[C context.Context, I1, I2, I3, I4, I5, I6 any](d *Definition, name string, f func(C, I1, I2, I3, I4, I5, I6) error, i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], i6 Value[I6], opts ...TaskOption) Dependency {
+	return addAction(d, name, f, []metaValue{i1, i2, i3, i4, i5, i6}, opts)
+}
+
 type dependency struct {
 	task *taskDefinition
 }
@@ -509,6 +517,10 @@ func Expand4[I1, I2, I3, I4, O1 any](d *Definition, name string, f func(*Definit
 
 func Expand5[I1, I2, I3, I4, I5, O1 any](d *Definition, name string, f func(*Definition, I1, I2, I3, I4, I5) (Value[O1], error), i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], opts ...TaskOption) Value[O1] {
 	return addExpansion[O1](d, name, f, []metaValue{i1, i2, i3, i4, i5}, opts)
+}
+
+func Expand6[I1, I2, I3, I4, I5, I6, O1 any](d *Definition, name string, f func(*Definition, I1, I2, I3, I4, I5, I6) (Value[O1], error), i1 Value[I1], i2 Value[I2], i3 Value[I3], i4 Value[I4], i5 Value[I5], i6 Value[I6], opts ...TaskOption) Value[O1] {
+	return addExpansion[O1](d, name, f, []metaValue{i1, i2, i3, i4, i5, i6}, opts)
 }
 
 // A TaskContext is a context.Context, plus workflow-related features.
