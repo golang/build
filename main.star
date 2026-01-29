@@ -1210,7 +1210,7 @@ RUN_MODS = dict(
     # Build and test with GOEXPERIMENT=sizespecializedmalloc.
     sizespecializedmalloc = make_run_mod(
         add_env = {"GOEXPERIMENT": "sizespecializedmalloc"},
-        enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
+        enabled = define_for_gotip_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
     ),
 
     # Build and test with GO386=softfloat, which makes the compiler emit non-floating-point
