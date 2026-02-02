@@ -134,6 +134,7 @@ qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw -F 
 
 mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d iso/usr/local/bin
 cp loader.conf iso/boot
+cp doas.conf iso/etc
 cp rc.conf iso/etc
 cp sysctl.conf iso/etc
 cp buildlet iso/usr/local/etc/rc.d
@@ -147,6 +148,7 @@ mkdir -p /usr/local/etc/rc.d/ /usr/local/etc/sudoers.d/ /usr/local/bin/
 cp /mnt/usr/local/etc/rc.d/buildlet /usr/local/etc/rc.d/buildlet
 chmod +x /usr/local/etc/rc.d/buildlet
 cp /mnt/boot/loader.conf /boot/loader.conf
+cp /mnt/etc/doas.conf /usr/local/etc/doas.conf
 cp /mnt/etc/rc.conf /etc/rc.conf
 cp /mnt/usr/local/bin/bootstrapswarm /usr/local/bin/bootstrapswarm
 cat /mnt/etc/sysctl.conf >> /etc/sysctl.conf
