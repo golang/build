@@ -428,7 +428,6 @@ BUILDER_TYPES = [
     "freebsd-386",
     "freebsd-amd64",
     "freebsd-amd64-race",
-    "freebsd-amd64_14.1",
     "freebsd-arm",
     "freebsd-arm64",
     "freebsd-riscv64",
@@ -546,7 +545,6 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
 
 KNOWN_ISSUE_BUILDER_TYPES = {
     "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
-    "freebsd-amd64_14.1": known_issue(issue_number = 72030, skip_x_repos = True, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
     "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
