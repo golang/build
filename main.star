@@ -427,6 +427,7 @@ BUILDER_TYPES = [
     "dragonfly-amd64",
     "freebsd-386",
     "freebsd-amd64",
+    "freebsd-amd64_14.3",
     "freebsd-amd64-race",
     "freebsd-arm",
     "freebsd-arm64",
