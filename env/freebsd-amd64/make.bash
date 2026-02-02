@@ -111,6 +111,12 @@ case $1 in
   readonly SHA256=0773a05b5a3ca41b86fa8347a455c92dfe055812a215bc03f3ee0b1af947efd8
   readonly BLIND_SWITCH_CONSOLE=1
 ;;
+14.3)
+  readonly VERSION=14.3-RELEASE
+  readonly VERSION_TRAILER=
+  readonly SHA256=bcdf55da5bf848de1427e752e1280bd0ec7c7ef2b65037dfea8fc60f97274ebd
+  readonly BLIND_SWITCH_CONSOLE=1
+;;
 *)
   echo "Usage: $0 <version>"
   echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2 13.0 13.0-SNAPSHOT 14.1 14.2"
