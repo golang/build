@@ -4,7 +4,7 @@ FreeBSD builder, booting up to run the bootstrapswarm command.
 make.bash should be run on a Linux box with qemu and a few additional packages.
 on ubuntu 20.04:
     apt-get install qemu-system-x86 qemu-utils expect genisoimage
-    ./make.bash 14.2
+    ./make.bash 15.0
 
 After it completes, it creates a file freebsd-amd64-142.tar.gz.
 

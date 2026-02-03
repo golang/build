@@ -117,9 +117,15 @@ case $1 in
   readonly SHA256=bcdf55da5bf848de1427e752e1280bd0ec7c7ef2b65037dfea8fc60f97274ebd
   readonly BLIND_SWITCH_CONSOLE=1
 ;;
+15.0)
+  readonly VERSION=15.0-RELEASE
+  readonly VERSION_TRAILER=-zfs
+  readonly SHA256=6c616e34a2683865678cc4a6d9b688a9264cbebc3625e7c87f4ce435baa09fbb
+  readonly BLIND_SWITCH_CONSOLE=1
+;;
 *)
   echo "Usage: $0 <version>"
-  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2 13.0 13.0-SNAPSHOT 14.1 14.2"
+  echo " version - FreeBSD version to build. Valid choices: 9.3 10.3 10.4 11.0 11.1 11.2 11.3 11.4 12.0 12.1 12.2 13.0 13.0-SNAPSHOT 14.1 14.2 14.3 15.0"
   exit 1
 esac
 
