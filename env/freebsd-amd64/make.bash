@@ -119,8 +119,8 @@ case $1 in
 ;;
 15.0)
   readonly VERSION=15.0-RELEASE
-  readonly VERSION_TRAILER=-zfs
-  readonly SHA256=6c616e34a2683865678cc4a6d9b688a9264cbebc3625e7c87f4ce435baa09fbb
+  readonly VERSION_TRAILER=-ufs
+  readonly SHA256=311661446d4654a81a687afd6cbca72cf32848f5251f072a7d4067c42e173324
   readonly BLIND_SWITCH_CONSOLE=1
 ;;
 *)
