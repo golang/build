@@ -462,6 +462,7 @@ BUILDER_TYPES = [
     "linux-amd64-racecompile",
     "linux-amd64-runtimefreegc",
     "linux-amd64-sizespecializedmalloc",
+    "linux-amd64-spectre",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
     "linux-amd64-tiplang",
@@ -567,6 +568,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "illumos-amd64": known_issue(issue_number = 67302, skip_x_repos = True),
     "ios-amd64": known_issue(issue_number = 42177, skip_x_repos = True),
     "ios-arm64": known_issue(issue_number = 66360, skip_x_repos = True),
+    "linux-amd64-spectre": known_issue(issue_number = 77427, skip_x_repos = True),
     "linux-mips": known_issue(issue_number = 67303, skip_x_repos = True),
     "linux-mips64": known_issue(issue_number = 67305, skip_x_repos = True),
     "linux-mipsle": known_issue(issue_number = 67304, skip_x_repos = True),
@@ -1216,6 +1218,12 @@ RUN_MODS = dict(
     # CPU instructions to perform floating point operations.
     softfloat = make_run_mod(
         add_env = {"GO386": "softfloat"},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Build and test with Spectre mitigations enabled (https://go.dev/wiki/Spectre).
+    spectre = make_run_mod(
+        add_env = {"GOFLAGS": "-gcflags=all=-spectre=all -asmflags=all=-spectre=all"},
         enabled = define_for_postsubmit(["go"]),
     ),
 
