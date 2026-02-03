@@ -379,7 +379,7 @@ def host_timeout_scale(host):
 DEFAULT_HOST_SUFFIX = {
     "darwin-amd64": "14",
     "darwin-arm64": "15",
-    "freebsd-amd64": "14.2",
+    "freebsd-amd64": "14.3",
     "linux-amd64": "debian11",
     "linux-arm64": "debian12",
     "openbsd-386": "7.6",
@@ -427,7 +427,6 @@ BUILDER_TYPES = [
     "dragonfly-amd64",
     "freebsd-386",
     "freebsd-amd64",
-    "freebsd-amd64_14.3",
     "freebsd-amd64_15.0",
     "freebsd-amd64-race",
     "freebsd-arm",
