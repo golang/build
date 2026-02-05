@@ -166,12 +166,18 @@ func BaseLink(baseURL *url.URL) func(target string, extras ...string) string {
 			log.Printf("BaseLink: url.Parse(%q) = %v, %v", target, u, err)
 			return path.Join(append([]string{target}, extras...)...)
 		}
+		if u.RawPath != "" {
+			u.RawPath = path.Join(append([]string{u.RawPath}, extras...)...)
+		}
 		u.Path = path.Join(append([]string{u.Path}, extras...)...)
 		if baseURL == nil || u.IsAbs() {
 			return u.String()
 		}
 		u.Scheme = baseURL.Scheme
 		u.Host = baseURL.Host
+		if baseURL.RawPath != "" || u.RawPath != "" {
+			u.RawPath = path.Join(baseURL.EscapedPath(), u.EscapedPath())
+		}
 		u.Path = path.Join(baseURL.Path, u.Path)
 		return u.String()
 	}

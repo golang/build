@@ -509,6 +509,25 @@ func TestServerBaseLink(t *testing.T) {
 			extras:  []string{"else"},
 			want:    "https://example.test/something/else",
 		},
+
+		{
+			desc:   "no baseURL, path involving escaping",
+			target: "/workflows/123/tasks/update%20x%2Fbuild/retry",
+			want:   "/workflows/123/tasks/update%20x%2Fbuild/retry",
+		},
+		{
+			desc:    "absolute baseURL, path involving escaping",
+			baseURL: "https://example.test/releases",
+			target:  "/workflows/123/tasks/update%20x%2Fbuild/retry",
+			want:    "https://example.test/releases/workflows/123/tasks/update%20x%2Fbuild/retry",
+		},
+		{
+			desc:    "absolute baseURL, path involving escaping with extras",
+			baseURL: "https://example.test/releases",
+			target:  "/workflows/123/tasks/update%20x%2Fbuild/retry",
+			extras:  []string{"extra1", "extra2"},
+			want:    "https://example.test/releases/workflows/123/tasks/update%20x%2Fbuild/retry/extra1/extra2",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
