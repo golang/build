@@ -34,7 +34,8 @@ import (
 const (
 	crBuildBucketHost = "cr-buildbucket.appspot.com"
 	gitilesHost       = "go.googlesource.com"
-	resultDBHost      = "results.api.cr.dev"
+	resultDBHost      = "results.api.luci.app"
+	oldResultDBHost   = "results.api.cr.dev" // Needed while watchflakes still processes builds prior to February 2026, before the change.
 	swarmingHost      = "chromium-swarm.appspot.com"
 )
 
@@ -417,9 +418,9 @@ func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Bu
 		case "go":
 			goCommit = c
 		default:
-			// go.dev/issue/70091 pointed out that failing because of a missmatch between builder definition
+			// go.dev/issue/70091 pointed out that failing because of a mismatch between builder definition
 			// and input version is suboptimal. Instead log the case and continue processing.
-			log.Printf("repo mismatch: %s %s %s", bRepo, repo, buildURL(id))
+			log.Printf("repo mismatch in build %s: bRepo=%s repo=%s", buildURL(id), bRepo, repo)
 			return nil
 		}
 	}
@@ -434,12 +435,12 @@ func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Bu
 	}
 	buildTime := b.GetEndTime().AsTime()
 	rdb := b.GetInfra().GetResultdb()
-	if rdb.GetHostname() != resultDBHost {
-		log.Fatalf("ResultDB host mismatch: %s %s %s", rdb.GetHostname(), resultDBHost, buildURL(id))
+	if rdb.GetHostname() != resultDBHost && rdb.GetHostname() != oldResultDBHost {
+		log.Fatalf("ResultDB host mismatch in build %s: %s not in [%s, %s]", buildURL(id), rdb.GetHostname(), resultDBHost, oldResultDBHost)
 	}
 	bName := builder.Name
 	if b.GetBuilder().GetBuilder() != bName { // coherence check
-		log.Fatalf("builder mismatch: %s %s %s", b.GetBuilder().GetBuilder(), bName, buildURL(id))
+		log.Fatalf("builder mismatch in build %s: %s != %s", buildURL(id), b.GetBuilder().GetBuilder(), bName)
 	}
 	r := &BuildResult{
 		ID:                      id,
