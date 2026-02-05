@@ -357,8 +357,14 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 				return fmt.Errorf("GetBuilds: %w", err)
 			}
 			for _, b := range builds {
-				r := c.GetBuildResult(groupContext, dash.Repo, builder, b)
-				if r == nil {
+				r, reason, err := c.GetBuildResult(groupContext, dash.Repo, builder, b)
+				if err != nil {
+					return fmt.Errorf("GetBuildResult: %v", err)
+				} else if r == nil {
+					const printEmptyBuildResultReason = false
+					if printEmptyBuildResultReason {
+						log.Println("skipping empty build result:", reason)
+					}
 					continue
 				}
 				if r0 := buildMap[r.Commit]; r0 != nil {
@@ -400,7 +406,12 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 }
 
 // GetBuildResult gets the build result of a given build.
-func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Builder, b *bbpb.Build) *BuildResult {
+//
+// GetBuildResult may return a nil *BuildResult to indicate
+// that it's not viable to get a build result that would be
+// worthwhile processing further, and provides some context
+// in the reason string.
+func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Builder, b *bbpb.Build) (_ *BuildResult, reason string, _ error) {
 	id := b.GetId()
 	var commit, goCommit string
 	prop := b.GetOutput().GetProperties().GetFields()
@@ -420,27 +431,28 @@ func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Bu
 		default:
 			// go.dev/issue/70091 pointed out that failing because of a mismatch between builder definition
 			// and input version is suboptimal. Instead log the case and continue processing.
-			log.Printf("repo mismatch in build %s: bRepo=%s repo=%s", buildURL(id), bRepo, repo)
-			return nil
+			reason = fmt.Sprintf("repo mismatch in build %s: bRepo=%s repo=%s", buildURL(id), bRepo, repo)
+			return nil, reason, nil
 		}
 	}
 	if commit == "" {
 		switch b.GetStatus() {
 		case bbpb.Status_SUCCESS:
-			log.Fatalf("empty commit: %s", buildURL(id))
+			return nil, "", fmt.Errorf("empty commit in a successful build %s", buildURL(id))
 		default:
 			// unfinished build, or infra failure, ignore
-			return nil
+			reason = fmt.Sprintf("empty commit in a status %s build %s ", b.GetStatus(), buildURL(id))
+			return nil, reason, nil
 		}
 	}
 	buildTime := b.GetEndTime().AsTime()
 	rdb := b.GetInfra().GetResultdb()
 	if rdb.GetHostname() != resultDBHost && rdb.GetHostname() != oldResultDBHost {
-		log.Fatalf("ResultDB host mismatch in build %s: %s not in [%s, %s]", buildURL(id), rdb.GetHostname(), resultDBHost, oldResultDBHost)
+		return nil, "", fmt.Errorf("ResultDB host mismatch in build %s: %s not in [%s, %s]", buildURL(id), rdb.GetHostname(), resultDBHost, oldResultDBHost)
 	}
 	bName := builder.Name
 	if b.GetBuilder().GetBuilder() != bName { // coherence check
-		log.Fatalf("builder mismatch in build %s: %s != %s", buildURL(id), b.GetBuilder().GetBuilder(), bName)
+		return nil, "", fmt.Errorf("builder mismatch in build %s: %s != %s", buildURL(id), b.GetBuilder().GetBuilder(), bName)
 	}
 	r := &BuildResult{
 		ID:                      id,
@@ -488,7 +500,7 @@ func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Bu
 			}
 		}
 	}
-	return r
+	return r, "", nil
 }
 
 // GetBuild gets the information (builder info and build result) of a single build,
@@ -524,7 +536,12 @@ func (c *LUCIClient) GetBuild(ctx context.Context, id int64) (*BuildResult, erro
 		return nil, fmt.Errorf("JSON unmarshal into BuilderConfigProperties: %w", err)
 	}
 	builder := Builder{bi.GetId().GetBuilder(), &p}
-	r := c.GetBuildResult(ctx, builder.Repo, builder, b)
+	r, reason, err := c.GetBuildResult(ctx, builder.Repo, builder, b)
+	if err != nil {
+		return nil, fmt.Errorf("GetBuildResult: %v", err)
+	} else if r == nil {
+		return nil, fmt.Errorf("GetBuildResult returned an empty build result: %s", reason)
+	}
 	return r, nil
 }
 
