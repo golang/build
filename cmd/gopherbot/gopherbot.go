@@ -1896,7 +1896,7 @@ func (b *gopherbot) setMinorMilestones(ctx context.Context) error {
 func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 	cherryPickIssues := make(map[int32]*maintner.GitHubIssue) // by GitHub Issue Number
 	b.foreachIssue(b.gorepo, open, func(gi *maintner.GitHubIssue) error {
-		if gi.Milestone.IsNone() || gi.HasEvent("reopened") {
+		if gi.Milestone.IsNone() {
 			return nil
 		}
 		if !strings.HasPrefix(gi.Milestone.Title, "Go") {
@@ -1931,6 +1931,11 @@ func (b *gopherbot) closeCherryPickIssues(ctx context.Context) error {
 				if !strutil.HasPrefixFold(gi.Milestone.Title, clBranchVersion) {
 					// This issue's milestone (e.g., "Go1.11.6", "Go1.12", "Go1.12.1", etc.)
 					// doesn't match the CL branch goX.Y version, so skip it.
+					continue
+				}
+				if issueLastOpened(gi).After(cl.Commit.CommitTime) {
+					// The issue was opened (or more likely, reopened) after this CL was submitted,
+					// so skip it.
 					continue
 				}
 				printIssue("close-cherry-pick", ref.Repo.ID(), gi)
@@ -1968,7 +1973,12 @@ func (b *gopherbot) closeLUCIConfigIssues(ctx context.Context) error {
 			}
 			gi := b.gorepo.Issue(ref.Number)
 			if gi == nil || gi.NotExist || gi.PullRequest || gi.Locked || b.deletedIssues[githubIssue{ref.Repo.ID(), gi.Number}] ||
-				gi.Closed || gi.HasEvent("reopened") || !strings.Contains(cl.Commit.Msg, fmt.Sprintf("\nFixes golang/go#%d", gi.Number)) {
+				gi.Closed || !strings.Contains(cl.Commit.Msg, fmt.Sprintf("\nFixes golang/go#%d", gi.Number)) {
+				continue
+			}
+			if issueLastOpened(gi).After(cl.Commit.CommitTime) {
+				// The issue was opened (or more likely, reopened) after this CL was submitted,
+				// so skip it.
 				continue
 			}
 			printIssue("close luci-config issues", ref.Repo.ID(), gi)
@@ -1980,6 +1990,19 @@ func (b *gopherbot) closeLUCIConfigIssues(ctx context.Context) error {
 		}
 		return nil
 	})
+}
+
+// issueLastOpened reports the most recent time that the issue
+// had an "opened" or "reopened" event.
+func issueLastOpened(gi *maintner.GitHubIssue) time.Time {
+	last := gi.Created
+	gi.ForeachEvent(func(e *maintner.GitHubIssueEvent) error {
+		if e.Type == "reopened" {
+			last = e.Created
+		}
+		return nil
+	})
+	return last
 }
 
 type labelCommand struct {
