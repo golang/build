@@ -239,8 +239,8 @@ github.com/esimov/stackblur-go v1.1.0 h1:fwnZJC/7sHFzu4CDMgdJ1QxMN/q3k5MGILuoU4h
 github.com/esimov/stackblur-go v1.1.0/go.mod h1:7PcTPCHHKStxbZvBkUlQJjRclqjnXtQ0NoORZt1AlHE=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/fflewddur/ltbsky v0.4.0 h1:v/3VAm0QGzsCf96KqsnTsxRy3Div2eudlAbVsy51Dqc=
-github.com/fflewddur/ltbsky v0.4.0/go.mod h1:W6eWCv0jpTCTAimd4t2fVm0FImCLyN9J7vONNhCdn5k=
+github.com/fflewddur/ltbsky v0.4.1 h1:Xgn5x9gZmLbswqAIWaK4x1t1ea4Fhx+SWlXP6HVYjvc=
+github.com/fflewddur/ltbsky v0.4.1/go.mod h1:W6eWCv0jpTCTAimd4t2fVm0FImCLyN9J7vONNhCdn5k=
 github.com/form3tech-oss/jwt-go v3.2.2+incompatible/go.mod h1:pbq4aXjuKjdthFRnoDwaVPLA+WlJuPGy+QneDUgJi2k=
 github.com/form3tech-oss/jwt-go v3.2.3+incompatible/go.mod h1:pbq4aXjuKjdthFRnoDwaVPLA+WlJuPGy+QneDUgJi2k=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
