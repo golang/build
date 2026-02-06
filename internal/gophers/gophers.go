@@ -8,6 +8,7 @@ package gophers
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"golang.org/x/build/gerrit"
@@ -23,15 +24,6 @@ type Person struct {
 	Bot     bool     // whether it's a known bot (GopherBot, Gerrit Bot)
 }
 
-func strSliceContains(ss []string, s string) bool {
-	for _, v := range ss {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
 func (p *Person) mergeIDs(ids ...string) {
 	for _, id := range ids {
 		switch {
@@ -40,7 +32,7 @@ func (p *Person) mergeIDs(ids ...string) {
 			idToPerson[strings.ToLower(id)] = p
 		case strings.Contains(id, "@"):
 			email := strings.ToLower(id)
-			if !strSliceContains(p.Emails, email) {
+			if !slices.Contains(p.Emails, email) {
 				p.Emails = append(p.Emails, email)
 			}
 			idToPerson[email] = p

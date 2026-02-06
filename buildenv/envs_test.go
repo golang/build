@@ -5,6 +5,7 @@
 package buildenv
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -14,16 +15,7 @@ func TestEnvironmentNextZone(t *testing.T) {
 	}
 	wantOneOf := []string{"texas", "california", "washington"}
 	got := env.RandomVMZone()
-	if !containsString(got, wantOneOf) {
+	if !slices.Contains(wantOneOf, got) {
 		t.Errorf("got=%q; want %v", got, wantOneOf)
 	}
-}
-
-func containsString(item string, items []string) bool {
-	for _, s := range items {
-		if item == s {
-			return true
-		}
-	}
-	return false
 }

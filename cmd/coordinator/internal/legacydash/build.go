@@ -15,6 +15,7 @@ import (
 	"io"
 	"math/rand"
 	pathpkg "path"
+	"slices"
 	"strings"
 
 	"cloud.google.com/go/datastore"
@@ -373,22 +374,13 @@ func (c *CommitInfo) ResultGoHashes() []string {
 			continue
 		}
 		// Append only new results (use linear scan to preserve order).
-		if !contains(hashes, p[3]) {
+		if !slices.Contains(hashes, p[3]) {
 			hashes = append(hashes, p[3])
 		}
 	}
 	// Return results in reverse order (newest first).
 	reverse(hashes)
 	return hashes
-}
-
-func contains(t []string, s string) bool {
-	for _, s2 := range t {
-		if s2 == s {
-			return true
-		}
-	}
-	return false
 }
 
 func reverse(s []string) {

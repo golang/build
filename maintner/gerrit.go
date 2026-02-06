@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -527,7 +528,7 @@ func (cl *GerritCL) updateGithubIssueRefs() {
 	newRefs := gerrit.c.parseGithubRefs(gp.proj, gc.Msg)
 	cl.GitHubIssueRefs = newRefs
 	for _, ref := range newRefs {
-		if !clSliceContains(gerrit.clsReferencingGithubIssue[ref], cl) {
+		if !slices.Contains(gerrit.clsReferencingGithubIssue[ref], cl) {
 			// TODO: make this as small as
 			// possible? Most will have length
 			// 1. Care about default capacity of
@@ -910,16 +911,6 @@ func (gp *GerritProject) finishProcessingCL(cl *GerritCL) {
 	cl.Created = cl.Metas[0].Commit.CommitTime
 
 	cl.updateBranch()
-}
-
-// clSliceContains reports whether cls contains cl.
-func clSliceContains(cls []*GerritCL, cl *GerritCL) bool {
-	for _, v := range cls {
-		if v == cl {
-			return true
-		}
-	}
-	return false
 }
 
 // c.mu must be held

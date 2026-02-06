@@ -2566,22 +2566,12 @@ func (c *Corpus) parseGithubRefs(gerritProj string, commitMsg string) []GitHubIs
 			}
 		}
 		ref := GitHubIssueRef{github.getOrCreateRepo(owner, repo), int32(num)}
-		if contains(refs, ref) {
+		if slices.Contains(refs, ref) {
 			continue
 		}
 		refs = append(refs, ref)
 	}
 	return refs
-}
-
-// contains reports whether refs contains the reference ref.
-func contains(refs []GitHubIssueRef, ref GitHubIssueRef) bool {
-	for _, r := range refs {
-		if r == ref {
-			return true
-		}
-	}
-	return false
 }
 
 type limitTransport struct {
