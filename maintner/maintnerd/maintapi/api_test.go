@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -629,13 +630,7 @@ func TestGetDashboard(t *testing.T) {
 	}
 	hasBranch := func(branch string) check {
 		return func(t *testing.T, res *apipb.DashboardResponse, _ error) {
-			ok := false
-			for _, b := range res.Branches {
-				if b == branch {
-					ok = true
-					break
-				}
-			}
+			ok := slices.Contains(res.Branches, branch)
 			if !ok {
 				t.Errorf("didn't find expected branch %q; got branches: %q", branch, res.Branches)
 			}

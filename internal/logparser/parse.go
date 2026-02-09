@@ -7,6 +7,7 @@ package logparser
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -70,17 +71,14 @@ func Parse(log string) []*Fail {
 	// but it also processes the hold space to find any build failures lurking.
 	flush := func() {
 		// Any unattributed compile-failure-looking lines turn into a build failure.
-		for _, line := range hold {
-			if compileRE.MatchString(line) {
-				f = &Fail{
-					Section: section,
-					Mode:    "build",
-				}
-				fails = append(fails, f)
-				lines = append(lines, hold)
-				hold = nil
-				break
+		if slices.ContainsFunc(hold, compileRE.MatchString) {
+			f = &Fail{
+				Section: section,
+				Mode:    "build",
 			}
+			fails = append(fails, f)
+			lines = append(lines, hold)
+			hold = nil
 		}
 		f = nil
 		hold = hold[:0]

@@ -17,6 +17,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -529,12 +530,7 @@ func (st *buildStatus) isSlowBot() bool {
 	if st.trySet == nil {
 		return false
 	}
-	for _, conf := range st.trySet.slowBots {
-		if st.conf == conf {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(st.trySet.slowBots, st.conf)
 }
 
 func (st *buildStatus) buildRecord() *types.BuildRecord {

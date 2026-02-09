@@ -144,12 +144,7 @@ func match(pattern string, s string) bool {
 // returning false for a bad regexp after logging the bad regexp.
 func matchAny(pattern string, list []string) bool {
 	re := regexp.MustCompile(pattern)
-	for _, s := range list {
-		if re.MatchString(s) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(list, re.MatchString)
 }
 
 // matchCount reports the count of matches for the regexp in s,

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -54,12 +55,7 @@ func createFilter(f *ec2.Filter) filterFunc {
 	if *f.Name == "instance-state-name" {
 		states := aws.StringValueSlice(f.Values)
 		return func(i *ec2.Instance) bool {
-			for _, s := range states {
-				if *i.State.Name == s {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(states, *i.State.Name)
 		}
 	}
 	// return noop filter for unsupported filters
@@ -677,13 +673,7 @@ func TestEC2ToInstance(t *testing.T) {
 	if gotInst.SSHKeyID != wantKey {
 		t.Errorf("SSHKeyID %s; want %s", gotInst.SSHKeyID, wantKey)
 	}
-	found := false
-	for _, sg := range gotInst.SecurityGroups {
-		if sg == wantSecurityGroup {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(gotInst.SecurityGroups, wantSecurityGroup)
 	if !found {
 		t.Errorf("SecurityGroups not found")
 	}

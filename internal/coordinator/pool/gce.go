@@ -18,6 +18,7 @@ import (
 	"log"
 	"net/http"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -781,12 +782,7 @@ func HasScope(want string) bool {
 		log.Printf("failed to query metadata default scopes: %v", err)
 		return false
 	}
-	for _, v := range scopes {
-		if v == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(scopes, want)
 }
 
 func hasComputeScope() bool {

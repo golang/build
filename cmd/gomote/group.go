@@ -130,13 +130,7 @@ func removeFromGroup(args []string) error {
 	var errs []error
 	newInstances := make([]string, 0, len(activeGroup.Instances))
 	for _, inst := range activeGroup.Instances {
-		remove := false
-		for _, rmInst := range args {
-			if inst == rmInst {
-				remove = true
-				break
-			}
-		}
+		remove := slices.Contains(args, inst)
 		if remove {
 			if err := pruneFromGroup(inst, activeGroup.Name); err != nil {
 				errs = append(errs, err)
@@ -197,12 +191,7 @@ type groupData struct {
 }
 
 func (g *groupData) has(inst string) bool {
-	for _, i := range g.Instances {
-		if inst == i {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(g.Instances, inst)
 }
 
 const groupDirSuffix = ".instances"

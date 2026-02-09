@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -194,10 +195,8 @@ var pathDateRE = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})-([0-
 func process(path, nicePath string) (found bool, err error) {
 	// If this is from the dashboard, filter by builder and date and get the builder URL.
 	builder := filepath.Base(nicePath)
-	for _, b := range brokenBuilders {
-		if builder == b {
-			return false, nil
-		}
+	if slices.Contains(brokenBuilders, builder) {
+		return false, nil
 	}
 	if omit.AnyMatchString(builder) {
 		return false, nil

@@ -34,6 +34,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1412,10 +1413,8 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 		if fi.IsDir() {
-			for _, v := range skip {
-				if rel == v {
-					return filepath.SkipDir
-				}
+			if slices.Contains(skip, rel) {
+				return filepath.SkipDir
 			}
 		}
 		anyOutput = true

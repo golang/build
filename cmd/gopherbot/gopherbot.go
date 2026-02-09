@@ -2448,12 +2448,7 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 	}
 	reject := []string{gobotGerritID, gerritbotGerritID, kokoroGerritID, goLUCIGerritID, triciumGerritID, ownerID}
 	ownerOrRobot := func(gerritID string) bool {
-		for _, r := range reject {
-			if gerritID == r {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(reject, gerritID)
 	}
 
 	ids := slices.DeleteFunc(reviewersInMetas(cl.Metas), ownerOrRobot)
@@ -2483,12 +2478,7 @@ func (b *gopherbot) humanReviewersOnChange(ctx context.Context, change gerritCha
 
 // hasServiceUserTag reports whether the account has a SERVICE_USER tag.
 func hasServiceUserTag(a gerrit.AccountInfo) bool {
-	for _, t := range a.Tags {
-		if t == "SERVICE_USER" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(a.Tags, "SERVICE_USER")
 }
 
 // autoSubmitCLs submits CLs which are labelled "Auto-Submit",

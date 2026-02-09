@@ -9,6 +9,7 @@ package dashboard
 import (
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1298,10 +1299,8 @@ func linuxAmd64Repos(repo, branch, goBranch string) bool {
 // all the repos listed, plus the default repos.
 func defaultPlus(repos ...string) func(repo, branch, goBranch string) bool {
 	return func(repo, _, _ string) bool {
-		for _, r := range repos {
-			if r == repo {
-				return true
-			}
+		if slices.Contains(repos, repo) {
+			return true
 		}
 		return buildRepoByDefault(repo)
 	}
@@ -1456,10 +1455,8 @@ func defaultTrySet(extraProj ...string) func(proj, branch, goBranch string) bool
 		if proj == "go" {
 			return true
 		}
-		for _, p := range extraProj {
-			if proj == p {
-				return true
-			}
+		if slices.Contains(extraProj, proj) {
+			return true
 		}
 		switch proj {
 		case "grpc-review":
@@ -1474,12 +1471,7 @@ func defaultTrySet(extraProj ...string) func(proj, branch, goBranch string) bool
 // projs are enabled.
 func explicitTrySet(projs ...string) func(proj, branch, goBranch string) bool {
 	return func(proj, branch, goBranch string) bool {
-		for _, p := range projs {
-			if proj == p {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(projs, proj)
 	}
 }
 

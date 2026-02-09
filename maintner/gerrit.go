@@ -358,12 +358,7 @@ type GerritMessage struct {
 // References reports whether cl includes a commit message reference
 // to the provided Github issue ref.
 func (cl *GerritCL) References(ref GitHubIssueRef) bool {
-	for _, eref := range cl.GitHubIssueRefs {
-		if eref == ref {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(cl.GitHubIssueRefs, ref)
 }
 
 // Branch returns the CL's branch, with any "refs/heads/" prefix removed.

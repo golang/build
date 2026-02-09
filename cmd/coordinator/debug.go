@@ -14,6 +14,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -95,11 +96,8 @@ func latestBuildableGoRev(count int) ([]string, error) {
 	// Find first count "ok" revisions
 	for _, br := range bs.Revisions {
 		if br.Repo == "go" {
-			for _, res := range br.Results {
-				if res == "ok" {
-					revisions = append(revisions, br.Revision)
-					break
-				}
+			if slices.Contains(br.Results, "ok") {
+				revisions = append(revisions, br.Revision)
 			}
 		}
 		if len(revisions) == count {

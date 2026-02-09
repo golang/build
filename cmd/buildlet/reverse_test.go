@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -102,11 +103,9 @@ func testReverseDial(t *testing.T, coordAddr, hostType string) {
 		}
 
 		types := pool.ReversePool().HostTypes()
-		for _, typ := range types {
-			if typ == hostType {
-				// Success!
-				return
-			}
+		if slices.Contains(types, hostType) {
+			// Success!
+			return
 		}
 	}
 }
