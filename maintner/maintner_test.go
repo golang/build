@@ -319,8 +319,8 @@ func diffPath(got, want reflect.Value) error {
 			if err := diffPath(got.Field(i), want.Field(i)); err != nil {
 				inner := err.Error()
 				sep := "."
-				if strings.HasPrefix(inner, "field ") {
-					inner = strings.TrimPrefix(inner, "field ")
+				if after, ok := strings.CutPrefix(inner, "field "); ok {
+					inner = after
 				} else {
 					sep = ": "
 				}

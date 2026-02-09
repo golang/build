@@ -168,8 +168,8 @@ Lines:
 					Test:    fields[2],
 					Mode:    "test",
 				}
-				if strings.HasPrefix(section, "../") {
-					f.Pkg = strings.TrimPrefix(section, "../")
+				if after, ok := strings.CutPrefix(section, "../"); ok {
+					f.Pkg = after
 				}
 				fails = append(fails, f)
 				// Include held lines printed above the --- FAIL
@@ -207,10 +207,10 @@ Lines:
 		}
 
 		// In the ../test phase, run.go prints "go run run.go" lines for each failing test.
-		if strings.HasPrefix(line, "# go run run.go -- ") {
+		if after, ok := strings.CutPrefix(line, "# go run run.go -- "); ok {
 			f = &Fail{
 				Section: section,
-				Pkg:     strings.TrimSpace(strings.TrimPrefix(line, "# go run run.go -- ")),
+				Pkg:     strings.TrimSpace(after),
 				Mode:    "test",
 			}
 			fails = append(fails, f)

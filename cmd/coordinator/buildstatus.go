@@ -112,8 +112,8 @@ func (st *buildStatus) NameAndBranch() string {
 		// For the common and currently-only case of
 		// "release-branch.go1.15" say "linux-amd64 (Go 1.15.x)"
 		const releasePrefix = "release-branch.go"
-		if strings.HasPrefix(st.RevBranch, releasePrefix) {
-			result = fmt.Sprintf("%s (Go %s.x)", st.Name, strings.TrimPrefix(st.RevBranch, releasePrefix))
+		if after, ok := strings.CutPrefix(st.RevBranch, releasePrefix); ok {
+			result = fmt.Sprintf("%s (Go %s.x)", st.Name, after)
 		} else {
 			// But if we ever support building other branches,
 			// fall back to something verbose until we add a

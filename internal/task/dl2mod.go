@@ -48,8 +48,8 @@ func TarToModFiles(target *releasetargets.Target, version string, t time.Time, t
 			return "", fmt.Errorf("unexpected file name %q", name)
 		}
 		// Modules cannot contain go.mod files, so rename them to _go.mod.
-		if strings.HasSuffix(name, "/go.mod") {
-			name = strings.TrimSuffix(name, "/go.mod") + "/_go.mod"
+		if before, ok := strings.CutSuffix(name, "/go.mod"); ok {
+			name = before + "/_go.mod"
 		}
 		// Omit these directories.
 		switch {
