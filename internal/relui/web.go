@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,7 +31,6 @@ import (
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
-	"golang.org/x/exp/slices"
 )
 
 const DatetimeLocalLayout = "2006-01-02T15:04"

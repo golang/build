@@ -18,6 +18,7 @@ import (
 	goversion "go/version"
 	"io"
 	"io/fs"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -42,7 +43,6 @@ import (
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/task"
 	wf "golang.org/x/build/internal/workflow"
-	"golang.org/x/exp/maps"
 	"golang.org/x/net/context/ctxhttp"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -1275,7 +1275,7 @@ func (b *BuildReleaseTasks) mergeSignedToTGZ(ctx *wf.TaskContext, unsigned, sign
 		if err != nil {
 			return err
 		} else if _, ok := signedBinaries["go/bin/go"]; !ok {
-			return fmt.Errorf("didn't find go/bin/go among %d signed binaries %+q", len(signedBinaries), maps.Keys(signedBinaries))
+			return fmt.Errorf("didn't find go/bin/go among %d signed binaries %+q", len(signedBinaries), slices.Collect(maps.Keys(signedBinaries)))
 		}
 
 		// Copy files from the tgz, overwriting with binaries from the signed tar.
@@ -1334,7 +1334,7 @@ func (b *BuildReleaseTasks) mergeSignedToModule(ctx *wf.TaskContext, version str
 		if err != nil {
 			return err
 		} else if _, ok := signedBinaries["go/bin/go"]; !ok {
-			return fmt.Errorf("didn't find go/bin/go among %d signed binaries %+q", len(signedBinaries), maps.Keys(signedBinaries))
+			return fmt.Errorf("didn't find go/bin/go among %d signed binaries %+q", len(signedBinaries), slices.Collect(maps.Keys(signedBinaries)))
 		}
 
 		// Copy files from the module zip, overwriting with binaries from the signed tar.

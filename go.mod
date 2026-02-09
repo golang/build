@@ -54,7 +54,6 @@ require (
 	go.opencensus.io v0.24.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
 	golang.org/x/crypto v0.48.0
-	golang.org/x/exp v0.0.0-20260112195511-716be5621a96
 	golang.org/x/image v0.36.0
 	golang.org/x/mod v0.33.0
 	golang.org/x/net v0.50.0

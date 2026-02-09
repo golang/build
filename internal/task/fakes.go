@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,7 +43,6 @@ import (
 	"golang.org/x/build/internal/installer/windowsmsi"
 	"golang.org/x/build/internal/relui/sign"
 	wf "golang.org/x/build/internal/workflow"
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

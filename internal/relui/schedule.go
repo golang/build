@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,6 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/robfig/cron/v3"
 	"golang.org/x/build/internal/relui/db"
-	"golang.org/x/exp/slices"
 )
 
 // ScheduleType determines whether a workflow runs immediately or on

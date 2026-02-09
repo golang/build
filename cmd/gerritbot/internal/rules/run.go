@@ -8,9 +8,8 @@ import (
 	"bufio"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
-
-	"golang.org/x/exp/slices"
 )
 
 // Change represents a Gerrit CL and/or GitHub PR that we want to check rules against.

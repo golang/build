@@ -14,6 +14,7 @@ import (
 	pathpkg "path"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,7 +25,6 @@ import (
 	"golang.org/x/build/internal/releasetargets"
 	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
-	"golang.org/x/exp/slices"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/semver"
 )

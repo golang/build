@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,7 +24,6 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/maintner"
 	"golang.org/x/build/maintner/godata"
-	"golang.org/x/exp/maps"
 )
 
 type ToDo struct {
@@ -326,8 +326,7 @@ func writeToDos(w io.Writer, todos []ToDo) error {
 	for _, td := range todos {
 		byMessage[td.message] = append(byMessage[td.message], td)
 	}
-	msgs := maps.Keys(byMessage)
-	slices.Sort(msgs) // for deterministic output
+	msgs := slices.Sorted(maps.Keys(byMessage)) // sort for deterministic output
 	for _, msg := range msgs {
 		var provs []string
 		for _, td := range byMessage[msg] {
