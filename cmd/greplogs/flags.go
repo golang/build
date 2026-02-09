@@ -14,14 +14,14 @@ import (
 type regexpList []*regexp.Regexp
 
 func (x *regexpList) String() string {
-	s := ""
+	var s strings.Builder
 	for i, r := range *x {
 		if i != 0 {
-			s += ","
+			s.WriteString(",")
 		}
-		s += r.String()
+		s.WriteString(r.String())
 	}
-	return s
+	return s.String()
 }
 
 func (x *regexpList) Set(s string) error {

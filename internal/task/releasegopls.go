@@ -734,9 +734,10 @@ func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsSetting(ctx *wf.TaskContext, revi
 		"docs/settings.md",                    // gopls setting info
 	}
 	steps := func(resultURL string) []*cloudbuildpb.BuildStep {
-		updateScript := cloudBuildClientScriptPrefix
+		var updateScript strings.Builder
+		updateScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range files {
-			updateScript += fmt.Sprintf("cp %s %s.before\n", file, file)
+			updateScript.WriteString(fmt.Sprintf("cp %s %s.before\n", file, file))
 		}
 
 		// `go run generate.go -tools` is environment-independent because it
@@ -748,15 +749,15 @@ func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsSetting(ctx *wf.TaskContext, revi
 		// This would allow anyone to run it without a specific local setup.
 		// Consider using a Docker container to achieve this without
 		// affecting the local `gopls`.
-		updateScript += `
+		updateScript.WriteString(`
 export PATH="$PATH:$(go env GOPATH)/bin"
 export PATH="$PATH:/workspace/tools"
 go install golang.org/x/tools/gopls@%s
 go run -C extension tools/generate.go -w -tools -gopls
-`
+`)
 		for _, file := range files {
-			updateScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
-			updateScript += fmt.Sprintf("gsutil cp %s.before %s/%s.before\n", file, resultURL, file)
+			updateScript.WriteString(fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file))
+			updateScript.WriteString(fmt.Sprintf("gsutil cp %s.before %s/%s.before\n", file, resultURL, file))
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -782,7 +783,7 @@ mv jq /workspace/tools`,
 			},
 			{
 				Name:   "gcr.io/cloud-builders/gsutil",
-				Script: fmt.Sprintf(updateScript, version),
+				Script: fmt.Sprintf(updateScript.String(), version),
 				Dir:    "vscode-go",
 			},
 		}
@@ -920,25 +921,26 @@ func (r *ReleaseGoplsTasks) createGitHubRelease(ctx *wf.TaskContext, release rel
 // their corresponding content after script execution.
 func executeAndMonitorChange(ctx *wf.TaskContext, cloudBuild CloudBuildClient, project, branch, script string, watchFiles []string) (map[string]string, error) {
 	// Checkout to the provided branch.
-	fullScript := fmt.Sprintf(`git checkout %s
+	var fullScript strings.Builder
+	fullScript.WriteString(fmt.Sprintf(`git checkout %s
 git rev-parse --abbrev-ref HEAD
 git rev-parse --ref HEAD
-`, branch)
+`, branch))
 	// Make a copy of all file that need to watch.
 	// If the file does not exist, create a empty file and a empty before file.
 	for _, file := range watchFiles {
 		if strings.Contains(file, "'") {
 			return nil, fmt.Errorf("file name %q contains '", file)
 		}
-		fullScript += fmt.Sprintf(`if [ -f '%[1]s' ]; then
+		fullScript.WriteString(fmt.Sprintf(`if [ -f '%[1]s' ]; then
     cp '%[1]s' '%[1]s.before'
 else
     touch '%[1]s' '%[1]s.before'
 fi
-`, file)
+`, file))
 	}
 	// Execute the script provided.
-	fullScript += script
+	fullScript.WriteString(script)
 
 	// Output files before the script execution and after the script execution.
 	outputFiles := []string{}
@@ -946,7 +948,7 @@ fi
 		outputFiles = append(outputFiles, file+".before")
 		outputFiles = append(outputFiles, file)
 	}
-	build, err := cloudBuild.RunScript(ctx, fullScript, project, outputFiles)
+	build, err := cloudBuild.RunScript(ctx, fullScript.String(), project, outputFiles)
 	if err != nil {
 		return nil, err
 	}

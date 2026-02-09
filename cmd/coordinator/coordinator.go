@@ -1532,10 +1532,11 @@ func (ts *trySet) notifyStarting(invalidSlowBots []string) {
 	if len(ts.slowBots) > 0 {
 		name = "SlowBots"
 	}
-	msg := name + " beginning. Status page: " + ts.statusPage() + "\n"
+	var msg strings.Builder
+	msg.WriteString(name + " beginning. Status page: " + ts.statusPage() + "\n")
 
 	if len(invalidSlowBots) > 0 {
-		msg += fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s.\n", strings.Join(invalidSlowBots, ", "))
+		msg.WriteString(fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s.\n", strings.Join(invalidSlowBots, ", ")))
 	}
 
 	// If any of the requested SlowBot builders
@@ -1547,7 +1548,7 @@ func (ts *trySet) notifyStarting(invalidSlowBots []string) {
 			for _, i := range b.KnownIssues {
 				fmt.Fprintf(issueBlock, "\thttps://go.dev/issue/%d\n", i)
 			}
-			msg += issueBlock.String()
+			msg.WriteString(issueBlock.String())
 		}
 	}
 
@@ -1555,7 +1556,7 @@ func (ts *trySet) notifyStarting(invalidSlowBots []string) {
 	ri := gerrit.ReviewInput{
 		Tag: tryBotsTag("beginning"),
 		Comments: map[string][]gerrit.CommentInput{
-			"/PATCHSET_LEVEL": {{Message: msg, Unresolved: &unresolved}},
+			"/PATCHSET_LEVEL": {{Message: msg.String(), Unresolved: &unresolved}},
 		},
 	}
 

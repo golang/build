@@ -325,9 +325,10 @@ go run tools/release/release.go package &> go-package-output.log
 cat npm-output.log
 cat go-package-output.log
 `
-		saveScript := cloudBuildClientScriptPrefix
+		var saveScript strings.Builder
+		saveScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range []string{"npm-output.log", "go-package-output.log", vsixFileName(release, prerelease)} {
-			saveScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
+			saveScript.WriteString(fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file))
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -350,7 +351,7 @@ cat go-package-output.log
 			},
 			{
 				Name:   "gcr.io/cloud-builders/gsutil",
-				Script: saveScript,
+				Script: saveScript.String(),
 				Dir:    "vscode-go/extension",
 			},
 		}
@@ -388,9 +389,10 @@ cat npm-output.log
 cat go-publish-output.log
 `
 		versionString := release.String()
-		saveScript := cloudBuildClientScriptPrefix
+		var saveScript strings.Builder
+		saveScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range []string{"npm-output.log", "go-publish-output.log", vsixFileName(release, "")} {
-			saveScript += fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file)
+			saveScript.WriteString(fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file))
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -419,7 +421,7 @@ cat go-publish-output.log
 			},
 			{
 				Name:   "gcr.io/cloud-builders/gsutil",
-				Script: saveScript,
+				Script: saveScript.String(),
 				Dir:    "vscode-go/extension",
 			},
 		}
@@ -870,7 +872,8 @@ cat npm-output.log
 cat npx-output.log
 `, version)
 
-		saveScriptFmt := cloudBuildClientScriptPrefix
+		var saveScriptFmt strings.Builder
+		saveScriptFmt.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range []string{
 			"package.json",
 			"package-lock.json",
@@ -879,7 +882,7 @@ cat npx-output.log
 			"npx-output.log",
 			"npm-output.log",
 		} {
-			saveScriptFmt += fmt.Sprintf("gsutil cp %[1]s %[2]s/%[1]s\n", file, resultURL)
+			saveScriptFmt.WriteString(fmt.Sprintf("gsutil cp %[1]s %[2]s/%[1]s\n", file, resultURL))
 		}
 
 		return []*cloudbuildpb.BuildStep{
@@ -899,7 +902,7 @@ cat npx-output.log
 			},
 			{
 				Name:   "gcr.io/cloud-builders/gsutil",
-				Script: saveScriptFmt,
+				Script: saveScriptFmt.String(),
 				Dir:    "vscode-go/extension",
 			},
 		}
