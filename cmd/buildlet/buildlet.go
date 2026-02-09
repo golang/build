@@ -1412,10 +1412,8 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 		if rel == "" && fi.IsDir() {
 			return nil
 		}
-		if fi.IsDir() {
-			if slices.Contains(skip, rel) {
-				return filepath.SkipDir
-			}
+		if fi.IsDir() && slices.Contains(skip, rel) {
+			return filepath.SkipDir
 		}
 		anyOutput = true
 		fmt.Fprintf(w, "%s\t%s", fi.Mode(), rel)

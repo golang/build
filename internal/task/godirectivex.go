@@ -107,7 +107,7 @@ func (x GoDirectiveXReposTasks) MaintainGoDirectiveAndMailCL(ctx *wf.TaskContext
 				return fmt.Errorf("unexpectedly ran into a non-'golang.org/x' module %q defined in %s of project %s", f.Module.Mod.Path, path, repo)
 			}
 			if f.Go != nil && goversion.Compare("go"+f.Go.Version, fmt.Sprintf("go1.%d.0", prevGoVer)) >= 0 {
-				script.WriteString(fmt.Sprintf("(cd %v && echo 'skipping because it already has go%s >= go1.%d.0, nothing to do')\n", dir, f.Go.Version, prevGoVer))
+				fmt.Fprintf(&script, "(cd %v && echo 'skipping because it already has go%s >= go1.%d.0, nothing to do')\n", dir, f.Go.Version, prevGoVer)
 				ctx.Printf("Skipping module %s because it already has go%s >= go1.%d.0, nothing to do.", f.Module.Mod.Path, f.Go.Version, prevGoVer)
 				return nil
 			}
@@ -118,7 +118,7 @@ func (x GoDirectiveXReposTasks) MaintainGoDirectiveAndMailCL(ctx *wf.TaskContext
 				dropToolchain = " && go mod edit -toolchain=none"
 			}
 
-			script.WriteString(fmt.Sprintf("(cd %v && go get go@1.%d.0 && go mod tidy && go fix ./...%s)\n", dir, prevGoVer, dropToolchain))
+			fmt.Fprintf(&script, "(cd %v && go get go@1.%d.0 && go mod tidy && go fix ./...%s)\n", dir, prevGoVer, dropToolchain)
 			needCL = true
 		}
 		return nil

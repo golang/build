@@ -737,7 +737,7 @@ func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsSetting(ctx *wf.TaskContext, revi
 		var updateScript strings.Builder
 		updateScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range files {
-			updateScript.WriteString(fmt.Sprintf("cp %s %s.before\n", file, file))
+			fmt.Fprintf(&updateScript, "cp %s %s.before\n", file, file)
 		}
 
 		// `go run generate.go -tools` is environment-independent because it
@@ -756,8 +756,8 @@ go install golang.org/x/tools/gopls@%s
 go run -C extension tools/generate.go -w -tools -gopls
 `)
 		for _, file := range files {
-			updateScript.WriteString(fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file))
-			updateScript.WriteString(fmt.Sprintf("gsutil cp %s.before %s/%s.before\n", file, resultURL, file))
+			fmt.Fprintf(&updateScript, "gsutil cp %s %s/%s\n", file, resultURL, file)
+			fmt.Fprintf(&updateScript, "gsutil cp %s.before %s/%s.before\n", file, resultURL, file)
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -922,22 +922,22 @@ func (r *ReleaseGoplsTasks) createGitHubRelease(ctx *wf.TaskContext, release rel
 func executeAndMonitorChange(ctx *wf.TaskContext, cloudBuild CloudBuildClient, project, branch, script string, watchFiles []string) (map[string]string, error) {
 	// Checkout to the provided branch.
 	var fullScript strings.Builder
-	fullScript.WriteString(fmt.Sprintf(`git checkout %s
+	fmt.Fprintf(&fullScript, `git checkout %s
 git rev-parse --abbrev-ref HEAD
 git rev-parse --ref HEAD
-`, branch))
+`, branch)
 	// Make a copy of all file that need to watch.
 	// If the file does not exist, create a empty file and a empty before file.
 	for _, file := range watchFiles {
 		if strings.Contains(file, "'") {
 			return nil, fmt.Errorf("file name %q contains '", file)
 		}
-		fullScript.WriteString(fmt.Sprintf(`if [ -f '%[1]s' ]; then
+		fmt.Fprintf(&fullScript, `if [ -f '%[1]s' ]; then
     cp '%[1]s' '%[1]s.before'
 else
     touch '%[1]s' '%[1]s.before'
 fi
-`, file))
+`, file)
 	}
 	// Execute the script provided.
 	fullScript.WriteString(script)

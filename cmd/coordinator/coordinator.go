@@ -1533,10 +1533,10 @@ func (ts *trySet) notifyStarting(invalidSlowBots []string) {
 		name = "SlowBots"
 	}
 	var msg strings.Builder
-	msg.WriteString(name + " beginning. Status page: " + ts.statusPage() + "\n")
+	fmt.Fprintf(&msg, "%s beginning. Status page: %s\n", name, ts.statusPage())
 
 	if len(invalidSlowBots) > 0 {
-		msg.WriteString(fmt.Sprintf("Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s.\n", strings.Join(invalidSlowBots, ", ")))
+		fmt.Fprintf(&msg, "Note that the following SlowBot terms didn't match any existing builder name or slowbot alias: %s.\n", strings.Join(invalidSlowBots, ", "))
 	}
 
 	// If any of the requested SlowBot builders

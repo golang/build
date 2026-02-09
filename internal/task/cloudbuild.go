@@ -125,7 +125,7 @@ func (c *RealCloudBuildClient) RunScript(ctx context.Context, script string, ger
 		var saveOutputsScript strings.Builder
 		saveOutputsScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, out := range outputs {
-			saveOutputsScript.WriteString(fmt.Sprintf("gsutil cp %q %q\n", out, resultURL+"/"+strings.TrimPrefix(out, "./")))
+			fmt.Fprintf(&saveOutputsScript, "gsutil cp %q %q\n", out, resultURL+"/"+strings.TrimPrefix(out, "./"))
 		}
 
 		var steps []*cloudbuildpb.BuildStep

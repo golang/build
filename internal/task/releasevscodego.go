@@ -328,7 +328,7 @@ cat go-package-output.log
 		var saveScript strings.Builder
 		saveScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range []string{"npm-output.log", "go-package-output.log", vsixFileName(release, prerelease)} {
-			saveScript.WriteString(fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file))
+			fmt.Fprintf(&saveScript, "gsutil cp %s %s/%s\n", file, resultURL, file)
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -392,7 +392,7 @@ cat go-publish-output.log
 		var saveScript strings.Builder
 		saveScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range []string{"npm-output.log", "go-publish-output.log", vsixFileName(release, "")} {
-			saveScript.WriteString(fmt.Sprintf("gsutil cp %s %s/%s\n", file, resultURL, file))
+			fmt.Fprintf(&saveScript, "gsutil cp %s %s/%s\n", file, resultURL, file)
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -882,7 +882,7 @@ cat npx-output.log
 			"npx-output.log",
 			"npm-output.log",
 		} {
-			saveScriptFmt.WriteString(fmt.Sprintf("gsutil cp %[1]s %[2]s/%[1]s\n", file, resultURL))
+			fmt.Fprintf(&saveScriptFmt, "gsutil cp %[1]s %[2]s/%[1]s\n", file, resultURL)
 		}
 
 		return []*cloudbuildpb.BuildStep{
