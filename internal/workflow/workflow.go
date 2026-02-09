@@ -47,6 +47,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -93,12 +94,8 @@ func (d *Definition) shallowClone() *Definition {
 	clone := New(d.acl)
 	clone.namePrefix = d.namePrefix
 	clone.parameters = append([]MetaParameter(nil), d.parameters...)
-	for k, v := range d.tasks {
-		clone.tasks[k] = v
-	}
-	for k, v := range d.outputs {
-		clone.outputs[k] = v
-	}
+	maps.Copy(clone.tasks, d.tasks)
+	maps.Copy(clone.outputs, d.outputs)
 	return clone
 }
 

@@ -85,9 +85,7 @@ func (h *DefinitionHolder) Definitions() map[string]*wf.Definition {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	defs := make(map[string]*wf.Definition)
-	for k, v := range h.definitions {
-		defs[k] = v
-	}
+	maps.Copy(defs, h.definitions)
 	return defs
 }
 

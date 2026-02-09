@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"html/template"
 	"log"
+	"maps"
 	"net/http"
 	"time"
 
@@ -32,9 +33,7 @@ type QueuesResponse struct {
 func handleQueues(w http.ResponseWriter, _ *http.Request) {
 	resp := QueuesResponse{Queues: map[string]*queue.QuotaStats{}}
 	mergeStats := func(qs map[string]*queue.QuotaStats) {
-		for name, stats := range qs {
-			resp.Queues[name] = stats
-		}
+		maps.Copy(resp.Queues, qs)
 	}
 	mergeStats(pool.ReversePool().QuotaStats())
 	mergeStats(pool.EC2BuildetPool().QuotaStats())

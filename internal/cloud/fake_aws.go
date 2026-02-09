@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"maps"
 	mrand "math/rand"
 	"sync"
 	"time"
@@ -144,9 +145,7 @@ func (f *FakeAWSClient) CreateInstance(ctx context.Context, config *EC2VMConfigu
 		Type:              config.Type,
 		Zone:              config.Zone,
 	}
-	for k, v := range config.Tags {
-		inst.Tags[k] = v
-	}
+	maps.Copy(inst.Tags, config.Tags)
 	f.instances[inst.ID] = inst
 	return copyInstance(inst), nil
 }
@@ -206,9 +205,7 @@ func copyInstance(inst *Instance) *Instance {
 		Type:              inst.Type,
 		Zone:              inst.Zone,
 	}
-	for k, v := range inst.Tags {
-		i.Tags[k] = v
-	}
+	maps.Copy(i.Tags, inst.Tags)
 	return i
 }
 

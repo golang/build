@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"sort"
 	"sync"
 )
@@ -47,9 +48,7 @@ func NewMemFS() *MemFS {
 // it associates the given metadata with the file.
 func (fs *MemFS) NewWriter(_ context.Context, name string, metadata map[string]string) (Writer, error) {
 	meta := make(map[string]string)
-	for k, v := range metadata {
-		meta[k] = v
-	}
+	maps.Copy(meta, metadata)
 	return &memFile{fs: fs, name: name, metadata: meta}, nil
 }
 

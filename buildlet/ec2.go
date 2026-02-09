@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"time"
 
@@ -134,9 +135,7 @@ func vmUserDataSpec(buildEnv *buildenv.Environment, hconf *dashboard.HostConfig,
 		TLSKey:            opts.TLS.KeyPEM,
 		TLSPassword:       opts.TLS.Password(),
 	}
-	for k, v := range opts.Meta {
-		ud.Metadata[k] = v
-	}
+	maps.Copy(ud.Metadata, opts.Meta)
 	return ud.EncodedString()
 }
 
