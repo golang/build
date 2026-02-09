@@ -116,7 +116,7 @@ func dialCoordinator() (net.Listener, error) {
 	success := false
 	location := "/reverse"
 	const maxRedirects = 2
-	for i := 0; i < maxRedirects; i++ {
+	for range maxRedirects {
 		req, err := http.NewRequest("GET", location, nil)
 		if err != nil {
 			log.Fatal(err)
@@ -206,7 +206,7 @@ func dialGomoteServer() (net.Listener, error) {
 	success := false
 	location := "/reverse"
 	const maxRedirects = 2
-	for i := 0; i < maxRedirects; i++ {
+	for range maxRedirects {
 		req, err := http.NewRequest("GET", location, nil)
 		if err != nil {
 			log.Fatal(err)

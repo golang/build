@@ -307,7 +307,7 @@ func generatePassword() (string, error) {
 
 	b := make([]byte, 0, length)
 	max := big.NewInt(int64(len(passwordCharacters) - 1))
-	for i := 0; i < length; i++ {
+	for range length {
 		j, err := rand.Int(rand.Reader, max)
 		if err != nil {
 			return "", fmt.Errorf("error generating random number: %w", err)

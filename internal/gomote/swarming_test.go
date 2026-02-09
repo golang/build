@@ -675,7 +675,7 @@ func TestSwarmingListInstance(t *testing.T) {
 	client := setupGomoteSwarmingTest(t, context.Background(), mockSwarmClientSimple())
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	var want []*protos.Instance
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		want = append(want, &protos.Instance{
 			GomoteId:    mustCreateSwarmingInstance(t, client, fakeIAP()),
 			BuilderType: "gotip-linux-amd64-boringcrypto",

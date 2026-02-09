@@ -153,7 +153,7 @@ func (f *fakeEC2Client) RunInstancesWithContext(ctx context.Context, input *ec2.
 	instances := make([]*ec2.Instance, 0, instCount)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for i := 0; i < instCount; i++ {
+	for range instCount {
 		inst := &ec2.Instance{
 			CpuOptions: &ec2.CpuOptions{
 				CoreCount: aws.Int64(4),
@@ -309,7 +309,7 @@ func fakeClientWithInstances(t *testing.T, count int, opts ...option) (*AWSClien
 	c := fakeClient(opts...)
 	ctx := context.Background()
 	insts := make([]*Instance, 0, count)
-	for i := 0; i < count; i++ {
+	for range count {
 		inst, err := c.CreateInstance(ctx, randomVMConfig())
 		if err != nil {
 			t.Fatalf("unable to create instance: %s", err)

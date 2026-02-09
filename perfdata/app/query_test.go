@@ -36,9 +36,9 @@ func TestQuery(t *testing.T) {
 			t.Errorf("CreateFormFile: %v", err)
 		}
 		bp := benchfmt.NewPrinter(w)
-		for i := 0; i < 1024; i++ {
+		for i := range 1024 {
 			r := &benchfmt.Result{Labels: make(map[string]string), NameLabels: make(map[string]string), Content: "BenchmarkName 1 ns/op"}
-			for j := uint(0); j < 10; j++ {
+			for j := range uint(10) {
 				r.Labels[fmt.Sprintf("label%d", j)] = fmt.Sprintf("%d", i/(1<<j))
 			}
 			r.NameLabels["name"] = "Name"
@@ -111,7 +111,7 @@ func TestUploads(t *testing.T) {
 	// results each, a common label "i" set to the upload number,
 	// and a label "j" set to the record number within the upload.
 	var uploadIDs []string
-	for i := 0; i < 9; i++ {
+	for i := range 9 {
 		status := app.uploadFiles(t, func(mpw *multipart.Writer) {
 			w, err := mpw.CreateFormFile("file", "path/1.txt")
 			if err != nil {

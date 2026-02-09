@@ -79,7 +79,7 @@ func runBench(out io.Writer, bench, src string, commits []string) error {
 	}
 	// Loop over commits and run N times interleaved, grabbing output
 	// TODO: Overhead of multiple Exec calls might be significant; should we ship over a shell script to do this in one go?
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		log.Printf("Starting bench run %d", i)
 		for _, rev := range commits {
 			var buf bytes.Buffer

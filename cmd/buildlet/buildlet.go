@@ -1648,7 +1648,7 @@ func startSSHServerNetBSD() {
 
 // waitLocalSSH waits for sshd to start accepting connections.
 func waitLocalSSH() {
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		time.Sleep(10 * time.Millisecond * time.Duration(i+1))
 		c, err := net.Dial("tcp", "localhost:"+sshPort())
 		if err == nil {

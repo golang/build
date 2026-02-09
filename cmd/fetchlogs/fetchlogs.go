@@ -292,7 +292,7 @@ func newFetcher(jobs int) *fetcher {
 	f := new(fetcher)
 
 	f.tokens = make(chan struct{}, *flagPar)
-	for i := 0; i < jobs; i++ {
+	for range jobs {
 		f.tokens <- struct{}{}
 	}
 

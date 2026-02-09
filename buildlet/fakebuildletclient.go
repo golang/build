@@ -88,7 +88,7 @@ func (fc *FakeClient) Exec(ctx context.Context, cmd string, opts ExecOpts) (remo
 		return nil, nil
 	}
 	out := []byte("<this is a song that never ends>")
-	for it := 0; it < 3; it++ {
+	for range 3 {
 		if n, err := opts.Output.Write(out); n != len(out) || err != nil {
 			return nil, fmt.Errorf("Output.Write(...) = %d, %q; want %d, no error", n, err, len(out))
 		}

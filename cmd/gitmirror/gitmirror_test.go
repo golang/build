@@ -66,7 +66,7 @@ func TestArchive(t *testing.T) {
 
 func TestMirror(t *testing.T) {
 	tm := newTestMirror(t)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		tm.commit(fmt.Sprintf("revision %v", i))
 		rev := tm.git(tm.gerrit, "rev-parse", "HEAD")
 		tm.loopOnce()

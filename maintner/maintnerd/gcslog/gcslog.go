@@ -549,7 +549,7 @@ func (gl *GCSLog) GetMutations(ctx context.Context) <-chan maintner.MutationStre
 func try(tries int, firstDelay time.Duration, fn func() error) error {
 	var err error
 	delay := firstDelay
-	for i := 0; i < tries; i++ {
+	for range tries {
 		err = fn()
 		if err == nil {
 			return nil

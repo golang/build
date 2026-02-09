@@ -314,7 +314,7 @@ func diffPath(got, want reflect.Value) error {
 
 	case reflect.Struct:
 		nf := t.NumField()
-		for i := 0; i < nf; i++ {
+		for i := range nf {
 			sf := t.Field(i)
 			if err := diffPath(got.Field(i), want.Field(i)); err != nil {
 				inner := err.Error()
@@ -357,7 +357,7 @@ func diffPath(got, want reflect.Value) error {
 		if gl != wl {
 			return fmt.Errorf("slice len %v; want %v", gl, wl)
 		}
-		for i := 0; i < gl; i++ {
+		for i := range gl {
 			if err := diffPath(got.Index(i), want.Index(i)); err != nil {
 				return fmt.Errorf("index[%d] differs: %v", i, err)
 			}

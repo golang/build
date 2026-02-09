@@ -17,7 +17,7 @@ func TestWriter(t *testing.T) {
 	var in bytes.Buffer
 	big := strings.Repeat("a", 4<<10)
 	for in.Len() < 20<<20 {
-		for i := 0; i < 256; i++ {
+		for i := range 256 {
 			in.WriteByte(byte(i))
 			in.WriteString(big)
 		}

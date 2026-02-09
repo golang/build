@@ -209,7 +209,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 	wd := workflow.New(workflow.ACL{})
 	nothing := workflow.Task0(wd, "needs retry", func(ctx context.Context) (string, error) {
 		// Send twice so that the test can stop us mid-execution.
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			select {
 			case <-ctx.Done():
 				return "", ctx.Err()
@@ -228,7 +228,7 @@ func TestWorkflowResumeRetry(t *testing.T) {
 	// Run the workflow. It will try the task up to 3 times. Stop the worker
 	// during its second run, then resume it and verify the task retries.
 	go func() {
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			<-blockingChan
 		}
 		cancel()

@@ -419,7 +419,7 @@ func TestListInstance(t *testing.T) {
 	client := setupGomoteTest(t, context.Background())
 	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 	var want []*protos.Instance
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		want = append(want, &protos.Instance{
 			GomoteId:    mustCreateInstance(t, client, fakeIAP()),
 			BuilderType: "linux-amd64",

@@ -22,7 +22,7 @@ func TestMovingAverage(t *testing.T) {
 	// Test MovingAverage against the obvious (but slow)
 	// implementation.
 	xs := make([]float64, 100)
-	for iter := 0; iter < 10; iter++ {
+	for range 10 {
 		for i := range xs {
 			xs[i] = rand.Float64()
 		}

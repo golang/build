@@ -133,7 +133,7 @@ func TestNewUpload(t *testing.T) {
 	c := &Client{BaseURL: ts.URL}
 
 	u := c.NewUpload(context.Background())
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		w, err := u.CreateFile(fmt.Sprintf("want%d.txt", i))
 		if err != nil {
 			t.Fatalf("CreateFile = %v", err)
@@ -191,7 +191,7 @@ func TestNewUploadAbort(t *testing.T) {
 	c := &Client{BaseURL: ts.URL}
 
 	u := c.NewUpload(context.Background())
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		w, err := u.CreateFile(fmt.Sprintf("want%d.txt", i))
 		if err != nil {
 			t.Fatalf("CreateFile = %v", err)

@@ -53,7 +53,7 @@ func TestSessionPool(t *testing.T) {
 	defer sp.Close()
 
 	wantInstances := 4
-	for i := 0; i < wantInstances; i++ {
+	for range wantInstances {
 		sp.AddSession("accounts.google.com:user-xyz-124", "test-user", "builder-type-x", "host-type-x", "", &buildlet.FakeClient{})
 	}
 	sp.destroyExpiredSessions(context.Background())
@@ -67,7 +67,7 @@ func TestSessionPoolList(t *testing.T) {
 	defer sp.Close()
 
 	wantCount := 4
-	for i := 0; i < wantCount; i++ {
+	for i := range wantCount {
 		sp.AddSession("accounts.google.com:user-xyz-124", fmt.Sprintf("user-%d", i), "builder", "host", "", &buildlet.FakeClient{})
 	}
 	got := sp.List()
@@ -87,7 +87,7 @@ func TestSessionPoolDestroySession(t *testing.T) {
 	defer sp.Close()
 
 	var sn []string
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		name := sp.AddSession("accounts.google.com:user-xyz-124", fmt.Sprintf("user-%d", i), "builder", "host", "", &buildlet.FakeClient{})
 		sn = append(sn, name)
 	}

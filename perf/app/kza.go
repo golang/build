@@ -51,7 +51,7 @@ func KolmogorovZurbenko(xs []float64, m, k int) []float64 {
 	// k is typically small, and MA is quite efficient, so just do
 	// the iterated moving average rather than bothering to
 	// compute the binomial coefficient kernel.
-	for i := 0; i < k; i++ {
+	for range k {
 		// TODO: Generate less garbage.
 		xs = MovingAverage(xs, m)
 	}

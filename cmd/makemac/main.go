@@ -602,7 +602,7 @@ func addNewLeases(
 				continue
 			}
 
-			for i := 0; i < need; i++ {
+			for i := range need {
 				log.Printf("Host %s: image %s: creating lease %d...", sc.Host, config.Image, i)
 				resp, err := mc.Lease(req)
 				if err != nil {

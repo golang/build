@@ -249,11 +249,11 @@ func TestQuery(t *testing.T) {
 
 	var allRecords []int
 
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		allRecords = append(allRecords, i)
 		r := &benchfmt.Result{Labels: make(map[string]string), NameLabels: make(map[string]string), Content: "BenchmarkName 1 ns/op"}
 		r.Labels["upload"] = u.ID
-		for j := uint(0); j < 10; j++ {
+		for j := range uint(10) {
 			r.Labels[fmt.Sprintf("label%d", j)] = fmt.Sprintf("%d", i/(1<<j))
 		}
 		r.NameLabels["name"] = "Name"

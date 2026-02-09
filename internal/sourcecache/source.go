@@ -119,7 +119,7 @@ func getSourceTgzFromGerrit(repo, rev string) (source, error) {
 }
 
 func getSourceTgzFromGitMirror(repo, rev string) (src source, err error) {
-	for i := 0; i < 2; i++ { // two tries; different pods maybe?
+	for i := range 2 { // two tries; different pods maybe?
 		if i > 0 {
 			time.Sleep(1 * time.Second)
 		}

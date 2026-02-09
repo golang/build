@@ -211,7 +211,7 @@ func Run(args []string) *Report {
 		log.Fatalf("invalid parallelism -p=%d", *pFlag)
 	}
 	limit := make(chan int, N)
-	for i := 0; i < N; i++ {
+	for range N {
 		limit <- 1
 	}
 	for _, rel := range r.Releases {
@@ -233,7 +233,7 @@ func Run(args []string) *Report {
 	}
 
 	// Wait for goroutines to finish.
-	for i := 0; i < N; i++ {
+	for range N {
 		<-limit
 	}
 

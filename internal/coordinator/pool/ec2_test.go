@@ -484,7 +484,7 @@ func TestEC2BuildeletDestroyUntrackedInstances(t *testing.T) {
 		return inst
 	}
 	// create untracked instances
-	for it := 0; it < 10; it++ {
+	for range 10 {
 		_ = create(instanceName("host-test-type", 10))
 	}
 	wantTrackedInst := create(instanceName("host-test-type", 10))

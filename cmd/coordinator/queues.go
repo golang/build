@@ -102,7 +102,7 @@ func fmtFrac(buf []byte, v uint64, prec int) (nw int, nv uint64) {
 	// Omit trailing zeros up to and including decimal point.
 	w := len(buf)
 	print := false
-	for i := 0; i < prec; i++ {
+	for range prec {
 		digit := v % 10
 		print = print || digit != 0
 		if print {

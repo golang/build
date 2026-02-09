@@ -320,7 +320,7 @@ func (ln *Listener) grabConn(path string) {
 
 	success := false
 	const maxRedirects = 2
-	for i := 0; i < maxRedirects; i++ {
+	for range maxRedirects {
 		req, _ := http.NewRequest("GET", path, nil)
 		if err := req.Write(c); err != nil {
 			failPickup(err)

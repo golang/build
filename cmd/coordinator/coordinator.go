@@ -1812,7 +1812,7 @@ func getBuildlets(ctx context.Context, n int, schedTmpl *queue.SchedItem, lg poo
 	ch := make(chan buildlet.Client) // NOT buffered
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) {
 			defer wg.Done()
 			sp := lg.CreateSpan("get_helper", fmt.Sprintf("helper %d/%d", i+1, n))

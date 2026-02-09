@@ -45,7 +45,7 @@ func titleDirs(title string) []string {
 		b bytes.Buffer
 		r []string
 	)
-	for j := 0; j < i; j++ {
+	for j := range i {
 		switch title[j] {
 		case ' ':
 			continue

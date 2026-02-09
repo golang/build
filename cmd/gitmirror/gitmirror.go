@@ -615,7 +615,7 @@ func (r *repo) serveStatus(w http.ResponseWriter, req *http.Request) {
 
 func (r *repo) try(n int, fn func(attempt int) error) error {
 	var err error
-	for tries := 0; tries < n; tries++ {
+	for tries := range n {
 		time.Sleep(time.Duration(tries) * 5 * time.Second * time.Duration(r.mirror.timeoutScale)) // Linear back-off.
 		if err = fn(tries); err == nil {
 			break

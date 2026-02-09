@@ -550,7 +550,7 @@ func skipBrokenBuilders(boards []*Dashboard) {
 						// Skip the run at the top.
 						// Too few to tell if it is flaky or consistent.
 						// It may also get fixed soon.
-						for j := 0; j < i; j++ {
+						for j := range i {
 							skip(j)
 						}
 					}
