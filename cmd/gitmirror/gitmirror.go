@@ -676,8 +676,7 @@ func (m *gitMirror) subscribeToMaintnerAndTickle() error {
 		err := maintner.TailNetworkMutationSource(ctx, godata.Server, func(e maintner.MutationStreamEvent) error {
 			if e.Mutation != nil && e.Mutation.Gerrit != nil {
 				gm := e.Mutation.Gerrit
-				if after, ok := strings.CutPrefix(gm.Project, "go.googlesource.com/"); ok {
-					proj := after
+				if proj, ok := strings.CutPrefix(gm.Project, "go.googlesource.com/"); ok {
 					log.Printf("maintner refs for %s changed", gm.Project)
 					m.notifyChanged(proj)
 				}
