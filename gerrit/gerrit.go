@@ -1077,7 +1077,7 @@ func (ts TimeStamp) Equal(v TimeStamp) bool {
 const timeStampLayout = "2006-01-02 15:04:05.999999999"
 
 func (ts TimeStamp) MarshalJSON() ([]byte, error) {
-	return []byte(fmt.Sprintf(`"%s"`, ts.Time().UTC().Format(timeStampLayout))), nil
+	return fmt.Appendf(nil, `"%s"`, ts.Time().UTC().Format(timeStampLayout)), nil
 }
 
 func (ts *TimeStamp) UnmarshalJSON(p []byte) error {

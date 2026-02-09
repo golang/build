@@ -1834,7 +1834,7 @@ func makeBSDFilesystemFast() {
 
 func appendSSHAuthorizedKey(sshUser, authKey string) error {
 	if *swarmingBot {
-		buldletAuthKeys = append(buldletAuthKeys, []byte(fmt.Sprintf("%s\n%s\n", sshUser, authKey))...)
+		buldletAuthKeys = append(buldletAuthKeys, fmt.Appendf(nil, "%s\n%s\n", sshUser, authKey)...)
 		return nil
 	}
 	var homeRoot string
