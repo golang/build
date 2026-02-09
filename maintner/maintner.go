@@ -387,7 +387,6 @@ func (c *Corpus) sync(ctx context.Context, loop bool) error {
 		})
 	}
 	for _, rp := range c.pollGitDirs {
-		rp := rp
 		group.Go(func() error {
 			for {
 				err := c.syncGitCommits(ctx, rp, loop)

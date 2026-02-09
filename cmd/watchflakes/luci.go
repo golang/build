@@ -347,7 +347,6 @@ func (c *LUCIClient) ReadBoard(ctx context.Context, dash *Dashboard, since time.
 	g, groupContext := errgroup.WithContext(ctx)
 	g.SetLimit(c.nProc)
 	for i, builder := range dash.Builders {
-		builder := builder
 		buildMap := make(map[string]*BuildResult)
 		dashMap[i] = buildMap
 		g.Go(func() error {
@@ -703,7 +702,6 @@ func (c *LUCIClient) FetchLogs(res []*BuildResult) {
 	g := new(errgroup.Group)
 	g.SetLimit(c.nProc)
 	for _, r := range res {
-		r := r
 		g.Go(func() error {
 			c.fetchLogsForBuild(r)
 			return nil

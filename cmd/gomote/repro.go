@@ -165,7 +165,6 @@ func initReproInstances(ctx context.Context, instances []string, reproBuildID in
 	var tmpOutDirOnce sync.Once
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, inst := range instances {
-		inst := inst
 		eg.Go(func() error {
 			var err error
 			tmpOutDirOnce.Do(func() {

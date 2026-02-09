@@ -152,7 +152,6 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 func imageConfigMap(cc []imageConfig) map[string]*imageConfig {
 	m := make(map[string]*imageConfig)
 	for _, c := range cc {
-		c := c
 		if _, ok := m[c.Image]; ok {
 			panic(fmt.Sprintf("duplicate image %s in image config", c.Image))
 		}

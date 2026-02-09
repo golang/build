@@ -203,8 +203,6 @@ func run() error {
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.SetLimit(*maxConcurrent)
 	for i, req := range reqs {
-		i := i
-		req := req
 		eg.Go(func() error {
 			json, err := protojson.Marshal(req)
 			if err != nil {

@@ -59,7 +59,6 @@ func rm(args []string) error {
 
 	eg, ctx := errgroup.WithContext(context.Background())
 	for _, inst := range rmSet {
-		inst := inst
 		eg.Go(func() error {
 			return doRm(ctx, inst, paths)
 		})

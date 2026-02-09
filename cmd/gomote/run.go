@@ -140,7 +140,6 @@ func run(args []string) error {
 	var cmdsFailed []*cmdFailedError
 	eg, ctx := errgroup.WithContext(context.Background())
 	for _, inst := range runSet {
-		inst := inst
 		if len(runSet) > 1 {
 			// There's more than one instance running the command, so let's
 			// be explicit about that.

@@ -1000,7 +1000,6 @@ func TestMiscCompileLinuxGOARM5(t *testing.T) {
 // that their environment configurations are okay.
 func TestLongTestBuilder(t *testing.T) {
 	for _, name := range []string{"linux-amd64-longtest", "linux-amd64-longtest-race"} {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			long, ok := Builders[name]
 			if !ok {
@@ -1026,7 +1025,6 @@ func TestLongTestBuilder(t *testing.T) {
 // that their environment configurations are okay.
 func TestRaceBuilder(t *testing.T) {
 	for _, name := range []string{"linux-amd64-race", "linux-amd64-longtest-race"} {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			race, ok := Builders[name]
 			if !ok {

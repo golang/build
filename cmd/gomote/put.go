@@ -129,7 +129,6 @@ func putTar(args []string) error {
 	}
 	eg, ctx := errgroup.WithContext(context.Background())
 	for _, inst := range putSet {
-		inst := inst
 		eg.Go(func() error {
 			return putTarFn(ctx, inst)
 		})
@@ -235,7 +234,6 @@ func putBootstrap(args []string) error {
 
 	eg, ctx := errgroup.WithContext(context.Background())
 	for _, inst := range putSet {
-		inst := inst
 		eg.Go(func() error {
 			// TODO(66635) remove once gomotes can no longer be created via the coordinator.
 			if luciDisabled() {
@@ -360,7 +358,6 @@ func put(args []string) error {
 
 	eg, ctx := errgroup.WithContext(ctx)
 	for _, inst := range putSet {
-		inst := inst
 		eg.Go(func() error {
 			return putFileFn(ctx, inst)
 		})

@@ -169,7 +169,6 @@ func (d *Handler) getBuilders(conf map[string]*dashboard.BuildConfig, luci lucip
 
 	var builders builderSlice
 	for _, db := range bm {
-		db := db
 		sort.Sort(&db.Archs)
 		builders = append(builders, &db)
 	}

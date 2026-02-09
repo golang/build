@@ -60,7 +60,6 @@ func push(args []string) error {
 	detailedProgress := len(pushSet) == 1
 	eg, ctx := errgroup.WithContext(context.Background())
 	for _, inst := range pushSet {
-		inst := inst
 		eg.Go(func() error {
 			log.Printf("Pushing GOROOT %q to %q...\n", goroot, inst)
 			return doPush(ctx, inst, goroot, dryRun, detailedProgress)

@@ -215,7 +215,6 @@ func Run(args []string) *Report {
 		limit <- 1
 	}
 	for _, rel := range r.Releases {
-		rel := rel
 		// Download source code.
 		src, err := GerritTarGz(&rel.Log, "go", "refs/tags/"+rel.Version)
 		if err != nil {
@@ -225,7 +224,6 @@ func Run(args []string) *Report {
 
 		// Reproduce all the files.
 		for _, file := range rel.Files {
-			file := file
 			<-limit
 			go func() {
 				defer func() { limit <- 1 }()

@@ -76,13 +76,11 @@ func Update(old []*Board, limit time.Time) ([]*Board, error) {
 	var errors []error
 	var wg sync.WaitGroup
 	for _, r := range repos {
-		r := r
 		branches := []string{""}
 		if r == "go" {
 			branches = goBranches
 		}
 		for _, branch := range branches {
-			branch := branch
 			if branch == "master" || branch == "main" {
 				branch = ""
 			}

@@ -51,7 +51,6 @@ func getTar(args []string) error {
 
 	eg, ctx := errgroup.WithContext(context.Background())
 	for _, inst := range getSet {
-		inst := inst
 		eg.Go(func() error {
 			f, err := os.Create(fmt.Sprintf("%s.tar.gz", inst))
 			if err != nil {
