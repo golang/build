@@ -1858,9 +1858,7 @@ func (p *githubRepoPoller) issueNumbersWithStaleCommentSync() (issueNums []int32
 			issueNums = append(issueNums, n)
 		}
 	}
-	sort.Slice(issueNums, func(i, j int) bool {
-		return issueNums[i] < issueNums[j]
-	})
+	slices.Sort(issueNums)
 	return issueNums
 }
 
@@ -2001,9 +1999,7 @@ func (p *githubRepoPoller) issueNumbersWithStaleEventSync() (issueNums []int32) 
 			issueNums = append(issueNums, n)
 		}
 	}
-	sort.Slice(issueNums, func(i, j int) bool {
-		return issueNums[i] < issueNums[j]
-	})
+	slices.Sort(issueNums)
 	return issueNums
 }
 
@@ -2240,9 +2236,7 @@ func (p *githubRepoPoller) issueNumbersWithStaleReviewsSync() (issueNums []int32
 			issueNums = append(issueNums, n)
 		}
 	}
-	sort.Slice(issueNums, func(i, j int) bool {
-		return issueNums[i] < issueNums[j]
-	})
+	slices.Sort(issueNums)
 	return issueNums
 }
 
