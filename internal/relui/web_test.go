@@ -101,8 +101,7 @@ func TestFileServerHandler(t *testing.T) {
 }
 
 func TestServerHomeHandler(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	p := testDB(ctx, t)
 
 	q := db.New(p)
@@ -155,8 +154,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 
 			u := url.URL{Path: "/new_workflow", RawQuery: c.params.Encode()}
 			req := httptest.NewRequest(http.MethodGet, u.String(), nil)
@@ -174,8 +172,7 @@ func TestServerNewWorkflowHandler(t *testing.T) {
 }
 
 func TestServerCreateWorkflowHandler(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	now := time.Now()
 	cases := []struct {
@@ -546,8 +543,7 @@ func TestServerBaseLink(t *testing.T) {
 }
 
 func TestServerApproveTaskHandler(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	hourAgo := time.Now().Add(-1 * time.Hour)
 	wfID := uuid.New()

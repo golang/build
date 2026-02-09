@@ -5,7 +5,6 @@
 package relui
 
 import (
-	"context"
 	"database/sql"
 	"testing"
 	"time"
@@ -117,8 +116,7 @@ func TestSchedulerCreate(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			p := testDB(ctx, t)
 			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}))
 			row, err := s.Create(ctx, c.sched, c.workflowName, c.params)
@@ -239,8 +237,7 @@ func TestSchedulerResume(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			p := testDB(ctx, t)
 			q := db.New(p)
 			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}))
@@ -290,8 +287,7 @@ func TestScheduleDelete(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			p := testDB(ctx, t)
 			q := db.New(p)
 			s := NewScheduler(p, NewWorker(NewDefinitionHolder(), p, &PGListener{DB: p}))

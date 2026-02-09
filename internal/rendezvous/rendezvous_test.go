@@ -16,8 +16,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	_ = New(ctx)
 }
 
@@ -36,8 +35,7 @@ func TestPurgeExpiredRegistrations(t *testing.T) {
 }
 
 func TestRegisterInstance(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	rdv := New(ctx)
 	rdv.RegisterInstance(ctx, "sample-1", time.Minute)
 	if len(rdv.m) != 1 {

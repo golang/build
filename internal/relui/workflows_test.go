@@ -118,8 +118,7 @@ func TestAwaitFunc(t *testing.T) {
 }
 
 func TestCheckTaskApproved(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	hourAgo := time.Now().Add(-1 * time.Hour)
 	p := testDB(ctx, t)

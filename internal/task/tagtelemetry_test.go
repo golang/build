@@ -5,7 +5,6 @@
 package task
 
 import (
-	"context"
 	"testing"
 
 	"golang.org/x/build/internal/workflow"
@@ -92,8 +91,7 @@ func TestTagTelemetry(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 
 			outputs, err := w.Run(ctx, &verboseListener{t: t})
 			if err != nil {

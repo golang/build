@@ -22,8 +22,7 @@ import (
 )
 
 func TestListenerTaskStateChanged(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 
@@ -98,8 +97,7 @@ func TestListenerTaskStateChanged(t *testing.T) {
 }
 
 func TestListenerLogger(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 

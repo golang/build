@@ -22,8 +22,7 @@ import (
 )
 
 func TestWorkerStartWorkflow(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 	wg := sync.WaitGroup{}
@@ -83,8 +82,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 }
 
 func TestWorkerResume(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 	wg := sync.WaitGroup{}
@@ -125,8 +123,7 @@ func TestWorkerResume(t *testing.T) {
 }
 
 func TestWorkerResumeMissingDefinition(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 	w := NewWorker(NewDefinitionHolder(), dbp, &PGListener{DB: dbp})
@@ -142,8 +139,7 @@ func TestWorkerResumeMissingDefinition(t *testing.T) {
 }
 
 func TestWorkflowResumeAll(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dbp := testDB(ctx, t)
 	q := db.New(dbp)
 	wg := sync.WaitGroup{}

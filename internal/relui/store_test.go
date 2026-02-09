@@ -5,14 +5,12 @@
 package relui
 
 import (
-	"context"
 	"errors"
 	"testing"
 )
 
 func TestCreateDBIfNotExists(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	db := testDB(ctx, t)
 
 	testCfg := db.Config().ConnConfig.Copy()
