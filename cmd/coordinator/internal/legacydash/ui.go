@@ -622,8 +622,8 @@ func cleanTitle(title, viewBranch string) string {
 	// Strip the "[release-branch.go1.n]" prefixes from commit messages
 	// when looking at a branch.
 	if strings.HasPrefix(title, "[") {
-		if i := strings.IndexByte(title, ']'); i != -1 {
-			return strings.TrimSpace(title[i+1:])
+		if _, after, ok := strings.Cut(title, "]"); ok {
+			return strings.TrimSpace(after)
 		}
 	}
 	return title
@@ -1074,9 +1074,9 @@ func formatTime(t time.Time) string {
 }
 
 func splitDash(s string) (string, string) {
-	i := strings.Index(s, "-")
-	if i >= 0 {
-		return s[:i], s[i+1:]
+	before, after, ok := strings.Cut(s, "-")
+	if ok {
+		return before, after
 	}
 	return s, ""
 }
@@ -1183,8 +1183,8 @@ func shortUser(user string) string {
 	if i, j := strings.Index(user, "<"), strings.Index(user, ">"); 0 <= i && i < j {
 		user = user[i+1 : j]
 	}
-	if i := strings.Index(user, "@"); i >= 0 {
-		return user[:i]
+	if before, _, ok := strings.Cut(user, "@"); ok {
+		return before
 	}
 	return user
 }

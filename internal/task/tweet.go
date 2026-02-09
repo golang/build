@@ -275,10 +275,10 @@ func (r *releaseTweet) tweetText(rnd *rand.Rand) (string, error) {
 		// build extracts the pre-release build number of a valid Go version.
 		// For example, build("go1.19beta2") == "2".
 		"build": func(v string) (string, error) {
-			if i := strings.Index(v, "beta"); i != -1 {
-				return v[i+len("beta"):], nil
-			} else if i := strings.Index(v, "rc"); i != -1 {
-				return v[i+len("rc"):], nil
+			if _, after, ok := strings.Cut(v, "beta"); ok {
+				return after, nil
+			} else if _, after, ok := strings.Cut(v, "rc"); ok {
+				return after, nil
 			}
 			return "", fmt.Errorf("internal error: unhandled pre-release Go version %q", v)
 		},

@@ -465,11 +465,11 @@ func (cl *GerritCL) OwnerID() int {
 	// Meta commits caused by the owner of a change have an email of the form
 	// <user id>@<uuid of gerrit server>.
 	email := cl.Metas[0].Commit.Author.Email()
-	idx := strings.Index(email, "@")
-	if idx == -1 {
+	before, _, ok := strings.Cut(email, "@")
+	if !ok {
 		return -1
 	}
-	id, err := strconv.Atoi(email[:idx])
+	id, err := strconv.Atoi(before)
 	if err != nil {
 		return -1
 	}
@@ -1083,15 +1083,15 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	refExists := map[string]bool{} // whether ref is this ls-remote fetch
 	for bs.Scan() {
 		line := bs.Bytes()
-		tab := bytes.IndexByte(line, '\t')
-		if tab == -1 {
+		before, after, ok := bytes.Cut(line, []byte{'\t'})
+		if !ok {
 			if !strings.HasPrefix(bs.Text(), "From ") {
 				gp.logf("bogus ls-remote line: %q", line)
 			}
 			continue
 		}
-		sha1 := string(line[:tab])
-		refName := strings.TrimSpace(string(line[tab+1:]))
+		sha1 := string(before)
+		refName := strings.TrimSpace(string(after))
 		refExists[refName] = true
 		hash := c.gitHashFromHexStr(sha1)
 
@@ -1438,10 +1438,10 @@ func (m *GerritMeta) HashtagEdits() (added, removed GerritHashtags, ok bool) {
 	for len(msg) > 0 {
 		value, rest := lineValueRest(msg, "Hash")
 		msg = rest
-		colon := strings.IndexByte(value, ':')
-		if colon != -1 {
-			action := value[:colon]
-			value := GerritHashtags(strings.TrimSpace(value[colon+1:]))
+		before, after, ok0 := strings.Cut(value, ":")
+		if ok0 {
+			action := before
+			value := GerritHashtags(strings.TrimSpace(after))
 			switch action {
 			case "tag added", "tags added":
 				added = value
@@ -1581,11 +1581,11 @@ func parseGerritLabelValue(v string) (label string, value int8, whose string) {
 		}
 	}
 	v = strings.TrimSpace(v)
-	if eq := strings.IndexByte(v, '='); eq == -1 {
+	if before, after, ok := strings.Cut(v, "="); !ok {
 		label = v
 	} else {
-		label = v[:eq]
-		if n, err := strconv.ParseInt(v[eq+1:], 10, 8); err == nil {
+		label = before
+		if n, err := strconv.ParseInt(after, 10, 8); err == nil {
 			value = int8(n)
 		}
 	}

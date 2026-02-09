@@ -31,11 +31,11 @@ type project struct {
 func (p *project) ReviewServer() string {
 	const d = ".googlesource.com"
 	s := p.Server()
-	i := strings.Index(s, d)
-	if i == -1 {
+	before, _, ok := strings.Cut(s, d)
+	if !ok {
 		return ""
 	}
-	return s[:i] + "-review" + d
+	return before + "-review" + d
 }
 
 type change struct {

@@ -71,8 +71,8 @@ func ParseReleaseBranch(branchName string) (major, minor int, ok bool) {
 	}
 	majorStr, minorStr := dottedNum, ""
 	if numDot == 1 {
-		dot := strings.Index(dottedNum, ".")
-		majorStr, minorStr = dottedNum[:dot], dottedNum[dot+1:]
+		before, after, _ := strings.Cut(dottedNum, ".")
+		majorStr, minorStr = before, after
 	}
 	major, ok = parse0To999(majorStr)
 	if !ok || major == 0 {

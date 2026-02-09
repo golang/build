@@ -278,8 +278,8 @@ func (c *commit) ShortUser() string {
 	if i, j := strings.Index(user, "<"), strings.Index(user, ">"); 0 <= i && i < j {
 		user = user[i+1 : j]
 	}
-	if i := strings.Index(user, "@"); i >= 0 {
-		return user[:i]
+	if before, _, ok := strings.Cut(user, "@"); ok {
+		return before
 	}
 	return user
 }

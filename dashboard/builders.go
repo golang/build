@@ -917,11 +917,11 @@ func (c *BuildConfig) GOOS() string { return c.Name[:strings.Index(c.Name, "-")]
 
 func (c *BuildConfig) GOARCH() string {
 	arch := c.Name[strings.Index(c.Name, "-")+1:]
-	i := strings.Index(arch, "-")
-	if i == -1 {
+	before, _, ok := strings.Cut(arch, "-")
+	if !ok {
 		return arch
 	}
-	return arch[:i]
+	return before
 }
 
 // MatchesSlowBotTerm reports whether some provided term from a

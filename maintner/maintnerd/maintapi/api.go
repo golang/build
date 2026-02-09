@@ -223,10 +223,10 @@ func tryWorkItem(
 }
 
 func firstLine(s string) string {
-	if nl := strings.Index(s, "\n"); nl < 0 {
+	if before, _, ok := strings.Cut(s, "\n"); !ok {
 		return s
 	} else {
-		return s[:nl]
+		return before
 	}
 }
 

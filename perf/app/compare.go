@@ -224,9 +224,9 @@ func elideKeyValues(content string, keys map[string]bool) string {
 	}
 	parts := strings.Split(content, "/")
 	for i, part := range parts {
-		if equals := strings.Index(part, "="); equals >= 0 {
-			if keys[part[:equals]] {
-				parts[i] = part[:equals] + "=*"
+		if before, _, ok := strings.Cut(part, "="); ok {
+			if keys[before] {
+				parts[i] = before + "=*"
 			}
 		} else if i == 0 {
 			if keys["name"] {

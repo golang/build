@@ -480,8 +480,8 @@ func atoi(s string) int {
 // firstLine returns the first line from s, not including the line
 // terminator.
 func firstLine(s string) string {
-	if i := strings.Index(s, "\n"); i >= 0 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "\n"); ok {
+		return before
 	}
 	return s
 }
