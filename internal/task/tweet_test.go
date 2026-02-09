@@ -221,37 +221,6 @@ Success. You may now run 'go1.21.0'
 $ go1.21.0 version
 go version go1.21.0 freebsd/amd64` + "\n",
 	},
-	{
-		name: "fixup-v6l-suffix",
-		kind: KindMinor,
-		published: []Published{
-			{Version: "go1.22.4", Files: []WebsiteFile{{
-				OS: "windows", Arch: "armv6l",
-				Filename: "go1.22.4.windows-arm.zip", Size: 74142698, Kind: "archive"}},
-			},
-			{Version: "go1.21.11"},
-		},
-		announcement: "https://groups.google.com/g/golang-announce/c/XbxouI9gY7k",
-		randomSeed:   123,
-		wantLog: `tweet text:
-🥳 Go 1.22.4 and 1.21.11 are released!
-
-📢 Announcement: https://groups.google.com/g/golang-announce/c/XbxouI9gY7k
-
-⬇️ Download: https://go.dev/dl/#go1.22.4
-
-#golang
-tweet image:
-$ go install golang.org/dl/go1.22.4@latest
-$ go1.22.4 download
-Downloaded   0.0% (       0 / 74142698 bytes) ...
-Downloaded  50.0% (37071349 / 74142698 bytes) ...
-Downloaded 100.0% (74142698 / 74142698 bytes)
-Unpacking go1.22.4.windows-arm.zip ...
-Success. You may now run 'go1.22.4'
-$ go1.22.4 version
-go version go1.22.4 windows/arm` + "\n",
-	},
 }
 
 func TestTweetRelease(t *testing.T) {

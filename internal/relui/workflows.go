@@ -809,20 +809,17 @@ func (tasks *BuildReleaseTasks) addBuildTasks(wd *wf.Definition, major int, kind
 		// For windows, produce both a tgz and zip -- we need tgzs to run
 		// tests, even though we'll eventually publish the zips.
 		var tar, zip wf.Value[artifact]
-		var mod wf.Value[moduleArtifact]
-		{ // Block to improve diff readability. Can be unnested later.
-			distpack := wf.Task2(wd, "Build distpack", tasks.buildDistpack, wf.Const(target), source)
-			reproducer := wf.Task2(wd, "Reproduce distpack on Windows", tasks.reproduceDistpack, wf.Const(target), source)
-			match := wf.Action2(wd, "Check distpacks match", tasks.checkDistpacksMatch, distpack, reproducer)
-			blockers = append(blockers, match)
-			if target.GOOS == "windows" {
-				zip = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
-				tar = wf.Task1(wd, "Convert zip to .tgz", tasks.convertZipToTGZ, zip)
-			} else {
-				tar = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
-			}
-			mod = wf.Task1(wd, "Get module files from distpack", tasks.modFilesFromDistpack, distpack)
+		distpack := wf.Task3(wd, "Build distpack", tasks.buildDistpack, version, wf.Const(target), source)
+		reproducer := wf.Task2(wd, "Reproduce distpack on Windows", tasks.reproduceDistpack, wf.Const(target), source)
+		match := wf.Action2(wd, "Check distpacks match", tasks.checkDistpacksMatch, distpack, reproducer)
+		blockers = append(blockers, match)
+		if target.GOOS == "windows" {
+			zip = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
+			tar = wf.Task1(wd, "Convert zip to .tgz", tasks.convertZipToTGZ, zip)
+		} else {
+			tar = wf.Task1(wd, "Get binary from distpack", tasks.binaryArchiveFromDistpack, distpack)
 		}
+		mod := wf.Task1(wd, "Get module files from distpack", tasks.modFilesFromDistpack, distpack)
 
 		// Create installers and perform platform-specific signing where
 		// applicable. For macOS, produce updated tgz and module zips that
@@ -1095,11 +1092,14 @@ func tarballHashes(r io.Reader, prefix string, hashes map[string]string, include
 	return nil
 }
 
-func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, target *releasetargets.Target, source artifact) (artifact, error) {
+func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, version string, target *releasetargets.Target, source artifact) (artifact, error) {
 	return b.runBuildStep(ctx, target, artifact{}, "tar.gz", func(_ io.Reader, w io.Writer) error {
-		// We need GOROOT_FINAL both during the binary build and test runs. See go.dev/issue/52236.
-		// TODO(go.dev/issue/62047): GOROOT_FINAL is being removed. Remove it from here too.
-		makeEnv := []string{"GOROOT_FINAL=" + dashboard.GorootFinal(target.GOOS)}
+		var makeEnv []string
+		if goversion.Compare(version, "go1.27") < 0 { // TODO: Delete this after Go 1.28.0 is out and this becomes dead code.
+			// We used to need GOROOT_FINAL both during the binary build and test runs.
+			// See go.dev/issue/52236.
+			makeEnv = append(makeEnv, "GOROOT_FINAL="+dashboard.GorootFinal(target.GOOS))
+		}
 		// Add extra vars from the target's configuration.
 		makeEnv = append(makeEnv, target.ExtraEnv...)
 		makeEnv = append(makeEnv, "GOOS="+target.GOOS, "GOARCH="+target.GOARCH)
@@ -1932,15 +1932,6 @@ func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version st
 			f.Arch = a.Target.GOARCH
 			if a.Target.GOOS == "linux" && a.Target.GOARCH == "arm" && slices.Contains(a.Target.ExtraEnv, "GOARM=6") {
 				f.Arch = "armv6l"
-			}
-			if goversion.Compare(version, "go1.23") == -1 { // TODO: Delete this after Go 1.24.0 is out and this becomes dead code.
-				// Due to an oversight, we've been inadvertently setting the "arch" field
-				// of published download metadata to "armv6l" for all arm ports, not just
-				// linux/arm port as intended. Keep doing it for the rest of Go 1.22/1.21
-				// minor releases only.
-				if a.Target.GOARCH == "arm" {
-					f.Arch = "armv6l"
-				}
 			}
 		}
 		switch a.Suffix {
