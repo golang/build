@@ -940,7 +940,7 @@ type TagInfo struct {
 	Object    string         `json:"object,omitempty"`
 	Message   string         `json:"message,omitempty"`
 	Tagger    *GitPersonInfo `json:"tagger,omitempty"`
-	Created   TimeStamp      `json:"created,omitempty"`
+	Created   TimeStamp      `json:"created"`
 	CanDelete bool           `json:"can_delete"`
 	WebLinks  []WebLinkInfo  `json:"web_links,omitempty"`
 }
