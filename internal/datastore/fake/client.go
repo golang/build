@@ -71,7 +71,7 @@ func (f *Client) Get(_ context.Context, key *datastore.Key, dst any) (err error)
 		return datastore.ErrNoSuchEntity
 	}
 	rv := reflect.ValueOf(dst)
-	if rv.Kind() != reflect.Ptr {
+	if rv.Kind() != reflect.Pointer {
 		return datastore.ErrInvalidEntityType
 	}
 	v := kdb[key.Encode()]

@@ -296,7 +296,7 @@ func diffPath(got, want reflect.Value) error {
 	}
 
 	switch t.Kind() {
-	case reflect.Ptr, reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Slice:
+	case reflect.Pointer, reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Slice:
 		if got.IsNil() != want.IsNil() {
 			if got.IsNil() {
 				return fmt.Errorf("got = (%s)(nil), want = non-nil", t)
@@ -306,7 +306,7 @@ func diffPath(got, want reflect.Value) error {
 	}
 
 	switch t.Kind() {
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if got.IsNil() {
 			return nil
 		}
