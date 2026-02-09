@@ -31,7 +31,7 @@ func (s *server) handleStats(t *template.Template, w http.ResponseWriter, r *htt
 	s.cMu.RLock()
 	defer s.cMu.RUnlock()
 	data := struct {
-		DataJSON interface{}
+		DataJSON any
 	}{
 		DataJSON: s.data.stats,
 	}
@@ -55,9 +55,9 @@ type statsData struct {
 // A chart holds data used by the Google Charts JavaScript API to render
 // an interactive visualization.
 type chart struct {
-	Title   string          `json:"title"`
-	Columns []*chartColumn  `json:"columns"`
-	Data    [][]interface{} `json:"data"`
+	Title   string         `json:"title"`
+	Columns []*chartColumn `json:"columns"`
+	Data    [][]any        `json:"data"`
 }
 
 // A chartColumn is analogous to a Google Charts DataTable column.
@@ -94,7 +94,7 @@ func (s *server) updateStatsData() {
 		return nil
 	}))
 
-	var chartData [][]interface{}
+	var chartData [][]any
 	for t0, t1 := windowStart, windowStart.Add(24*time.Hour); t0.Before(time.Now()); t0, t1 = t0.Add(24*time.Hour), t1.Add(24*time.Hour) {
 		var (
 			open       int
@@ -110,7 +110,7 @@ func (s *server) updateStatsData() {
 				withIssues++
 			}
 		}
-		chartData = append(chartData, []interface{}{
+		chartData = append(chartData, []any{
 			t0, open, withIssues,
 		})
 	}

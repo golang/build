@@ -132,17 +132,17 @@ func (p part) merge(p2 part) (part, error) {
 }
 
 // sql returns a SQL expression and a list of arguments for finding records matching p.
-func (p part) sql() (sql string, args []interface{}, err error) {
+func (p part) sql() (sql string, args []any, err error) {
 	if p.key == "upload" {
 		switch p.operator {
 		case equals:
-			return "SELECT UploadID, RecordID FROM Records WHERE UploadID = ?", []interface{}{p.value}, nil
+			return "SELECT UploadID, RecordID FROM Records WHERE UploadID = ?", []any{p.value}, nil
 		case lt:
-			return "SELECT UploadID, RecordID FROM Records WHERE UploadID < ?", []interface{}{p.value}, nil
+			return "SELECT UploadID, RecordID FROM Records WHERE UploadID < ?", []any{p.value}, nil
 		case gt:
-			return "SELECT UploadID, RecordID FROM Records WHERE UploadID > ?", []interface{}{p.value}, nil
+			return "SELECT UploadID, RecordID FROM Records WHERE UploadID > ?", []any{p.value}, nil
 		case ltgt:
-			return "SELECT UploadID, RecordID FROM Records WHERE UploadID < ? AND UploadID > ?", []interface{}{p.value, p.value2}, nil
+			return "SELECT UploadID, RecordID FROM Records WHERE UploadID < ? AND UploadID > ?", []any{p.value, p.value2}, nil
 		}
 	}
 	switch p.operator {
@@ -151,17 +151,17 @@ func (p part) sql() (sql string, args []interface{}, err error) {
 			// TODO(quentin): Implement support for searching for missing labels.
 			return "", nil, fmt.Errorf("missing value for key %q", p.key)
 		}
-		return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ? AND Value = ?", []interface{}{p.key, p.value}, nil
+		return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ? AND Value = ?", []any{p.key, p.value}, nil
 	case lt:
-		return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ? AND Value < ?", []interface{}{p.key, p.value}, nil
+		return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ? AND Value < ?", []any{p.key, p.value}, nil
 	case gt:
 		if p.value == "" {
 			// Simplify queries for any value.
-			return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ?", []interface{}{p.key}, nil
+			return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ?", []any{p.key}, nil
 		}
-		return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ? AND Value > ?", []interface{}{p.key, p.value}, nil
+		return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ? AND Value > ?", []any{p.key, p.value}, nil
 	case ltgt:
-		return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ? AND Value < ? AND Value > ?", []interface{}{p.key, p.value, p.value2}, nil
+		return "SELECT UploadID, RecordID FROM RecordLabels WHERE Name = ? AND Value < ? AND Value > ?", []any{p.key, p.value, p.value2}, nil
 	default:
 		panic("unknown operator " + string(p.operator))
 	}

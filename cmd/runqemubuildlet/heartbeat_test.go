@@ -56,8 +56,8 @@ func TestCheckBuildletHealth(t *testing.T) {
 func TestHeartbeatContext(t *testing.T) {
 	ctx := context.Background()
 
-	didWork := make(chan interface{}, 2)
-	done := make(chan interface{})
+	didWork := make(chan any, 2)
+	done := make(chan any)
 	ctx, cancel := heartbeatContext(ctx, time.Millisecond, 100*time.Millisecond, func(context.Context) error {
 		select {
 		case <-done:

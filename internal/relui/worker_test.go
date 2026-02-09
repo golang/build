@@ -35,7 +35,7 @@ func TestWorkerStartWorkflow(t *testing.T) {
 
 	wd := newTestEchoWorkflow()
 	dh.RegisterDefinition(t.Name(), wd)
-	params := map[string]interface{}{"greeting": "greetings", "names": []string{"alice", "bob"}}
+	params := map[string]any{"greeting": "greetings", "names": []string{"alice", "bob"}}
 
 	wg.Add(1)
 	wfid, err := w.StartWorkflow(ctx, t.Name(), params, 0)
@@ -302,7 +302,7 @@ type testWorkflowListener struct {
 	onStalled  func()
 }
 
-func (t *testWorkflowListener) WorkflowFinished(ctx context.Context, wfid uuid.UUID, outputs map[string]interface{}, wferr error) error {
+func (t *testWorkflowListener) WorkflowFinished(ctx context.Context, wfid uuid.UUID, outputs map[string]any, wferr error) error {
 	err := t.Listener.WorkflowFinished(ctx, wfid, outputs, wferr)
 	if t.onFinished != nil {
 		t.onFinished()

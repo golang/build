@@ -50,6 +50,6 @@ func (tf *timeFlag) String() string {
 	return tf.Time.Format(rfc3339DateTime)
 }
 
-func (tf *timeFlag) Get() interface{} {
+func (tf *timeFlag) Get() any {
 	return tf.Time
 }

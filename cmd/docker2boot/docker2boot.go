@@ -233,7 +233,7 @@ func filesystemUUID() string {
 }
 
 // failf is like log.Fatalf, but runs deferred functions.
-func failf(msg string, args ...interface{}) {
+func failf(msg string, args ...any) {
 	log.Printf(msg, args...)
 	runtime.Goexit()
 }

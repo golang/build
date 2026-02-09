@@ -80,7 +80,7 @@ func NewServer(p db.PGDBTX, w *Worker, baseURL *url.URL, header SiteHeader, ms *
 	if err := s.scheduler.Resume(context.Background()); err != nil {
 		log.Fatalf("s.scheduler.Resume() = %v", err)
 	}
-	helpers := map[string]interface{}{
+	helpers := map[string]any{
 		"allWorkflowsCount":     s.allWorkflowsCount,
 		"baseLink":              s.BaseLink,
 		"hasPrefix":             strings.HasPrefix,
@@ -366,7 +366,7 @@ func (s *Server) createWorkflowHandler(w http.ResponseWriter, r *http.Request) {
 		// authorizedForWorkflow writes errors to w itself.
 		return
 	}
-	params := make(map[string]interface{})
+	params := make(map[string]any)
 	for _, p := range d.Parameters() {
 		switch p.Type().String() {
 		case "string":
@@ -612,12 +612,12 @@ func (s *Server) deleteScheduleHandler(w http.ResponseWriter, r *http.Request) {
 type resultDetail struct {
 	Artifact artifact
 	Outputs  map[string]*resultDetail
-	JSON     map[string]interface{}
+	JSON     map[string]any
 	String   string
 	Number   float64
 	Slice    []*resultDetail
 	Boolean  bool
-	Unknown  interface{}
+	Unknown  any
 }
 
 func (r *resultDetail) Kind() string {

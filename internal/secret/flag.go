@@ -75,7 +75,7 @@ func (r *FlagResolver) ResolveSecret(flagValue string) (string, error) {
 
 // JSONVarFlag defines a flag on set that behaves like Flag and then
 // json.Unmarshals the resulting string into value.
-func (r *FlagResolver) JSONVarFlag(set *flag.FlagSet, value interface{}, name, usage string) {
+func (r *FlagResolver) JSONVarFlag(set *flag.FlagSet, value any, name, usage string) {
 	suffixedUsage := usage + "\n" + fmt.Sprintf("A JSON representation of a %T.", value) + "\n" + secretSuffix
 	set.Func(name, suffixedUsage, func(flagValue string) error {
 		stringValue, err := r.ResolveSecret(flagValue)
@@ -105,7 +105,7 @@ func FlagVar(p *string, name, usage string) {
 
 // JSONVarFlag defines a flag on flag.CommandLine that behaves like Flag
 // and then json.Unmarshals the resulting string into value.
-func JSONVarFlag(value interface{}, name, usage string) {
+func JSONVarFlag(value any, name, usage string) {
 	DefaultResolver.JSONVarFlag(flag.CommandLine, value, name, usage)
 }
 

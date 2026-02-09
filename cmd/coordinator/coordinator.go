@@ -710,9 +710,9 @@ func serveTryStatusJSON(w http.ResponseWriter, r *http.Request, ts *trySet, tss 
 		return
 	}
 	var resp struct {
-		Success bool        `json:"success"`
-		Error   string      `json:"error,omitempty"`
-		Payload interface{} `json:"payload,omitempty"`
+		Success bool   `json:"success"`
+		Error   string `json:"error,omitempty"`
+		Payload any    `json:"payload,omitempty"`
 	}
 	if ts == nil {
 		var buf bytes.Buffer
@@ -2005,7 +2005,7 @@ func (ti *testItem) retry() {
 	<-ti.take
 }
 
-func (ti *testItem) failf(format string, args ...interface{}) {
+func (ti *testItem) failf(format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	ti.output = []byte(msg)
 	ti.remoteErr = errors.New(msg)

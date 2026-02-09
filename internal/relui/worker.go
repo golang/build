@@ -24,8 +24,8 @@ import (
 type Listener interface {
 	workflow.Listener
 
-	WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}, scheduleID int) error
-	WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, err error) error
+	WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]any, scheduleID int) error
+	WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]any, err error) error
 }
 
 // Worker runs workflows, and persists their state.
@@ -140,7 +140,7 @@ func (w *Worker) workflowRunning(id uuid.UUID) bool {
 }
 
 // StartWorkflow persists and starts running a workflow.
-func (w *Worker) StartWorkflow(ctx context.Context, name string, params map[string]interface{}, scheduleID int) (uuid.UUID, error) {
+func (w *Worker) StartWorkflow(ctx context.Context, name string, params map[string]any, scheduleID int) (uuid.UUID, error) {
 	d := w.dh.Definition(name)
 	if d == nil {
 		return uuid.UUID{}, fmt.Errorf("no workflow named %q", name)

@@ -302,7 +302,7 @@ func (fi *gcsFileInfo) IsDir() bool {
 	return fi.attrs.Prefix != ""
 }
 
-func (fi *gcsFileInfo) Sys() interface{} {
+func (fi *gcsFileInfo) Sys() any {
 	return fi.attrs
 }
 

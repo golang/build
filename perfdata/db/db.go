@@ -168,8 +168,8 @@ type Upload struct {
 	tx *sql.Tx
 
 	// pending arguments for flush
-	insertRecordArgs []interface{}
-	insertLabelArgs  []interface{}
+	insertRecordArgs []any
+	insertLabelArgs  []any
 	lastResult       *benchfmt.Result
 }
 
@@ -320,7 +320,7 @@ func repeatDelim(s, delim string, n int) string {
 }
 
 // insertMultiple executes a single INSERT statement to insert multiple rows.
-func insertMultiple(tx *sql.Tx, sqlPrefix string, argsPerRow int, args []interface{}) error {
+func insertMultiple(tx *sql.Tx, sqlPrefix string, argsPerRow int, args []any) error {
 	if len(args) == 0 {
 		return nil
 	}
@@ -363,7 +363,7 @@ func (u *Upload) Abort() error {
 
 // parseQuery parses a query into a slice of SQL subselects and a slice of arguments.
 // The subselects must be joined with INNER JOIN in the order returned.
-func parseQuery(q string) (sql []string, args []interface{}, err error) {
+func parseQuery(q string) (sql []string, args []any, err error) {
 	var keys []string
 	parts := make(map[string]part)
 	for _, word := range query.SplitWords(q) {
@@ -450,7 +450,7 @@ type Query struct {
 	// for Debug
 	q        string
 	sqlQuery string
-	sqlArgs  []interface{}
+	sqlArgs  []any
 	// from last call to Next
 	br  *benchfmt.Reader
 	err error
@@ -558,7 +558,7 @@ type UploadList struct {
 	// for Debug
 	q        string
 	sqlQuery string
-	sqlArgs  []interface{}
+	sqlArgs  []any
 	// from last call to Next
 	count       int
 	uploadID    string
@@ -585,7 +585,7 @@ func (ul *UploadList) Debug() string {
 func (db *DB) ListUploads(q string, extraLabels []string, limit int) *UploadList {
 	ret := &UploadList{q: q, extraLabels: extraLabels}
 
-	var args []interface{}
+	var args []any
 	query := "SELECT j.UploadID, rCount"
 	for i, label := range extraLabels {
 		query += fmt.Sprintf(", (SELECT l%d.Value FROM RecordLabels l%d WHERE l%d.UploadID = j.UploadID AND Name = ? LIMIT 1)", i, i, i)
@@ -646,7 +646,7 @@ func (ul *UploadList) Next() bool {
 	if !ul.rows.Next() {
 		return false
 	}
-	args := []interface{}{&ul.uploadID, &ul.count}
+	args := []any{&ul.uploadID, &ul.count}
 	ul.labelValues = make([]sql.NullString, len(ul.extraLabels))
 	for i := range ul.labelValues {
 		args = append(args, &ul.labelValues[i])

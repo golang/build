@@ -90,12 +90,12 @@ type checkWriter struct {
 	Out []levelText
 }
 
-func (w *checkWriter) error(s string)                       { w.Out = append(w.Out, levelText{levelError, s}) }
-func (w *checkWriter) errorf(a string, args ...interface{}) { w.error(fmt.Sprintf(a, args...)) }
-func (w *checkWriter) info(s string)                        { w.Out = append(w.Out, levelText{levelInfo, s}) }
-func (w *checkWriter) infof(a string, args ...interface{})  { w.info(fmt.Sprintf(a, args...)) }
-func (w *checkWriter) warn(s string)                        { w.Out = append(w.Out, levelText{levelWarn, s}) }
-func (w *checkWriter) warnf(a string, args ...interface{})  { w.warn(fmt.Sprintf(a, args...)) }
+func (w *checkWriter) error(s string)               { w.Out = append(w.Out, levelText{levelError, s}) }
+func (w *checkWriter) errorf(a string, args ...any) { w.error(fmt.Sprintf(a, args...)) }
+func (w *checkWriter) info(s string)                { w.Out = append(w.Out, levelText{levelInfo, s}) }
+func (w *checkWriter) infof(a string, args ...any)  { w.info(fmt.Sprintf(a, args...)) }
+func (w *checkWriter) warn(s string)                { w.Out = append(w.Out, levelText{levelWarn, s}) }
+func (w *checkWriter) warnf(a string, args ...any)  { w.warn(fmt.Sprintf(a, args...)) }
 func (w *checkWriter) hasErrors() bool {
 	for _, v := range w.Out {
 		if v.Level == levelError {

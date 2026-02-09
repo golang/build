@@ -283,7 +283,7 @@ func buildletURL() string {
 	return fmt.Sprintf("https://storage.googleapis.com/go-builder-data/buildlet.%s-%s", runtime.GOOS, runtime.GOARCH)
 }
 
-func sleepFatalf(format string, args ...interface{}) {
+func sleepFatalf(format string, args ...any) {
 	log.Printf(format, args...)
 	if runtime.GOOS == "windows" {
 		log.Printf("(sleeping for 1 minute before failing)")

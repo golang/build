@@ -85,7 +85,7 @@ func TestTagTelemetry(t *testing.T) {
 			}
 
 			wd := tasks.NewDefinition()
-			w, err := workflow.Start(wd, map[string]interface{}{
+			w, err := workflow.Start(wd, map[string]any{
 				reviewersParam.Name: []string(nil),
 			})
 			if err != nil {

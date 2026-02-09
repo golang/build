@@ -277,7 +277,7 @@ func TestTweetRelease(t *testing.T) {
 
 type fmtWriter struct{ w io.Writer }
 
-func (f fmtWriter) Printf(format string, v ...interface{}) {
+func (f fmtWriter) Printf(format string, v ...any) {
 	fmt.Fprintf(f.w, format, v...)
 }
 

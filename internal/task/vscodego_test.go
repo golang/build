@@ -102,7 +102,7 @@ esac
 			}
 
 			wd := releaseTask.NewDefinition()
-			w, err := workflow.Start(wd, map[string]interface{}{
+			w, err := workflow.Start(wd, map[string]any{
 				vscgoVersionParam.Name: "v0.0.0",
 			})
 			if err != nil {

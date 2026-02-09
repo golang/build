@@ -398,7 +398,7 @@ func Task6[C context.Context, I1, I2, I3, I4, I5, I6, O1 any](d *Definition, nam
 	return addTask[O1](d, name, f, []metaValue{i1, i2, i3, i4, i5, i6}, opts)
 }
 
-func addFunc(d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *taskDefinition {
+func addFunc(d *Definition, name string, f any, inputs []metaValue, opts []TaskOption) *taskDefinition {
 	name = d.name(name)
 	td := &taskDefinition{name: name, f: f, args: inputs}
 	for _, input := range inputs {
@@ -411,17 +411,17 @@ func addFunc(d *Definition, name string, f interface{}, inputs []metaValue, opts
 	return td
 }
 
-func addTask[O1 any](d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *taskResult[O1] {
+func addTask[O1 any](d *Definition, name string, f any, inputs []metaValue, opts []TaskOption) *taskResult[O1] {
 	td := addFunc(d, name, f, inputs, opts)
 	return &taskResult[O1]{td}
 }
 
-func addAction(d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *dependency {
+func addAction(d *Definition, name string, f any, inputs []metaValue, opts []TaskOption) *dependency {
 	td := addFunc(d, name, f, inputs, opts)
 	return &dependency{td}
 }
 
-func addExpansion[O1 any](d *Definition, name string, f interface{}, inputs []metaValue, opts []TaskOption) *expansionResult[O1] {
+func addExpansion[O1 any](d *Definition, name string, f any, inputs []metaValue, opts []TaskOption) *expansionResult[O1] {
 	td := addFunc(d, name, f, inputs, opts)
 	td.isExpansion = true
 	// Also record the workflow name prefix at the time the expansion is added.
@@ -535,7 +535,7 @@ type TaskContext struct {
 	watchdogScale int
 }
 
-func (c *TaskContext) Printf(format string, v ...interface{}) {
+func (c *TaskContext) Printf(format string, v ...any) {
 	if false {
 		_ = fmt.Sprintf(format, v...) // enable printf checker
 	}
@@ -600,7 +600,7 @@ type TaskState struct {
 	Name             string
 	Started          bool
 	Finished         bool
-	Result           interface{}
+	Result           any
 	SerializedResult []byte
 	Error            string
 	RetryCount       int
@@ -609,12 +609,12 @@ type TaskState struct {
 // WorkflowState contains the shallow state of a running workflow.
 type WorkflowState struct {
 	ID     uuid.UUID
-	Params map[string]interface{}
+	Params map[string]any
 }
 
 // A Logger is a debug logger passed to a task implementation.
 type Logger interface {
-	Printf(format string, v ...interface{})
+	Printf(format string, v ...any)
 }
 
 type taskDefinition struct {
@@ -623,7 +623,7 @@ type taskDefinition struct {
 	namePrefix  string // Workflow name prefix; applies only when isExpansion is true.
 	args        []metaValue
 	deps        []Dependency
-	f           interface{}
+	f           any
 }
 
 type taskResult[T any] struct {
@@ -647,7 +647,7 @@ func (tr *taskResult[T]) ready(w *Workflow) bool {
 // A Workflow is an instantiated workflow instance, ready to run.
 type Workflow struct {
 	ID            uuid.UUID
-	params        map[string]interface{}
+	params        map[string]any
 	retryCommands chan retryCommand
 
 	// Notes on ownership and concurrency:
@@ -675,7 +675,7 @@ type taskState struct {
 	err      error
 
 	// normal tasks
-	result           interface{}
+	result           any
 	serializedResult []byte
 	retryCount       int
 
@@ -700,7 +700,7 @@ func (t *taskState) toExported() *TaskState {
 }
 
 // Start instantiates a workflow with the given parameters.
-func Start(def *Definition, params map[string]interface{}) (*Workflow, error) {
+func Start(def *Definition, params map[string]any) (*Workflow, error) {
 	w := &Workflow{
 		ID:            uuid.New(),
 		def:           def,
@@ -798,7 +798,7 @@ func loadTaskState(states map[string]*TaskState, def *taskDefinition, allowMissi
 	return state, nil
 }
 
-func unmarshalNew(t reflect.Type, data []byte) (interface{}, error) {
+func unmarshalNew(t reflect.Type, data []byte) (any, error) {
 	ptr := reflect.New(t)
 	if err := json.Unmarshal(data, ptr.Interface()); err != nil {
 		return nil, err
@@ -815,7 +815,7 @@ func unmarshalNew(t reflect.Type, data []byte) (interface{}, error) {
 // it will be called immediately, when each task starts, and when they finish.
 //
 // Register Outputs to read task results.
-func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]interface{}, error) {
+func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]any, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	if listener == nil {
@@ -912,7 +912,7 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]inter
 		}
 	}
 
-	outs := map[string]interface{}{}
+	outs := map[string]any{}
 	for name, def := range w.def.outputs {
 		outs[name] = def.value(w).Interface()
 	}
@@ -1063,7 +1063,7 @@ func (s *defaultListener) Logger(_ uuid.UUID, task string) Logger {
 
 type defaultLogger struct{}
 
-func (l *defaultLogger) Printf(format string, v ...interface{}) {}
+func (l *defaultLogger) Printf(format string, v ...any) {}
 
 type retryCommand struct {
 	name  string

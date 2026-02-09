@@ -31,7 +31,7 @@ const (
 // creates a new Result entity, and creates or updates the relevant Commit entity.
 // If the Log field is not empty, resultHandler creates a new Log entity
 // and updates the LogHash field before putting the Commit entity.
-func (h handler) resultHandler(r *http.Request) (interface{}, error) {
+func (h handler) resultHandler(r *http.Request) (any, error) {
 	if r.Method != "POST" {
 		return nil, errBadMethod(r.Method)
 	}
@@ -114,7 +114,7 @@ func (h handler) logHandler(w http.ResponseWriter, r *http.Request) {
 
 // clearResultsHandler purge a single build failure from the dashboard.
 // It currently only supports the main Go repo.
-func (h handler) clearResultsHandler(r *http.Request) (interface{}, error) {
+func (h handler) clearResultsHandler(r *http.Request) (any, error) {
 	if r.Method != "POST" {
 		return nil, errBadMethod(r.Method)
 	}
@@ -159,10 +159,10 @@ func (h handler) clearResultsHandler(r *http.Request) (interface{}, error) {
 	return nil, err
 }
 
-type dashHandler func(*http.Request) (interface{}, error)
+type dashHandler func(*http.Request) (any, error)
 
 type dashResponse struct {
-	Response interface{}
+	Response any
 	Error    string
 }
 
@@ -203,7 +203,7 @@ func (a authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.Form = r.URL.Query()
 
 		var err error
-		var resp interface{}
+		var resp any
 
 		// Validate key query parameter for POST requests only.
 		key := r.FormValue("key")

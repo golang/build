@@ -56,7 +56,7 @@ func (f *Client) DeleteMulti(context.Context, []*datastore.Key) (err error) {
 
 // Get loads the entity stored for key into dst, which must be a
 // struct pointer.
-func (f *Client) Get(_ context.Context, key *datastore.Key, dst interface{}) (err error) {
+func (f *Client) Get(_ context.Context, key *datastore.Key, dst any) (err error) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	// get catches nil interfaces; we need to catch nil ptr here
@@ -87,7 +87,7 @@ func (f *Client) Get(_ context.Context, key *datastore.Key, dst interface{}) (er
 //
 // GetAll currently only supports a query of all entities of a given
 // Kind, and a dst of a slice of pointers to structs.
-func (f *Client) GetAll(_ context.Context, q *datastore.Query, dst interface{}) (keys []*datastore.Key, err error) {
+func (f *Client) GetAll(_ context.Context, q *datastore.Query, dst any) (keys []*datastore.Key, err error) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	fv := reflect.ValueOf(q).Elem().FieldByName("kind")
@@ -115,7 +115,7 @@ func (f *Client) GetAll(_ context.Context, q *datastore.Query, dst interface{}) 
 }
 
 // GetMulti is unimplemented and panics.
-func (f *Client) GetMulti(context.Context, []*datastore.Key, interface{}) (err error) {
+func (f *Client) GetMulti(context.Context, []*datastore.Key, any) (err error) {
 	panic("unimplemented")
 }
 
@@ -131,7 +131,7 @@ func (f *Client) NewTransaction(context.Context, ...datastore.TransactionOption)
 
 // Put saves the entity src into the datastore with the given key. src
 // must be a struct pointer.
-func (f *Client) Put(_ context.Context, key *datastore.Key, src interface{}) (*datastore.Key, error) {
+func (f *Client) Put(_ context.Context, key *datastore.Key, src any) (*datastore.Key, error) {
 	f.m.Lock()
 	defer f.m.Unlock()
 	if f.db == nil {
@@ -152,7 +152,7 @@ func (f *Client) Put(_ context.Context, key *datastore.Key, src interface{}) (*d
 }
 
 // PutMulti is unimplemented and panics.
-func (f *Client) PutMulti(context.Context, []*datastore.Key, interface{}) (ret []*datastore.Key, err error) {
+func (f *Client) PutMulti(context.Context, []*datastore.Key, any) (ret []*datastore.Key, err error) {
 	panic("unimplemented")
 }
 

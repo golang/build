@@ -1736,7 +1736,7 @@ func (he httpError) httpStatus() int { return he.statusCode }
 
 // badRequestf returns an httpError with status 400 and an error constructed by
 // formatting the given arguments.
-func badRequestf(format string, args ...interface{}) error {
+func badRequestf(format string, args ...any) error {
 	return httpError{http.StatusBadRequest, fmt.Errorf(format, args...)}
 }
 

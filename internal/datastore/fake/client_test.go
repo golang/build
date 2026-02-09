@@ -24,7 +24,7 @@ func TestClientGet(t *testing.T) {
 		desc    string
 		db      map[string]map[string][]byte
 		key     *datastore.Key
-		dst     interface{}
+		dst     any
 		want    *author
 		wantErr bool
 	}{
@@ -182,7 +182,7 @@ func TestClientPut(t *testing.T) {
 
 // gobEncode encodes src with gob, returning the encoded byte slice.
 // It will report errors on the provided testing.T.
-func gobEncode(t *testing.T, src interface{}) []byte {
+func gobEncode(t *testing.T, src any) []byte {
 	t.Helper()
 	dst := bytes.Buffer{}
 	e := gob.NewEncoder(&dst)
@@ -195,7 +195,7 @@ func gobEncode(t *testing.T, src interface{}) []byte {
 
 // gobDecode decodes v into dst with gob. It will report errors on the
 // provided testing.T.
-func gobDecode(t *testing.T, v []byte, dst interface{}) {
+func gobDecode(t *testing.T, v []byte, dst any) {
 	t.Helper()
 	d := gob.NewDecoder(bytes.NewReader(v))
 	if err := d.Decode(dst); err != nil {

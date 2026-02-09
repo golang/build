@@ -84,7 +84,7 @@ var NoKeyPair = KeyPair{}
 
 func NewKeyPair() (KeyPair, error) {
 	fail := func(err error) (KeyPair, error) { return KeyPair{}, err }
-	failf := func(format string, args ...interface{}) (KeyPair, error) { return fail(fmt.Errorf(format, args...)) }
+	failf := func(format string, args ...any) (KeyPair, error) { return fail(fmt.Errorf(format, args...)) }
 
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

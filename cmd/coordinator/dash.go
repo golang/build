@@ -39,7 +39,7 @@ import (
 // If req is non-nil it is JSON-encoded and passed as the body of the HTTP POST.
 // If resp is non-nil the server's response is decoded into the value pointed
 // to by resp (resp must be a pointer).
-func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
+func dash(meth, cmd string, args url.Values, req, resp any) error {
 	const builderVersion = 1 // keep in sync with cmd/coordinator/internal/legacydash/handler.go
 	argsCopy := url.Values{"version": {fmt.Sprint(builderVersion)}}
 	for k, v := range args {
@@ -97,7 +97,7 @@ func dash(meth, cmd string, args url.Values, req, resp interface{}) error {
 // This is not used for trybot runs; only those after commit.
 // The URLs end up looking like https://build.golang.org/log/$HEXDIGEST
 func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.Duration) error {
-	req := map[string]interface{}{
+	req := map[string]any{
 		"Builder":     br.Name,
 		"PackagePath": "",
 		"Hash":        br.Rev,
@@ -117,7 +117,7 @@ func recordResult(br buildgo.BuilderRev, ok bool, buildLog string, runTime time.
 		return nil
 	}
 	var result struct {
-		Response interface{}
+		Response any
 		Error    string
 	}
 	if err := dash("POST", "result", args, req, &result); err != nil {

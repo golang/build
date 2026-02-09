@@ -179,7 +179,7 @@ func (st *buildStatus) isRunning() bool {
 
 func (st *buildStatus) isRunningLocked() bool { return st.done.IsZero() }
 
-func (st *buildStatus) logf(format string, args ...interface{}) {
+func (st *buildStatus) logf(format string, args ...any) {
 	log.Printf("[build %s %s]: %s", st.Name, st.Rev, fmt.Sprintf(format, args...))
 }
 
@@ -1067,7 +1067,7 @@ func getTestStats(sl spanlog.Logger) *buildstats.TestStats {
 		sp.Done(nil)
 		return ts
 	}
-	v, err, _ := testStatsLoader.Do("", func() (interface{}, error) {
+	v, err, _ := testStatsLoader.Do("", func() (any, error) {
 		log.Printf("getTestStats: reloading from BigQuery...")
 		sp := sl.CreateSpan("query_test_stats")
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)

@@ -512,7 +512,7 @@ func (r *repo) loopOnce() error {
 	return nil
 }
 
-func (r *repo) logf(format string, args ...interface{}) {
+func (r *repo) logf(format string, args ...any) {
 	log.Printf(r.name+": "+format, args...)
 }
 

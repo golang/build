@@ -109,7 +109,7 @@ func (c *getBuildletCall) wantGetBuildlet(t *testing.T, s *Scheduler) {
 }
 
 type fakePool struct {
-	poolChan map[string]chan interface{} // hostType -> { buildlet.Client | error}
+	poolChan map[string]chan any // hostType -> { buildlet.Client | error}
 }
 
 func (f *fakePool) GetBuildlet(ctx context.Context, hostType string, lg cpool.Logger, item *queue.SchedItem) (buildlet.Client, error) {
@@ -191,9 +191,9 @@ func TestScheduler(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		pool = &fakePool{poolChan: map[string]chan interface{}{}}
-		pool.poolChan["test-host-foo"] = make(chan interface{}, 1)
-		pool.poolChan["test-host-bar"] = make(chan interface{}, 1)
+		pool = &fakePool{poolChan: map[string]chan any{}}
+		pool.poolChan["test-host-foo"] = make(chan any, 1)
+		pool.poolChan["test-host-bar"] = make(chan any, 1)
 
 		cpool.TestPoolHook = func(*dashboard.HostConfig) cpool.Buildlet { return pool }
 		t.Run(tt.name, func(t *testing.T) {

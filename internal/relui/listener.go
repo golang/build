@@ -92,7 +92,7 @@ func (l *PGListener) TaskStateChanged(workflowID uuid.UUID, taskName string, sta
 }
 
 // WorkflowStarted persists a new workflow execution in the database.
-func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]interface{}, scheduleID int) error {
+func (l *PGListener) WorkflowStarted(ctx context.Context, workflowID uuid.UUID, name string, params map[string]any, scheduleID int) error {
 	q := db.New(l.DB)
 	m, err := json.Marshal(params)
 	if err != nil {
@@ -118,7 +118,7 @@ type scheduledFailureEmailBody struct {
 
 // WorkflowFinished saves the final state of a workflow after its run
 // has completed.
-func (l *PGListener) WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]interface{}, workflowErr error) error {
+func (l *PGListener) WorkflowFinished(ctx context.Context, workflowID uuid.UUID, outputs map[string]any, workflowErr error) error {
 	log.Printf("WorkflowFinished(%q, %v, %q)", workflowID, outputs, workflowErr)
 	q := db.New(l.DB)
 	m, err := json.Marshal(outputs)
@@ -165,7 +165,7 @@ type postgresLogger struct {
 	taskName   string
 }
 
-func (l *postgresLogger) Printf(format string, v ...interface{}) {
+func (l *postgresLogger) Printf(format string, v ...any) {
 	ctx := context.Background()
 	err := l.db.BeginFunc(ctx, func(tx pgx.Tx) error {
 		q := db.New(tx)

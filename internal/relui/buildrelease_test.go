@@ -247,7 +247,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, major, kind, workflow.Const(deps.gerrit.wantReviewers))
 	workflow.Output(wd, "Published Go version", v)
 
-	w, err := workflow.Start(wd, map[string]interface{}{
+	w, err := workflow.Start(wd, map[string]any{
 		"Targets to skip testing (or 'all') (optional)": []string{
 			// allScript is intentionally hardcoded to fail on GOOS=js
 			// and we confirm here that it's possible to skip that.
@@ -496,7 +496,7 @@ esac
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 24, task.KindMinor, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
-	w, err := workflow.Start(wd, map[string]interface{}{
+	w, err := workflow.Start(wd, map[string]any{
 		"Targets to skip testing (or 'all') (optional)": []string{"js-wasm"},
 	})
 	if err != nil {
@@ -541,7 +541,7 @@ func TestAdvisoryTestsFail(t *testing.T) {
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 24, task.KindMinor, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
-	w, err := workflow.Start(wd, map[string]interface{}{
+	w, err := workflow.Start(wd, map[string]any{
 		"Targets to skip testing (or 'all') (optional)": []string(nil),
 	})
 	if err != nil {
@@ -816,7 +816,7 @@ type testLogger struct {
 	task string
 }
 
-func (l *testLogger) Printf(format string, v ...interface{}) {
+func (l *testLogger) Printf(format string, v ...any) {
 	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
 }
 

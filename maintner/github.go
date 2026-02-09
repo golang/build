@@ -1539,7 +1539,7 @@ type githubRepoPoller struct {
 func (p *githubRepoPoller) Owner() string { return p.gr.id.Owner }
 func (p *githubRepoPoller) Repo() string  { return p.gr.id.Repo }
 
-func (p *githubRepoPoller) logf(format string, args ...interface{}) {
+func (p *githubRepoPoller) logf(format string, args ...any) {
 	log.Printf("sync github "+p.gr.id.String()+": "+format, args...)
 }
 
@@ -1563,7 +1563,7 @@ func (p *githubRepoPoller) sync(ctx context.Context, expectChanges bool) error {
 func (p *githubRepoPoller) syncMilestones(ctx context.Context) error {
 	var mut *maintpb.GithubMutation // lazy init
 	var changes int
-	err := p.foreachItem(ctx, 1, p.getMilestonePage, func(e interface{}) error {
+	err := p.foreachItem(ctx, 1, p.getMilestonePage, func(e any) error {
 		ms := e.(*github.Milestone)
 		id := int64(ms.GetID())
 		p.c.mu.RLock()
@@ -1596,7 +1596,7 @@ func (p *githubRepoPoller) syncMilestones(ctx context.Context) error {
 func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
 	var mut *maintpb.GithubMutation // lazy init
 	var changes int
-	err := p.foreachItem(ctx, 1, p.getLabelPage, func(e interface{}) error {
+	err := p.foreachItem(ctx, 1, p.getLabelPage, func(e any) error {
 		lb := e.(*github.Label)
 		id := int64(lb.GetID())
 		p.c.mu.RLock()
@@ -1626,7 +1626,7 @@ func (p *githubRepoPoller) syncLabels(ctx context.Context) error {
 	return nil
 }
 
-func (p *githubRepoPoller) getMilestonePage(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
+func (p *githubRepoPoller) getMilestonePage(ctx context.Context, page int) ([]any, *github.Response, error) {
 	ms, res, err := p.githubCaching.Issues.ListMilestones(ctx, p.Owner(), p.Repo(), &github.MilestoneListOptions{
 		State:       "all",
 		ListOptions: github.ListOptions{Page: page},
@@ -1634,21 +1634,21 @@ func (p *githubRepoPoller) getMilestonePage(ctx context.Context, page int) ([]in
 	if err != nil {
 		return nil, nil, err
 	}
-	its := make([]interface{}, len(ms))
+	its := make([]any, len(ms))
 	for i, m := range ms {
 		its[i] = m
 	}
 	return its, res, nil
 }
 
-func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
+func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]any, *github.Response, error) {
 	ls, res, err := p.githubCaching.Issues.ListLabels(ctx, p.Owner(), p.Repo(), &github.ListOptions{
 		Page: page,
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	its := make([]interface{}, len(ls))
+	its := make([]any, len(ls))
 	for i, lb := range ls {
 		its[i] = lb
 	}
@@ -1660,8 +1660,8 @@ func (p *githubRepoPoller) getLabelPage(ctx context.Context, page int) ([]interf
 func (p *githubRepoPoller) foreachItem(
 	ctx context.Context,
 	page int,
-	getPage func(ctx context.Context, page int) ([]interface{}, *github.Response, error),
-	fn func(interface{}) error) error {
+	getPage func(ctx context.Context, page int) ([]any, *github.Response, error),
+	fn func(any) error) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -2047,7 +2047,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 
 	err := p.foreachItem(ctx,
 		1+skipPages,
-		func(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
+		func(ctx context.Context, page int) ([]any, *github.Response, error) {
 			u := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%v/events?per_page=%v&page=%v",
 				p.Owner(), p.Repo(), issueNum, perPage, page)
 			req, _ := http.NewRequest("GET", u, nil)
@@ -2074,7 +2074,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s: parse github events: %v", u, err)
 			}
-			is := make([]interface{}, len(evts))
+			is := make([]any, len(evts))
 			for i, v := range evts {
 				is[i] = v
 			}
@@ -2088,7 +2088,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 
 			return is, ghResp, err
 		},
-		func(v interface{}) error {
+		func(v any) error {
 			ge := v.(*GitHubIssueEvent)
 			p.c.mu.RLock()
 			_, ok := gi.events[ge.ID]
@@ -2119,7 +2119,7 @@ func (p *githubRepoPoller) syncEventsOnIssue(ctx context.Context, issueNum int32
 // GitHub adds new Event types in the future, we want to archive them,
 // even if we don't understand them)
 func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
-	var jevents []map[string]interface{}
+	var jevents []map[string]any
 	jd := json.NewDecoder(r)
 	jd.UseNumber()
 	if err := jd.Decode(&jevents); err != nil {
@@ -2149,7 +2149,7 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 		delete(em, "commit_url")
 
 		getUser := func(field string, gup **GitHubUser) {
-			am, ok := em[field].(map[string]interface{})
+			am, ok := em[field].(map[string]any)
 			if !ok {
 				return
 			}
@@ -2165,17 +2165,17 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 		getUser("requested_reviewer", &e.Reviewer)
 		getUser("review_requester", &e.ReviewRequester)
 
-		if lm, ok := em["label"].(map[string]interface{}); ok {
+		if lm, ok := em["label"].(map[string]any); ok {
 			delete(em, "label")
 			e.Label, _ = lm["name"].(string)
 		}
 
-		if mm, ok := em["milestone"].(map[string]interface{}); ok {
+		if mm, ok := em["milestone"].(map[string]any); ok {
 			delete(em, "milestone")
 			e.Milestone, _ = mm["title"].(string)
 		}
 
-		if rm, ok := em["rename"].(map[string]interface{}); ok {
+		if rm, ok := em["rename"].(map[string]any); ok {
 			delete(em, "rename")
 			e.From, _ = rm["from"].(string)
 			e.To, _ = rm["to"].(string)
@@ -2192,7 +2192,7 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 		}
 		if dr, ok := em["dismissed_review"]; ok {
 			delete(em, "dismissed_review")
-			drm := dr.(map[string]interface{})
+			drm := dr.(map[string]any)
 			dro := &GitHubDismissedReviewEvent{}
 			dro.ReviewID = jint64(drm["review_id"])
 			if state, ok := drm["state"].(string); ok {
@@ -2205,7 +2205,7 @@ func parseGithubEvents(r io.Reader) ([]*GitHubIssueEvent, error) {
 		}
 		if rt, ok := em["requested_team"]; ok {
 			delete(em, "requested_team")
-			rtm, ok := rt.(map[string]interface{})
+			rtm, ok := rt.(map[string]any)
 			if !ok {
 				log.Printf("got value %+v for 'requested_team' field, wanted a map with 'id' and 'slug' fields", rt)
 			} else {
@@ -2293,7 +2293,7 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 
 	err := p.foreachItem(ctx,
 		1+skipPages,
-		func(ctx context.Context, page int) ([]interface{}, *github.Response, error) {
+		func(ctx context.Context, page int) ([]any, *github.Response, error) {
 			u := fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%v/reviews?per_page=%v&page=%v",
 				p.Owner(), p.Repo(), issueNum, perPage, page)
 			req, _ := http.NewRequest("GET", u, nil)
@@ -2319,7 +2319,7 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 			if err != nil {
 				return nil, nil, fmt.Errorf("%s: parse github pr reviews: %v", u, err)
 			}
-			is := make([]interface{}, len(evts))
+			is := make([]any, len(evts))
 			for i, v := range evts {
 				is[i] = v
 			}
@@ -2333,7 +2333,7 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 
 			return is, ghResp, err
 		},
-		func(v interface{}) error {
+		func(v any) error {
 			ge := v.(*GitHubReview)
 			p.c.mu.RLock()
 			_, ok := gi.reviews[ge.ID]
@@ -2364,7 +2364,7 @@ func (p *githubRepoPoller) syncReviewsOnPullRequest(ctx context.Context, issueNu
 // GitHub adds new Event types in the future, we want to archive them,
 // even if we don't understand them)
 func parseGithubReviews(r io.Reader) ([]*GitHubReview, error) {
-	var jevents []map[string]interface{}
+	var jevents []map[string]any
 	jd := json.NewDecoder(r)
 	jd.UseNumber()
 	if err := jd.Decode(&jevents); err != nil {
@@ -2394,7 +2394,7 @@ func parseGithubReviews(r io.Reader) ([]*GitHubReview, error) {
 		delete(em, "commit_id")
 
 		getUser := func(field string, gup **GitHubUser) {
-			am, ok := em[field].(map[string]interface{})
+			am, ok := em[field].(map[string]any)
 			if !ok {
 				return
 			}
@@ -2438,7 +2438,7 @@ func parseGithubReviews(r io.Reader) ([]*GitHubReview, error) {
 }
 
 // jint64 return an int64 from the provided JSON object value v.
-func jint64(v interface{}) int64 {
+func jint64(v any) int64 {
 	switch v := v.(type) {
 	case nil:
 		return 0

@@ -47,7 +47,7 @@ func GetSourceTgz(sl spanlog.Logger, repo, rev string) (tgz io.Reader, err error
 	defer func() { sp.Done(err) }()
 
 	key := fmt.Sprintf("%v-%v", repo, rev)
-	v, err, _ := sourceGroup.Do(key, func() (interface{}, error) {
+	v, err, _ := sourceGroup.Do(key, func() (any, error) {
 		if src, ok := sourceCache.Get(key); ok {
 			return src, nil
 		}

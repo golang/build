@@ -199,7 +199,7 @@ type extractCache struct {
 var extractCachePool sync.Pool
 
 func init() {
-	extractCachePool.New = func() interface{} {
+	extractCachePool.New = func() any {
 		return &extractCache{make(map[string]bool)}
 	}
 }

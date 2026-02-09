@@ -15,7 +15,7 @@ func TestPeriodicallyDo(t *testing.T) {
 	defer cancel()
 
 	didWork := make(chan time.Time, 2)
-	done := make(chan interface{})
+	done := make(chan any)
 	go func() {
 		PeriodicallyDo(ctx, time.Millisecond, func(ctx context.Context, t time.Time) {
 			select {

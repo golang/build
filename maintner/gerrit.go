@@ -243,7 +243,7 @@ func (gp *GerritProject) GitCommit(hash string) (*GitCommit, error) {
 	return c, nil
 }
 
-func (gp *GerritProject) logf(format string, args ...interface{}) {
+func (gp *GerritProject) logf(format string, args ...any) {
 	log.Printf("gerrit "+gp.proj+": "+format, args...)
 }
 

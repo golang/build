@@ -278,7 +278,7 @@ func TestSync(t *testing.T) {
 	}
 }
 
-func DeepDiff(got, want interface{}) error {
+func DeepDiff(got, want any) error {
 	return diffPath(reflect.ValueOf(got), reflect.ValueOf(want))
 }
 

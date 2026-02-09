@@ -154,7 +154,7 @@ func (c *Corpus) SetDebug() {
 	c.debug = true
 }
 
-func (c *Corpus) debugf(format string, v ...interface{}) {
+func (c *Corpus) debugf(format string, v ...any) {
 	if c.debug {
 		log.Printf(format, v...)
 	}

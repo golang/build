@@ -196,26 +196,26 @@ func TestParameters(t *testing.T) {
 	wf.Output(wd, "out1", out1)
 	wf.Output(wd, "out2", out2)
 
-	w := startWorkflow(t, wd, map[string]interface{}{"param1": "#1", "param2": "#2"})
+	w := startWorkflow(t, wd, map[string]any{"param1": "#1", "param2": "#2"})
 	outputs := runWorkflow(t, w, nil)
-	if want := map[string]interface{}{"out1": "#1", "out2": "#2"}; !reflect.DeepEqual(outputs, want) {
+	if want := map[string]any{"out1": "#1", "out2": "#2"}; !reflect.DeepEqual(outputs, want) {
 		t.Errorf("outputs = %#v, want %#v", outputs, want)
 	}
 
 	t.Run("CountMismatch", func(t *testing.T) {
-		_, err := wf.Start(wd, map[string]interface{}{"param1": "#1"})
+		_, err := wf.Start(wd, map[string]any{"param1": "#1"})
 		if err == nil {
 			t.Errorf("wf.Start didn't return an error despite a parameter count mismatch")
 		}
 	})
 	t.Run("NameMismatch", func(t *testing.T) {
-		_, err := wf.Start(wd, map[string]interface{}{"paramA": "#1", "paramB": "#2"})
+		_, err := wf.Start(wd, map[string]any{"paramA": "#1", "paramB": "#2"})
 		if err == nil {
 			t.Errorf("wf.Start didn't return an error despite a parameter name mismatch")
 		}
 	})
 	t.Run("TypeMismatch", func(t *testing.T) {
-		_, err := wf.Start(wd, map[string]interface{}{"param1": "#1", "param2": 42})
+		_, err := wf.Start(wd, map[string]any{"param1": "#1", "param2": 42})
 		if err == nil {
 			t.Errorf("wf.Start didn't return an error despite a parameter type mismatch")
 		}
@@ -225,7 +225,7 @@ func TestParameters(t *testing.T) {
 // Test that passing wf.Parameter{...} directly to Definition.Task would be a build-time error.
 // Parameters need to be registered via the Definition.Parameter method.
 func TestParameterValue(t *testing.T) {
-	var p interface{} = wf.ParamDef[int]{}
+	var p any = wf.ParamDef[int]{}
 	if _, ok := p.(wf.Value[int]); ok {
 		t.Errorf("Parameter unexpectedly implements Value; it intentionally tries not to reduce possible API misuse")
 	}
@@ -557,7 +557,7 @@ type capturingLogger struct {
 	lines []string
 }
 
-func (l *capturingLogger) Printf(format string, v ...interface{}) {
+func (l *capturingLogger) Printf(format string, v ...any) {
 	l.lines = append(l.lines, fmt.Sprintf(format, v...))
 }
 
@@ -667,7 +667,7 @@ func (l *mapListener) assertState(t *testing.T, w *wf.Workflow, want map[string]
 	}
 }
 
-func startWorkflow(t *testing.T, wd *wf.Definition, params map[string]interface{}) *wf.Workflow {
+func startWorkflow(t *testing.T, wd *wf.Definition, params map[string]any) *wf.Workflow {
 	t.Helper()
 	w, err := wf.Start(wd, params)
 	if err != nil {
@@ -676,7 +676,7 @@ func startWorkflow(t *testing.T, wd *wf.Definition, params map[string]interface{
 	return w
 }
 
-func runWorkflow(t *testing.T, w *wf.Workflow, listener wf.Listener) map[string]interface{} {
+func runWorkflow(t *testing.T, w *wf.Workflow, listener wf.Listener) map[string]any {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	t.Helper()
@@ -720,7 +720,7 @@ type testLogger struct {
 	task string
 }
 
-func (l *testLogger) Printf(format string, v ...interface{}) {
+func (l *testLogger) Printf(format string, v ...any) {
 	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
 }
 

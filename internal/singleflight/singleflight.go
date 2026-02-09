@@ -14,7 +14,7 @@ type call struct {
 
 	// These fields are written once before the WaitGroup is done
 	// and are only read after the WaitGroup is done.
-	val interface{}
+	val any
 	err error
 
 	// These fields are read and written with the singleflight
@@ -34,7 +34,7 @@ type Group struct {
 // Result holds the results of Do, so they can be passed
 // on a channel.
 type Result struct {
-	Val    interface{}
+	Val    any
 	Err    error
 	Shared bool
 }
@@ -44,7 +44,7 @@ type Result struct {
 // time. If a duplicate comes in, the duplicate caller waits for the
 // original to complete and receives the same results.
 // The return value shared indicates whether v was given to multiple callers.
-func (g *Group) Do(key string, fn func() (interface{}, error)) (v interface{}, err error, shared bool) {
+func (g *Group) Do(key string, fn func() (any, error)) (v any, err error, shared bool) {
 	g.mu.Lock()
 	if g.m == nil {
 		g.m = make(map[string]*call)
@@ -66,7 +66,7 @@ func (g *Group) Do(key string, fn func() (interface{}, error)) (v interface{}, e
 
 // DoChan is like Do but returns a channel that will receive the
 // results when they are ready.
-func (g *Group) DoChan(key string, fn func() (interface{}, error)) <-chan Result {
+func (g *Group) DoChan(key string, fn func() (any, error)) <-chan Result {
 	ch := make(chan Result, 1)
 	g.mu.Lock()
 	if g.m == nil {
@@ -89,7 +89,7 @@ func (g *Group) DoChan(key string, fn func() (interface{}, error)) <-chan Result
 }
 
 // doCall handles the single call for a key.
-func (g *Group) doCall(c *call, key string, fn func() (interface{}, error)) {
+func (g *Group) doCall(c *call, key string, fn func() (any, error)) {
 	c.val, c.err = fn()
 	c.wg.Done()
 

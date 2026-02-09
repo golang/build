@@ -17,7 +17,7 @@ func requestContext(r *http.Request) context.Context {
 	return r.Context()
 }
 
-func infof(_ context.Context, format string, args ...interface{}) {
+func infof(_ context.Context, format string, args ...any) {
 	log.Printf(format, args...)
 }
 

@@ -104,7 +104,7 @@ func (wantResStatus) isDoArg() {}
 
 // reqBodyJSON sets the request body to a JSON encoding of v,
 // and the request's Content-Type header to "application/json".
-type reqBodyJSON struct{ v interface{} }
+type reqBodyJSON struct{ v any }
 
 func (reqBodyJSON) isDoArg() {}
 
@@ -123,7 +123,7 @@ type respBodyRaw struct{ rc *io.ReadCloser }
 
 func (respBodyRaw) isDoArg() {}
 
-func (c *Client) do(ctx context.Context, dst interface{}, method, path string, opts ...doArg) error {
+func (c *Client) do(ctx context.Context, dst any, method, path string, opts ...doArg) error {
 	var arg url.Values
 	var requestBody io.Reader
 	var contentType string

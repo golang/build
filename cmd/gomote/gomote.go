@@ -302,7 +302,7 @@ func gomoteServerClient(ctx context.Context) protos.GomoteServiceClient {
 }
 
 // logAndExitf is equivalent to Printf to Stderr followed by a call to os.Exit(1).
-func logAndExitf(format string, v ...interface{}) {
+func logAndExitf(format string, v ...any) {
 	log.Printf(format, v...)
 	os.Exit(1)
 }

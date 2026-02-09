@@ -256,14 +256,14 @@ func (q buildletQueue) Swap(i, j int) {
 	q[j].index = j
 }
 
-func (q *buildletQueue) Push(x interface{}) {
+func (q *buildletQueue) Push(x any) {
 	n := len(*q)
 	item := x.(*Item)
 	item.index = n
 	*q = append(*q, item)
 }
 
-func (q *buildletQueue) Pop() interface{} {
+func (q *buildletQueue) Pop() any {
 	old := *q
 	n := len(old)
 	item := old[n-1]

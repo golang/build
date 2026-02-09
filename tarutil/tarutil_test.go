@@ -28,7 +28,7 @@ func (fi fileInfo) ModTime() time.Time { return time.Time{} }
 func (fi fileInfo) Mode() os.FileMode  { return fi.mode }
 func (fi fileInfo) Name() string       { return path.Base(fi.name) }
 func (fi fileInfo) Size() int64        { return fi.size }
-func (fi fileInfo) Sys() interface{}   { return nil }
+func (fi fileInfo) Sys() any           { return nil }
 
 func tarHeader(t *testing.T, fi fileInfo) *tar.Header {
 	h, err := tar.FileInfoHeader(fi, fi.target)

@@ -20,7 +20,7 @@ import (
 //go:embed templates/queues.html
 var queuesTemplateStr string
 
-var queuesTemplate = template.Must(baseTmpl.New("queues.html").Funcs(map[string]interface{}{
+var queuesTemplate = template.Must(baseTmpl.New("queues.html").Funcs(map[string]any{
 	"timeSince":     timeSince,
 	"humanDuration": humanDuration,
 }).Parse(queuesTemplateStr))

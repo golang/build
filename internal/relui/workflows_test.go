@@ -30,13 +30,13 @@ import (
 func TestAwaitFunc(t *testing.T) {
 	cases := []struct {
 		desc       string
-		want       map[string]interface{}
+		want       map[string]any
 		wantErr    bool
 		wantCancel bool
 	}{
 		{
 			desc: "success",
-			want: map[string]interface{}{"await": true},
+			want: map[string]any{"await": true},
 		},
 		{
 			desc:    "error",
@@ -54,8 +54,8 @@ func TestAwaitFunc(t *testing.T) {
 			defer cancel()
 
 			didWork := make(chan struct{}, 2)
-			success := make(chan interface{})
-			done := make(chan interface{})
+			success := make(chan any)
+			done := make(chan any)
 			wd := workflow.New(workflow.ACL{})
 
 			awaitFunc := func(ctx *workflow.TaskContext) error {
@@ -183,13 +183,13 @@ func TestAnnounceBlogPostWorkflow(t *testing.T) {
 		atomXML     string
 		blogURL     string
 		wantErr     bool
-		wantOutputs map[string]interface{}
+		wantOutputs map[string]any
 	}{
 		{
 			name:    "success",
 			atomXML: `<AtomFeed><entry><title>Test Post</title><link rel="alternate" href="https://go.dev/blog/hello-world"></link><author><name>Test Author</name></author></entry></AtomFeed>`,
 			blogURL: "https://go.dev/blog/hello-world",
-			wantOutputs: map[string]interface{}{
+			wantOutputs: map[string]any{
 				"Blog Post": task.BlogPost{
 					Author: "Test Author",
 					Title:  "Test Post",
@@ -230,7 +230,7 @@ func TestAnnounceBlogPostWorkflow(t *testing.T) {
 				OverrideGoBlogPostAtomURL: ts.URL,
 			}
 			wd := NewAnnounceBlogPostWorkflow(comm)
-			w, err := workflow.Start(wd, map[string]interface{}{
+			w, err := workflow.Start(wd, map[string]any{
 				"Blog Post URL": tc.blogURL,
 			})
 			if err != nil {
@@ -278,7 +278,7 @@ func (m *mockPoster) PostTweet(text string, imagePNG []byte, altText string) (st
 	return fmt.Sprintf("https://%s.com/status/123", m.service), nil
 }
 
-func runWorkflow(t *testing.T, ctx context.Context, w *workflow.Workflow, listener workflow.Listener) (map[string]interface{}, error) {
+func runWorkflow(t *testing.T, ctx context.Context, w *workflow.Workflow, listener workflow.Listener) (map[string]any, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	t.Helper()

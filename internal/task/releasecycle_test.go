@@ -121,6 +121,6 @@ type testLogger struct {
 	task string // Optional.
 }
 
-func (l testLogger) Printf(format string, v ...interface{}) {
+func (l testLogger) Printf(format string, v ...any) {
 	l.t.Logf("%v\ttask %-10v: LOG: %s", time.Now(), l.task, fmt.Sprintf(format, v...))
 }

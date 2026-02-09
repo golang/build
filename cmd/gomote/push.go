@@ -70,7 +70,7 @@ func push(args []string) error {
 }
 
 func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress bool) error {
-	logf := func(s string, a ...interface{}) {
+	logf := func(s string, a ...any) {
 		if detailedProgress {
 			log.Printf(s, a...)
 		}

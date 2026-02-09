@@ -130,7 +130,7 @@ func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodSta
 	}
 }
 
-func (c *Client) do(ctx context.Context, method, urlStr string, dst interface{}) error {
+func (c *Client) do(ctx context.Context, method, urlStr string, dst any) error {
 	req, err := http.NewRequest(method, urlStr, nil)
 	if err != nil {
 		return err

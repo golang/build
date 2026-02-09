@@ -350,7 +350,7 @@ require (
 	deps := newTagXTestDeps(t, sys, mod, tools, build)
 
 	wd := deps.tagXTasks.NewDefinition()
-	w, err := wf.Start(wd, map[string]interface{}{
+	w, err := wf.Start(wd, map[string]any{
 		reviewersParam.Name: []string(nil),
 	})
 	if err != nil {
@@ -464,7 +464,7 @@ func testTagSingleRepo(t *testing.T, skipPostSubmit bool) {
 	deps := newTagXTestDeps(t, mod, foo)
 	deps.buildbucket.MissingBuilds = []string{"x_foo-gotip-linux-amd64"}
 
-	args := map[string]interface{}{
+	args := map[string]any{
 		"Repository name":   "foo",
 		reviewersParam.Name: []string(nil),
 	}
@@ -507,7 +507,7 @@ func TestTagSingleRepo(t *testing.T) {
 
 type verboseListener struct {
 	t              *testing.T
-	outputListener func(string, interface{})
+	outputListener func(string, any)
 	onStall        func()
 }
 
@@ -543,6 +543,6 @@ type testLogger struct {
 	task string // Optional.
 }
 
-func (l *testLogger) Printf(format string, v ...interface{}) {
+func (l *testLogger) Printf(format string, v ...any) {
 	l.t.Logf("%v\ttask %-10v: LOG: %s", time.Now(), l.task, fmt.Sprintf(format, v...))
 }
