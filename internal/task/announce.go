@@ -482,10 +482,10 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 	// build extracts the pre-release build number of a valid Go version.
 	// For example, build("go1.19beta2") == "2".
 	"build": func(v string) (string, error) {
-		if _, after, ok := strings.Cut(v, "beta"); ok {
-			return after, nil
-		} else if _, after, ok := strings.Cut(v, "rc"); ok {
-			return after, nil
+		if _, number, ok := strings.Cut(v, "beta"); ok {
+			return number, nil
+		} else if _, number, ok := strings.Cut(v, "rc"); ok {
+			return number, nil
 		}
 		return "", fmt.Errorf("internal error: unhandled pre-release Go version %q", v)
 	},

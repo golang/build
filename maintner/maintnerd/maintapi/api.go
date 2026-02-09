@@ -223,11 +223,8 @@ func tryWorkItem(
 }
 
 func firstLine(s string) string {
-	if before, _, ok := strings.Cut(s, "\n"); !ok {
-		return s
-	} else {
-		return before
-	}
+	s, _, _ = strings.Cut(s, "\n")
+	return s
 }
 
 func (s apiService) GetRef(ctx context.Context, req *apipb.GetRefRequest) (*apipb.GetRefResponse, error) {

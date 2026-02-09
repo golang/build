@@ -300,9 +300,8 @@ var indexCache struct {
 
 var indexTmpl = template.Must(template.New("index").Funcs(template.FuncMap{
 	"githubURL": func(githubUsername string) string {
-		if before, after, ok := strings.Cut(githubUsername, "/"); ok {
+		if org, team, ok := strings.Cut(githubUsername, "/"); ok {
 			// A GitHub team like "{org}/{team}".
-			org, team := before, after
 			return "https://github.com/orgs/" + org + "/teams/" + team
 		}
 		return "https://github.com/" + githubUsername

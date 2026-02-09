@@ -917,11 +917,8 @@ func (c *BuildConfig) GOOS() string { return c.Name[:strings.Index(c.Name, "-")]
 
 func (c *BuildConfig) GOARCH() string {
 	arch := c.Name[strings.Index(c.Name, "-")+1:]
-	before, _, ok := strings.Cut(arch, "-")
-	if !ok {
-		return arch
-	}
-	return before
+	arch, _, _ = strings.Cut(arch, "-") // cut off suffix like "-387" or "-race"
+	return arch
 }
 
 // MatchesSlowBotTerm reports whether some provided term from a

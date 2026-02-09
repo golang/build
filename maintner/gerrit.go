@@ -465,11 +465,11 @@ func (cl *GerritCL) OwnerID() int {
 	// Meta commits caused by the owner of a change have an email of the form
 	// <user id>@<uuid of gerrit server>.
 	email := cl.Metas[0].Commit.Author.Email()
-	before, _, ok := strings.Cut(email, "@")
+	idStr, _, ok := strings.Cut(email, "@")
 	if !ok {
 		return -1
 	}
-	id, err := strconv.Atoi(before)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		return -1
 	}
@@ -1082,25 +1082,24 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 	c.mu.Lock()
 	refExists := map[string]bool{} // whether ref is this ls-remote fetch
 	for bs.Scan() {
-		line := bs.Bytes()
-		before, after, ok := bytes.Cut(line, []byte{'\t'})
+		line := bs.Text()
+		sha1, refName, ok := strings.Cut(line, "\t")
 		if !ok {
-			if !strings.HasPrefix(bs.Text(), "From ") {
+			if !strings.HasPrefix(line, "From ") {
 				gp.logf("bogus ls-remote line: %q", line)
 			}
 			continue
 		}
-		sha1 := string(before)
-		refName := strings.TrimSpace(string(after))
+		refName = strings.TrimSpace(refName)
 		refExists[refName] = true
 		hash := c.gitHashFromHexStr(sha1)
 
 		var needFetch bool
 
-		m := rxRemoteRef.FindSubmatch(line)
+		m := rxRemoteRef.FindStringSubmatch(line)
 		if m != nil {
-			clNum, err := strconv.ParseInt(string(m[2]), 10, 32)
-			version, ok := gerritVersionNumber(string(m[3]))
+			clNum, err := strconv.ParseInt(m[2], 10, 32)
+			version, ok := gerritVersionNumber(m[3])
 			if err != nil || !ok {
 				continue
 			}
@@ -1115,7 +1114,7 @@ func (gp *GerritProject) syncOnce(ctx context.Context) error {
 			toFetch = append(toFetch, hash)
 			changedRefs = append(changedRefs, &maintpb.GitRef{
 				Ref:  refName,
-				Sha1: string(sha1),
+				Sha1: sha1,
 			})
 		}
 	}
@@ -1438,15 +1437,13 @@ func (m *GerritMeta) HashtagEdits() (added, removed GerritHashtags, ok bool) {
 	for len(msg) > 0 {
 		value, rest := lineValueRest(msg, "Hash")
 		msg = rest
-		before, after, ok0 := strings.Cut(value, ":")
-		if ok0 {
-			action := before
-			value := GerritHashtags(strings.TrimSpace(after))
+		if action, hashtags, ok := strings.Cut(value, ":"); ok {
+			h := GerritHashtags(strings.TrimSpace(hashtags))
 			switch action {
 			case "tag added", "tags added":
-				added = value
+				added = h
 			case "tag removed", "tags removed":
-				removed = value
+				removed = h
 			}
 		}
 	}
@@ -1581,15 +1578,13 @@ func parseGerritLabelValue(v string) (label string, value int8, whose string) {
 		}
 	}
 	v = strings.TrimSpace(v)
-	if before, after, ok := strings.Cut(v, "="); !ok {
-		label = v
-	} else {
-		label = before
-		if n, err := strconv.ParseInt(after, 10, 8); err == nil {
+	label, nStr, ok := strings.Cut(v, "=")
+	if ok {
+		if n, err := strconv.ParseInt(nStr, 10, 8); err == nil {
 			value = int8(n)
 		}
 	}
-	return
+	return label, value, whose
 }
 
 // GerritHashtags represents a set of "hashtags" on a Gerrit CL.

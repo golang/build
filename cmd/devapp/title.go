@@ -38,11 +38,10 @@ func ParsePrefixedChangeTitle(root, prefixedTitle string) (paths []string, title
 
 	// Parse the rest of the prefixed change title.
 	// E.g., "path1, path2: change title" -> ["path1", "path2"], "change title".
-	before, after, ok := strings.Cut(prefixedTitle, ": ")
+	prefix, title, ok := strings.Cut(prefixedTitle, ": ")
 	if !ok {
 		return []string{root}, branch + prefixedTitle
 	}
-	prefix, title := before, after
 	if strings.ContainsAny(prefix, "{}") {
 		// TODO: Parse "image/{png,jpeg}" as ["image/png", "image/jpeg"], maybe?
 		return []string{path.Join(root, strings.TrimSpace(prefix))}, branch + title

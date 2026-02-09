@@ -1074,11 +1074,8 @@ func formatTime(t time.Time) string {
 }
 
 func splitDash(s string) (string, string) {
-	before, after, ok := strings.Cut(s, "-")
-	if ok {
-		return before, after
-	}
-	return s, ""
+	before, after, _ := strings.Cut(s, "-")
+	return before, after
 }
 
 // builderOS returns the os tag for a builder string
@@ -1183,9 +1180,7 @@ func shortUser(user string) string {
 	if i, j := strings.Index(user, "<"), strings.Index(user, ">"); 0 <= i && i < j {
 		user = user[i+1 : j]
 	}
-	if before, _, ok := strings.Cut(user, "@"); ok {
-		return before
-	}
+	user, _, _ = strings.Cut(user, "@")
 	return user
 }
 
