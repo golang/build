@@ -90,7 +90,7 @@ func run() error {
 	}
 	var commitProgs []*commitProgram
 	if *commitPattern != "" {
-		for _, s := range strings.Split(*commitPattern, ",") {
+		for s := range strings.SplitSeq(*commitPattern, ",") {
 			cp, err := parseCommitProgram(s)
 			if err != nil {
 				flag.Usage()

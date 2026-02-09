@@ -118,8 +118,8 @@ func (fc *FakeClient) ListDir(ctx context.Context, dir string, opts ListDirOpts,
 	}
 	var lsOutput = `drwxr-xr-x      gocache/
 drwxr-xr-x      tmp/`
-	lines := strings.Split(lsOutput, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(lsOutput, "\n")
+	for line := range lines {
 		fn(DirEntry{Line: line})
 	}
 	return nil

@@ -102,7 +102,7 @@ func (gitCookiesAuth) setAuth(c *Client, r *http.Request) error {
 	host := url.Host
 	netrc := netrcPath()
 	data, _ := os.ReadFile(netrc)
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		if i := strings.Index(line, "#"); i >= 0 {
 			line = line[:i]
 		}
@@ -151,7 +151,7 @@ func (a *gitCookieFileAuth) setAuth(c *Client, r *http.Request) error {
 
 func parseGitCookies(data string) *cookiejar.Jar {
 	jar, _ := cookiejar.New(nil)
-	for _, line := range strings.Split(data, "\n") {
+	for line := range strings.SplitSeq(data, "\n") {
 		f := strings.Split(line, "\t")
 		if len(f) < 7 {
 			continue

@@ -129,7 +129,7 @@ func init() {
 		if err != nil {
 			panic(err)
 		}
-		for _, line := range strings.Split(strings.TrimSpace(string(body)), "\n") {
+		for line := range strings.SplitSeq(strings.TrimSpace(string(body)), "\n") {
 			os, arch, _ := strings.Cut(line, "/")
 			allPorts[major] = append(allPorts[major], OSArch{os, arch})
 		}

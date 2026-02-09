@@ -252,7 +252,7 @@ func (repo *FakeRepo) ReadDir(commit, dir string) ([]struct{ Name string }, erro
 		return nil, fmt.Errorf("internal error: FakeRepo.ReadDir: no trailing newline")
 	}
 	var des []struct{ Name string }
-	for _, name := range strings.Split(lines, "\n") {
+	for name := range strings.SplitSeq(lines, "\n") {
 		des = append(des, struct{ Name string }{name})
 	}
 	return des, nil
@@ -314,7 +314,7 @@ func (g *FakeGerrit) ListBranches(ctx context.Context, project string) ([]gerrit
 		return nil, err
 	}
 	var infos []gerrit.BranchInfo
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		branchCommit := strings.Fields(line)
 		infos = append(infos, gerrit.BranchInfo{Ref: branchCommit[0], Revision: branchCommit[1]})
 	}
@@ -491,7 +491,7 @@ func (g *FakeGerrit) GetCommitsInRefs(ctx context.Context, project string, commi
 		if err != nil {
 			return nil, err
 		}
-		for _, branch := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		for branch := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 			branch := strings.TrimSpace(branch)
 			if refSet[branch] {
 				result[commit] = append(result[commit], branch)

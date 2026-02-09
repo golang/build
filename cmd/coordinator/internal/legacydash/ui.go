@@ -1118,7 +1118,7 @@ func builderSubheading2(s string) string {
 	if isRace(s) {
 		// Remove "race" and just take whatever the third component is after.
 		var split []string
-		for _, sc := range strings.Split(s, "-") {
+		for sc := range strings.SplitSeq(s, "-") {
 			if sc == "race" {
 				continue
 			}

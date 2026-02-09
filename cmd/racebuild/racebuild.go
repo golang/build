@@ -475,7 +475,7 @@ func parsePlatformsFlag() {
 	}
 
 	var invalid []string
-	for _, name := range strings.Split(*flagPlatforms, ",") {
+	for name := range strings.SplitSeq(*flagPlatforms, ",") {
 		for _, p := range platforms {
 			if name == p.Name() {
 				platformEnabled[name] = true

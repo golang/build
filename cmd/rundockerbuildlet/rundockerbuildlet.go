@@ -122,8 +122,8 @@ func checkFix() error {
 	// b1dc9ec2e646 packet14 Up 23 minutes
 	// eeb458938447 packet11 Exited (0) About a minute ago
 	// ...
-	lines := strings.Split(string(out), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(string(out), "\n")
+	for line := range lines {
 		f := strings.SplitN(line, " ", 3)
 		if len(f) < 3 {
 			continue

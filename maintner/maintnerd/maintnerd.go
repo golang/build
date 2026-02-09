@@ -164,7 +164,7 @@ func main() {
 			limit := rate.Every(time.Second / time.Duration(*githubRateLimit))
 			corpus.SetGitHubLimiter(rate.NewLimiter(limit, *githubRateLimit))
 		}
-		for _, pair := range strings.Split(*watchGithub, ",") {
+		for pair := range strings.SplitSeq(*watchGithub, ",") {
 			splits := strings.SplitN(pair, "/", 2)
 			if len(splits) != 2 || splits[1] == "" {
 				log.Fatalf("Invalid github repo: %s. Should be 'owner/repo,owner2/repo2'", pair)
@@ -177,7 +177,7 @@ func main() {
 		}
 	}
 	if *watchGerrit != "" {
-		for _, project := range strings.Split(*watchGerrit, ",") {
+		for project := range strings.SplitSeq(*watchGerrit, ",") {
 			// token may be empty, that's OK.
 			corpus.TrackGerrit(project)
 		}

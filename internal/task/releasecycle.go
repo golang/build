@@ -51,7 +51,7 @@ func splitPromotedAPIs(file []byte) ([]string, error) {
 	if !ok {
 		return nil, errors.New("missing trailing newline")
 	}
-	for _, l := range bytes.Split(b, []byte("\n")) {
+	for l := range bytes.SplitSeq(b, []byte("\n")) {
 		if len(l) == 0 {
 			return nil, errors.New("unexpected blank line")
 		}

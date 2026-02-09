@@ -117,7 +117,7 @@ func (db *DB) createTables(driverName string) error {
 	if err := createTmpl.Execute(&buf, map[string]bool{driverName: true}); err != nil {
 		return err
 	}
-	for _, q := range strings.Split(buf.String(), ";") {
+	for q := range strings.SplitSeq(buf.String(), ";") {
 		if strings.TrimSpace(q) == "" {
 			continue
 		}

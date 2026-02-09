@@ -375,7 +375,7 @@ func TestGo120DistTestNames(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := go120DistTestNames(strings.Fields(tc.in))
 			var want []distTestName
-			for _, old := range strings.Fields(tc.want) {
+			for old := range strings.FieldsSeq(tc.want) {
 				want = append(want, distTestName{Old: old})
 			}
 			for i, raw := range strings.Fields(tc.in) {

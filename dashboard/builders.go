@@ -1025,7 +1025,7 @@ func (c *HostConfig) BuildletBinaryURL(e *buildenv.Environment) string {
 // if and only if it one of the components of the builder
 // name is "race" (components are delimited by "-").
 func (c *BuildConfig) IsRace() bool {
-	for _, s := range strings.Split(c.Name, "-") {
+	for s := range strings.SplitSeq(c.Name, "-") {
 		if s == "race" {
 			return true
 		}
@@ -1040,7 +1040,7 @@ func (c *BuildConfig) IsRace() bool {
 // if and only if it one of the components of the builder
 // name is "longtest" (components are delimited by "-").
 func (c *BuildConfig) IsLongTest() bool {
-	for _, s := range strings.Split(c.Name, "-") {
+	for s := range strings.SplitSeq(c.Name, "-") {
 		if s == "longtest" {
 			return true
 		}

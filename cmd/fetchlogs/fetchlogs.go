@@ -90,7 +90,7 @@ func main() {
 
 	// Fetch dashboard pages.
 	for _, repo := range parseRepoFlag() {
-		for _, branch := range strings.Split(*flagBranch, ",") {
+		for branch := range strings.SplitSeq(*flagBranch, ",") {
 			project := repo.GoGerritProject
 			haveCommits := 0
 			for page := 0; haveCommits < *flagN; page++ {
@@ -224,7 +224,7 @@ func parseRepoFlag() (rs []*repos.Repo) {
 			}
 		}
 	} else {
-		for _, p := range strings.Split(*flagRepo, ",") {
+		for p := range strings.SplitSeq(*flagRepo, ",") {
 			p = strings.TrimSpace(p)
 			repo := repos.ByGerritProject[p]
 			if repo == nil {

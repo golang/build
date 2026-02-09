@@ -366,7 +366,7 @@ func TestGerritHashtags(t *testing.T) {
 
 func canonicalTagList(s string) string {
 	var sl []string
-	for _, v := range strings.Split(s, ",") {
+	for v := range strings.SplitSeq(s, ",") {
 		sl = append(sl, strings.TrimSpace(v))
 	}
 	sort.Strings(sl)

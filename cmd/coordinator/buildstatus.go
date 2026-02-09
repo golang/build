@@ -1223,7 +1223,7 @@ func (st *buildStatus) runSubrepoTests() (remoteErr, err error) {
 //	Directory and file names that begin with "." or "_" are ignored
 //	by the go tool, as are directories named "testdata".
 func ignoredByGoTool(importPath string) bool {
-	for _, el := range strings.Split(importPath, "/") {
+	for el := range strings.SplitSeq(importPath, "/") {
 		if strings.HasPrefix(el, ".") || strings.HasPrefix(el, "_") || el == "testdata" {
 			return true
 		}

@@ -27,7 +27,7 @@ func Find(pkg string) string {
 		gopath = defaultGOPATH()
 	}
 	if gopath != "" {
-		for _, dir := range strings.Split(gopath, ":") {
+		for dir := range strings.SplitSeq(gopath, ":") {
 			p := filepath.Join(dir, pkg)
 			if _, err := os.Stat(p); err == nil {
 				return p

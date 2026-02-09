@@ -1139,7 +1139,7 @@ func (b *gopherbot) labelCompilerRuntimeIssues(ctx context.Context) error {
 		if len(components) != 2 {
 			return nil
 		}
-		for _, p := range strings.Split(strings.TrimSpace(components[0]), ",") {
+		for p := range strings.SplitSeq(strings.TrimSpace(components[0]), ",") {
 			if _, ok := crtPackages[strings.TrimSpace(p)]; !ok {
 				continue
 			}
@@ -2057,8 +2057,8 @@ func labelCommandsFromBody(body string, created time.Time) []labelCommand {
 		return nil
 	}
 	var cmds []labelCommand
-	lines := strings.Split(body, "\n")
-	for _, l := range lines {
+	lines := strings.SplitSeq(body, "\n")
+	for l := range lines {
 		if !strutil.ContainsFold(l, "@gopherbot") {
 			continue
 		}

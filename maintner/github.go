@@ -2476,7 +2476,7 @@ func makeGithubResponse(res *http.Response) *github.Response {
 	gr := &github.Response{Response: res}
 	gr.Rate = parseRate(res)
 	for _, lv := range res.Header["Link"] {
-		for _, link := range strings.Split(lv, ",") {
+		for link := range strings.SplitSeq(lv, ",") {
 			segs := strings.Split(strings.TrimSpace(link), ";")
 			if len(segs) < 2 {
 				continue
