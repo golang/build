@@ -80,7 +80,23 @@ if [ -d $GOROOT ]; then
 fi
 `, "pkg-scripts/preinstall", 0755)
 	version := readVERSION("pkg-root/usr/local/go")
-	if goversion.Compare(version, "go1.25rc2") >= 0 {
+	if goversion.Compare(version, "go1.27") < 0 { // TODO: Delete after Go 1.28.0 is released and it becomes dead code.
+		// This "Fixing permissions" step is the only work done in
+		// the postinstall script. As described in go.dev/issue/74287,
+		// it appears not to be needed anymore, and we have not been
+		// able to uncover information on the exact reason it was added
+		// in the first place.
+		//
+		// Nothing seems to break when this step is no longer done,
+		// quite possibly because it became obsolete sometime along the way
+		// to distpack-based cross-compiled toolchain builds. (After all,
+		// permissions should be handled there, unless something about the
+		// installer itself causes them to break. But then it should probably
+		// fix permissions in the "pkg/tool" directory too, not just "bin".
+		//
+		// If it turns out to be needed in some scenario, hopefully it will
+		// be reported via Go 1.27 pre-releases and we can re-add it with a
+		// clear comment.
 		put(`#!/bin/bash
 
 GOROOT=/usr/local/go
@@ -89,17 +105,6 @@ cd $GOROOT
 find . -exec chmod ugo+r \{\} +
 find bin -exec chmod ugo+rx \{\} +
 find . -type d -exec chmod ugo+rx \{\} +
-chmod o-w .
-`, "pkg-scripts/postinstall", 0755)
-	} else {
-		put(`#!/bin/bash
-
-GOROOT=/usr/local/go
-echo "Fixing permissions"
-cd $GOROOT
-find . -exec chmod ugo+r \{\} \;
-find bin -exec chmod ugo+rx \{\} \;
-find . -type d -exec chmod ugo+rx \{\} \;
 chmod o-w .
 `, "pkg-scripts/postinstall", 0755)
 	}
