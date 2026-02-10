@@ -57,32 +57,25 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 	publicSwarming: {
 		// amd64
 		{
-			Hostname: "darwin-amd64-11",
-			Cert:     "secret:symbolic-datum-552/darwin-amd64-11-cert",
-			Key:      "secret:symbolic-datum-552/darwin-amd64-11-key",
-			Image:    "80919d456286b203a8ac20902439bc7c83a3f869bcec6844e36692a2e48d1f7a",
-			Count:    5, // Fewer because it runs on release branches only.
-		},
-		{
 			Hostname: "darwin-amd64-12",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-key",
 			Image:    "63771f3f8c869197fdff27c7357adc3a03f88e94c2493c0bb67d2a748eaed34e",
-			Count:    8,
+			Count:    5, // Fewer because it runs on release branches only.
 		},
 		{
 			Hostname: "darwin-amd64-13",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-13-key",
 			Image:    "1689f0e6d7548c1e58c2e7f531d64780d11e0331317972b9b0ace7716cbf4e6d",
-			Count:    8,
+			Count:    10,
 		},
 		{
 			Hostname: "darwin-amd64-14",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-key",
 			Image:    "0d57e04d231633116dfed4ebe6d10f053c86e34ca0dbea21eeb405012a8574c3",
-			Count:    14, // More to cover longtest, race, nocgo, etc.
+			Count:    20, // More to cover longtest, race, nocgo, etc.
 		},
 		// arm64
 		{
@@ -103,32 +96,25 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 	internalSwarming: {
 		// amd64
 		{
-			Hostname: "darwin-amd64-11-security",
-			Cert:     "secret:symbolic-datum-552/darwin-amd64-11-security-cert",
-			Key:      "secret:symbolic-datum-552/darwin-amd64-11-security-key",
-			Image:    "80919d456286b203a8ac20902439bc7c83a3f869bcec6844e36692a2e48d1f7a",
-			Count:    3,
-		},
-		{
 			Hostname: "darwin-amd64-12-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-security-key",
 			Image:    "63771f3f8c869197fdff27c7357adc3a03f88e94c2493c0bb67d2a748eaed34e",
-			Count:    3,
+			Count:    4,
 		},
 		{
 			Hostname: "darwin-amd64-13-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-13-security-key",
 			Image:    "1689f0e6d7548c1e58c2e7f531d64780d11e0331317972b9b0ace7716cbf4e6d",
-			Count:    3,
+			Count:    4,
 		},
 		{
 			Hostname: "darwin-amd64-14-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-security-key",
 			Image:    "0d57e04d231633116dfed4ebe6d10f053c86e34ca0dbea21eeb405012a8574c3",
-			Count:    6, // More to cover longtest, race, nocgo, etc.
+			Count:    7, // More to cover longtest, race, nocgo, etc.
 		},
 		// arm64
 		{
