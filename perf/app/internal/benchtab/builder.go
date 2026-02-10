@@ -231,12 +231,10 @@ func (b *Builder) ToTables(opts TableOpts) *Tables {
 
 			limit <- struct{}{}
 			table, col := table, col
-			wg.Add(1)
-			go func() {
+			wg.Go(func() {
 				summarizeCol(table, col, &s, nBase, isBase)
 				<-limit
-				wg.Done()
-			}()
+			})
 		}
 	}
 	wg.Wait()

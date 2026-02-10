@@ -1,6 +1,6 @@
 module golang.org/x/build
 
-go 1.24.9
+go 1.25.0
 
 require (
 	cloud.google.com/go/bigquery v1.53.0

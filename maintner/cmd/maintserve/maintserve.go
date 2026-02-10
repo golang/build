@@ -260,7 +260,7 @@ func (h *handler) serveIndex(w http.ResponseWriter, req *http.Request) {
 	})
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	err = indexHTML.Execute(w, map[string]interface{}{
+	err = indexHTML.Execute(w, map[string]any{
 		"Repos":    repos,
 		"Projects": projects,
 	})

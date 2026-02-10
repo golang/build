@@ -93,14 +93,12 @@ func Update(old []*Board, limit time.Time) ([]*Board, error) {
 			i := len(boards)
 			boards = append(boards, nil)
 			errors = append(errors, nil)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				boards[i], errors[i] = readRepo(r, branch, oldLimit)
 				if errors[i] == nil {
 					boards[i] = update(boards[i], old, limit)
 				}
-			}()
+			})
 		}
 	}
 	wg.Wait()

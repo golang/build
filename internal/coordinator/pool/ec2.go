@@ -123,27 +123,23 @@ func NewEC2Buildlet(client *cloud.AWSClient, buildEnv *buildenv.Environment, hos
 		return nil, fmt.Errorf("unable to create EC2 pool: %w", err)
 	}
 
-	b.pollWait.Add(1)
 	// polls for the EC2 quota data and sets the quota data in
 	// the ledger. When the context has been cancelled, the polling will stop.
-	go func() {
+	b.pollWait.Go(func() {
 		go internal.PeriodicallyDo(ctx, time.Hour, func(ctx context.Context, _ time.Time) {
 			log.Printf("retrieveing EC2 quota")
 			_ = b.retrieveAndSetQuota(ctx)
 		})
-		b.pollWait.Done()
-	}()
+	})
 
-	b.pollWait.Add(1)
 	// poll queries for VMs which are not tracked in the ledger and
 	// deletes them. When the context has been cancelled, the polling will stop.
-	go func() {
+	b.pollWait.Go(func() {
 		go internal.PeriodicallyDo(ctx, 2*time.Minute, func(ctx context.Context, _ time.Time) {
 			log.Printf("cleaning up unused EC2 instances")
 			b.destroyUntrackedInstances(ctx)
 		})
-		b.pollWait.Done()
-	}()
+	})
 
 	// TODO(golang.org/issues/38337) remove once a package level variable is no longer
 	// required by the main package.

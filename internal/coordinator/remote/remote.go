@@ -65,13 +65,11 @@ func NewSessionPool(ctx context.Context) *SessionPool {
 		cancelPoll: cancel,
 		m:          map[string]*Session{},
 	}
-	sp.pollWait.Add(1)
-	go func() {
+	sp.pollWait.Go(func() {
 		internal.PeriodicallyDo(ctx, remoteBuildletCleanInterval, func(ctx context.Context, _ time.Time) {
 			sp.destroyExpiredSessions(ctx)
 		})
-		sp.pollWait.Done()
-	}()
+	})
 	return sp
 }
 

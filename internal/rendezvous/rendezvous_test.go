@@ -122,12 +122,10 @@ func TestWaitForInstaceRevdialError(t *testing.T) {
 	req.Header.Set(HeaderHostname, "test-hostname")
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		_, _ = client.Do(req)
-	}()
+	})
 	_, err = rdv.WaitForInstance(ctx, instanceID)
 	if err == nil {
 		// expect a missing status endpoint

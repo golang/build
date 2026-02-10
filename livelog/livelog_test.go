@@ -15,11 +15,9 @@ import (
 func TestBuffer(t *testing.T) {
 	var wg sync.WaitGroup
 	testConc := func(prefix string, r io.Reader, want string, wantErr error) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			testRead(t, prefix, r, want, wantErr)
-		}()
+		})
 	}
 	sleep := func() { time.Sleep(time.Millisecond) }
 
