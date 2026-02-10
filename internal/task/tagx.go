@@ -411,7 +411,6 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, updatedD
 	type module struct {
 		Dir          string // Relative to repo root, '/'-separated. For example, "." for root module of x/tools, "gopls" for x/tools/gopls.
 		DepsToUpdate []*TagDep
-		HadToolchain bool // whether the go.mod file had a toolchain directive before our modifications
 	}
 	var modules []module // The root and nested modules in repo.
 
@@ -463,7 +462,6 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, updatedD
 			modules = append(modules, module{
 				Dir:          dir,
 				DepsToUpdate: depsToUpdate,
-				HadToolchain: f.Toolchain != nil,
 			})
 		}
 		return nil
@@ -508,12 +506,7 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, updatedD
 
 	// Afterwards, tidy the root module and nested modules.
 	for _, m := range modules {
-		dropToolchain := ""
-		if !m.HadToolchain {
-			// Don't introduce a toolchain directive if it wasn't already there.
-			dropToolchain = " && go mod edit -toolchain=none"
-		}
-		fmt.Fprintf(&script, "(cd %v && touch go.sum && go mod tidy%s)\n", m.Dir, dropToolchain)
+		fmt.Fprintf(&script, "(cd %v && touch go.sum && go mod tidy)\n", m.Dir)
 	}
 
 	// Execute the script to generate updated go.mod/go.sum files.

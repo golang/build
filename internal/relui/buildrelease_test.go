@@ -13,7 +13,6 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"go/build"
 	"io"
 	"io/fs"
 	"net/http"
@@ -62,12 +61,6 @@ func TestRelease(t *testing.T) {
 		testRelease(t, "go1.24", 25, "go1.25rc1", task.KindRC)
 	})
 	t.Run("major", func(t *testing.T) {
-		if len(build.Default.ReleaseTags) < 24 {
-			// The 'Maintain x/repo go directive' task will run
-			// 'go get go@1.24.0', which can't be done on older
-			// toolchains without involving a toolchain upgrade.
-			t.Skip("TestRelease/major needs Go 1.24 or newer to run")
-		}
 		testRelease(t, "go1.24", 25, "go1.25.0", task.KindMajor)
 	})
 }
@@ -108,6 +101,7 @@ type releaseTestDeps struct {
 	buildBucket    *task.FakeBuildBucketClient
 	goRepo         *task.FakeRepo
 	gerrit         *reviewerCheckGerrit
+	goDirectives   map[string]string // repo name -> initial go directive
 	versionTasks   *task.VersionTasks
 	buildTasks     *BuildReleaseTasks
 	milestoneTasks *task.MilestoneTasks
@@ -148,19 +142,22 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		return nil
 	}
 
+	var goDirectives = make(map[string]string)
 	goRepo := task.NewFakeRepo(t, "go")
 	base := goRepo.Commit(goFiles)
 	goRepo.Tag(previousTag, base)
 	goRepo.Branch(fmt.Sprintf("release-branch.go1.%d", major), base)
 	dlRepo := task.NewFakeRepo(t, "dl")
 	buildRepo := task.NewFakeRepo(t, "build")
+	goDirectives["build"] = "go 1.22.0"
 	buildRepo.Commit(map[string]string{
-		"go.mod":   "module golang.org/x/build\n",
+		"go.mod":   fmt.Sprintf("module golang.org/x/build\n\n%s\n", goDirectives["build"]),
 		"build.go": "package build\n",
 	})
 	toolsRepo := task.NewFakeRepo(t, "tools")
+	goDirectives["tools"] = "go 1.21.0"
 	toolsRepo.Commit(map[string]string{
-		"go.mod":                    "module golang.org/x/tools\n",
+		"go.mod":                    fmt.Sprintf("module golang.org/x/tools\n\n%s\n", goDirectives["tools"]),
 		"go.sum":                    "\n",
 		"internal/stdlib/stdlib.go": "//go:generate cp gen.out manifest.go\n\npackage stdlib\n",
 		"internal/stdlib/gen.out":   "package stdlib\n\n// manifest.go was generated!\n",
@@ -232,6 +229,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		buildBucket:    buildBucket,
 		goRepo:         goRepo,
 		gerrit:         gerrit,
+		goDirectives:   goDirectives,
 		versionTasks:   versionTasks,
 		buildTasks:     buildTasks,
 		milestoneTasks: milestoneTasks,
@@ -423,9 +421,15 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 			t.Fatal(err)
 		}
 		want := fmt.Sprintf("module golang.org/x/%s\n", repo)
-		if kind == task.KindMajor {
+		switch kind {
+		case task.KindMajor:
 			prevGoVer := major - 1 // See https://go.googlesource.com/proposal/+/HEAD/design/69095-x-repo-continuous-go.md#why-1_n_1_0.
+			if new, old := fmt.Sprintf("go 1.%d.0", prevGoVer), deps.goDirectives[repo]; new == old {
+				t.Fatalf("ineffective test case: repo %s already had %q, so can't check that upgrading it to %q worked", repo, old, new)
+			}
 			want += fmt.Sprintf("\ngo 1.%d.0\n", prevGoVer)
+		default:
+			want += fmt.Sprintf("\n%s\n", deps.goDirectives[repo])
 		}
 		if diff := cmp.Diff(want, string(goMod)); diff != "" {
 			t.Errorf("x/ repo should have a maintained go directive and no toolchain directive: go.mod mismatch (-want +got):\n%s", diff)

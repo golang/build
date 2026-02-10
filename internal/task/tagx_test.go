@@ -400,8 +400,8 @@ require (
 	if !strings.Contains(string(goMod), "tidied!") {
 		t.Error("tools go.mod should be tidied")
 	}
-	if !strings.Contains(string(goMod), "edited! mod edit -toolchain=none") {
-		t.Error("tools go.mod should be edited with -toolchain=none")
+	if strings.Contains(string(goMod), "edited!") {
+		t.Error("tools go.mod should not be edited")
 	}
 	goplsMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "gopls/go.mod")
 	if err != nil {
@@ -410,8 +410,8 @@ require (
 	if !strings.Contains(string(goplsMod), "mod@v1.0.0") || strings.Contains(string(goplsMod), "sys") {
 		t.Errorf("gopls should use mod v1.0.0 and no sys. go.mod: %v", string(goplsMod))
 	}
-	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "edited!") || !strings.Contains(string(goplsMod), "upgraded") {
-		t.Errorf("gopls go.mod should be tidied+edited+upgraded:\n%s", goplsMod)
+	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "upgraded") || strings.Contains(string(goplsMod), "edited!") {
+		t.Errorf("gopls go.mod should be tidied+upgraded and not edited:\n%s", goplsMod)
 	}
 	if !strings.Contains(string(goplsMod), "we've upgraded to golang.org/x/mod@v1.0.0") ||
 		strings.Contains(string(goplsMod), "we've upgraded to golang.org/x/sys") {

@@ -112,13 +112,7 @@ func (x GoDirectiveXReposTasks) MaintainGoDirectiveAndMailCL(ctx *wf.TaskContext
 				return nil
 			}
 
-			dropToolchain := ""
-			if f.Toolchain == nil {
-				// Don't introduce a toolchain directive if it wasn't already there.
-				dropToolchain = " && go mod edit -toolchain=none"
-			}
-
-			fmt.Fprintf(&script, "(cd %v && go get go@1.%d.0 && go mod tidy && go fix ./...%s)\n", dir, prevGoVer, dropToolchain)
+			fmt.Fprintf(&script, "(cd %v && go get go@1.%d.0 && go mod tidy && go fix ./...)\n", dir, prevGoVer)
 			needCL = true
 		}
 		return nil
