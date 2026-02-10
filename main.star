@@ -259,11 +259,9 @@ def is_first_class(goos, goarch):
 # GOOGLE_LOW_CAPACITY_HOSTS are low-capacity hosts that happen to be operated
 # by Google, so we can rely on them being available.
 GOOGLE_LOW_CAPACITY_HOSTS = [
-    "darwin-amd64_11",
     "darwin-amd64_12",
     "darwin-amd64_13",
     "darwin-amd64_14",
-    "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
     "darwin-arm64_14",
@@ -413,11 +411,9 @@ BUILDER_TYPES = [
     "darwin-amd64-longtest",
     "darwin-amd64-nocgo",
     "darwin-amd64-race",
-    "darwin-amd64_11",
     "darwin-amd64_12",
     "darwin-amd64_13",
     "darwin-amd64_14",
-    "darwin-arm64_11",
     "darwin-arm64_12",
     "darwin-arm64_13",
     "darwin-arm64_14",
@@ -451,7 +447,6 @@ BUILDER_TYPES = [
     "linux-amd64-longtest",
     "linux-amd64-longtest-race",
     "linux-amd64-longtest-noswissmap",
-    "linux-amd64-longtest-aliastypeparams",
     "linux-amd64-misccompile",
     "linux-amd64-msan-clang15",
     "linux-amd64-newinliner",
@@ -466,8 +461,6 @@ BUILDER_TYPES = [
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
     "linux-amd64-tiplang",
-    "linux-amd64-typesalias",
-    "linux-amd64-aliastypeparams",
     "linux-amd64_avx512",
     "linux-amd64_c2s16-perf_pgo_vs_oldest_stable",
     "linux-amd64_c2s16-perf_vs_gopls_0_11",
@@ -974,47 +967,14 @@ def define_for_projects_except(projects):
 
     return f
 
-# define_for_issue68798 is a custom policy for go.dev/issue/68798.
-# It shouldn't be needed beyond Go 1.24.
-def define_for_issue68798():
-    def f(port, project, go_branch_short):
-        # Starting with Go 1.23, gotypesalias=1 is the default, so
-        # a builder that sets it explicitly in the environment is expected to be a no-op.
-        # Run it anyway to confirm that's the case for reasons motivated in go.dev/issue/68798.
-        exists, presubmit, postsubmit = False, True, True
-        if project in ["go", "tools"]:
-            exists = go_branch_short != "gotip" and go_branch_short <= "go1.24"
-        return (exists, presubmit, postsubmit, [])
-
-    return f
-
-# define_for_issue69121 is a custom policy for go.dev/issue/69121.
-# It shouldn't be needed beyond Go 1.25.
-# TODO: delete when Go 1.24 is end of support.
-def define_for_issue69121():
-    def f(port, project, go_branch_short):
-        exists, presubmit, postsubmit = False, True, True
-        if project in ["go", "tools"]:
-            exists = go_branch_short == "go1.24"
-        return (exists, presubmit, postsubmit, [])
-
-    return f
-
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = dict(
-    # Build and test with the aliastypeparams GOEXPERIMENT, which enables
-    # aliases with type parameters and the V2 unified IR exportdata format.
-    aliastypeparams = make_run_mod(
-        add_env = {"GODEBUG": "gotypesalias=1", "GOEXPERIMENT": "aliastypeparams"},
-        enabled = define_for_issue69121(),
-    ),
-
     # Build and test with AddressSanitizer enabled.
     asan = make_run_mod(
         add_props = {"asan_mode": True},
         test_timeout_scale = 2,
-        enabled = define_for_go_starting_at("go1.24", presubmit = False),
+        enabled = define_for_postsubmit(["go"]),
     ),
 
     # Build and test with the boringcrypto GOEXPERIMENT.
@@ -1073,7 +1033,7 @@ RUN_MODS = dict(
     msan = make_run_mod(
         add_props = {"msan_mode": True},
         test_timeout_scale = 2,
-        enabled = define_for_go_starting_at("go1.24", presubmit = False),
+        enabled = define_for_postsubmit(["go"]),
     ),
 
     # Build and test with the newinliner GOEXPERIMENT.
@@ -1250,13 +1210,6 @@ RUN_MODS = dict(
             for proj, typ in PROJECTS.items()
             if proj != "go" and typ != PT.SPECIAL
         ], go_branches = ["gotip"]),
-    ),
-
-    # Build and test with the gotypesalias GODEBUG, which enables
-    # explicit representation of type aliases.
-    typesalias = make_run_mod(
-        add_env = {"GODEBUG": "gotypesalias=1"},
-        enabled = define_for_issue68798(),
     ),
 )
 
@@ -1733,13 +1686,6 @@ def define_builder(env, project, go_branch_short, builder_type):
     if builder_type in NO_NETWORK_BUILDERS:
         base_props["no_network"] = True
 
-    # Set GOEXPERIMENT=synctest in x/net for go1.24. (Go 1.25+ includes it by default.)
-    #
-    # N.B. This must come before applying run mods, which may add more
-    # GOEXPERIMENTs.
-    if project == "net" and go_branch_short == "go1.24":
-        base_props["env"]["GOEXPERIMENT"] = "synctest"
-
     # Increase the timeout for vscode-go tests to accommodate significant setup
     # overhead, including building Docker images and initializing the VS Code
     # extension host.
@@ -2085,17 +2031,12 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out old OS versions from new branches.
-    if os == "darwin" and suffix == "11" and go_branch_short not in ["go1.24"]:
-        # Go 1.24 is last to support macOS 11. See go.dev/doc/go1.24#darwin.
-        return False, PRESUBMIT.DISABLED, False, []
-    elif os == "darwin" and suffix == "12" and go_branch_short not in ["go1.24", "go1.25", "go1.26"]:
+    if os == "darwin" and suffix == "12" and go_branch_short not in ["go1.25", "go1.26"]:
         # Go 1.26 is last to support macOS 12. See go.dev/issue/75836.
         return False, PRESUBMIT.DISABLED, False, []
 
     # Filter out new ports on old release branches.
-    if os == "freebsd" and arch == "amd64" and "race" in run_mods and go_branch_short in ["go1.24"]:
-        # The freebsd-amd64-race LUCI builders may need fixes that aren't available on old branches.
-        return False, PRESUBMIT.DISABLED, False, []
+    # Nothing to do here at this time.
 
     # Docker builder should only be used in VSCode-Go repo.
     if suffix == "docker" and project != "vscode-go":
@@ -2478,7 +2419,6 @@ def _define_go_internal_ci():
                     # swarming instance. This requires additional resources and
                     # work to set up, hence each such host needs to opt-in here.
                     "linux-arm",
-                    "darwin-amd64_11",
                     "darwin-amd64_12",
                     "darwin-amd64_13",
                     "darwin-amd64_14",
