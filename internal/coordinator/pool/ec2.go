@@ -126,7 +126,7 @@ func NewEC2Buildlet(client *cloud.AWSClient, buildEnv *buildenv.Environment, hos
 	// polls for the EC2 quota data and sets the quota data in
 	// the ledger. When the context has been cancelled, the polling will stop.
 	b.pollWait.Go(func() {
-		go internal.PeriodicallyDo(ctx, time.Hour, func(ctx context.Context, _ time.Time) {
+		internal.PeriodicallyDo(ctx, time.Hour, func(ctx context.Context, _ time.Time) {
 			log.Printf("retrieveing EC2 quota")
 			_ = b.retrieveAndSetQuota(ctx)
 		})
@@ -135,7 +135,7 @@ func NewEC2Buildlet(client *cloud.AWSClient, buildEnv *buildenv.Environment, hos
 	// poll queries for VMs which are not tracked in the ledger and
 	// deletes them. When the context has been cancelled, the polling will stop.
 	b.pollWait.Go(func() {
-		go internal.PeriodicallyDo(ctx, 2*time.Minute, func(ctx context.Context, _ time.Time) {
+		internal.PeriodicallyDo(ctx, 2*time.Minute, func(ctx context.Context, _ time.Time) {
 			log.Printf("cleaning up unused EC2 instances")
 			b.destroyUntrackedInstances(ctx)
 		})
