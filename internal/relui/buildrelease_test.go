@@ -423,7 +423,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		want := fmt.Sprintf("module golang.org/x/%s\n", repo)
 		switch kind {
 		case task.KindMajor:
-			prevGoVer := major - 1 // See https://go.googlesource.com/proposal/+/HEAD/design/69095-x-repo-continuous-go.md#why-1_n_1_0.
+			prevGoVer := major - 1 // See https://go.dev/design/69095-x-repo-continuous-go#why-1_n_1_0.
 			if new, old := fmt.Sprintf("go 1.%d.0", prevGoVer), deps.goDirectives[repo]; new == old {
 				t.Fatalf("ineffective test case: repo %s already had %q, so can't check that upgrading it to %q worked", repo, old, new)
 			}

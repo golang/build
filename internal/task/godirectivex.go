@@ -58,9 +58,9 @@ func (x GoDirectiveXReposTasks) BuildPlan(wd *wf.Definition, repos []string, goV
 // the specified repository. repo must be a Gerrit project holding a golang.org/x module.
 // goVer is a number like 24, when Go 1.24.0 is the most recently released major Go release.
 //
-// See go.dev/design/69095 for details.
+// See go.dev/issue/69095 and go.dev/design/69095-x-repo-continuous-go for details.
 func (x GoDirectiveXReposTasks) MaintainGoDirectiveAndMailCL(ctx *wf.TaskContext, repo string, goVer int, reviewers []string) (changeID string, _ error) {
-	prevGoVer := goVer - 1 // See https://go.googlesource.com/proposal/+/HEAD/design/69095-x-repo-continuous-go.md#why-1_n_1_0.
+	prevGoVer := goVer - 1 // See https://go.dev/design/69095-x-repo-continuous-go#why-1_n_1_0.
 
 	// Maintain the go directive in the root module and nested modules.
 	// Dynamically find the modules and create the git-generate script.
@@ -112,7 +112,7 @@ func (x GoDirectiveXReposTasks) MaintainGoDirectiveAndMailCL(ctx *wf.TaskContext
 				return nil
 			}
 
-			fmt.Fprintf(&script, "(cd %v && go get go@1.%d.0 && go mod tidy && go fix ./...)\n", dir, prevGoVer)
+			fmt.Fprintf(&script, "(cd %v && go get go@1.%d.0 && go mod tidy)\n", dir, prevGoVer)
 			needCL = true
 		}
 		return nil
@@ -135,10 +135,13 @@ func (x GoDirectiveXReposTasks) MaintainGoDirectiveAndMailCL(ctx *wf.TaskContext
 By now Go 1.%d.0 has been released, and Go 1.%d is no longer supported
 per the Go Release Policy (see https://go.dev/doc/devel/release#policy).
 
+See https://go.dev/doc/godebug#go-1%[1]d for GODEBUG setting changes
+relevant to Go 1.%[1]d.
+
 For golang/go#69095.
 
 [git-generate]
-%s`, prevGoVer, goVer, goVer-2, script.String()),
+%[4]s`, prevGoVer, goVer, goVer-2, script.String()),
 	}, reviewers)
 }
 
