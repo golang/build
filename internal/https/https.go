@@ -49,7 +49,7 @@ type Options struct {
 	HealthPath string
 	// CrossOriginProtection controls protections against Cross-Site Request Forgery (CSRF) to use.
 	// If nil, the default [http.NewCrossOriginProtection] is used.
-	CrossOriginProtection *CrossOriginProtection
+	CrossOriginProtection *http.CrossOriginProtection
 }
 
 var DefaultOptions = &Options{}
@@ -102,7 +102,7 @@ func ListenAndServeOpts(ctx context.Context, handler http.Handler, opts *Options
 
 	protect := opts.CrossOriginProtection
 	if protect == nil {
-		protect = new(CrossOriginProtection)
+		protect = http.NewCrossOriginProtection()
 	}
 	handler = protect.Handler(handler)
 
