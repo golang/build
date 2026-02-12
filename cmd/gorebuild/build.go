@@ -174,6 +174,16 @@ func (r *Report) Build(log *Log, goroot, version string, env, args []string) err
 		"GO_LDFLAGS=",
 		"GO_LDSO=",
 		"PKG_CONFIG=",
+
+		// If make.bash is run and GOROOT/bin isn't already in PATH,
+		// make.bash prints what it hopes to be a useful suggestion:
+		// "*** You need to add GOROOT/bin to your PATH."
+		// Abide the suggestion and include GOROOT/bin in PATH here,
+		// so that it's not printed unnecessarily. The hope is that
+		// this way it'll stand out more when it's printed in other
+		// appropriate contexts.
+		"PATH="+filepath.Join(goroot, "bin")+string(filepath.ListSeparator)+os.Getenv("PATH"),
+		"PWD="+cmd.Dir, // set PWD to handle symlinks in work dir
 	)
 	cmd.Env = append(cmd.Env, env...)
 	log.Printf("running %s env=%v args=%v\nGOROOT=%s\nGOROOT_BOOTSTRAP=%s\n",
