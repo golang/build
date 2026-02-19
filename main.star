@@ -542,6 +542,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
+    "freebsd-amd64_15.0": known_issue(issue_number = 77411, hide_from_presubmit = False),
     "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
     "openbsd-riscv64": known_issue(issue_number = 73569, hide_from_presubmit = False),
 
@@ -556,7 +557,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "android-arm64": known_issue(issue_number = 61097, skip_x_repos = True),
     "dragonfly-amd64": known_issue(issue_number = 61092, skip_x_repos = True),
     "freebsd-386": known_issue(issue_number = 60468, skip_x_repos = True),
-    "freebsd-amd64_15.0": known_issue(issue_number = 77411, skip_x_repos = True),
     "freebsd-arm": known_issue(issue_number = 67300, skip_x_repos = True),
     "freebsd-arm64": known_issue(issue_number = 67301, skip_x_repos = True),
     "illumos-amd64": known_issue(issue_number = 67302, skip_x_repos = True),
