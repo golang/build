@@ -82,7 +82,6 @@ var (
 
 	commandlineTeam = gh("golang/command-line")
 	compilerTeam    = gh("golang/compiler")
-	fuzzingTeam     = gh("golang/fuzzing")
 	oscarTeam       = gh("golang/oscar-team")
 	pkgsiteTeam     = gh("golang/pkgsite")
 	releaseTeam     = gh("golang/release")
@@ -493,7 +492,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{martisch},
 	},
 	"go/src/internal/fuzz": {
-		Primary:   []Owner{fuzzingTeam},
+		Primary:   []Owner{securityTeam},
 		Secondary: []Owner{katie, roland},
 	},
 	"go/src/internal/goarch": {
