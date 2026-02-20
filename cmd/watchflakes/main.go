@@ -177,16 +177,15 @@ Repeat:
 
 	// Load GitHub issues
 	var issues []*Issue
-	issues, err = readIssues(issues)
-	if err != nil {
-		log.Fatalln("readIssues:", err)
-	}
-	findScripts(issues)
-	if query == nil {
-		postIssueErrors(issues)
-	}
 	if query != nil {
 		issues = []*Issue{query}
+	} else {
+		issues, err = readIssues(issues)
+		if err != nil {
+			log.Fatalln("readIssues:", err)
+		}
+		findScripts(issues)
+		postIssueErrors(issues)
 	}
 
 	for _, r := range failRes {
