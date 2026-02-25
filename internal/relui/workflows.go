@@ -979,7 +979,7 @@ func (b *BuildReleaseTasks) buildSourceGCB(ctx *wf.TaskContext, r io.Reader, ver
 	}
 
 	script := fmt.Sprintf(`
-gsutil cp %q source.tgz
+gcloud storage cp %q source.tgz
 mkdir go
 tar -xf source.tgz -C go
 echo -ne %q > go/VERSION
@@ -1105,7 +1105,7 @@ func (b *BuildReleaseTasks) buildDistpack(ctx *wf.TaskContext, version string, t
 		makeEnv = append(makeEnv, "GOOS="+target.GOOS, "GOARCH="+target.GOARCH)
 
 		script := fmt.Sprintf(`
-gsutil cp %q src.tar.gz
+gcloud storage cp %q src.tar.gz
 tar -xf src.tar.gz
 (cd go/src && %v ./make.bash -distpack)
 (cd go/pkg/distpack && tar -czf ../../../distpacks.tar.gz *)
@@ -1139,7 +1139,7 @@ func (b *BuildReleaseTasks) reproduceDistpack(ctx *wf.TaskContext, target *relea
 		// for testing. In particular, Windows doesn't seem to like ./foo.exe,
 		// so we have to run it unadorned with . on PATH.
 		script := fmt.Sprintf(
-			`gsutil cat %s | tar -xzf - && cd go/src && make.bat -distpack && cd ../pkg/distpack && tar -czf - * | gsutil cp - %s`,
+			`gcloud storage cat %s | tar -xzf - && cd go/src && make.bat -distpack && cd ../pkg/distpack && tar -czf - * | gcloud storage cp - %s`,
 			b.ScratchFS.URL(ctx, source.Scratch), b.ScratchFS.URL(ctx, scratchFile))
 
 		env := map[string]string{
