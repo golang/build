@@ -43,14 +43,14 @@ type CloudBuildClient interface {
 	// RunScript runs the given script under bash -eux -o pipefail in
 	// ScriptProject. Outputs are collected into the build's ResultURL,
 	// readable with ResultFS. The script will have the latest stable version of Go
-	// and some version of gsutil on $PATH.
+	// and some version of gcloud on $PATH.
 	// If gerritProject is provided, the script operates within a checkout of the
 	// latest commit on the default branch of that repository.
 	RunScript(ctx context.Context, script string, gerritProject string, outputs []string) (CloudBuild, error)
 	// RunCustomSteps is a low-level API that provides direct control over
 	// individual Cloud Build steps. It creates a random result directory
 	// and provides that as a parameter to the steps function, so that it
-	// may write output to it with 'gsutil cp' for accessing via ResultFS.
+	// may write output to it with 'gcloud storage cp' for accessing via ResultFS.
 	// Prefer RunScript for simpler scenarios.
 	// Reference: https://cloud.google.com/build/docs/build-config-file-schema
 	RunCustomSteps(ctx context.Context, steps func(resultURL string) []*cloudbuildpb.BuildStep, opts *CloudBuildOptions) (CloudBuild, error)
@@ -125,7 +125,7 @@ func (c *RealCloudBuildClient) RunScript(ctx context.Context, script string, ger
 		var saveOutputsScript strings.Builder
 		saveOutputsScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, out := range outputs {
-			fmt.Fprintf(&saveOutputsScript, "gsutil cp %q %q\n", out, resultURL+"/"+strings.TrimPrefix(out, "./"))
+			fmt.Fprintf(&saveOutputsScript, "gcloud storage cp %q %q\n", out, resultURL+"/"+strings.TrimPrefix(out, "./"))
 		}
 
 		var steps []*cloudbuildpb.BuildStep
@@ -143,12 +143,12 @@ func (c *RealCloudBuildClient) RunScript(ctx context.Context, script string, ger
 				Script: cloudBuildClientDownloadGoScript,
 			},
 			&cloudbuildpb.BuildStep{
-				Name:   "gcr.io/cloud-builders/gsutil",
+				Name:   "gcr.io/cloud-builders/gcloud",
 				Script: cloudBuildClientScriptPrefix + script,
 				Dir:    dir,
 			},
 			&cloudbuildpb.BuildStep{
-				Name:   "gcr.io/cloud-builders/gsutil",
+				Name:   "gcr.io/cloud-builders/gcloud",
 				Script: saveOutputsScript.String(),
 				Dir:    dir,
 			},

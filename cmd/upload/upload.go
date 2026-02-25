@@ -4,7 +4,7 @@
 
 // The upload command writes a file to Google Cloud Storage. It's used
 // exclusively by the Makefiles in the Go project repos. Think of it
-// as a very light version of gsutil or gcloud, but with some
+// as a very light version of 'gcloud storage', but with some
 // Go-specific configuration knowledge baked in.
 package main
 

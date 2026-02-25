@@ -198,8 +198,8 @@ chown -R 1000:1000 .
 				Dir:    "vscode-go",
 			},
 			{
-				Name: "gcr.io/cloud-builders/gsutil",
-				Args: []string{"cp", "output.log", fmt.Sprintf("%s/output.log", resultURL)},
+				Name: "gcr.io/cloud-builders/gcloud",
+				Args: []string{"storage", "cp", "output.log", fmt.Sprintf("%s/output.log", resultURL)},
 				Dir:  "vscode-go",
 			},
 		}
@@ -328,7 +328,7 @@ cat go-package-output.log
 		var saveScript strings.Builder
 		saveScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range []string{"npm-output.log", "go-package-output.log", vsixFileName(release, prerelease)} {
-			fmt.Fprintf(&saveScript, "gsutil cp %s %s/%s\n", file, resultURL, file)
+			fmt.Fprintf(&saveScript, "gcloud storage cp %s %s/%s\n", file, resultURL, file)
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -350,7 +350,7 @@ cat go-package-output.log
 				Dir:    "vscode-go/extension",
 			},
 			{
-				Name:   "gcr.io/cloud-builders/gsutil",
+				Name:   "gcr.io/cloud-builders/gcloud",
 				Script: saveScript.String(),
 				Dir:    "vscode-go/extension",
 			},
@@ -392,7 +392,7 @@ cat go-publish-output.log
 		var saveScript strings.Builder
 		saveScript.WriteString(cloudBuildClientScriptPrefix)
 		for _, file := range []string{"npm-output.log", "go-publish-output.log", vsixFileName(release, "")} {
-			fmt.Fprintf(&saveScript, "gsutil cp %s %s/%s\n", file, resultURL, file)
+			fmt.Fprintf(&saveScript, "gcloud storage cp %s %s/%s\n", file, resultURL, file)
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -409,7 +409,7 @@ cat go-publish-output.log
 				// files to publish.
 				// TODO(hxjiang): write the vsix file to a separate gcs bucket and read
 				// it from there.
-				Name: "gcr.io/cloud-builders/gsutil",
+				Name: "gcr.io/cloud-builders/gcloud",
 				Args: []string{"cp", build.ResultURL + "/" + vsixFileName(release, ""), "."},
 				Dir:  "vscode-go/extension",
 			},
@@ -420,7 +420,7 @@ cat go-publish-output.log
 				SecretEnv: []string{"VSCE_PAT"},
 			},
 			{
-				Name:   "gcr.io/cloud-builders/gsutil",
+				Name:   "gcr.io/cloud-builders/gcloud",
 				Script: saveScript.String(),
 				Dir:    "vscode-go/extension",
 			},
@@ -882,7 +882,7 @@ cat npx-output.log
 			"npx-output.log",
 			"npm-output.log",
 		} {
-			fmt.Fprintf(&saveScriptFmt, "gsutil cp %[1]s %[2]s/%[1]s\n", file, resultURL)
+			fmt.Fprintf(&saveScriptFmt, "gcloud storage cp %[1]s %[2]s/%[1]s\n", file, resultURL)
 		}
 
 		return []*cloudbuildpb.BuildStep{
@@ -901,7 +901,7 @@ cat npx-output.log
 				Dir:    "vscode-go/extension",
 			},
 			{
-				Name:   "gcr.io/cloud-builders/gsutil",
+				Name:   "gcr.io/cloud-builders/gcloud",
 				Script: saveScriptFmt.String(),
 				Dir:    "vscode-go/extension",
 			},

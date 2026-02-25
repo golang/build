@@ -918,13 +918,13 @@ func (s *FakeSignService) fakeGPGFile(jobID, f string) string {
 
 var _ CloudBuildClient = (*FakeCloudBuild)(nil)
 
-const fakeGsutil = `
+const fakeGcloud = `
 #!/bin/bash -eux
 
-case "$1" in
-"cp")
-  in=$2
-  out=$3
+case "$1 $2" in
+"storage cp")
+  in=$3
+  out=$4
   if [[ $in == '-' ]]; then
     in=/dev/stdin
   fi
@@ -935,8 +935,8 @@ case "$1" in
   mkdir -p "${dir#file://}"
   cp "${in#file://}" "${out#file://}"
   ;;
-"cat")
-  cat "${2#file://}"
+"storage cat")
+  cat "${3#file://}"
   ;;
 *)
   echo unexpected command $@ >&2
@@ -960,7 +960,7 @@ type FakeBinary struct {
 
 func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowedTriggers map[string]map[string]string, fakeBinaries ...FakeBinary) *FakeCloudBuild {
 	toolDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(toolDir, "gsutil"), []byte(fakeGsutil), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(toolDir, "gcloud"), []byte(fakeGcloud), 0777); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1213,7 +1213,7 @@ func NewFakeSwarmingClient(t *testing.T, fakeGo string) *FakeSwarmingClient {
 	if err := os.WriteFile(filepath.Join(toolDir, "go"), []byte(fakeGo), 0777); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(toolDir, "gsutil"), []byte(fakeGsutil), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(toolDir, "gcloud"), []byte(fakeGcloud), 0777); err != nil {
 		t.Fatal(err)
 	}
 	return &FakeSwarmingClient{

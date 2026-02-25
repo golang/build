@@ -15,7 +15,7 @@ import (
 
 type SwarmingClient interface {
 	// RunTask runs script on a machine running port with env set.
-	// The script will have the latest version of Go and some version of gsutil
+	// The script will have the latest version of Go and some version of gcloud
 	// on $PATH. To facilitate Windows/Unix compatibility, . will be at the end
 	// of $PATH.
 	RunTask(ctx context.Context, dims map[string]string, script string, env map[string]string) (string, error)

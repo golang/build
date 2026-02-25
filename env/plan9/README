@@ -24,7 +24,7 @@ To create the image:
   $ ./make.bash
 
 Then:
-  $ gsutil cp -a public-read plan9-386-gce.tar.gz gs://go-builder-data/plan9-386-gce.tar.gz
+  $ gcloud storage cp -a public-read plan9-386-gce.tar.gz gs://go-builder-data/plan9-386-gce.tar.gz
 
 Then:
   $ gcloud compute --project symbolic-datum-552 images create plan9-386-v6 --source-uri gs://go-builder-data/plan9-386-gce.tar.gz
