@@ -51,8 +51,8 @@ function run_command_on_vm() {
 function copy_from_go_builder_data() {
   local FILE="$1"
   local TGT="$2"
-  echo "... executing: gsutil cp gs://go-builder-data/${FILE} $TGT"
-  gsutil cp gs://go-builder-data/${FILE} $TGT
+  echo "... executing: gcloud storage cp gs://go-builder-data/${FILE} $TGT"
+  gcloud storage cp gs://go-builder-data/${FILE} $TGT
   if [ $? != 0 ]; then
     echo "error: copy from gs://go-builder-data/${FILE} failed, aborting"
     exit 1
