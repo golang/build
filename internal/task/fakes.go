@@ -1382,6 +1382,9 @@ type FakeGitHub struct {
 	DisallowComments bool // if set, return an error from PostComment
 	lastIssueNumber  int  // last issue number created by nextIssueNumber, or 0
 	lastMilestoneID  int  // last milestone ID created by nextMilestoneID, or 0
+
+	// Tags is a set of tags that exist on GitHub for testing.
+	Tags map[string]bool
 }
 
 func (f *FakeGitHub) nextMilestoneID() int {
@@ -1453,6 +1456,10 @@ func (f *FakeGitHub) CreateRelease(ctx context.Context, owner, repo string, rele
 
 func (*FakeGitHub) PublishRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
 	return nil, nil
+}
+
+func (f *FakeGitHub) TagExists(ctx context.Context, owner, repo, tag string) (bool, error) {
+	return f.Tags[tag], nil
 }
 
 func (*FakeGitHub) EditIssue(_ context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {

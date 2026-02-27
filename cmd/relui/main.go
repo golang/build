@@ -395,6 +395,13 @@ func main() {
 	dh.RegisterDefinition("Prepare a pre-release gopls candidate", goplsTasks.NewPrereleaseDefinition())
 	dh.RegisterDefinition("Release gopls", goplsTasks.NewReleaseDefinition())
 
+	govulncheckActionTasks := task.ReleaseGovulncheckActionTasks{
+		Gerrit:        gerritClient,
+		GitHub:        githubClient,
+		ApproveAction: relui.ApproveActionDep(dbPool),
+	}
+	dh.RegisterDefinition("Tag govulncheck-action", govulncheckActionTasks.NewDefinition())
+
 	privateSyncTask := &task.PrivateMasterSyncTask{
 		Git:              gitClient,
 		PrivateGerritURL: "https://go-internal.googlesource.com/golang/go-private",

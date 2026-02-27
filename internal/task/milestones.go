@@ -389,6 +389,9 @@ type GitHubClientInterface interface {
 	//   - fileName:  The name of the asset as it will appear in the release.
 	//   - file:      The content of the file to upload.
 	UploadReleaseAsset(ctx context.Context, owner, repo string, releaseID int64, fileName string, file fs.File) (*github.ReleaseAsset, error)
+
+	// TagExists reports whether the specified tag exists in the repository.
+	TagExists(ctx context.Context, owner, repo, tag string) (bool, error)
 }
 
 type GitHubClient struct {
@@ -453,6 +456,17 @@ func (c *GitHubClient) PublishRelease(ctx context.Context, owner, repo string, r
 		Draft: github.Bool(false),
 	})
 	return release, err
+}
+
+func (c *GitHubClient) TagExists(ctx context.Context, owner, repo, tag string) (bool, error) {
+	_, resp, err := c.V3.Git.GetRef(ctx, owner, repo, "tags/"+tag)
+	if resp != nil && resp.StatusCode == 404 {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func findMilestone(ctx context.Context, client *githubv4.Client, owner, repo, name string) (int, bool, error) {
