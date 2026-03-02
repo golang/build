@@ -60,7 +60,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Hostname: "darwin-amd64-12",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-key",
-			Image:    "63771f3f8c869197fdff27c7357adc3a03f88e94c2493c0bb67d2a748eaed34e",
+			Image:    "f48c5538d2ac7b91c592dcce18f247e3aad70503558f92b41bdc010f2c8728a9",
 			Count:    5, // Fewer because it runs on release branches only.
 		},
 		{
@@ -99,7 +99,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Hostname: "darwin-amd64-12-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-security-key",
-			Image:    "63771f3f8c869197fdff27c7357adc3a03f88e94c2493c0bb67d2a748eaed34e",
+			Image:    "f48c5538d2ac7b91c592dcce18f247e3aad70503558f92b41bdc010f2c8728a9",
 			Count:    4,
 		},
 		{
