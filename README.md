@@ -81,7 +81,7 @@ The main components of the Go build system are:
 * **maintner** in [maintner/](https://dev.golang.org/dir/build/maintner) is
   a library for slurping all of Go's GitHub and Gerrit state into memory.
   The daemon **maintnerd** in
-  [maintner/maintnerd/](https://dev.golang.org/dir/build/maintner/maintnerd)
+  [cmd/maintnerd/](https://dev.golang.org/dir/build/cmd/maintnerd)
   runs on GKE and serves https://maintner.golang.org/. The daemon watches
   GitHub and Gerrit and appends to a mutation log whenever it sees new
   activity. The logs are stored on GCS and served to clients.

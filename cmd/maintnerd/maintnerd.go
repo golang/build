@@ -236,7 +236,7 @@ func main() {
 		io.WriteString(w, `<html>
 <body>
 <p>
-  This is <a href='https://godoc.org/golang.org/x/build/maintner/maintnerd'>maintnerd</a>,
+  This is <a href='https://godoc.org/golang.org/x/build/cmd/maintnerd'>maintnerd</a>,
   the <a href='https://godoc.org/golang.org/x/build/maintner'>maintner</a> server.
   See the <a href='https://godoc.org/golang.org/x/build/maintner/godata'>godata package</a> for
   a client.

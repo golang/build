@@ -24,7 +24,7 @@ RUN go install google.golang.org/grpc
 
 COPY . /go/src/golang.org/x/build/
 
-RUN go install golang.org/x/build/maintner/maintnerd
+RUN go install golang.org/x/build/cmd/maintnerd
 
 
 FROM debian:trixie
