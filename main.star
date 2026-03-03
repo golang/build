@@ -266,6 +266,7 @@ GOOGLE_LOW_CAPACITY_HOSTS = [
     "darwin-arm64_13",
     "darwin-arm64_14",
     "darwin-arm64_15",
+    "darwin-arm64_26",
     "linux-arm",
     "windows-arm64",
 ]
@@ -418,6 +419,7 @@ BUILDER_TYPES = [
     "darwin-arm64_13",
     "darwin-arm64_14",
     "darwin-arm64_15",
+    "darwin-arm64_26",
     "darwin-arm64-longtest",
     "darwin-arm64-race",
     "dragonfly-amd64",
@@ -539,6 +541,7 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
     )
 
 KNOWN_ISSUE_BUILDER_TYPES = {
+    "darwin-arm64_26": known_issue(issue_number = 76798, hide_from_presubmit = False),
     "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
@@ -1679,6 +1682,7 @@ def define_builder(env, project, go_branch_short, builder_type):
             13: "15c500b",  # released Jan 2024, macOS 13.5 released Jul 2023
             14: "15e204a",  # released Mar 2023, macOS 14 released Sep 2023
             15: "16e140",  # released Mar 2025, macOS 15.2 released Dec 2024
+            26: "17c52",  # released Dec 2025, macOS 26.2 released Dec 2025
         }
         base_props["xcode_version"] = xcode_versions[int(dimensions_of(host_type)["os"].split(".")[0].replace("Mac-", ""))]
 
@@ -2424,6 +2428,7 @@ def _define_go_internal_ci():
                     "darwin-amd64_14",
                     "darwin-arm64_14",
                     "darwin-arm64_15",
+                    "darwin-arm64_26",
                 ]:
                     # The list above is expected to contain only Google low-capacity hosts.
                     # Verify that's the case.
