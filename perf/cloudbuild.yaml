@@ -1,0 +1,26 @@
+# Copyright 2026 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+# Build from a local git checkout of https://go.googlesource.com/build.
+
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args:
+    - 'build'
+    - '-f'
+    - 'perf/Dockerfile'
+    - '--build-arg'
+    - 'version=${TAG_NAME}'
+    - '-t'
+    - 'gcr.io/${PROJECT_ID}/perf:${TAG_NAME}'
+    - '-t'
+    - 'gcr.io/${PROJECT_ID}/perf:latest'
+    - '.'
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/${PROJECT_ID}/perf:${TAG_NAME}']
+images:
+- 'gcr.io/${PROJECT_ID}/perf:${TAG_NAME}'
+- 'gcr.io/${PROJECT_ID}/perf:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY
