@@ -544,7 +544,6 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
 
 KNOWN_ISSUE_BUILDER_TYPES = {
     "darwin-amd64_15": known_issue(issue_number = 77997, hide_from_presubmit = False),
-    "darwin-arm64_26": known_issue(issue_number = 76798, hide_from_presubmit = False),
     "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
