@@ -756,8 +756,8 @@ go install golang.org/x/tools/gopls@%s
 go run -C extension tools/generate.go -w -tools -gopls
 `)
 		for _, file := range files {
-			fmt.Fprintf(&updateScript, "gsutil cp %s %s/%s\n", file, resultURL, file)
-			fmt.Fprintf(&updateScript, "gsutil cp %s.before %s/%s.before\n", file, resultURL, file)
+			fmt.Fprintf(&updateScript, "gcloud storage cp %s %s/%s\n", file, resultURL, file)
+			fmt.Fprintf(&updateScript, "gcloud storage cp %s.before %s/%s.before\n", file, resultURL, file)
 		}
 		return []*cloudbuildpb.BuildStep{
 			{
@@ -782,7 +782,7 @@ mv jq /workspace/tools`,
 				Dir:  "vscode-go",
 			},
 			{
-				Name:   "gcr.io/cloud-builders/gsutil",
+				Name:   "gcr.io/cloud-builders/gcloud",
 				Script: fmt.Sprintf(updateScript.String(), version),
 				Dir:    "vscode-go",
 			},
