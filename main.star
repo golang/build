@@ -262,6 +262,7 @@ GOOGLE_LOW_CAPACITY_HOSTS = [
     "darwin-amd64_12",
     "darwin-amd64_13",
     "darwin-amd64_14",
+    "darwin-amd64_15",
     "darwin-arm64_12",
     "darwin-arm64_13",
     "darwin-arm64_14",
@@ -415,6 +416,7 @@ BUILDER_TYPES = [
     "darwin-amd64_12",
     "darwin-amd64_13",
     "darwin-amd64_14",
+    "darwin-amd64_15",
     "darwin-arm64_12",
     "darwin-arm64_13",
     "darwin-arm64_14",
@@ -541,6 +543,7 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
     )
 
 KNOWN_ISSUE_BUILDER_TYPES = {
+    "darwin-amd64_15": known_issue(issue_number = 77997, hide_from_presubmit = False),
     "darwin-arm64_26": known_issue(issue_number = 76798, hide_from_presubmit = False),
     "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
