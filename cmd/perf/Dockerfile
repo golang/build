@@ -12,7 +12,7 @@ WORKDIR /app
 RUN go mod download
 
 COPY . /app
-RUN go build -o perf golang.org/x/build/perf
+RUN go build -o perf golang.org/x/build/cmd/perf
 
 FROM debian:trixie
 

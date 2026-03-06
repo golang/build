@@ -125,16 +125,16 @@ The main components of the Go build system are:
 
 
 * The **perfdata** server, in
-  [perfdata/appengine](https://dev.golang.org/dir/build/perfdata/appengine)
+  [perfdata/appengine](https://dev.golang.org/dir/build/perfdata/appengine/)
   serves https://perfdata.golang.org/. It runs on App Engine and
   serves the benchmark result storage system.
 
 
 * The **perf** server, in
-  [perf/appengine](https://dev.golang.org/dir/build/perf/appengine)
-  serves https://perf.golang.org/. It runs on App Engine and serves
-  the benchmark result analysis system. See [its
-  README](perf/README.md) for how to start a local testing instance.
+  [cmd/perf](https://dev.golang.org/dir/build/cmd/perf/)
+  serves https://perf.golang.org/ and https://perf.golang.org/dashboard/.
+  It runs on GKE and serves the benchmark result analysis system. See [its
+  README](cmd/perf/README.md) for how to start a local testing instance.
 
 
 ### Adding a Go Builder

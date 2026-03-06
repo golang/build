@@ -13,7 +13,7 @@ import (
 	"os"
 
 	"golang.org/x/build/internal/https"
-	"golang.org/x/build/perf/app"
+	"golang.org/x/build/internal/perf"
 	"golang.org/x/build/perfdata"
 )
 
@@ -29,7 +29,7 @@ func main() {
 	https.RegisterFlags(flag.CommandLine)
 	flag.Parse()
 
-	app := &app.App{
+	app := &perf.App{
 		StorageClient: &perfdata.Client{BaseURL: *perfdataURL},
 		InfluxHost:    *influxHost,
 		InfluxToken:   *influxToken,

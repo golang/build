@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package app
+package perf
 
 import (
 	"bytes"
@@ -23,7 +23,7 @@ import (
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	"golang.org/x/build/internal/influx"
-	"golang.org/x/build/perf/app/internal/benchtab"
+	"golang.org/x/build/internal/perf/internal/benchtab"
 	"golang.org/x/build/perfdata"
 	"golang.org/x/perf/benchfmt"
 	"golang.org/x/perf/benchmath"

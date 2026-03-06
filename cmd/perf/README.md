@@ -28,7 +28,7 @@ Browse to https://localhost:8080 (note that the instance uses a self-signed
 certificate).
 
 To run the analysis frontend connected to a local InfluxDB instance, first
-follow [the instructions to set one up](../cmd/influx/README.md).
+follow [the instructions to set one up](../influx/README.md).
 Then, run the above command but with the `-influx-host` and `-influx-token`
 flags set to their appropriate values (as specified by the InfluxDB setup
 instructions).
@@ -46,7 +46,7 @@ One-time setup:
   a. Create GCP service account:
 
     $ gcloud iam service-accounts create perf-prod \
-        --description="Runs golang.org/x/build/perf"
+        --description="Runs golang.org/x/build/cmd/perf"
 
   c. Allow Kubernetes service account (created by deployment-prod.yaml) to
      impersonate the GCP service account:
@@ -58,4 +58,4 @@ One-time setup:
 
 ## Deployment
 
-See the documentation on [deployment](../doc/deployment.md).
+See the documentation on [deployment](../../doc/deployment.md).
