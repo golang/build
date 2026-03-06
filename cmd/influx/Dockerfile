@@ -17,7 +17,7 @@ COPY . /app
 # of glibc.
 ENV CGO_ENABLED=0
 
-RUN go build -o run-influx golang.org/x/build/influx
+RUN go build -o run-influx golang.org/x/build/cmd/influx
 
 FROM marketplace.gcr.io/google/influxdb2:latest
 

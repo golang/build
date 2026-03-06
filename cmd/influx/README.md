@@ -26,7 +26,7 @@ One-time setup:
   a. Create GCP service account:
 
     $ gcloud iam service-accounts create influx \
-        --description="Runs golang.org/x/build/influx"
+        --description="Runs golang.org/x/build/cmd/influx"
 
   c. Allow Kubernetes service account (created by deployment-prod.yaml) to
      impersonate the GCP service account:
@@ -67,4 +67,4 @@ To access the admin password, admin API token, or reader API token, change to
 
 ## Deployment
 
-See the documentation on [deployment](../doc/deployment.md).
+See the documentation on [deployment](../../doc/deployment.md).

@@ -28,7 +28,7 @@ Browse to https://localhost:8080 (note that the instance uses a self-signed
 certificate).
 
 To run the analysis frontend connected to a local InfluxDB instance, first
-follow [the instructions to set one up](../influx/README.md).
+follow [the instructions to set one up](../cmd/influx/README.md).
 Then, run the above command but with the `-influx-host` and `-influx-token`
 flags set to their appropriate values (as specified by the InfluxDB setup
 instructions).
