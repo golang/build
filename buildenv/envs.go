@@ -132,10 +132,13 @@ type Environment struct {
 	// AWSRegion is the region where AWS resources are deployed.
 	AWSRegion string
 
-	// iapServiceIDs is a map of service-backends to service IDs for the backend
-	// services used by IAP enabled HTTP paths.
-	// map[backend-service-name]service_id
-	iapServiceIDs map[string]string
+	// iapServiceAudiences is a map of service-backend names to their IAP
+	// audience strings. This is used for authenticating requests to backend
+	// services protected by IAP.
+	//
+	// These values can be found in the "Identity-Aware Proxy" page of the GCP
+	// console.
+	iapServiceAudiences map[string]string
 
 	// GomoteTransferBucket is the bucket used by the gomote GRPC service
 	// to transfer files between gomote clients and the gomote instances.
@@ -204,10 +207,10 @@ func (e Environment) Credentials(ctx context.Context) (*google.Credentials, erro
 	return creds, nil
 }
 
-// IAPServiceID returns the service id for the backend service. If a path does not exist for a
-// backend, the service id will be an empty string.
-func (e Environment) IAPServiceID(backendServiceName string) string {
-	if v, ok := e.iapServiceIDs[backendServiceName]; ok {
+// IAPServiceAudience returns the IAP audience string for the backend service.
+// If a path does not exist for a backend, the audience will be an empty string.
+func (e Environment) IAPServiceAudience(backendServiceName string) string {
+	if v, ok := e.iapServiceAudiences[backendServiceName]; ok {
 		return v
 	}
 	return ""
@@ -251,16 +254,16 @@ var Staging = &Environment{
 		Name:      "go",
 		Namespace: "default",
 	},
-	DashURL:           "https://build-staging.golang.org/",
-	PerfDataURL:       "https://perfdata.golang.org",
-	CoordinatorName:   "farmer",
-	BuildletBucket:    "dev-go-builder-data",
-	LogBucket:         "dev-go-build-log",
-	SnapBucket:        "dev-go-build-snap",
-	COSServiceAccount: "linux-cos-builders@go-dashboard-dev.iam.gserviceaccount.com",
-	AWSSecurityGroup:  "staging-go-builders",
-	AWSRegion:         "us-east-1",
-	iapServiceIDs:     map[string]string{},
+	DashURL:             "https://build-staging.golang.org/",
+	PerfDataURL:         "https://perfdata.golang.org",
+	CoordinatorName:     "farmer",
+	BuildletBucket:      "dev-go-builder-data",
+	LogBucket:           "dev-go-build-log",
+	SnapBucket:          "dev-go-build-snap",
+	COSServiceAccount:   "linux-cos-builders@go-dashboard-dev.iam.gserviceaccount.com",
+	AWSSecurityGroup:    "staging-go-builders",
+	AWSRegion:           "us-east-1",
+	iapServiceAudiences: map[string]string{},
 }
 
 // Production defines the environment that the coordinator and build
@@ -287,9 +290,10 @@ var Production = &Environment{
 	COSServiceAccount: "linux-cos-builders@symbolic-datum-552.iam.gserviceaccount.com",
 	AWSSecurityGroup:  "go-builders",
 	AWSRegion:         "us-east-2",
-	iapServiceIDs: map[string]string{
-		"coordinator-internal-iap": "7963570695201399464",
-		"relui-internal":           "155577380958854618",
+	iapServiceAudiences: map[string]string{
+		"coordinator-internal-iap":  "/projects/872405196845/global/backendServices/4826093512013065339",
+		"gomoteserver-internal-iap": "/projects/872405196845/global/backendServices/2509522331545700271",
+		"relui-internal":            "/projects/872405196845/global/backendServices/1081345757520014641",
 	},
 	GomoteTransferBucket: "gomote-transfer",
 }

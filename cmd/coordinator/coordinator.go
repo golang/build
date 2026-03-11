@@ -356,12 +356,12 @@ func main() {
 		}
 		env := buildenv.ByProjectID(projectID)
 		gomoteBucket = env.GomoteTransferBucket
-		var coordinatorBackend, serviceID = "coordinator-internal-iap", ""
-		if serviceID = env.IAPServiceID(coordinatorBackend); serviceID == "" {
-			log.Fatalf("unable to retrieve Service ID for backend service=%q", coordinatorBackend)
+		var coordinatorBackend, iapAudience = "coordinator-internal-iap", ""
+		if iapAudience = env.IAPServiceAudience(coordinatorBackend); iapAudience == "" {
+			log.Fatalf("unable to retrieve IAP audience for backend service=%q", coordinatorBackend)
 		}
-		opts = append(opts, grpc.UnaryInterceptor(access.RequireIAPAuthUnaryInterceptor(access.IAPSkipAudienceValidation)))
-		opts = append(opts, grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(access.IAPSkipAudienceValidation)))
+		opts = append(opts, grpc.UnaryInterceptor(access.RequireIAPAuthUnaryInterceptor(iapAudience)))
+		opts = append(opts, grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(iapAudience)))
 	}
 	// grpcServer is a shared gRPC server. It is global, as it needs to be used in places that aren't factored otherwise.
 	grpcServer := grpc.NewServer(opts...)

@@ -29,10 +29,6 @@ const (
 
 	// IAPHeaderJWT is the header IAP stores the JWT token in.
 	iapHeaderJWT = "X-Goog-IAP-JWT-Assertion"
-
-	// IAPSkipAudienceValidation is the audience string used when the validation is not
-	// necessary. https://pkg.go.dev/google.golang.org/api/idtoken#Validate
-	IAPSkipAudienceValidation = ""
 )
 
 // IAPFields contains the values for the headers retrieved from Identity Aware

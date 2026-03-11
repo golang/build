@@ -74,12 +74,12 @@ func main() {
 		luciEnv := buildenv.ByProjectID("golang-ci-luci")
 		env := buildenv.ByProjectID(projectID)
 		gomoteBucket = luciEnv.GomoteTransferBucket
-		var coordinatorBackend, serviceID = "coordinator-internal-iap", ""
-		if serviceID = env.IAPServiceID(coordinatorBackend); serviceID == "" {
-			log.Fatalf("unable to retrieve Service ID for backend service=%q", coordinatorBackend)
+		var gomoteserverBackend, iapAudience = "gomoteserver-internal-iap", ""
+		if iapAudience = env.IAPServiceAudience(gomoteserverBackend); iapAudience == "" {
+			log.Fatalf("unable to retrieve IAP audience for backend service=%q", gomoteserverBackend)
 		}
-		opts = append(opts, grpc.UnaryInterceptor(access.RequireIAPAuthUnaryInterceptor(access.IAPSkipAudienceValidation)))
-		opts = append(opts, grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(access.IAPSkipAudienceValidation)))
+		opts = append(opts, grpc.UnaryInterceptor(access.RequireIAPAuthUnaryInterceptor(iapAudience)))
+		opts = append(opts, grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(iapAudience)))
 	}
 	grpcServer := grpc.NewServer(opts...)
 	rdv := rendezvous.New(ctx)

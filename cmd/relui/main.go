@@ -31,6 +31,7 @@ import (
 	"go.chromium.org/luci/grpc/prpc"
 	"go.chromium.org/luci/swarming/client/swarming"
 	"go.opencensus.io/plugin/ochttp"
+	"golang.org/x/build/buildenv"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/access"
@@ -259,8 +260,12 @@ func main() {
 	} else {
 		defer ms.Stop()
 	}
-	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(access.RequireIAPAuthUnaryInterceptor(access.IAPSkipAudienceValidation)),
-		grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(access.IAPSkipAudienceValidation)))
+	iapAudience := buildenv.Production.IAPServiceAudience("relui-internal")
+	if iapAudience == "" {
+		log.Fatalln("unable to retrieve IAP audience for backend service=relui-internal")
+	}
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(access.RequireIAPAuthUnaryInterceptor(iapAudience)),
+		grpc.StreamInterceptor(access.RequireIAPAuthStreamInterceptor(iapAudience)))
 	signServer := sign.NewServer()
 	protos.RegisterReleaseServiceServer(grpcServer, signServer)
 	buildTasks := &relui.BuildReleaseTasks{
@@ -451,7 +456,8 @@ func main() {
 	}
 	var h http.Handler = relui.NewServer(dbPool, w, base, siteHeader, ms, criaDB)
 	if prod {
-		h = access.RequireIAPAuthHandler(h, access.IAPSkipAudienceValidation)
+		iapAudience := buildenv.Production.IAPServiceAudience("relui-internal")
+		h = access.RequireIAPAuthHandler(h, iapAudience)
 	}
 	log.Fatalln(https.ListenAndServe(ctx, &ochttp.Handler{Handler: GRPCHandler(grpcServer, h)}))
 }
