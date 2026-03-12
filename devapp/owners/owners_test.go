@@ -25,7 +25,7 @@ func TestMatch(t *testing.T) {
 		{
 			"net",
 			&Entry{
-				Primary: []Owner{neild, iant},
+				Primary: []Owner{neild, iant, nsh},
 			},
 		},
 		{

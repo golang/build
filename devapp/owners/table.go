@@ -66,6 +66,7 @@ var (
 	neelance      = gh("neelance")
 	neild         = gh("neild")
 	nigeltao      = gh("nigeltao")
+	nsh           = gh("nicholashusin")
 	prattmic      = gh("prattmic")
 	pjw           = gh("pjweinb")
 	qmuntal       = gh("qmuntal")
@@ -540,7 +541,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/internal/nettrace": {
 		// Same as net/http.
-		Primary:   []Owner{neild},
+		Primary:   []Owner{neild, nsh},
 		Secondary: []Owner{rsc},
 	},
 	"go/src/internal/obscuretestdata": {
@@ -724,11 +725,11 @@ var entries = map[string]*Entry{
 	},
 	"go/src/net": {
 		// Same as internal/routebsd.
-		Primary: []Owner{iant, neild},
+		Primary: []Owner{iant, neild, nsh},
 	},
 	"go/src/net/http": {
 		// Same as internal/nettrace.
-		Primary:   []Owner{neild},
+		Primary:   []Owner{neild, nsh},
 		Secondary: []Owner{rsc},
 	},
 	"go/src/net/http/pprof": {
@@ -756,7 +757,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{bradfitz, rsc},
 	},
 	"go/src/net/url": {
-		Primary: []Owner{neild, rsc},
+		Primary: []Owner{neild, rsc, nsh},
 	},
 	"go/src/os": {
 		// Same as internal/oserror.
@@ -937,17 +938,17 @@ var entries = map[string]*Entry{
 		Primary: []Owner{commandlineTeam},
 	},
 	"net": {
-		Primary: []Owner{neild, iant},
+		Primary: []Owner{neild, iant, nsh},
 	},
 	"net/bpf": {
 		Primary: []Owner{danderson, mdlayher},
 	},
 	"net/http": {
-		Primary:   []Owner{neild},
+		Primary:   []Owner{neild, nsh},
 		Secondary: []Owner{},
 	},
 	"net/http2": {
-		Primary:   []Owner{neild, tombergan},
+		Primary:   []Owner{neild, tombergan, nsh},
 		Secondary: []Owner{},
 	},
 	"net/icmp": {
@@ -1186,5 +1187,5 @@ var wasmOwners = []Owner{neelance, cherryyz}
 
 var modProxyOwners = &Entry{
 	Primary:   []Owner{toolsTeam},
-	Secondary: []Owner{samthanawalla},
+	Secondary: []Owner{samthanawalla, nsh},
 }
