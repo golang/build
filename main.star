@@ -40,15 +40,6 @@ luci.project(
             groups = "mdb/golang-luci-admin",
         ),
 
-        # Allow task service accounts to spawn builds.
-        luci.binding(
-            roles = "role/buildbucket.triggerer",
-            users = [
-                "coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
-                "security-coordinator-builder@golang-ci-luci.iam.gserviceaccount.com",
-            ],
-        ),
-
         # Allow task service accounts to validate configurations.
         #
         # This is fine, since all our configurations for this project (even for internal
@@ -111,24 +102,31 @@ luci.project(
 luci.logdog(gs_bucket = "logdog-golang-archive")
 
 # Realms for public buckets and Swarming pools.
-PUBLIC_REALMS = [
+PUBLIC_COORDINATOR_REALMS = [
     luci.realm(name = "pools/ci"),
-    luci.realm(name = "pools/ci-workers"),
     luci.realm(name = "pools/try"),
+    luci.bucket(name = "try"),
+    luci.bucket(name = "ci"),
+]
+PUBLIC_WORKER_REALMS = [
+    luci.realm(name = "pools/ci-workers"),
     luci.realm(name = "pools/try-workers"),
     luci.realm(name = "pools/shared-workers"),
-    luci.bucket(name = "try"),
     luci.bucket(name = "try-workers"),
-    luci.bucket(name = "ci"),
     luci.bucket(name = "ci-workers"),
 ]
+PUBLIC_REALMS = PUBLIC_COORDINATOR_REALMS + PUBLIC_WORKER_REALMS
 
-SECURITY_REALMS = [
+# Realms for internal buckets and Swarming pools.
+SECURITY_COORDINATOR_REALMS = [
     luci.realm(name = "pools/security-try"),
-    luci.realm(name = "pools/security-try-workers"),
     luci.bucket(name = "security-try"),
+]
+SECURITY_WORKER_REALMS = [
+    luci.realm(name = "pools/security-try-workers"),
     luci.bucket(name = "security-try-workers"),
 ]
+SECURITY_REALMS = SECURITY_COORDINATOR_REALMS + SECURITY_WORKER_REALMS
 
 luci.realm(name = "pools/prod")
 
@@ -145,11 +143,26 @@ luci.binding(
     groups = "all",
 )
 
+# Permissions for triggering builders.
+#
 # may-start-trybots grants the permission to trigger public builds.
+#
+# The coordinator service accounts need to be able to trigger child
+# builds in their respective realms as well.
 luci.binding(
     roles = ["role/buildbucket.triggerer"],
     realm = PUBLIC_REALMS,
     groups = ["project-golang-may-start-trybots"],
+)
+luci.binding(
+    roles = ["role/buildbucket.triggerer"],
+    realm = PUBLIC_COORDINATOR_REALMS,
+    users = ["coordinator-builder@golang-ci-luci.iam.gserviceaccount.com"],
+)
+luci.binding(
+    roles = ["role/buildbucket.triggerer"],
+    realm = SECURITY_COORDINATOR_REALMS,
+    users = ["security-coordinator-builder@golang-ci-luci.iam.gserviceaccount.com"],
 )
 
 # Allow security release participants to see and trigger security builds, etc.
