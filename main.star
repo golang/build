@@ -102,31 +102,24 @@ luci.project(
 luci.logdog(gs_bucket = "logdog-golang-archive")
 
 # Realms for public buckets and Swarming pools.
-PUBLIC_COORDINATOR_REALMS = [
+PUBLIC_REALMS = [
     luci.realm(name = "pools/ci"),
-    luci.realm(name = "pools/try"),
-    luci.bucket(name = "try"),
-    luci.bucket(name = "ci"),
-]
-PUBLIC_WORKER_REALMS = [
     luci.realm(name = "pools/ci-workers"),
+    luci.realm(name = "pools/try"),
     luci.realm(name = "pools/try-workers"),
     luci.realm(name = "pools/shared-workers"),
+    luci.bucket(name = "try"),
     luci.bucket(name = "try-workers"),
+    luci.bucket(name = "ci"),
     luci.bucket(name = "ci-workers"),
 ]
-PUBLIC_REALMS = PUBLIC_COORDINATOR_REALMS + PUBLIC_WORKER_REALMS
 
-# Realms for internal buckets and Swarming pools.
-SECURITY_COORDINATOR_REALMS = [
+SECURITY_REALMS = [
     luci.realm(name = "pools/security-try"),
-    luci.bucket(name = "security-try"),
-]
-SECURITY_WORKER_REALMS = [
     luci.realm(name = "pools/security-try-workers"),
+    luci.bucket(name = "security-try"),
     luci.bucket(name = "security-try-workers"),
 ]
-SECURITY_REALMS = SECURITY_COORDINATOR_REALMS + SECURITY_WORKER_REALMS
 
 luci.realm(name = "pools/prod")
 
@@ -153,15 +146,11 @@ luci.binding(
     roles = ["role/buildbucket.triggerer"],
     realm = PUBLIC_REALMS,
     groups = ["project-golang-may-start-trybots"],
-)
-luci.binding(
-    roles = ["role/buildbucket.triggerer"],
-    realm = PUBLIC_COORDINATOR_REALMS,
     users = ["coordinator-builder@golang-ci-luci.iam.gserviceaccount.com"],
 )
 luci.binding(
     roles = ["role/buildbucket.triggerer"],
-    realm = SECURITY_COORDINATOR_REALMS,
+    realm = SECURITY_REALMS,
     users = ["security-coordinator-builder@golang-ci-luci.iam.gserviceaccount.com"],
 )
 
