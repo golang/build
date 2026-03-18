@@ -433,7 +433,9 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:   "linux",
 		Arch: "loong64",
 		Type: "gotip-linux-loong64",
-		// Needs git, g++, patch, unzip, golang-bin on the builder.
+		// Needs git, g++, unzip, golang-bin on the builder.
+		// Unlike other builders, this one is missing patch, but git
+		// apply works fine even outside of a git repository.
 		Script: `#!/usr/bin/env bash
 set -e
 cat /etc/os-release
@@ -448,7 +450,7 @@ popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
 if [ "$LLVM_PATCH" != "" ]; then
-  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+  (cd llvm-project-${REV}/ && git apply ../patch.patch)
 fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_loong64.syso go/src/runtime/race
