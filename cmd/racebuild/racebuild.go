@@ -32,6 +32,7 @@ import (
 var (
 	flagGoroot     = flag.String("goroot", "", "path to Go repository to update (required)")
 	flagRev        = flag.String("rev", "", "llvm-project git revision from https://github.com/llvm/llvm-project (required)")
+	flagLLVMPatch  = flag.String("llvm-patch", "", "path to a patch file to apply to the llvm-project repo. The patch should only include changes to the compiler-rt directory. (optional)")
 	flagCherryPick = flag.String("cherrypick", "", "go.googlesource.com CL reference to cherry-pick on top of Go repo (takes form 'refs/changes/NNN/<CL number>/<patchset number>') (optional)")
 	flagCheckout   = flag.String("checkout", "", "go.googlesource.com CL reference to check out on top of Go repo (takes form 'refs/changes/NNN/<CL number>/<patchset number>') (optional)")
 	flagCopyOnFail = flag.Bool("copyonfail", false, "Attempt to copy newly built race syso into Go repo even if script fails.")
@@ -62,6 +63,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_openbsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_openbsd.syso
 # work around gomote gettar issue #64195
@@ -89,6 +93,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_freebsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_freebsd.syso
 # work around gomote gettar issue #64195
@@ -116,6 +123,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
 # The generated syso file contains a malformed LC_DYSYMTAB, which new Apple linker doesn't
 # like and emits an annoying warning https://github.com/golang/go/issues/61229#issuecomment-1988965927 .
@@ -143,6 +153,9 @@ git checkout $GOREV
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang GOAMD64=v3 ./buildgo.sh)
 # The generated syso file contains a malformed LC_DYSYMTAB, which new Apple linker doesn't
 # like and emits an annoying warning https://github.com/golang/go/issues/61229#issuecomment-1988965927 .
@@ -172,6 +185,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
 # The generated syso file contains a malformed LC_DYSYMTAB, which new Apple linker doesn't
 # like and emits an annoying warning https://github.com/golang/go/issues/61229#issuecomment-1988965927 .
@@ -190,7 +206,7 @@ rm -r llvm.zip llvm-project-${REV}
 		Arch:    "amd64",
 		SubArch: "v1",
 		Type:    "gotip-linux-amd64-race",
-		// Needs git, g++, unzip on the builder.
+		// Needs git, g++, patch, unzip on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -203,6 +219,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race/internal/amd64v1/race_linux.syso
 # work around gomote gettar issue #64195
@@ -218,7 +237,7 @@ rm -r llvm.zip llvm-project-${REV}
 		Arch:    "amd64",
 		SubArch: "v3",
 		Type:    "gotip-linux-amd64-race",
-		// Needs git, g++, unzip on the builder.
+		// Needs git, g++, patch, unzip on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -227,6 +246,9 @@ git checkout $GOREV
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && GOAMD64=v3 ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_amd64.syso go/src/runtime/race/internal/amd64v3/race_linux.syso
 # work around gomote gettar issue #64195
@@ -241,7 +263,7 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:   "linux",
 		Arch: "ppc64le",
 		Type: "gotip-linux-ppc64le_power8",
-		// Needs git, g++, unzip on the builder.
+		// Needs git, g++, patch, unzip on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -255,6 +277,9 @@ popd
 workdir=$(pwd)
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso $workdir/go/src/runtime/race
 # work around gomote gettar issue #64195
@@ -270,7 +295,7 @@ cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_ppc64le.syso outdir/ra
 		OS:   "linux",
 		Arch: "arm64",
 		Type: "gotip-linux-arm64-race",
-		// Needs git, g++, unzip on the builder.
+		// Needs git, g++, patch, unzip on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 git clone https://go.googlesource.com/go
@@ -283,6 +308,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_arm64.syso go/src/runtime/race
 # work around gomote gettar issue #64195
@@ -310,6 +338,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && CC=clang ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_netbsd_amd64.syso go/src/runtime/race/internal/amd64v1/race_netbsd.syso
 # work around gomote gettar issue #64195
@@ -332,7 +363,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 cd go
 git checkout %GOREV%
 if %errorlevel% neq 0 exit /b %errorlevel%
-if "%$GOGITOP%"=="" goto nogogitop
+if "%GOGITOP%"=="" goto nogogitop
 git fetch https://go.googlesource.com/go %GOSRCREF%
 if %errorlevel% neq 0 exit /b %errorlevel%
 git %GOGITOP% FETCH_HEAD
@@ -344,6 +375,10 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 cd llvm-project
 git checkout %REV%
 if %errorlevel% neq 0 exit /b %errorlevel%
+if "%LLVM_PATCH%"=="" goto nollvmpatch
+git apply ../patch.patch
+if %errorlevel% neq 0 exit /b %errorlevel%
+:nollvmpatch
 cd ..
 cd llvm-project/compiler-rt/lib/tsan/go
 call build.bat
@@ -367,7 +402,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 		OS:   "linux",
 		Arch: "s390x",
 		Type: "gotip-linux-s390x",
-		// Needs git, g++, unzip, golang-bin on the builder.
+		// Needs git, g++, patch, unzip, golang-bin on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 cat /etc/os-release
@@ -381,6 +416,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_s390x.syso go/src/runtime/race
 # work around gomote gettar issue #64195
@@ -395,7 +433,7 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:   "linux",
 		Arch: "loong64",
 		Type: "gotip-linux-loong64",
-		// Needs git, g++, unzip, golang-bin on the builder.
+		// Needs git, g++, patch, unzip, golang-bin on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 cat /etc/os-release
@@ -409,6 +447,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_loong64.syso go/src/runtime/race
 # work around gomote gettar issue #64195
@@ -423,7 +464,7 @@ rm -r llvm.zip llvm-project-${REV}
 		OS:   "linux",
 		Arch: "riscv64",
 		Type: "gotip-linux-riscv64",
-		// Needs git, g++, unzip, golang-bin on the builder.
+		// Needs git, g++, patch, unzip, golang-bin on the builder.
 		Script: `#!/usr/bin/env bash
 set -e
 uname -a
@@ -439,6 +480,9 @@ fi
 popd
 curl -L -o llvm.zip https://github.com/llvm/llvm-project/archive/${REV}.zip
 unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
+if [ "$LLVM_PATCH" != "" ]; then
+  (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
+fi
 (cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_riscv64.syso go/src/runtime/race
 # work around gomote gettar issue #64195
@@ -630,13 +674,31 @@ func (p *Platform) Build(ctx context.Context) error {
 		targetName = "script.bat"
 	}
 	if _, err := p.Gomote(ctx, "put", "-mode=0700", p.Inst, script.Name(), targetName); err != nil {
-		return err
+		return fmt.Errorf("error pushing script to gomote: %v", err)
 	}
-	var scriptRunErr error
+
+	if *flagLLVMPatch != "" {
+		if _, err := p.Gomote(ctx, "put", "-mode=0600", p.Inst, *flagLLVMPatch, "patch.patch"); err != nil {
+			return fmt.Errorf("error pushing patch %s to gomote: %v", *flagLLVMPatch, err)
+		}
+	}
+
 	gogitop, gosrcref := setupForGoRepoGitOp()
-	if _, err := p.Gomote(ctx, "run", "-e=REV="+*flagRev, "-e=GOREV="+goRev,
-		"-e=GOGITOP="+gogitop, "-e=GOSRCREF="+gosrcref,
-		p.Inst, targetName); err != nil {
+	args := []string{
+		"run",
+		"-e=REV=" + *flagRev,
+		"-e=GOREV=" + goRev,
+		"-e=GOGITOP=" + gogitop,
+		"-e=GOSRCREF=" + gosrcref,
+	}
+	if *flagLLVMPatch != "" {
+		args = append(args, "-e=LLVM_PATCH=1")
+	}
+	args = append(args, p.Inst)
+	args = append(args, targetName)
+
+	var scriptRunErr error
+	if _, err := p.Gomote(ctx, args...); err != nil {
 		if !*flagCopyOnFail {
 			return err
 		}
@@ -698,23 +760,42 @@ func (p *Platform) UpdateReadme() error {
 	readmeMu.Lock()
 	defer readmeMu.Unlock()
 
-	readmeFile := filepath.Join(*flagGoroot, "src", "runtime", "race", "README")
+	raceDir := filepath.Join(*flagGoroot, "src", "runtime", "race")
+	syso := p.Basename()
+
+	var patchStr string
+	if *flagLLVMPatch != "" {
+		patch := strings.Replace(syso, ".syso", ".patch", 1)
+		patchStr = " with patch " + patch
+
+		patchContents, err := os.ReadFile(*flagLLVMPatch)
+		if err != nil {
+			return fmt.Errorf("error reading patch file: %v", err)
+		}
+
+		patchFile := filepath.Join(raceDir, patch)
+		if err := os.WriteFile(patchFile, patchContents, 0640); err != nil {
+			return fmt.Errorf("error writing patch file: %v", err)
+		}
+	}
+
+	readmeFile := filepath.Join(raceDir, "README")
 	readme, err := os.ReadFile(readmeFile)
 	if err != nil {
 		log.Fatalf("bad -goroot? %v", err)
 	}
 
-	syso := p.Basename()
 	const (
-		readmeTmpl = "%s built with LLVM %s and Go %s."
+		readmeTmpl = "%s built with LLVM %s%s and Go %s."
 		commitRE   = "[0-9a-f]+"
+		patchRE    = `( with patch \S+.patch)?`
 	)
 
 	// TODO(bcmills): Extract the C++ toolchain version from the .syso file and
 	// record it in the README.
-	updatedLine := fmt.Sprintf(readmeTmpl, syso, *flagRev, goRev)
+	updatedLine := fmt.Sprintf(readmeTmpl, syso, *flagRev, patchStr, goRev)
 
-	lineRE, err := regexp.Compile("(?m)^" + fmt.Sprintf(readmeTmpl, regexp.QuoteMeta(syso), commitRE, commitRE) + "$")
+	lineRE, err := regexp.Compile("(?m)^" + fmt.Sprintf(readmeTmpl, regexp.QuoteMeta(syso), commitRE, patchRE, commitRE) + "$")
 	if err != nil {
 		return err
 	}
