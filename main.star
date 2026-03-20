@@ -2242,16 +2242,16 @@ def _define_go_ci():
                         go_repo_presubmit = PRESUBMIT.ENABLED
 
                     # Add an x/website builder to the Go presubmit
-                    # but only when release notes are being edited.
+                    # but only when documentation files are edited.
                     # This is to catch problems with Markdown/HTML.
-                    # See go.dev/issue/68633.
+                    # See go.dev/issue/68633 and go.dev/issue/78211.
                     if project == "website" and builder_type == "linux-amd64" and go_branch_short == "gotip":
                         go_repo_presubmit = PRESUBMIT.ENABLED
                         location_filters = [
                             cq.location_filter(
                                 gerrit_host_regexp = "go-review.googlesource.com",
                                 gerrit_project_regexp = "^go$",
-                                path_regexp = "doc/next/.+",
+                                path_regexp = "doc/.+",
                             ),
                         ]
 
