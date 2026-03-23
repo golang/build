@@ -451,6 +451,7 @@ BUILDER_TYPES = [
     "linux-amd64-clang15",
     "linux-amd64-goamd64v3",
     "linux-amd64-longtest",
+    "linux-amd64-longtest-git2.24.0",
     "linux-amd64-longtest-race",
     "linux-amd64-longtest-noswissmap",
     "linux-amd64-misccompile",
@@ -548,6 +549,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "darwin-amd64_15": known_issue(issue_number = 77997, hide_from_presubmit = False),
     "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
+    "linux-amd64-longtest-git2.24.0": known_issue(issue_number = 26653),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
     "freebsd-amd64_15.0": known_issue(issue_number = 77411, hide_from_presubmit = False),
@@ -976,34 +978,44 @@ def define_for_projects_except(projects):
 
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
-RUN_MODS = dict(
+RUN_MODS = {
     # Build and test with AddressSanitizer enabled.
-    asan = make_run_mod(
+    "asan": make_run_mod(
         add_props = {"asan_mode": True},
         test_timeout_scale = 2,
         enabled = define_for_postsubmit(["go"]),
     ),
 
     # Build and test with the boringcrypto GOEXPERIMENT.
-    boringcrypto = make_run_mod(
+    "boringcrypto": make_run_mod(
         add_env = {"GOEXPERIMENT": "boringcrypto"},
     ),
 
     # Build and test clang 15 as the C toolchain.
-    clang15 = make_run_mod(
+    "clang15": make_run_mod(
         add_props = {"clang_version": "15.0.6"},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+
+    # Build and test with git 2.24.0. See go.dev/issue/26746.
+    "git2.24.0": make_run_mod(
+        add_props = {
+            # The availability of a given version in CIPD can be checked with:
+            #   cipd search infra/3pp/tools/git/{platform} -tag={version}
+            "git_version": "version:2.24.0.chromium.5",
+        },
         enabled = define_for_postsubmit(["go"]),
     ),
 
     # Build and test with GOAMD64=v3, which makes the compiler assume certain amd64 CPU
     # features are always available.
-    goamd64v3 = make_run_mod(
+    "goamd64v3": make_run_mod(
         add_env = {"GOAMD64": "v3"},
         enabled = define_for_postsubmit(["go"]),
     ),
 
     # Run a larger set of tests.
-    longtest = make_run_mod(
+    "longtest": make_run_mod(
         add_props = {"long_test": True},
         test_timeout_scale = 5,
         enabled = define_for_presubmit_only_for_projs_or_on_release_branches({
@@ -1031,38 +1043,38 @@ RUN_MODS = dict(
 
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
     # that is to cross-compile all non-first-class ports to quickly flag portability issues.
-    misccompile = make_run_mod(
+    "misccompile": make_run_mod(
         add_props = {"compile_only": True, "misc_ports": True},
         enabled = define_for_projects_except(["oscar"]),
     ),
 
     # Build and test with MemorySanitizer enabled.
-    msan = make_run_mod(
+    "msan": make_run_mod(
         add_props = {"msan_mode": True},
         test_timeout_scale = 2,
         enabled = define_for_postsubmit(["go"]),
     ),
 
     # Build and test with the newinliner GOEXPERIMENT.
-    newinliner = make_run_mod(
+    "newinliner": make_run_mod(
         add_env = {"GOEXPERIMENT": "newinliner"},
         enabled = define_for_go_starting_at("go1.22"),
     ),
 
     # Build and test with cgo disabled.
-    nocgo = make_run_mod(
+    "nocgo": make_run_mod(
         add_env = {"CGO_ENABLED": "0"},
         enabled = define_for_postsubmit(projects_of_type([PT.CORE, PT.LIBRARY])),
     ),
 
     # Build and test with GOEXPERIMENT=nogreenteagc.
-    nogreenteagc = make_run_mod(
+    "nogreenteagc": make_run_mod(
         add_env = {"GOEXPERIMENT": "nogreenteagc"},
         enabled = define_for_postsubmit(["go"], ["gotip"]),
     ),
 
     # Build and test with optimizations disabled.
-    noopt = make_run_mod(
+    "noopt": make_run_mod(
         add_env = {"GO_GCFLAGS": "-N -l"},
         enabled = define_for_postsubmit(["go"]),
     ),
@@ -1071,7 +1083,7 @@ RUN_MODS = dict(
     #
     # GOEXPERIMENT=swissmap was deleted in Go 1.26. This can be deleted when Go
     # 1.25 is no longer supported.
-    noswissmap = make_run_mod(
+    "noswissmap": make_run_mod(
         add_env = {"GOEXPERIMENT": "noswissmap"},
         enabled = define_for_go_range("go1.24", "go1.25", presubmit = False),
     ),
@@ -1085,7 +1097,7 @@ RUN_MODS = dict(
     # This should eventually be the default, because it produces a strict superset of data
     # compared vs. the others performance run-mods. This is just to test and make sure it
     # works.
-    perf_pgo_vs_oldest_stable = make_run_mod(
+    "perf_pgo_vs_oldest_stable": make_run_mod(
         add_props = {"perf_mode": {"baseline": "refs/heads/" + GO_BRANCHES[SECOND_GO].branch, "pgo": True}},
         enabled = define_for_optional_presubmit_only(["go"]),
     ),
@@ -1098,7 +1110,7 @@ RUN_MODS = dict(
     # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
-    perf_vs_gopls_0_11 = make_run_mod(
+    "perf_vs_gopls_0_11": make_run_mod(
         add_props = {"perf_mode": {"baseline": "refs/heads/gopls-release-branch.0.11"}},
         enabled = define_for_postsubmit(["tools"], go_branches = [LATEST_GO]),
     ),
@@ -1108,7 +1120,7 @@ RUN_MODS = dict(
     # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
-    perf_vs_oldest_stable = make_run_mod(
+    "perf_vs_oldest_stable": make_run_mod(
         add_props = {"perf_mode": {"baseline": "refs/heads/" + GO_BRANCHES[SECOND_GO].branch}},
         enabled = define_for_optional_presubmit_only(["go"]),
     ),
@@ -1118,7 +1130,7 @@ RUN_MODS = dict(
     # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
-    perf_vs_parent = make_run_mod(
+    "perf_vs_parent": make_run_mod(
         add_props = {"perf_mode": {"baseline": "parent"}},
         enabled = define_for_optional_presubmit_only(["go", "tools"]),
     ),
@@ -1133,7 +1145,7 @@ RUN_MODS = dict(
     # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
-    perf_vs_release = make_run_mod(
+    "perf_vs_release": make_run_mod(
         add_props = {"perf_mode": {"baseline": "latest_go_release"}},
         enabled = define_for_postsubmit(["go"]),
     ),
@@ -1144,20 +1156,20 @@ RUN_MODS = dict(
     # Note: This run_mod is incompatible with most other run_mods. Generally, build-time
     # environment variables will apply, but others like compile_only, race, and longtest
     # will have no effect.
-    perf_vs_tip = make_run_mod(
+    "perf_vs_tip": make_run_mod(
         add_props = {"perf_mode": {"baseline": "refs/heads/" + MAIN_BRANCH_NAME}},
         enabled = define_for_optional_presubmit_only(["go", "tools"]),
     ),
 
     # Build and test with race mode enabled.
-    race = make_run_mod(
+    "race": make_run_mod(
         add_props = {"race_mode": True},
         test_timeout_scale = 2,
         enabled = define_for_presubmit_only_for_ports_or_on_release_branches(["linux-amd64"]),
     ),
 
     # Build with a compiler and linker that are built with race mode enabled.
-    racecompile = make_run_mod(
+    "racecompile": make_run_mod(
         add_props = {"compile_only": True, "compiler_linker_race_mode": True},
         enabled = define_for_postsubmit(["go"]),
     ),
@@ -1169,32 +1181,32 @@ RUN_MODS = dict(
     # in progress, but should be removed if nobody else is
     # working on it, or we remove the experiment. We'll
     # re-evaluate the need for this builder mid-year.
-    runtimefreegc = make_run_mod(
+    "runtimefreegc": make_run_mod(
         add_env = {"GOEXPERIMENT": "runtimefreegc"},
         enabled = define_for_postsubmit(["go"], ["gotip"]),
     ),
 
     # Build and test with GOEXPERIMENT=sizespecializedmalloc.
-    sizespecializedmalloc = make_run_mod(
+    "sizespecializedmalloc": make_run_mod(
         add_env = {"GOEXPERIMENT": "sizespecializedmalloc"},
         enabled = define_for_gotip_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
     ),
 
     # Build and test with GO386=softfloat, which makes the compiler emit non-floating-point
     # CPU instructions to perform floating point operations.
-    softfloat = make_run_mod(
+    "softfloat": make_run_mod(
         add_env = {"GO386": "softfloat"},
         enabled = define_for_postsubmit(["go"]),
     ),
 
     # Build and test with Spectre mitigations enabled (https://go.dev/wiki/Spectre).
-    spectre = make_run_mod(
+    "spectre": make_run_mod(
         add_env = {"GOFLAGS": "-gcflags=all=-spectre=all -asmflags=all=-spectre=all"},
         enabled = define_for_postsubmit(["go"]),
     ),
 
     # Build with ssacheck mode enabled in the compiler.
-    ssacheck = make_run_mod(
+    "ssacheck": make_run_mod(
         add_props = {"compile_only": True},
         add_env = {"GO_GCFLAGS": "-d=ssa/check/on"},
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/(ssa|ssagen)/.+"]),
@@ -1202,7 +1214,7 @@ RUN_MODS = dict(
 
     # Build and test with the staticlockranking GOEXPERIMENT, which validates the runtime's
     # dynamic lock usage against a static ranking to detect possible deadlocks before they happen.
-    staticlockranking = make_run_mod(
+    "staticlockranking": make_run_mod(
         add_env = {"GOEXPERIMENT": "staticlockranking"},
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
     ),
@@ -1210,7 +1222,7 @@ RUN_MODS = dict(
     # Build and test with go.mod upgraded to the latest version.
     #
     # Enabled only in postsubmit for non-special subrepos.
-    tiplang = make_run_mod(
+    "tiplang": make_run_mod(
         add_props = {"upgrade_go_mod_lang": True},
         enabled = define_for_postsubmit([
             proj
@@ -1218,7 +1230,7 @@ RUN_MODS = dict(
             if proj != "go" and typ != PT.SPECIAL
         ], go_branches = ["gotip"]),
     ),
-)
+}
 
 # EXTRA_DEPENDENCIES specifies custom additional dependencies
 # to append when applies(project, port, run_mods) matches.
