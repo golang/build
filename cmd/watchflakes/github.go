@@ -394,17 +394,10 @@ func readComments(issue *Issue) {
 }
 
 // postNew creates a new issue with the given title and body,
-// setting the NeedsInvestigation label (unless it's a consistent failure)
-// and placing the issue in the Test Flakes project.
+// placing the issue in the Test Flakes project.
 // It automatically caps issue body length and adds signature to it.
 func postNew(title, body string) *github.Issue {
-	var args []any
-	if strings.HasSuffix(title, consistentFailureTitleSuffix) {
-		// No label.
-	} else if lab := labels["NeedsInvestigation"]; lab != nil {
-		args = append(args, lab)
-	}
-	args = append(args, testFlakes)
+	args := []any{testFlakes}
 
 	if len(body) > 50000 {
 		// As of 2025-11-27, GitHub GraphQL API limits body length to 65536.
@@ -418,14 +411,10 @@ func postNew(title, body string) *github.Issue {
 }
 
 // postNewBrokenBot creates a new issue with the given title and body,
-// setting the NeedsInvestigation label and placing the issue in
-// the Broken Bots project.
+// placing the issue in the Broken Bots project.
 // It automatically adds signature to the body.
 func postNewBrokenBot(title, body string) (*github.Issue, error) {
 	var args []any
-	if lab := labels["NeedsInvestigation"]; lab != nil {
-		args = append(args, lab)
-	}
 	if lab := labels["Builders"]; lab != nil {
 		args = append(args, lab)
 	}
