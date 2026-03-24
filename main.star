@@ -456,6 +456,7 @@ BUILDER_TYPES = [
     "linux-amd64-longtest-noswissmap",
     "linux-amd64-misccompile",
     "linux-amd64-msan-clang15",
+    "linux-amd64-mapsplitgroup",
     "linux-amd64-newinliner",
     "linux-amd64-nocgo",
     "linux-amd64-nogreenteagc",
@@ -1039,6 +1040,16 @@ RUN_MODS = {
             ],
             "protobuf": [],
         }),
+    ),
+
+    # Build and test with GOEXPERIMENT=mapsplitgroup.
+    #
+    # This is an experiment for performance improvements
+    # (https://go.dev/issue/70835, https://go.dev/issue/71368). We anticipate
+    # deciding whether to commit to this experiment before the 1.27 freeze.
+    "mapsplitgroup": make_run_mod(
+        add_env = {"GOEXPERIMENT": "mapsplitgroup"},
+        enabled = define_for_postsubmit(["go"], go_branches = ["gotip"]),
     ),
 
     # The misccompile mod indicates that the builder should act as a "misc-compile" builder,
