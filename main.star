@@ -550,7 +550,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "darwin-amd64_15": known_issue(issue_number = 77997, hide_from_presubmit = False),
     "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
-    "linux-amd64-longtest-git2.24.0": known_issue(issue_number = 26653),
+    "linux-amd64-longtest-git2.24.0": known_issue(issue_number = 26653, hide_from_presubmit = False),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
     "freebsd-amd64_15.0": known_issue(issue_number = 77411, hide_from_presubmit = False),
