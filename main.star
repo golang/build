@@ -1068,7 +1068,7 @@ RUN_MODS = {
     # Build and test with the newinliner GOEXPERIMENT.
     "newinliner": make_run_mod(
         add_env = {"GOEXPERIMENT": "newinliner"},
-        enabled = define_for_go_starting_at("go1.22"),
+        enabled = define_for_go_starting_at("go1.22", presubmit = False),
     ),
 
     # Build and test with cgo disabled.
