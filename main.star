@@ -551,8 +551,6 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
 KNOWN_ISSUE_BUILDER_TYPES = {
     "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
-    "linux-amd64-simd": known_issue(issue_number = 77855),
-    "linux-amd64_avx512-simd": known_issue(issue_number = 77855),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
     "freebsd-amd64_15.0": known_issue(issue_number = 77411, hide_from_presubmit = False),
