@@ -548,8 +548,13 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
         hide_from_presubmit = hide_from_presubmit,
     )
 
+# KNOWN_ISSUE_BUILDER_TYPES are known issues per builder type.
+#
+# "builder_type@go_branch_short" is a supported syntax to apply
+# a known issue only for the named Go branch.
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "linux-arm64_debian13": known_issue(issue_number = 74985, hide_from_presubmit = False),
+    "linux-arm64_debian13@go1.26": known_issue(issue_number = 78406, hide_from_presubmit = False),
+    "linux-arm64_debian13@go1.25": known_issue(issue_number = 78405, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
@@ -1644,8 +1649,17 @@ def define_builder(env, project, go_branch_short, builder_type):
     }
     if host_timeout_scale(host_type) != 1:
         base_props["test_timeout_scale"] = host_timeout_scale(host_type)
-    if builder_type in env.known_issue_builder_types:
+    builder_type_and_go_branch_short = "%s@%s" % (builder_type, go_branch_short)
+    if builder_type in env.known_issue_builder_types and builder_type_and_go_branch_short in env.known_issue_builder_types:
+        # If there is an overlap between an all-go-branch known issue with a go-branch-specific known issue,
+        # it might be an unintentional mistake. If it helps to permit this by deciding to let one take
+        # higher precedence over the other (and document the direction), we can decide to support it.
+        # Since it can be confusing, to start out, treat it as an unsupported configuration.
+        fail("unsupported known issues configuration: %s and %s are overlapping" % (builder_type, builder_type_and_go_branch_short))
+    elif builder_type in env.known_issue_builder_types:
         base_props["known_issue"] = env.known_issue_builder_types[builder_type].issue_number
+    elif builder_type_and_go_branch_short in env.known_issue_builder_types:
+        base_props["known_issue"] = env.known_issue_builder_types[builder_type_and_go_branch_short].issue_number
     for d in EXTRA_DEPENDENCIES:
         if not d.applies(project, port_of(builder_type), run_mods):
             continue
@@ -2481,15 +2495,17 @@ def _define_go_internal_ci():
                 # Define presubmit builders. Since there's no postsubmit to monitor,
                 # all possible completed builders that perform testing are required.
                 name, _, _ = define_builder(SECURITY_TRY_ENV, project_name, go_branch_short, builder_type)
-                _, _, _, run_mods = split_builder_type(builder_type)
                 if presubmit != PRESUBMIT.DISABLED:
+                    _, _, _, run_mods = split_builder_type(builder_type)
+                    builder_type_and_go_branch_short = "%s@%s" % (builder_type, go_branch_short)
                     luci.cq_tryjob_verifier(
                         builder = name,
                         cq_group = cq_group_name,
                         disable_reuse = True,
                         includable_only = any([r.startswith("perf") for r in run_mods]) or
                                           (presubmit == PRESUBMIT.OPTIONAL and not postsubmit) or
-                                          builder_type in SECURITY_KNOWN_ISSUE_BUILDER_TYPES,
+                                          builder_type in SECURITY_KNOWN_ISSUE_BUILDER_TYPES or
+                                          builder_type_and_go_branch_short in SECURITY_KNOWN_ISSUE_BUILDER_TYPES,
                     )
 
 _define_go_ci()
