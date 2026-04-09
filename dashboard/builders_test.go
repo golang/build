@@ -154,10 +154,10 @@ func TestTrybots(t *testing.T) {
 		{
 			repo:   "mobile",
 			branch: "master",
-			want: []string{
-				"android-amd64-emu",
-				"linux-amd64-androidemu",
+			want:   []string{
 				// Stopped.
+				//"android-amd64-emu",
+				//"linux-amd64-androidemu",
 				//"linux-amd64",
 				//"linux-amd64-race",
 			},
@@ -165,9 +165,9 @@ func TestTrybots(t *testing.T) {
 		{
 			repo:   "sys",
 			branch: "master",
-			want: []string{
-				"freebsd-386-13_0",
+			want:   []string{
 				// Stopped.
+				//"freebsd-386-13_0",
 				//"freebsd-amd64-12_3",
 				//"freebsd-amd64-13_0",
 				//"linux-386",
@@ -175,9 +175,8 @@ func TestTrybots(t *testing.T) {
 				//"linux-amd64-boringcrypto", // GoDeps will exclude, but not in test
 				//"linux-amd64-race",
 				//"linux-arm64",
-				"netbsd-amd64-9_3",
-				"openbsd-386-72",
-				// Stopped.
+				//"netbsd-amd64-9_3",
+				//"openbsd-386-72",
 				//"openbsd-amd64-72",
 				//"windows-386-2016",
 				//"windows-amd64-2016",
@@ -672,7 +671,7 @@ func TestBuilderConfig(t *testing.T) {
 			}
 			gotPost := bc.BuildsRepoPostSubmit(tt.br.repo, tt.br.branch, tt.br.goBranch)
 			if tt.want&isBuilder != 0 && !gotPost {
-				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder; stopped {
+				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder || migration.StopAllLegacyBuilders; stopped {
 					t.Logf("not a post-submit builder because it's intentionally stopped")
 				} else {
 					t.Errorf("not a post-submit builder, but expected")
@@ -684,7 +683,7 @@ func TestBuilderConfig(t *testing.T) {
 
 			gotTry := bc.BuildsRepoTryBot(tt.br.repo, tt.br.branch, tt.br.goBranch)
 			if tt.want&isTrybot != 0 && !gotTry {
-				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder; stopped {
+				if stopped := migration.BuildersPortedToLUCI[bc.Name] && migration.StopPortedBuilder || migration.StopAllLegacyBuilders; stopped {
 					t.Logf("not a trybot builder because it's intentionally stopped")
 				} else {
 					t.Errorf("not trybot, but expected")
@@ -731,6 +730,9 @@ func TestBuilderOwners(t *testing.T) {
 
 // tests that goBranch is optional for repo == "go"
 func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
+	if migration.StopAllLegacyBuilders {
+		t.Skip("test can't be used because all legacy builders are stopped")
+	}
 	builder := Builders["android-amd64-emu"]
 	got := builder.buildsRepoAtAll("go", "master", "")
 	if !got {
@@ -739,7 +741,7 @@ func TestBuildsRepoAtAllImplicitGoBranch(t *testing.T) {
 }
 
 func TestShouldRunDistTest(t *testing.T) {
-	if stopped := migration.BuildersPortedToLUCI["linux-amd64"] && migration.StopPortedBuilder; stopped {
+	if stopped := migration.BuildersPortedToLUCI["linux-amd64"] && migration.StopPortedBuilder || migration.StopAllLegacyBuilders; stopped {
 		t.Skip("test can't be used because linux builders are stopped")
 	}
 

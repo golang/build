@@ -2899,6 +2899,9 @@ func addBuilder(c BuildConfig) {
 	if migration.BuildersPortedToLUCI[c.Name] && migration.StopPortedBuilder {
 		c.buildsRepo = func(_, _, _ string) bool { return false }
 		c.Notes = "Unavailable in the coordinator. Use LUCI (https://go.dev/wiki/LUCI) instead."
+	} else if migration.StopAllLegacyBuilders {
+		c.buildsRepo = func(_, _, _ string) bool { return false }
+		c.Notes = "Unavailable in the coordinator. Look for a tracking issue to add this builder to LUCI (https://go.dev/wiki/LUCI) instead."
 	}
 
 	Builders[c.Name] = &c

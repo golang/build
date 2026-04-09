@@ -14,6 +14,9 @@ const (
 	// StopPortedBuilder controls whether ported builders should be stopped,
 	// instead of just made invisible in the web UI.
 	StopPortedBuilder = true
+
+	// StopAllLegacyBuilders controls whether all legacy builders are stopped.
+	StopAllLegacyBuilders = true
 )
 
 // BuildersPortedToLUCI lists coordinator builders that have been ported
