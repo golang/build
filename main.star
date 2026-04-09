@@ -550,11 +550,14 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
 
 # KNOWN_ISSUE_BUILDER_TYPES are known issues per builder type.
 #
-# "builder_type@go_branch_short" is a supported syntax to apply
-# a known issue only for the named Go branch.
+# The supported syntax for the key is "builder_type[@go_branch_short][ in repo]".
+# builder_type is required, it is the builder type to apply the known issue for.
+# An optional "@go_branch_short" suffix means to apply the known issue only for the named Go branch.
+# An optional " in repo" suffix means to apply the known issue only for the named Go repository.
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "linux-arm64_debian13@go1.26": known_issue(issue_number = 78406, hide_from_presubmit = False),
-    "linux-arm64_debian13@go1.25": known_issue(issue_number = 78405, hide_from_presubmit = False),
+    "linux-arm64_debian13@go1.26 in go": known_issue(issue_number = 78406, hide_from_presubmit = False),
+    "linux-arm64_debian13@go1.25 in go": known_issue(issue_number = 78405, hide_from_presubmit = False),
+    "linux-arm64_debian13 in arch": known_issue(issue_number = 66005, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
@@ -1649,17 +1652,24 @@ def define_builder(env, project, go_branch_short, builder_type):
     }
     if host_timeout_scale(host_type) != 1:
         base_props["test_timeout_scale"] = host_timeout_scale(host_type)
+    known_issue_matches = set()
     builder_type_and_go_branch_short = "%s@%s" % (builder_type, go_branch_short)
-    if builder_type in env.known_issue_builder_types and builder_type_and_go_branch_short in env.known_issue_builder_types:
+    if builder_type in env.known_issue_builder_types:
+        known_issue_matches.add(builder_type)
+    if builder_type_and_go_branch_short in env.known_issue_builder_types:
+        known_issue_matches.add(builder_type_and_go_branch_short)
+    if "%s in %s" % (builder_type, project) in env.known_issue_builder_types:
+        known_issue_matches.add("%s in %s" % (builder_type, project))
+    if "%s in %s" % (builder_type_and_go_branch_short, project) in env.known_issue_builder_types:
+        known_issue_matches.add("%s in %s" % (builder_type_and_go_branch_short, project))
+    if len(known_issue_matches) == 1:
+        base_props["known_issue"] = env.known_issue_builder_types[known_issue_matches.pop()].issue_number
+    elif len(known_issue_matches) > 1:
         # If there is an overlap between an all-go-branch known issue with a go-branch-specific known issue,
         # it might be an unintentional mistake. If it helps to permit this by deciding to let one take
         # higher precedence over the other (and document the direction), we can decide to support it.
         # Since it can be confusing, to start out, treat it as an unsupported configuration.
-        fail("unsupported known issues configuration: %s and %s are overlapping" % (builder_type, builder_type_and_go_branch_short))
-    elif builder_type in env.known_issue_builder_types:
-        base_props["known_issue"] = env.known_issue_builder_types[builder_type].issue_number
-    elif builder_type_and_go_branch_short in env.known_issue_builder_types:
-        base_props["known_issue"] = env.known_issue_builder_types[builder_type_and_go_branch_short].issue_number
+        fail("unsupported known issues configuration: %s are overlapping" % list(known_issue_matches))
     for d in EXTRA_DEPENDENCIES:
         if not d.applies(project, port_of(builder_type), run_mods):
             continue
@@ -2435,9 +2445,9 @@ def _define_go_ci():
         )
 
 def _define_go_internal_ci():
-    for project_name in ["go", "net", "crypto", "image", "oauth2", "build"]:
+    for project in ["go", "net", "crypto", "image", "oauth2", "build"]:
         for go_branch_short, go_branch in INTERNAL_GO_BRANCHES.items():
-            cq_group_name = ("go-internal_%s_%s" % (project_name, go_branch_short)).replace(".", "-")
+            cq_group_name = ("go-internal_%s_%s" % (project, go_branch_short)).replace(".", "-")
             luci.cq_group(
                 name = cq_group_name,
                 acls = [
@@ -2451,7 +2461,7 @@ def _define_go_internal_ci():
                     ),
                 ],
                 watch = cq.refset(
-                    repo = "https://go-internal.googlesource.com/%s" % project_name,
+                    repo = "https://go-internal.googlesource.com/%s" % project,
                     refs = ["refs/heads/%s" % branch for branch in go_branch.branch_regexps],
                 ),
                 allow_submit_with_open_deps = True,
@@ -2461,7 +2471,7 @@ def _define_go_internal_ci():
             )
 
             for builder_type in BUILDER_TYPES:
-                exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project_name, go_branch_short, builder_type, SECURITY_KNOWN_ISSUE_BUILDER_TYPES)
+                exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, SECURITY_KNOWN_ISSUE_BUILDER_TYPES)
                 host_type = host_of(builder_type)
                 if host_type in DEFAULT_HOST_SUFFIX:
                     host_type += "_" + DEFAULT_HOST_SUFFIX[host_type]
@@ -2494,7 +2504,7 @@ def _define_go_internal_ci():
 
                 # Define presubmit builders. Since there's no postsubmit to monitor,
                 # all possible completed builders that perform testing are required.
-                name, _, _ = define_builder(SECURITY_TRY_ENV, project_name, go_branch_short, builder_type)
+                name, _, _ = define_builder(SECURITY_TRY_ENV, project, go_branch_short, builder_type)
                 if presubmit != PRESUBMIT.DISABLED:
                     _, _, _, run_mods = split_builder_type(builder_type)
                     builder_type_and_go_branch_short = "%s@%s" % (builder_type, go_branch_short)
@@ -2505,7 +2515,9 @@ def _define_go_internal_ci():
                         includable_only = any([r.startswith("perf") for r in run_mods]) or
                                           (presubmit == PRESUBMIT.OPTIONAL and not postsubmit) or
                                           builder_type in SECURITY_KNOWN_ISSUE_BUILDER_TYPES or
-                                          builder_type_and_go_branch_short in SECURITY_KNOWN_ISSUE_BUILDER_TYPES,
+                                          builder_type_and_go_branch_short in SECURITY_KNOWN_ISSUE_BUILDER_TYPES or
+                                          "%s in %s" % (builder_type, project) in SECURITY_KNOWN_ISSUE_BUILDER_TYPES or
+                                          "%s in %s" % (builder_type_and_go_branch_short, project) in SECURITY_KNOWN_ISSUE_BUILDER_TYPES,
                     )
 
 _define_go_ci()
