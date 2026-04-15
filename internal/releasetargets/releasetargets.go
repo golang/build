@@ -58,12 +58,12 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
 var allFirstClass = map[int]ReleaseTargets{
-	24: {
+	25: {
 		"darwin-amd64": &Target{
-			MinMacOSVersion: "11", // go.dev/issue/64207
+			MinMacOSVersion: "12", // go.dev/issue/69839
 		},
 		"darwin-arm64": &Target{
-			MinMacOSVersion: "11", // Big Sur was the first release with M1 support.
+			MinMacOSVersion: "12", // go.dev/issue/69839
 		},
 		"linux-386": &Target{},
 		"linux-armv6l": &Target{
@@ -75,16 +75,16 @@ var allFirstClass = map[int]ReleaseTargets{
 		"windows-386":   &Target{},
 		"windows-amd64": &Target{},
 	},
-	25: {
-		"darwin-amd64": &Target{
-			MinMacOSVersion: "12", // go.dev/issue/69839
-		},
-		"darwin-arm64": &Target{
-			MinMacOSVersion: "12", // go.dev/issue/69839
-		},
-	},
 	26: {
 		// There aren't any release target changes specific to Go 1.26.
+	},
+	27: {
+		"darwin-amd64": &Target{
+			MinMacOSVersion: "13", // go.dev/issue/75836
+		},
+		"darwin-arm64": &Target{
+			MinMacOSVersion: "13", // go.dev/issue/75836
+		},
 	},
 }
 
