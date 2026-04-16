@@ -410,7 +410,7 @@ cat go-publish-output.log
 				// TODO(hxjiang): write the vsix file to a separate gcs bucket and read
 				// it from there.
 				Name: "gcr.io/cloud-builders/gcloud",
-				Args: []string{"cp", build.ResultURL + "/" + vsixFileName(release, ""), "."},
+				Args: []string{"storage", "cp", build.ResultURL + "/" + vsixFileName(release, ""), "."},
 				Dir:  "vscode-go/extension",
 			},
 			{
