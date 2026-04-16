@@ -19,6 +19,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -36,6 +37,8 @@ func SHA256(data []byte) string {
 //
 // When it encounters what might be a temporary network error,
 // it tries fetching multiple times with delays before giving up.
+// If it encounters a 429 Too Many Requests status code, it
+// returns early with an error matching tooManyRequestsError.
 func Get(log *Log, url string) (_ []byte, err error) {
 	defer func() {
 		if err != nil && log != nil {
@@ -58,7 +61,14 @@ func Get(log *Log, url string) (_ []byte, err error) {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
 			resp.Body.Close()
 			err := fmt.Errorf("non-200 OK status code: %v body: %q", resp.Status, body)
-			if resp.StatusCode/100 == 5 {
+			if resp.StatusCode == http.StatusTooManyRequests {
+				// Give up early, let the caller handle it.
+				v, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+				return nil, tooManyRequestsError{
+					errorText:  err.Error(),
+					RetryAfter: time.Duration(v),
+				}
+			} else if resp.StatusCode/100 == 5 {
 				// Consider a 5xx server response to possibly succeed later.
 				fetchErrors = append(fetchErrors, fmt.Errorf("attempt %d: %v", i+1, err))
 				continue
@@ -80,10 +90,65 @@ func Get(log *Log, url string) (_ []byte, err error) {
 	return nil, fmt.Errorf("get %s: %v", url, errors.Join(fetchErrors...))
 }
 
+type tooManyRequestsError struct {
+	errorText  string
+	RetryAfter time.Duration
+}
+
+func (e tooManyRequestsError) Error() string { return e.errorText }
+
 // GerritTarGz returns a .tar.gz file corresponding to the named repo and ref on Go's Gerrit server.
 func GerritTarGz(log *Log, repo, ref string) ([]byte, error) {
-	return Get(log, "https://go.googlesource.com/"+repo+"/+archive/"+ref+".tar.gz")
+	b, err := Get(log, "https://go.googlesource.com/"+repo+"/+archive/"+ref+".tar.gz")
+	if te := (tooManyRequestsError{}); errors.As(err, &te) && haveGit {
+		// Wait a bit before retrying.
+		delay := te.RetryAfter
+		if delay == 0 {
+			delay = 5 * time.Minute
+		}
+		if log != nil {
+			log.Printf("waiting %s", delay)
+		}
+		time.Sleep(delay)
+
+		// Try to fetch the .tar.gz via git clone instead of +archive this time.
+		if log != nil {
+			log.Printf("retrying via git clone")
+		}
+		tempDir, err := os.MkdirTemp("", "gorebuild-")
+		if err != nil {
+			return nil, err
+		}
+		defer os.RemoveAll(tempDir)
+		revisionFlag := "--revision=" + ref
+		if git249MoreCommonlyAvailable := time.Date(2029, time.January, 15, 0, 0, 0, 0, time.UTC); time.Now().Before(git249MoreCommonlyAvailable) {
+			// TODO: Delete this after 2029 or whenever it becomes a part of stable distributions.
+			//
+			// Support for the --revision flag is new to Git 2.49, which was released in March 2025.
+			// Stick with the older --branch flag while the new Git version propagates more widely.
+			// (It happens to be sufficient since ref is always a tag or a branch in this context.)
+			revisionFlag = "--branch=" + strings.TrimPrefix(strings.TrimPrefix(ref, "refs/tags/"), "refs/heads/")
+		}
+		if err := exec.Command("git", "clone", revisionFlag, "--depth=1", "--",
+			"https://go.googlesource.com/"+repo, filepath.Join(tempDir, "repo-ref.git")).Run(); err != nil {
+			return nil, err
+		}
+		cmd := exec.Command("git", "archive", "--format=tar.gz", "--output="+filepath.Join("..", "repo-ref.tar.gz"), "HEAD")
+		cmd.Dir = filepath.Join(tempDir, "repo-ref.git")
+		if err := cmd.Run(); err != nil {
+			return nil, err
+		}
+		return os.ReadFile(filepath.Join(tempDir, "repo-ref.tar.gz"))
+	} else if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
+
+var haveGit = func() bool {
+	_, err := exec.LookPath("git")
+	return err == nil
+}()
 
 // A DLRelease is the JSON for a release, returned by go.dev/dl.
 type DLRelease struct {
@@ -152,7 +217,10 @@ func UnpackTarGz(dir string, tgz []byte) error {
 			return err
 		}
 		if hdr.Typeflag == tar.TypeDir {
-			// Ignore directories entirely
+			// Ignore directories entirely.
+			continue
+		} else if hdr.Typeflag == tar.TypeXGlobalHeader {
+			// git archive generates these. Ignore them.
 			continue
 		}
 		name := filepath.FromSlash(hdr.Name)
@@ -275,7 +343,7 @@ func IndexTarGz(log *Log, tgz []byte, fix Fixer) map[string]*TarFile {
 			return nil
 		}
 		if hdr.Typeflag == tar.TypeDir {
-			// Ignore directories entirely
+			// Ignore directories entirely.
 			continue
 		}
 		data, err := io.ReadAll(tr)
