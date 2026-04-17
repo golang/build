@@ -542,6 +542,8 @@ BUILDER_TYPES = [
 ]
 
 def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
+    if issue_number == 0:
+        fail("a known issue must specify a non-zero issue number")
     return struct(
         issue_number = issue_number,
         skip_x_repos = skip_x_repos,  # Whether to skip defining builders for x/ repos.
@@ -1601,7 +1603,7 @@ GOLANGBUILD_MODES = {
     "PERF": 4,
 }
 
-def define_builder(env, project, go_branch_short, builder_type):
+def define_builder(env, project, go_branch_short, builder_type, known_issue):
     """Creates a builder definition.
 
     Args:
@@ -1609,11 +1611,11 @@ def define_builder(env, project, go_branch_short, builder_type):
         project: A go project defined in `PROJECTS`.
         go_branch_short: A go repository branch name defined in `GO_BRANCHES`.
         builder_type: A name defined in `BUILDER_TYPES`.
+        known_issue: A known issue number that is set for the builder, or 0 if none.
 
     Returns:
         The full name including a bucket prefix.
         A list of the builders this builder will trigger (by full name).
-        A known issue number that is set for the builder, or 0 if none.
     """
 
     os, arch, suffix, run_mods = split_builder_type(builder_type)
@@ -1641,24 +1643,8 @@ def define_builder(env, project, go_branch_short, builder_type):
     }
     if host_timeout_scale(host_type) != 1:
         base_props["test_timeout_scale"] = host_timeout_scale(host_type)
-    known_issue_matches = set()
-    builder_type_and_go_branch_short = "%s@%s" % (builder_type, go_branch_short)
-    if builder_type in env.known_issue_builder_types:
-        known_issue_matches.add(builder_type)
-    if builder_type_and_go_branch_short in env.known_issue_builder_types:
-        known_issue_matches.add(builder_type_and_go_branch_short)
-    if "%s in %s" % (builder_type, project) in env.known_issue_builder_types:
-        known_issue_matches.add("%s in %s" % (builder_type, project))
-    if "%s in %s" % (builder_type_and_go_branch_short, project) in env.known_issue_builder_types:
-        known_issue_matches.add("%s in %s" % (builder_type_and_go_branch_short, project))
-    if len(known_issue_matches) == 1:
-        base_props["known_issue"] = env.known_issue_builder_types[known_issue_matches.pop()].issue_number
-    elif len(known_issue_matches) > 1:
-        # If there is an overlap between an all-go-branch known issue with a go-branch-specific known issue,
-        # it might be an unintentional mistake. If it helps to permit this by deciding to let one take
-        # higher precedence over the other (and document the direction), we can decide to support it.
-        # Since it can be confusing, to start out, treat it as an unsupported configuration.
-        fail("unsupported known issues configuration: %s are overlapping" % list(known_issue_matches))
+    if known_issue:
+        base_props["known_issue"] = known_issue
     for d in EXTRA_DEPENDENCIES:
         if not d.applies(project, port_of(builder_type), run_mods):
             continue
@@ -1886,8 +1872,7 @@ def define_builder(env, project, go_branch_short, builder_type):
     else:
         fail("unhandled builder definition")
 
-    known_issue = base_props["known_issue"] if "known_issue" in base_props else 0
-    return env.bucket + "/" + name, downstream_builders, known_issue
+    return env.bucket + "/" + name, downstream_builders
 
 def define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder):
     os, arch, _, _ = split_builder_type(builder_type)
@@ -2065,7 +2050,8 @@ def display_for_builder_type(builder_type):
     category = "|".join(components[:2])
     return category, short_name  # Produces: "$GOOS|$GOARCH", $HOST_SPECIFIER(-$RUN_MOD)*
 
-# enabled returns three values and a list or None.
+# enabled reports the degree to which the builder type is enabled, described using the following
+# 5 return values.
 #
 # The first value is a boolean which indicates if this builder_type should exist at all for the
 # given project and branch.
@@ -2075,33 +2061,57 @@ def display_for_builder_type(builder_type):
 #
 # The third value is a boolean which indicates if this builder_type should run in postsubmit.
 #
-# The final list is a list of cq.location_filters if the second value is PRESUBMIT.ENABLED.
+# The fourth value is a list of cq.location_filters if the second value is PRESUBMIT.ENABLED, or None.
+#
+# The fifth value is the known issue for the builder_type+go_branch_short+project combination, if any,
+# otherwise 0.
 def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_issue_builder_types):
     pt = PROJECTS[project]
     os, arch, suffix, run_mods = split_builder_type(builder_type)
     host_type = host_of(builder_type)
 
-    if builder_type in known_issue_builder_types and known_issue_builder_types[builder_type] \
-        .skip_x_repos and project != "go":
-        return False, PRESUBMIT.DISABLED, False, []
+    # Determine if there's a known issue for this builder type, go_branch_short, and project.
+    known_issue_match = None
+    known_issue_matches = set()
+    builder_type_and_go_branch_short = "%s@%s" % (builder_type, go_branch_short)
+    if builder_type in known_issue_builder_types:
+        known_issue_matches.add(builder_type)
+    if builder_type_and_go_branch_short in known_issue_builder_types:
+        known_issue_matches.add(builder_type_and_go_branch_short)
+    if "%s in %s" % (builder_type, project) in known_issue_builder_types:
+        known_issue_matches.add("%s in %s" % (builder_type, project))
+    if "%s in %s" % (builder_type_and_go_branch_short, project) in known_issue_builder_types:
+        known_issue_matches.add("%s in %s" % (builder_type_and_go_branch_short, project))
+    if len(known_issue_matches) == 1:
+        # There's a single match. Use it.
+        known_issue_match = known_issue_builder_types[known_issue_matches.pop()]
+    elif len(known_issue_matches) > 1:
+        # If there is an overlap between an all-go-branch known issue with a go-branch-specific known issue,
+        # it might be an unintentional mistake. If it helps to permit this by deciding to let one take
+        # higher precedence over the other (and document the direction), we can decide to support it.
+        # Since it can be confusing, to start out, treat it as an unsupported configuration.
+        fail("unsupported known issues configuration: %s are overlapping" % list(known_issue_matches))
+
+    if known_issue_match and known_issue_match.skip_x_repos and project != "go":
+        return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Filter out old OS versions from new branches.
     if os == "darwin" and suffix == "12" and go_branch_short not in ["go1.25", "go1.26"]:
         # Go 1.26 is last to support macOS 12. See go.dev/issue/75836.
-        return False, PRESUBMIT.DISABLED, False, []
+        return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Filter out new ports on old release branches.
     # Nothing to do here at this time.
 
     # Docker builder should only be used in VSCode-Go repo.
     if suffix == "docker" and project != "vscode-go":
-        return False, PRESUBMIT.DISABLED, False, []
+        return False, PRESUBMIT.DISABLED, False, [], 0
     if suffix != "docker" and project == "vscode-go":
-        return False, PRESUBMIT.DISABLED, False, []
+        return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Only run avx512 builders on the main Go repository, there's little value gained elsewhere.
     if suffix == "avx512" and project != "go":
-        return False, PRESUBMIT.DISABLED, False, []
+        return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Apply basic policies about which projects run on what machine types,
     # and what we have capacity to run in presubmit.
@@ -2124,7 +2134,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
     presubmit = presubmit and not host_timeout_scale(host_type) > 1  # Speed.
     presubmit = presubmit and not ("longtest" in run_mods and "race" in run_mods)  # Speed.
-    presubmit = presubmit and not builder_type in known_issue_builder_types  # Known issues.
+    presubmit = presubmit and not known_issue_match  # Known issues.
     presubmit = presubmit and (is_first_class(os, arch) or arch == "wasm")  # Only first-class ports or wasm.
     if project != "go":  # Some ports run as presubmit only in the main Go repo.
         presubmit = presubmit and os not in ["js", "wasip1"]
@@ -2134,7 +2144,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     for mod in run_mods:
         ex, pre, post, prefilt = RUN_MODS[mod].enabled(port_of(builder_type), project, go_branch_short)
         if not ex:
-            return False, False, False, []
+            return False, False, False, [], 0
         presubmit = presubmit and pre
         postsubmit = postsubmit and post
 
@@ -2164,10 +2174,11 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
 
     # Hide from presubmit if required.
     presubmit_state = PRESUBMIT.ENABLED if presubmit else PRESUBMIT.OPTIONAL
-    if builder_type in known_issue_builder_types and known_issue_builder_types[builder_type].hide_from_presubmit:
+    if known_issue_match and known_issue_match.hide_from_presubmit:
         presubmit_state = PRESUBMIT.DISABLED
 
-    return True, presubmit_state, postsubmit, presubmit_filters
+    known_issue = known_issue_match.issue_number if known_issue_match else 0
+    return True, presubmit_state, postsubmit, presubmit_filters, known_issue
 
 # Apply LUCI-TryBot-Result +1 or -1 based on CQ result.
 #
@@ -2223,11 +2234,11 @@ def _define_go_ci():
 
             # Define builders.
             for builder_type in BUILDER_TYPES:
-                exists, presubmit, _, presubmit_filters = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)
+                exists, presubmit, _, presubmit_filters, known_issue = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)
                 if not exists or presubmit == PRESUBMIT.DISABLED:
                     continue
 
-                name, _, _ = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type)
+                name, _ = define_builder(PUBLIC_TRY_ENV, project, go_branch_short, builder_type, known_issue)
                 luci.cq_tryjob_verifier(
                     builder = name,
                     cq_group = cq_group.name,
@@ -2317,11 +2328,11 @@ def _define_go_ci():
             postsubmit_builders = {}
             postsubmit_builders_known_issue = {}
             for builder_type in BUILDER_TYPES:
-                exists, _, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)
+                exists, _, postsubmit, _, known_issue = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)
                 if not exists or not postsubmit:
                     continue
 
-                name, triggers, known_issue = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type)
+                name, triggers = define_builder(PUBLIC_CI_ENV, project, go_branch_short, builder_type, known_issue)
                 if known_issue != 0:
                     postsubmit_builders_known_issue[name] = struct(builder_type = builder_type, known_issue = known_issue)
                 else:
@@ -2441,7 +2452,7 @@ def _define_go_internal_ci():
             )
 
             for builder_type in BUILDER_TYPES:
-                exists, presubmit, postsubmit, _ = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, SECURITY_KNOWN_ISSUE_BUILDER_TYPES)
+                exists, presubmit, postsubmit, _, known_issue = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, SECURITY_KNOWN_ISSUE_BUILDER_TYPES)
                 host_type = host_of(builder_type)
                 if host_type in DEFAULT_HOST_SUFFIX:
                     host_type += "_" + DEFAULT_HOST_SUFFIX[host_type]
@@ -2474,7 +2485,7 @@ def _define_go_internal_ci():
 
                 # Define presubmit builders. Since there's no postsubmit to monitor,
                 # all possible completed builders that perform testing are required.
-                name, _, _ = define_builder(SECURITY_TRY_ENV, project, go_branch_short, builder_type)
+                name, _ = define_builder(SECURITY_TRY_ENV, project, go_branch_short, builder_type, known_issue)
                 if presubmit != PRESUBMIT.DISABLED:
                     _, _, _, run_mods = split_builder_type(builder_type)
                     builder_type_and_go_branch_short = "%s@%s" % (builder_type, go_branch_short)
@@ -2484,10 +2495,7 @@ def _define_go_internal_ci():
                         disable_reuse = True,
                         includable_only = any([r.startswith("perf") for r in run_mods]) or
                                           (presubmit == PRESUBMIT.OPTIONAL and not postsubmit) or
-                                          builder_type in SECURITY_KNOWN_ISSUE_BUILDER_TYPES or
-                                          builder_type_and_go_branch_short in SECURITY_KNOWN_ISSUE_BUILDER_TYPES or
-                                          "%s in %s" % (builder_type, project) in SECURITY_KNOWN_ISSUE_BUILDER_TYPES or
-                                          "%s in %s" % (builder_type_and_go_branch_short, project) in SECURITY_KNOWN_ISSUE_BUILDER_TYPES,
+                                          known_issue != 0,
                     )
 
 _define_go_ci()
