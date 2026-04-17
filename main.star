@@ -557,8 +557,6 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
 # An optional "@go_branch_short" suffix means to apply the known issue only for the named Go branch.
 # An optional " in repo" suffix means to apply the known issue only for the named Go repository.
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "linux-arm64_debian13@go1.26 in go": known_issue(issue_number = 78406, hide_from_presubmit = False),
-    "linux-arm64_debian13@go1.25 in go": known_issue(issue_number = 78405, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
     "plan9-amd64": known_issue(issue_number = 63600, hide_from_presubmit = False),
@@ -1627,15 +1625,14 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
 
     # Construct the basic properties that will apply to all builders for
     # this combination.
-    known_go_branches = dict(GO_BRANCHES)
     base_props = {
         "project": project,
         # NOTE: LUCI will pass in the commit information. This is
         # extra information that's only necessary for x/ repos.
         # However, we pass it to all builds for consistency and
         # convenience.
-        "go_branch": known_go_branches[go_branch_short].branch,
-        "bootstrap_version": known_go_branches[go_branch_short].bootstrap,
+        "go_branch": GO_BRANCHES[go_branch_short].branch,
+        "bootstrap_version": GO_BRANCHES[go_branch_short].bootstrap,
         "host": {"goos": hostos, "goarch": hostarch},
         "target": {"goos": os, "goarch": arch},
         "env": {},
