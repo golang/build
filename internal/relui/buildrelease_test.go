@@ -52,16 +52,17 @@ func TestRelease(t *testing.T) {
 	}
 
 	t.Run("minor", func(t *testing.T) {
-		testRelease(t, "go1.24", 24, "go1.24.1", task.KindMinor)
+		testRelease(t, "go1.26", 26, "go1.26.1", task.KindMinor)
 	})
 	t.Run("beta", func(t *testing.T) {
-		testRelease(t, "go1.24", 25, "go1.25beta1", task.KindBeta)
+		testRelease(t, "go1.26", 27, "go1.27beta1", task.KindBeta)
 	})
 	t.Run("rc", func(t *testing.T) {
-		testRelease(t, "go1.24", 25, "go1.25rc1", task.KindRC)
+		t.Skip("skipping go1.27rc1 test") // see go.dev/issue/78894
+		testRelease(t, "go1.26", 27, "go1.27rc1", task.KindRC)
 	})
 	t.Run("major", func(t *testing.T) {
-		testRelease(t, "go1.24", 25, "go1.25.0", task.KindMajor)
+		testRelease(t, "go1.26", 27, "go1.27.0", task.KindMajor)
 	})
 }
 
@@ -177,7 +178,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	}
 	milestoneTasks := &task.MilestoneTasks{
 		Client: &task.FakeGitHub{
-			Milestones:       map[int]string{0: "Go1.25", 1: "Go1.24.1"},
+			Milestones:       map[int]string{0: "Go1.27", 1: "Go1.26.1"},
 			DisallowComments: true,
 		},
 		RepoOwner: "golang",
@@ -438,7 +439,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 }
 
 func testSecurity(t *testing.T, mergeFixes bool) {
-	deps := newReleaseTestDeps(t, "go1.24.0", 24, "go1.24.1")
+	deps := newReleaseTestDeps(t, "go1.26.0", 26, "go1.26.1")
 
 	// Set up a fake private repository with a stack of prepared security fixes
 	// on top of the fake public repo content. The workflow will upstream these
@@ -447,9 +448,9 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	securityFix1 := map[string]string{"security.txt": "This file makes us secure"}
 	securityFix2 := map[string]string{"security2.txt": "This file makes us more secure"}
 	securityFix3 := map[string]string{"security3.txt": "This file makes us even more secure"}
-	privateRepo.Branch("internal-release-branch.go1.24.1", privateRepo.Commit(securityFix1))
-	privateRepo.CommitOnBranch("internal-release-branch.go1.24.1", securityFix2)
-	privateRepo.CommitOnBranch("internal-release-branch.go1.24.1", securityFix3)
+	privateRepo.Branch("internal-release-branch.go1.26.1", privateRepo.Commit(securityFix1))
+	privateRepo.CommitOnBranch("internal-release-branch.go1.26.1", securityFix2)
+	privateRepo.CommitOnBranch("internal-release-branch.go1.26.1", securityFix3)
 	privateGerrit := task.NewFakeGerrit(t, privateRepo)
 	deps.buildBucket.GerritURL = privateGerrit.GerritURL()
 	deps.buildBucket.Projects = []string{"go-private"}
@@ -460,7 +461,7 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	deps.goRepo.SetHook("pre-receive", `#!/bin/bash -eu
 read old new refname
 case "$refname $old" in
-"refs/for/release-branch.go1.24%l=Auto-Submit+1,l=TryBot-Bypass+1 0000000000000000000000000000000000000000")
+"refs/for/release-branch.go1.26%l=Auto-Submit+1,l=TryBot-Bypass+1 0000000000000000000000000000000000000000")
 	echo "Processing changes: refs: 1, new: 3, done"
 	echo
 	echo "SUCCESS"
@@ -480,9 +481,9 @@ esac
 		deps.goRepo.SetHook("post-receive", `#!/bin/bash -eu
 read old new refname
 case "$refname $old" in
-"refs/for/release-branch.go1.24%l=Auto-Submit+1,l=TryBot-Bypass+1 0000000000000000000000000000000000000000")
+"refs/for/release-branch.go1.26%l=Auto-Submit+1,l=TryBot-Bypass+1 0000000000000000000000000000000000000000")
 	git update-ref -d "$refname"
-	git update-ref refs/heads/release-branch.go1.24 "$new"
+	git update-ref refs/heads/release-branch.go1.26 "$new"
 	;;
 *)
 	echo "unexpected input $@"
@@ -497,7 +498,7 @@ esac
 
 	// Run the release.
 	wd := workflow.New(workflow.ACL{})
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 24, task.KindMinor, workflow.Slice[string]())
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 26, task.KindMinor, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]any{
@@ -528,7 +529,7 @@ esac
 }
 
 func TestAdvisoryTestsFail(t *testing.T) {
-	deps := newReleaseTestDeps(t, "go1.24.0", 24, "go1.24.1")
+	deps := newReleaseTestDeps(t, "go1.26.0", 26, "go1.26.1")
 	deps.buildBucket.FailBuilds = append(deps.buildBucket.FailBuilds, "linux-amd64-longtest")
 	defaultApprove := deps.buildTasks.ApproveAction
 	var testApprovals atomic.Int32
@@ -542,7 +543,7 @@ func TestAdvisoryTestsFail(t *testing.T) {
 
 	// Run the release.
 	wd := workflow.New(workflow.ACL{})
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 24, task.KindMinor, workflow.Slice[string]())
+	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 26, task.KindMinor, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
 	w, err := workflow.Start(wd, map[string]any{
