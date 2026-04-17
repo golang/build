@@ -99,6 +99,9 @@ func (e tooManyRequestsError) Error() string { return e.errorText }
 
 // GerritTarGz returns a .tar.gz file corresponding to the named repo and ref on Go's Gerrit server.
 func GerritTarGz(log *Log, repo, ref string) ([]byte, error) {
+	if log != nil {
+		log.Printf("downloading %s from https://go.googlesource.com/%s", ref, repo)
+	}
 	b, err := Get(log, "https://go.googlesource.com/"+repo+"/+archive/"+ref+".tar.gz")
 	if te := (tooManyRequestsError{}); errors.As(err, &te) && haveGit {
 		// Wait a bit before retrying.
