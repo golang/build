@@ -124,7 +124,8 @@ func bootstrap(ctx context.Context, hostname string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("status code %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return fmt.Errorf("non-200 OK status code: %v body: %q", resp.Status, body)
 	}
 	botBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
