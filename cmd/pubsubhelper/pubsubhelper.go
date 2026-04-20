@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 
 // The pubsubhelper is an SMTP server for Gerrit updates and an HTTP
-// server for Github webhook updates. It then lets other clients subscribe
+// server for GitHub webhook updates. It then lets other clients subscribe
 // to those changes.
 package main
 
@@ -54,7 +54,8 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// webhooksecret should not be set in production
+	// When the -webhook-secret flag isn't set, fetch
+	// the GitHub webhook secret from Secret Manager.
 	if *webhookSecret == "" {
 		sc := secret.MustNewClient()
 		defer sc.Close()
@@ -69,10 +70,10 @@ func main() {
 		}
 	}
 
-	http.HandleFunc("/", handleRoot)
-	http.HandleFunc("/waitevent", handleWaitEvent)
-	http.HandleFunc("/recent", handleRecent)
-	http.HandleFunc("/github-webhook", handleGithubWebhook)
+	http.HandleFunc("GET /{$}", handleRoot)
+	http.HandleFunc("GET /waitevent", handleWaitEvent)
+	http.HandleFunc("GET /recent", handleRecent)
+	http.HandleFunc("POST /github-webhook", handleGitHubWebhook)
 
 	errc := make(chan error)
 	go func() {
@@ -90,13 +91,9 @@ func main() {
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
 	io.WriteString(w, `<html>
 <body>
-  This is <a href="https://godoc.org/golang.org/x/build/cmd/pubsubhelper">pubsubhelper</a>.
+  This is <a href="https://golang.org/x/build/cmd/pubsubhelper">pubsubhelper</a>.
 
 <ul>
    <li><b><a href="/waitevent">/waitevent</a></b>: long-poll wait 30s for next event (use ?after=[RFC3339Nano] to resume at point)</li>

@@ -23,7 +23,7 @@ type Event struct {
 	// Gerrit is non-nil for Gerrit events.
 	Gerrit *GerritEvent `json:",omitempty"`
 
-	// Github is non-nil for GitHub events.
+	// GitHub is non-nil for GitHub events.
 	GitHub *GitHubEvent `json:",omitempty"`
 }
 

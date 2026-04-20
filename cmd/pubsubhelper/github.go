@@ -6,7 +6,6 @@ package main
 
 import (
 	"crypto/hmac"
-	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -20,16 +19,16 @@ import (
 	"golang.org/x/build/cmd/pubsubhelper/pubsubtypes"
 )
 
-func handleGithubWebhook(w http.ResponseWriter, r *http.Request) {
+func handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.TLS == nil {
 		http.Error(w, "HTTPS required", http.StatusBadRequest)
 		return
 	}
-	body, err := validateGithubRequest(w, r)
+	body, err := validateGitHubRequest(w, r)
 	if err != nil {
 		log.Printf("failed to validate github webhook request: %v", err)
 		// But send a 200 OK anyway, so they don't queue up on
-		// Github's side if they're real.
+		// GitHub's side if they're real.
 		return
 	}
 
@@ -47,7 +46,7 @@ func handleGithubWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f := strings.Split(payload.Repository.FullName, "/")
+	f := strings.SplitN(payload.Repository.FullName, "/", 3)
 	if len(f) != 2 {
 		log.Printf("bogus repository name %q", payload.Repository.FullName)
 		return
@@ -74,24 +73,22 @@ func handleGithubWebhook(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validateGithubRequest compares the signature in the request header with the body.
-func validateGithubRequest(w http.ResponseWriter, r *http.Request) (body []byte, err error) {
+// validateGitHubRequest compares the signature in the request header with the body.
+func validateGitHubRequest(w http.ResponseWriter, r *http.Request) (body []byte, err error) {
 	// Decode signature header.
-	sigHeader := r.Header.Get("X-Hub-Signature")
-	sigParts := strings.SplitN(sigHeader, "=", 2)
-	if len(sigParts) != 2 {
+	sigHeader := r.Header.Get("X-Hub-Signature-256")
+	sigAlg, sigHex, ok := strings.Cut(sigHeader, "=")
+	if !ok {
 		return nil, fmt.Errorf("Bad signature header: %q", sigHeader)
 	}
 	var h func() hash.Hash
-	switch alg := sigParts[0]; alg {
-	case "sha1":
-		h = sha1.New
+	switch sigAlg {
 	case "sha256":
 		h = sha256.New
 	default:
-		return nil, fmt.Errorf("Unsupported hash algorithm: %q", alg)
+		return nil, fmt.Errorf("Unsupported hash algorithm: %q", sigAlg)
 	}
-	gotSig, err := hex.DecodeString(sigParts[1])
+	gotSig, err := hex.DecodeString(sigHex)
 	if err != nil {
 		return nil, err
 	}
