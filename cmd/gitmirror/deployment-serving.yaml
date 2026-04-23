@@ -13,7 +13,7 @@ spec:
   strategy:
     rollingUpdate:
       maxUnavailable: 1
-  replicas: 2
+  replicas: 0  # there used to be 2 replicas; they're both stopped because gitmirror's serving functionality is currently unused
   selector:
     matchLabels:
       app: gitmirror-serving
