@@ -2100,6 +2100,12 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     # Filter out new ports on old release branches.
     # Nothing to do here at this time.
 
+    # Don't test x/vulndb on Go 1.25. It requires 1.26.0+ as of CL 747200,
+    # so Go 1.25 builders that test with GOTOOLCHAIN=local have no choice
+    # but to skip testing this module.
+    if project == "vulndb" and go_branch_short == "go1.25":
+        return False, PRESUBMIT.DISABLED, False, [], 0
+
     # Docker builder should only be used in VSCode-Go repo.
     if suffix == "docker" and project != "vscode-go":
         return False, PRESUBMIT.DISABLED, False, [], 0
