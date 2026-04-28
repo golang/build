@@ -135,9 +135,9 @@ func TestSecurityReleaseCoalesceTask(t *testing.T) {
 	}
 }
 
-const milestoneYAML = `buganizer_id: 100001
+const milestoneYAML = `id: 99915010
 security_patches:
-    - is_toolchain: false
+    - id: 20024001
       package: runtime
       track: PUBLIC
       changelists:
@@ -145,7 +145,7 @@ security_patches:
       target_releases:
         - go1.3.1
         - go1.4.1
-    - is_toolchain: false
+    - id: 40027190
       package: runtime
       track: PRIVATE
       changelists:

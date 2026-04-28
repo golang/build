@@ -18,6 +18,7 @@ import (
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/relmeta"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -146,27 +147,6 @@ func (x *SecurityReleaseCoalesceTask) GetBranchNames(ctx *wf.TaskContext) (branc
 	}
 }
 
-// ReleaseMilestone contains all
-// patches and their respective
-// metadata for a given release.
-//
-// TODO(nealpatel): Replace with relmeta package
-type ReleaseMilestone struct {
-	BuganizerID int              `yaml:"buganizer_id"`
-	Patches     []*SecurityPatch `yaml:"security_patches"`
-}
-
-// SecurityPatch is a subset of the
-// required metadata to release all
-// patches contained by a milestone.
-//
-// TODO(nealpatel): Replace with relmeta package
-type SecurityPatch struct {
-	Changelists      []string `yaml:"changelists"`
-	TargetedReleases []string `yaml:"target_releases"`
-	Track            string   `yaml:"track"`
-}
-
 func (x *SecurityReleaseCoalesceTask) GetPrivateChangelists(ctx *wf.TaskContext, milestoneNum string) ([]string, error) {
 	const project = "security-metadata"
 
@@ -180,14 +160,14 @@ func (x *SecurityReleaseCoalesceTask) GetPrivateChangelists(ctx *wf.TaskContext,
 		return nil, err
 	}
 
-	var rm ReleaseMilestone
+	var rm relmeta.ReleaseMilestone
 	if err := yaml.NewDecoder(bytes.NewReader(buf)).Decode(&rm); err != nil {
 		return nil, fmt.Errorf("cannot read milestone: %v", err)
 	}
 
 	var clNums []string
 	for _, patch := range rm.Patches {
-		if patch.Track == "PUBLIC" {
+		if patch.Track == relmeta.Public {
 			continue
 		}
 		for _, url := range patch.Changelists {
