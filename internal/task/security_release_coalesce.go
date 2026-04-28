@@ -64,7 +64,7 @@ func (x *SecurityReleaseCoalesceTask) NewDefinition(useMetadata bool) *wf.Defini
 				return nil
 			},
 		})
-		clNums = wf.Task1(wd, "Get CL numbers from metadata", x.GetCLsFromMetadata, milestoneNum)
+		clNums = wf.Task1(wd, "Get CL numbers from metadata", x.GetPrivateChangelists, milestoneNum)
 	} else {
 		clNums = wf.Param(wd, wf.ParamDef[[]string]{
 			Name:      "Security Patch CL Numbers",
@@ -149,6 +149,8 @@ func (x *SecurityReleaseCoalesceTask) GetBranchNames(ctx *wf.TaskContext) (branc
 // ReleaseMilestone contains all
 // patches and their respective
 // metadata for a given release.
+//
+// TODO(nealpatel): Replace with relmeta package
 type ReleaseMilestone struct {
 	BuganizerID int              `yaml:"buganizer_id"`
 	Patches     []*SecurityPatch `yaml:"security_patches"`
@@ -157,12 +159,15 @@ type ReleaseMilestone struct {
 // SecurityPatch is a subset of the
 // required metadata to release all
 // patches contained by a milestone.
+//
+// TODO(nealpatel): Replace with relmeta package
 type SecurityPatch struct {
 	Changelists      []string `yaml:"changelists"`
 	TargetedReleases []string `yaml:"target_releases"`
+	Track            string   `yaml:"track"`
 }
 
-func (x *SecurityReleaseCoalesceTask) GetCLsFromMetadata(ctx *wf.TaskContext, milestoneNum string) ([]string, error) {
+func (x *SecurityReleaseCoalesceTask) GetPrivateChangelists(ctx *wf.TaskContext, milestoneNum string) ([]string, error) {
 	const project = "security-metadata"
 
 	head, err := x.PrivateGerrit.ReadBranchHead(ctx, project, "main")
@@ -182,6 +187,9 @@ func (x *SecurityReleaseCoalesceTask) GetCLsFromMetadata(ctx *wf.TaskContext, mi
 
 	var clNums []string
 	for _, patch := range rm.Patches {
+		if patch.Track == "PUBLIC" {
+			continue
+		}
 		for _, url := range patch.Changelists {
 			_, num, _ := strings.Cut(url, "/+/")
 			clNums = append(clNums, num)

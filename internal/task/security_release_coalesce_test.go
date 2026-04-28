@@ -139,6 +139,15 @@ const milestoneYAML = `buganizer_id: 100001
 security_patches:
     - is_toolchain: false
       package: runtime
+      track: PUBLIC
+      changelists:
+        - https://go.dev/cl/123456
+      target_releases:
+        - go1.3.1
+        - go1.4.1
+    - is_toolchain: false
+      package: runtime
+      track: PRIVATE
       changelists:
         - https://go-internal-review.git.corp.google.com/c/security-metadata/+/1234
         - https://go-internal-review.git.corp.google.com/c/security-metadata/+/5678
