@@ -60,36 +60,14 @@ type SecurityReleaseCoalesceTask struct {
 	Version       *VersionTasks
 }
 
-func (x *SecurityReleaseCoalesceTask) NewDefinition(useMetadata bool) *wf.Definition {
-	// TODO: this is currently not particularly tolerant of failures that happen
-	// half way through the workflow. Will need to think a bit about how we can
-	// recover in failure situations that doesn't require manually cleaning a
-	// bunch of stuff up before re-running the workflow.
-
-	wd := wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
-
-	var clNums wf.Value[[]string]
-	if useMetadata {
-		milestoneNum := wf.Param(wd, SecurityMilestoneParameter)
-		clNums = wf.Task1(wd, "Get CL numbers from metadata", x.GetPrivateChangelists, milestoneNum)
-	} else {
-		clNums = wf.Param(wd, wf.ParamDef[[]string]{
-			Name:      "Security Patch CL Numbers",
-			ParamType: wf.SliceShort,
-			Doc:       `Gerrit CL numbers for each security patch in a release`,
-			Example:   "123456",
-			Check: func(nums []string) error {
-				for _, num := range nums {
-					if !numOnlyRE.MatchString(num) {
-						return errors.New("CL numbers must contain only numbers")
-					}
-				}
-				return nil
-			},
-		})
-	}
-
-	// check CLs are ready
+func (x *SecurityReleaseCoalesceTask) NewDefinition() *wf.Definition {
+	var (
+		wd           = wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
+		milestoneNum = wf.Param(wd, SecurityMilestoneParameter)
+	)
+	// fetch all non-PUBLIC security patch changelists
+	clNums := wf.Task1(wd, "Get private changelists from security-metadata", x.GetPrivateChangelists, milestoneNum)
+	// check eligibility of specified changelists
 	cls := wf.Task1(wd, "Check changes", x.CheckChanges, clNums)
 	// look up branch names
 	branchInfo := wf.Task0(wd, "Get branch names", x.GetBranchNames, wf.After(cls))
@@ -169,6 +147,7 @@ func (x *SecurityReleaseCoalesceTask) GetPrivateChangelists(ctx *wf.TaskContext,
 	}
 	return clNums, nil
 }
+
 func fetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
 	const project = "security-metadata"
 	head, err := private.ReadBranchHead(ctx, project, "main")

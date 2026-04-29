@@ -419,8 +419,7 @@ func main() {
 		PrivateGerrit: privateGerritClient,
 		Version:       versionTasks,
 	}
-	dh.RegisterDefinition("Prepare internal security release branches (cl-num based)", securityReleaseCoalesceTask.NewDefinition(false))
-	dh.RegisterDefinition("Prepare internal security release branches (metadata based)", securityReleaseCoalesceTask.NewDefinition(true))
+	dh.RegisterDefinition("Prepare internal security release branches", securityReleaseCoalesceTask.NewDefinition())
 
 	var base *url.URL
 	if *baseURL != "" {

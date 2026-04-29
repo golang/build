@@ -123,26 +123,51 @@ func (c *securityVersionClient) ReadBranchHead(_ context.Context, project, branc
 }
 
 func TestSecurityReleaseCoalesceTask(t *testing.T) {
-	for _, useMetadata := range []bool{false, true} {
-		t.Run(fmt.Sprintf("withMetadata=%v", useMetadata), func(t *testing.T) {
-			t.Run("minors only", func(t *testing.T) {
-				testSecurityReleaseCoalesceTask(t, false, useMetadata)
-			})
-			t.Run("minors with RC", func(t *testing.T) {
-				testSecurityReleaseCoalesceTask(t, true, useMetadata)
-			})
-		})
-	}
+	t.Run("minors only", func(t *testing.T) {
+		testSecurityReleaseCoalesceTask(t, false)
+	})
+	t.Run("minors with RC", func(t *testing.T) {
+		testSecurityReleaseCoalesceTask(t, true)
+	})
 }
 
-func testSecurityReleaseCoalesceTask(t *testing.T, withNextReleaseBranch bool, withMetadata bool) {
+func testSecurityReleaseCoalesceTask(t *testing.T, withNextReleaseBranch bool) {
 	publicTags := []string{"go1.3", "go1.3.1", "go1.4", "go1.4.1"}
 	publicBranches := []string{"release-branch.go1.3", "release-branch.go1.4"}
 	if withNextReleaseBranch {
 		publicBranches = append(publicBranches, "release-branch.go1.5")
 	}
 	privGoRepo, smRepo := NewFakeRepo(t, "go"), NewFakeRepo(t, "security-metadata")
-	privGerrit := &fakeCoalesceGerrit{FakeGerrit: NewFakeGerrit(t, privGoRepo, smRepo), cherryPicks: map[string][]cherryPickedCommit{}, commitMessages: map[string]string{}}
+
+	// Commit a test generated milestone to security-metadata.
+	head := smRepo.History()[0]
+	smRepo.Branch("main", head)
+	smRepo.CommitOnBranch("main", map[string]string{
+		path.Join("data", "milestones", "99915010.yaml"): `id: 99915010
+security_patches:
+    - id: 20024001
+      package: runtime
+      track: PUBLIC
+      changelists:
+        - https://go.dev/cl/123456
+      target_releases:
+        - go1.3.1
+        - go1.4.1
+    - id: 40027190
+      package: runtime
+      track: PRIVATE
+      changelists:
+        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/1234
+        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/5678
+      target_releases:
+        - go1.3.1
+        - go1.4.1`})
+
+	privGerrit := &fakeCoalesceGerrit{
+		FakeGerrit:     NewFakeGerrit(t, privGoRepo, smRepo),
+		cherryPicks:    map[string][]cherryPickedCommit{},
+		commitMessages: map[string]string{},
+	}
 	task := &SecurityReleaseCoalesceTask{
 		PrivateGerrit: privGerrit,
 		Version: &VersionTasks{
@@ -171,15 +196,11 @@ func testSecurityReleaseCoalesceTask(t *testing.T, withNextReleaseBranch bool, w
 	}
 
 	privGerrit.commitMessages = map[string]string{
-		"1234": `subject: 1234
-
-body`,
-		"5678": `subject: 5678
-
-other body`,
+		"1234": "subject: 1234\n\nbody",
+		"5678": "subject: 5678\n\nother body",
 	}
 
-	head := privGoRepo.History()[0]
+	head = privGoRepo.History()[0]
 	privGoRepo.Branch("public", head)
 	privGoRepo.Branch("release-branch.go1.3", head)
 	privGoRepo.Branch("release-branch.go1.4", head)
@@ -187,43 +208,8 @@ other body`,
 		privGoRepo.Branch("release-branch.go1.5", head)
 	}
 
-	if withMetadata {
-		const milestoneYAML = `id: 99915010
-security_patches:
-    - id: 20024001
-      package: runtime
-      track: PUBLIC
-      changelists:
-        - https://go.dev/cl/123456
-      target_releases:
-        - go1.3.1
-        - go1.4.1
-    - id: 40027190
-      package: runtime
-      track: PRIVATE
-      changelists:
-        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/1234
-        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/5678
-      target_releases:
-        - go1.3.1
-        - go1.4.1`
-
-		head = smRepo.History()[0]
-		smRepo.Branch("main", head)
-		smRepo.CommitOnBranch("main", map[string]string{path.Join("data", "milestones", "100001.yaml"): milestoneYAML})
-	}
-
-	wd := task.NewDefinition(withMetadata)
-	var params map[string]any
-	if withMetadata {
-		params = map[string]any{
-			"Release Milestone": "100001",
-		}
-	} else {
-		params = map[string]any{
-			"Security Patch CL Numbers": []string{"1234", "5678"},
-		}
-	}
+	wd := task.NewDefinition()
+	params := map[string]any{"Release Milestone": "99915010"}
 	w, err := wf.Start(wd, params)
 	if err != nil {
 		t.Fatal(err)
@@ -250,45 +236,34 @@ security_patches:
 		"internal-release-branch.go1.4.2": {
 			{
 				changeID: "1234",
-				message: `[release-branch.go1.4] subject: 1234
-
-body`,
+				message:  "[release-branch.go1.4] subject: 1234\n\nbody",
 			},
 			{
 				changeID: "5678",
-				message: `[release-branch.go1.4] subject: 5678
-
-other body`,
+				message:  "[release-branch.go1.4] subject: 5678\n\nother body",
 			},
 		},
 		"internal-release-branch.go1.3.2": {
 			{
 				changeID: "1234",
-				message: `[release-branch.go1.3] subject: 1234
-
-body`,
+				message:  "[release-branch.go1.3] subject: 1234\n\nbody",
 			},
 			{
 				changeID: "5678",
-				message: `[release-branch.go1.3] subject: 5678
-
-other body`,
+				message:  "[release-branch.go1.3] subject: 5678\n\nother body",
 			},
 		},
 	}
+
 	if withNextReleaseBranch {
 		expected["internal-release-branch.go1.5rc1"] = []cherryPickedCommit{
 			{
 				changeID: "1234",
-				message: `[release-branch.go1.5] subject: 1234
-
-body`,
+				message:  "[release-branch.go1.5] subject: 1234\n\nbody",
 			},
 			{
 				changeID: "5678",
-				message: `[release-branch.go1.5] subject: 5678
-
-other body`,
+				message:  "[release-branch.go1.5] subject: 5678\n\nother body",
 			},
 		}
 	}
