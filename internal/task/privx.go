@@ -227,7 +227,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, repos, repoName, skipPostSubmit, reviewers, wf.After(publicChange))
 
 	// wait for manual approval of the announcement message
-	okayToAnnoucne := wf.Action0(wd, "Wait to Announce", x.ApproveAction, wf.After(tagged))
+	okayToAnnounce := wf.Action0(wd, "Wait to Announce", x.ApproveAction, wf.After(tagged))
 
 	// send announcement email
 	wf.Task5(wd, "Mail announcement", func(ctx *wf.TaskContext, tagged TagRepo, cve string, githubIssue string, relNote string, acknowledgement string) (string, error) {
@@ -264,7 +264,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		}
 
 		return "", nil
-	}, tagged, cve, githubIssue, relNote, acknowledgement, wf.After(okayToAnnoucne))
+	}, tagged, cve, githubIssue, relNote, acknowledgement, wf.After(okayToAnnounce))
 
 	wf.Output(wd, "done", tagged)
 	return wd

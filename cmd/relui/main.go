@@ -186,6 +186,9 @@ func main() {
 		}
 	}
 	commTasks := task.CommunicationTasks{
+		SecurityCommunicationTasks: task.SecurityCommunicationTasks{
+			PrivateGerrit: privateGerritClient,
+		},
 		AnnounceMailTasks: task.AnnounceMailTasks{
 			SendMail:           mailFunc,
 			AnnounceMailHeader: annMail,

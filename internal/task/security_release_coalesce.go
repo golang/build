@@ -5,7 +5,7 @@
 package task
 
 import (
-	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	goversion "go/version"
@@ -20,6 +20,25 @@ import (
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/build/relmeta"
 	yaml "gopkg.in/yaml.v3"
+)
+
+// Security release parameter definitions.
+var (
+	SecurityMilestoneParameter = wf.ParamDef[string]{
+		Name:      "Release Milestone",
+		ParamType: wf.BasicString,
+		Doc: `Release Milestone is the security-metadata milestone for the security patch(es) being included in a Go release.
+
+You can check with the security release coordinator for this release to confirm this input.`,
+		Example: "123456",
+		Check: func(num string) error {
+			if !numOnlyRE.MatchString(num) {
+				return errors.New("milestone number must contain only numbers")
+			}
+			return nil
+		},
+	}
+	numOnlyRE = regexp.MustCompile(`^\d+$`)
 )
 
 // SecurityReleaseCoalesceTask is the workflow used to preparing patches for
@@ -47,24 +66,11 @@ func (x *SecurityReleaseCoalesceTask) NewDefinition(useMetadata bool) *wf.Defini
 	// recover in failure situations that doesn't require manually cleaning a
 	// bunch of stuff up before re-running the workflow.
 
-	var numOnlyRe = regexp.MustCompile(`^\d+$`)
-
 	wd := wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
 
 	var clNums wf.Value[[]string]
 	if useMetadata {
-		milestoneNum := wf.Param(wd, wf.ParamDef[string]{
-			Name:      "Release Milestone",
-			ParamType: wf.BasicString,
-			Doc:       `Release milestone for the security patch(es) being released.`,
-			Example:   "123456",
-			Check: func(num string) error {
-				if !numOnlyRe.MatchString(num) {
-					return errors.New("Milestone number must contain only numbers")
-				}
-				return nil
-			},
-		})
+		milestoneNum := wf.Param(wd, SecurityMilestoneParameter)
 		clNums = wf.Task1(wd, "Get CL numbers from metadata", x.GetPrivateChangelists, milestoneNum)
 	} else {
 		clNums = wf.Param(wd, wf.ParamDef[[]string]{
@@ -74,7 +80,7 @@ func (x *SecurityReleaseCoalesceTask) NewDefinition(useMetadata bool) *wf.Defini
 			Example:   "123456",
 			Check: func(nums []string) error {
 				for _, num := range nums {
-					if !numOnlyRe.MatchString(num) {
+					if !numOnlyRE.MatchString(num) {
 						return errors.New("CL numbers must contain only numbers")
 					}
 				}
@@ -147,25 +153,11 @@ func (x *SecurityReleaseCoalesceTask) GetBranchNames(ctx *wf.TaskContext) (branc
 	}
 }
 
-func (x *SecurityReleaseCoalesceTask) GetPrivateChangelists(ctx *wf.TaskContext, milestoneNum string) ([]string, error) {
-	const project = "security-metadata"
-
-	head, err := x.PrivateGerrit.ReadBranchHead(ctx, project, "main")
+func (x *SecurityReleaseCoalesceTask) GetPrivateChangelists(ctx *wf.TaskContext, milestoneNum string) (clNums []string, _ error) {
+	rm, err := fetchReleaseMilestone(ctx, x.PrivateGerrit, milestoneNum)
 	if err != nil {
 		return nil, err
 	}
-
-	buf, err := x.PrivateGerrit.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
-	if err != nil {
-		return nil, err
-	}
-
-	var rm relmeta.ReleaseMilestone
-	if err := yaml.NewDecoder(bytes.NewReader(buf)).Decode(&rm); err != nil {
-		return nil, fmt.Errorf("cannot read milestone: %v", err)
-	}
-
-	var clNums []string
 	for _, patch := range rm.Patches {
 		if patch.Track == relmeta.Public {
 			continue
@@ -176,6 +168,22 @@ func (x *SecurityReleaseCoalesceTask) GetPrivateChangelists(ctx *wf.TaskContext,
 		}
 	}
 	return clNums, nil
+}
+func fetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
+	const project = "security-metadata"
+	head, err := private.ReadBranchHead(ctx, project, "main")
+	if err != nil {
+		return relmeta.ReleaseMilestone{}, err
+	}
+	b, err := private.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
+	if err != nil {
+		return relmeta.ReleaseMilestone{}, err
+	}
+	var rm relmeta.ReleaseMilestone
+	if err := yaml.Unmarshal(b, &rm); err != nil {
+		return relmeta.ReleaseMilestone{}, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
+	}
+	return rm, nil
 }
 
 func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, clNums []string) ([]*gerrit.ChangeInfo, error) {

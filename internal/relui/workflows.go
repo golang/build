@@ -441,11 +441,19 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		h.RegisterDefinition(fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
 	}
 
-	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, currentMajor-1, currentMajor)
-	if err != nil {
-		return err
+	for _, v := range [...]struct {
+		UseMetadata bool
+		Description string
+	}{
+		{false, "manually input security comms"},
+		{true, "metadata-based security comms"},
+	} {
+		wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, currentMajor-1, currentMajor, v.UseMetadata)
+		if err != nil {
+			return err
+		}
+		h.RegisterDefinition(fmt.Sprintf("Minor releases for Go 1.%d and 1.%d (%s)", currentMajor-1, currentMajor, v.Description), wd)
 	}
-	h.RegisterDefinition(fmt.Sprintf("Minor releases for Go 1.%d and 1.%d", currentMajor-1, currentMajor), wd)
 
 	return nil
 }
@@ -472,15 +480,22 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 	h.RegisterDefinition(fmt.Sprintf("dry-run (build, test, and sign only): Go 1.%d next beta", major), wd)
 }
 
-func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int) (*wf.Definition, error) {
+func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int, useMetadata bool) (*wf.Definition, error) {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 
 	coordinators := wf.Param(wd, releaseCoordinators)
 	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators)
 	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindMinor, coordinators)
 
+	var securityFixes wf.Value[[]string]
+	if useMetadata {
+		milestoneNum := wf.Param(wd, task.SecurityMilestoneParameter)
+		securityFixes = wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
+	} else {
+		securityFixes = wf.Param(wd, securityFixesParameter)
+	}
+
 	securitySummary := wf.Param(wd, securitySummaryParameter)
-	securityFixes := wf.Param(wd, securityFixesParameter)
 	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators)
 	wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, currPublished)
 

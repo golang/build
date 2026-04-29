@@ -135,26 +135,6 @@ func TestSecurityReleaseCoalesceTask(t *testing.T) {
 	}
 }
 
-const milestoneYAML = `id: 99915010
-security_patches:
-    - id: 20024001
-      package: runtime
-      track: PUBLIC
-      changelists:
-        - https://go.dev/cl/123456
-      target_releases:
-        - go1.3.1
-        - go1.4.1
-    - id: 40027190
-      package: runtime
-      track: PRIVATE
-      changelists:
-        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/1234
-        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/5678
-      target_releases:
-        - go1.3.1
-        - go1.4.1`
-
 func testSecurityReleaseCoalesceTask(t *testing.T, withNextReleaseBranch bool, withMetadata bool) {
 	publicTags := []string{"go1.3", "go1.3.1", "go1.4", "go1.4.1"}
 	publicBranches := []string{"release-branch.go1.3", "release-branch.go1.4"}
@@ -208,6 +188,26 @@ other body`,
 	}
 
 	if withMetadata {
+		const milestoneYAML = `id: 99915010
+security_patches:
+    - id: 20024001
+      package: runtime
+      track: PUBLIC
+      changelists:
+        - https://go.dev/cl/123456
+      target_releases:
+        - go1.3.1
+        - go1.4.1
+    - id: 40027190
+      package: runtime
+      track: PRIVATE
+      changelists:
+        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/1234
+        - https://go-internal-review.git.corp.google.com/c/security-metadata/+/5678
+      target_releases:
+        - go1.3.1
+        - go1.4.1`
+
 		head = smRepo.History()[0]
 		smRepo.Branch("main", head)
 		smRepo.CommitOnBranch("main", map[string]string{path.Join("data", "milestones", "100001.yaml"): milestoneYAML})

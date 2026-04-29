@@ -28,6 +28,7 @@ type Published struct {
 
 // CommunicationTasks combines communication tasks together.
 type CommunicationTasks struct {
+	SecurityCommunicationTasks
 	AnnounceMailTasks
 	SocialMediaTasks
 }

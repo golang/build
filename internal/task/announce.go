@@ -922,3 +922,23 @@ func (t AnnounceMailTasks) generateAndSendAnnouncementMail(ctx *workflow.TaskCon
 
 	return SentMail{m.Subject, sentMailKeywords}, nil
 }
+
+// SecurityCommunicationTasks contains communication tasks
+// relevant to Go releases containing security fixes.
+type SecurityCommunicationTasks struct {
+	PrivateGerrit GerritClient
+}
+
+// GetSecurityReleaseNotes fetches a list of descriptions, one for each distinct security fix
+// included in the release identified by milestoneNum, in Markdown format.
+func (t SecurityCommunicationTasks) GetSecurityReleaseNotes(ctx *workflow.TaskContext, milestoneNum string) (releaseNotes []string, _ error) {
+	rm, err := fetchReleaseMilestone(ctx, t.PrivateGerrit, milestoneNum)
+	if err != nil {
+		return nil, err
+	}
+	ctx.Printf("fetched release notes for %d security fixes", len(rm.Patches))
+	for _, patch := range rm.Patches {
+		releaseNotes = append(releaseNotes, patch.ReleaseNote)
+	}
+	return releaseNotes, nil
+}
