@@ -970,7 +970,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{runtimeTeam, releaseTeam},
 	},
 	"review": {
-		Secondary: []Owner{kevinburke},
+		Primary:   []Owner{austin, rsc},
+		Secondary: []Owner{dmitshur, kevinburke},
 	},
 	"sync": {
 		Primary: []Owner{adonovan},
