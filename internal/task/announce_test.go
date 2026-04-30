@@ -715,11 +715,12 @@ func TestGetSecurityReleaseNotes(t *testing.T) {
 	const milestoneYAML = `id: 99915010
 security_patches:
     - id: 20024001
+      is_toolchain: false
       package: encoding/pem
       track: PUBLIC
       changelists:
         - https://go.dev/cl/123456
-      release_note: |
+      release_note: |-
         encoding/pem: fix stack overflow in Decode
 
         A large (more than 5 MB) PEM input can cause a stack overflow in Decode, leading the program to crash.
@@ -731,12 +732,13 @@ security_patches:
         - go1.3.1
         - go1.4.1
     - id: 40027190
+      is_toolchain: true
       package: cmd/go
       track: PRIVATE
       changelists:
         - https://go-internal-review.git.corp.google.com/c/security-metadata/+/1234
         - https://go-internal-review.git.corp.google.com/c/security-metadata/+/5678
-      release_note: |
+      release_note: |-
         cmd/go: unexpected command execution in untrusted VCS repositories
 
         This is CVE-2025-4674 and https://go.dev/issue/74380.
@@ -752,24 +754,37 @@ security_patches:
 	tasks := SecurityCommunicationTasks{
 		PrivateGerrit: NewFakeGerrit(t, smRepo),
 	}
-	ctx := &workflow.TaskContext{Context: t.Context(), Logger: &testLogger{t: t}}
-	got, err := tasks.GetSecurityReleaseNotes(ctx, "100001")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{
-		`encoding/pem: fix stack overflow in Decode
+	t.Run("Summary", func(t *testing.T) {
+		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &testLogger{t: t}}
+		got, err := tasks.GetSecuritySummary(ctx, "100001")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := "Includes 2 security fixes to the standard library and the toolchain."
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("summary mismatch (-want +got):\n%s", diff)
+		}
+	})
+	t.Run("ReleaseNotes", func(t *testing.T) {
+		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &testLogger{t: t}}
+		got, err := tasks.GetSecurityReleaseNotes(ctx, "100001")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{
+			`encoding/pem: fix stack overflow in Decode
 
 A large (more than 5 MB) PEM input can cause a stack overflow in Decode, leading the program to crash.
 
 Thanks to Juho Nurminen of Mattermost who reported the error.
 
-This is CVE-2022-24675 and https://go.dev/issue/51853.` + "\n",
-		`cmd/go: unexpected command execution in untrusted VCS repositories
+This is CVE-2022-24675 and https://go.dev/issue/51853.`,
+			`cmd/go: unexpected command execution in untrusted VCS repositories
 
-This is CVE-2025-4674 and https://go.dev/issue/74380.` + "\n",
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("release note mismatch (-want +got):\n%s", diff)
-	}
+This is CVE-2025-4674 and https://go.dev/issue/74380.`,
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("release note mismatch (-want +got):\n%s", diff)
+		}
+	})
 }

@@ -929,6 +929,41 @@ type SecurityCommunicationTasks struct {
 	PrivateGerrit GerritClient
 }
 
+// GetSecuritySummary returns a short security content summary following the template:
+//
+//	Includes {N} security fixes to {the standard library|the toolchain|the standard library and the toolchain}.
+//
+// It returns an empty string when there are 0 security fixes.
+func (t SecurityCommunicationTasks) GetSecuritySummary(ctx *workflow.TaskContext, milestoneNum string) (string, error) {
+	rm, err := fetchReleaseMilestone(ctx, t.PrivateGerrit, milestoneNum)
+	if err != nil {
+		return "", err
+	}
+	ctx.Printf("fetched security release milestone containing %d security fixes", len(rm.Patches))
+	if len(rm.Patches) == 0 {
+		// No security fixes.
+		return "", nil
+	}
+	var std, toolchain bool
+	for _, p := range rm.Patches {
+		if p.Toolchain {
+			toolchain = true
+		} else {
+			std = true
+		}
+	}
+	var components string
+	switch {
+	case std && !toolchain:
+		components = "the standard library"
+	case !std && toolchain:
+		components = "the toolchain"
+	case std && toolchain:
+		components = "the standard library and the toolchain"
+	}
+	return fmt.Sprintf("Includes %d security fixes to %s.", len(rm.Patches), components), nil
+}
+
 // GetSecurityReleaseNotes fetches a list of descriptions, one for each distinct security fix
 // included in the release identified by milestoneNum, in Markdown format.
 func (t SecurityCommunicationTasks) GetSecurityReleaseNotes(ctx *workflow.TaskContext, milestoneNum string) (releaseNotes []string, _ error) {
@@ -936,9 +971,9 @@ func (t SecurityCommunicationTasks) GetSecurityReleaseNotes(ctx *workflow.TaskCo
 	if err != nil {
 		return nil, err
 	}
-	ctx.Printf("fetched release notes for %d security fixes", len(rm.Patches))
-	for _, patch := range rm.Patches {
-		releaseNotes = append(releaseNotes, patch.ReleaseNote)
+	ctx.Printf("fetched security release milestone containing %d security fixes", len(rm.Patches))
+	for _, p := range rm.Patches {
+		releaseNotes = append(releaseNotes, p.ReleaseNote)
 	}
 	return releaseNotes, nil
 }
