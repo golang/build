@@ -1028,7 +1028,7 @@ mv go/pkg/distpack/*.src.tar.gz src.tar.gz
 // any mismatch.
 //
 // As a special case, mismatches in the content of the VERSION file at the root are ignored.
-// TODO(go.dev/issue/62481): Make it detect a mismatch in the the VERSION file at the root, too.
+// TODO(go.dev/issue/62481): Make it detect a mismatch in the VERSION file at the root, too.
 func (b *BuildReleaseTasks) checkSourceMatch(ctx *wf.TaskContext, branch, versionFile string, source artifact) (head string, _ error) {
 	head, err := b.GerritClient.ReadBranchHead(ctx, b.GerritProject, branch)
 	if err != nil {

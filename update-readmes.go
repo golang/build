@@ -55,7 +55,7 @@ func main() {
 			return nil
 		}
 		if _, err := os.Stat(filepath.Join(pkg.Dir, "README")); err == nil {
-			// Directory has exiting README; don't touch.
+			// Directory has existing README; don't touch.
 			return nil
 		}
 		readmePath := filepath.Join(pkg.Dir, "README.md")

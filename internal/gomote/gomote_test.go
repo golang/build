@@ -1096,8 +1096,8 @@ func TestEmailToUser(t *testing.T) {
 		{"valid email", "george@funky.com", "george"},
 		{"single digit local", "g@funky.com", "g"},
 		{"single digit domain", "george@f", "george"},
-		{"colon", "example@gmail.com:more-info", "example"},                                 // while not desired, wont lead to a panic
-		{"multiple at", "example@gmail.com:example@gmail.com", "example@gmail.com:example"}, // while not desired, wont lead to a panic
+		{"colon", "example@gmail.com:more-info", "example"},                                 // while not desired, won't lead to a panic
+		{"multiple at", "example@gmail.com:example@gmail.com", "example@gmail.com:example"}, // while not desired, won't lead to a panic
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {

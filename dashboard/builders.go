@@ -833,7 +833,7 @@ type BuildConfig struct {
 	// "std".
 	InstallRacePackages []string
 
-	// GoDeps is a list of of git sha1 commits that must be in the
+	// GoDeps is a list of git sha1 commits that must be in the
 	// commit to be tested's history. If absent, this builder is
 	// not run for that commit.
 	GoDeps []string
