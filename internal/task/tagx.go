@@ -638,12 +638,12 @@ func (x *TagXReposTasks) findMissingBuilders(ctx *wf.TaskContext, repo TagRepo, 
 			},
 			Status: buildbucketpb.Status_SUCCESS,
 		}
-		succesfulBuilds, err := x.BuildBucket.SearchBuilds(ctx, pred)
+		successfulBuilds, err := x.BuildBucket.SearchBuilds(ctx, pred)
 		if err != nil {
 			return nil, err
 		}
-		if len(succesfulBuilds) != 0 {
-			ctx.Printf("%v: found successful builds: %v", name, succesfulBuilds)
+		if len(successfulBuilds) != 0 {
+			ctx.Printf("%v: found successful builds: %v", name, successfulBuilds)
 			delete(wantBuilders, name)
 		} else {
 			ctx.Printf("%v: no successful builds", name)
