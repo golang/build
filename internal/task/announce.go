@@ -644,9 +644,9 @@ func (t AnnounceMailTasks) AwaitAnnounceMail(ctx *workflow.TaskContext, m SentMa
 // The search query includes the email subject and/or any keywords that are provided.
 // It returns its URL if found or the empty string if not found.
 //
-// findGoogleGroupsThread returns an error that matches fetchError with
-// PossiblyRetryable set to true when it has signal that repeating the
-// same call after some time may succeed.
+// findGoogleGroupsThread returns an error
+// satisfying [errors.As](err, [fetchError]) with PossiblyRetryable set to true
+// when it has signal that repeating the same call after some time may succeed.
 func findGoogleGroupsThread(ctx *workflow.TaskContext, subject string, keywords []string) (threadURL string, _ error) {
 	searchQuery := fmt.Sprintf(`subject:"%s"`, subject)
 	if len(keywords) > 0 {

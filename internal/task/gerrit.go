@@ -67,7 +67,7 @@ type GerritClient interface {
 	ListTags(ctx context.Context, project string) ([]string, error)
 
 	// ReadBranchHead returns the head of a branch in project.
-	// If the branch doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
+	// If the branch doesn't exist, it returns an error satisfying [errors.Is](err, [gerrit.ErrResourceNotExist]).
 	ReadBranchHead(ctx context.Context, project, branch string) (string, error)
 	// ListBranches returns the branch info for all the branch in a project.
 	ListBranches(ctx context.Context, project string) ([]gerrit.BranchInfo, error)
@@ -77,7 +77,7 @@ type GerritClient interface {
 	// ListCommits lists commits in project between head and base (including head, not including base).
 	// Both head and base must be non-empty strings, otherwise an error is returned.
 	// If either head or base refers to a commit that doesn't exist,
-	// an error matching gerrit.ErrResourceNotExist is returned.
+	// an error satisfying [errors.Is](err, [gerrit.ErrResourceNotExist]) is returned.
 	// The commits are returned in order from head to base (i.e., first element is newest commit, last element is oldest commit),
 	// capped in length to an implementation-defined page size. The caller can inspect
 	// the parents of the last commit if it needs to detect the page size being insufficient.
@@ -87,10 +87,10 @@ type GerritClient interface {
 	ListProjects(ctx context.Context) ([]string, error)
 
 	// ReadFile reads a file from project at the specified commit.
-	// If the file doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
+	// If the file doesn't exist, it returns an error satisfying [errors.Is](err, [gerrit.ErrResourceNotExist]).
 	ReadFile(ctx context.Context, project, commit, file string) ([]byte, error)
 	// ReadDir reads a directory from project at the specified commit.
-	// If the directory doesn't exist, it returns an error matching gerrit.ErrResourceNotExist.
+	// If the directory doesn't exist, it returns an error satisfying [errors.Is](err, [gerrit.ErrResourceNotExist]).
 	ReadDir(ctx context.Context, project, commit, dir string) ([]struct{ Name string }, error)
 
 	// QueryChanges gets changes which match the query.

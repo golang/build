@@ -261,9 +261,9 @@ func (ns *netMutSource) locallyCachedSegments() (segs []fileSeg, err error) {
 // log segment sizes different than the value specified. As a result,
 // it blocks until the server has new data to send or ctx expires.
 //
-// getServerSegments returns an error that matches fetchError with
-// PossiblyRetryable set to true when it has signal that repeating
-// the same call after some time may succeed.
+// getServerSegments returns an error
+// satisfying [errors.As](err, [fetchError]) with PossiblyRetryable set to true
+// when it has signal that repeating the same call after some time may succeed.
 func (ns *netMutSource) getServerSegments(ctx context.Context, waitSizeNot int64) ([]LogSegmentJSON, error) {
 	if fn := ns.testHookGetServerSegments; fn != nil {
 		return fn(ctx, waitSizeNot)
@@ -558,9 +558,9 @@ type fileSeg struct {
 // syncSeg syncs the provided log segment, returning its on-disk metadata.
 // The newData result is the new data that was added to the segment in this sync.
 //
-// syncSeg returns an error that matches fetchError with PossiblyRetryable set
-// to true when it has signal that repeating the same call after some time may
-// succeed.
+// syncSeg returns an error
+// satisfying [errors.As](err, [fetchError]) with PossiblyRetryable set to true
+// when it has signal that repeating the same call after some time may succeed.
 func (ns *netMutSource) syncSeg(ctx context.Context, seg LogSegmentJSON) (_ fileSeg, newData []byte, _ error) {
 	if fn := ns.testHookSyncSeg; fn != nil {
 		return fn(ctx, seg)

@@ -38,7 +38,7 @@ func SHA256(data []byte) string {
 // When it encounters what might be a temporary network error,
 // it tries fetching multiple times with delays before giving up.
 // If it encounters a 429 Too Many Requests status code, it
-// returns early with an error matching tooManyRequestsError.
+// returns early with an error satisfying [errors.As](err, [tooManyRequestsError]).
 func Get(log *Log, url string) (_ []byte, err error) {
 	defer func() {
 		if err != nil && log != nil {

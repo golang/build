@@ -809,7 +809,7 @@ type ChangeInput struct {
 }
 
 // ChangeFileContentInChangeEdit puts content of a file to a change edit.
-// If no change is made, an error that matches ErrNotModified is returned.
+// If no change is made, an error satisfying [errors.Is](err, [ErrNotModified]) is returned.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#put-edit-file.
 func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID string, path string, content string) error {
@@ -818,7 +818,7 @@ func (c *Client) ChangeFileContentInChangeEdit(ctx context.Context, changeID str
 }
 
 // DeleteFileInChangeEdit deletes a file from a change edit.
-// If no change is made, an error that matches ErrNotModified is returned.
+// If no change is made, an error satisfying [errors.Is](err, [ErrNotModified]) is returned.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#delete-edit-file.
 func (c *Client) DeleteFileInChangeEdit(ctx context.Context, changeID string, path string) error {
