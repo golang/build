@@ -196,8 +196,8 @@ security_patches:
 	}
 
 	privGerrit.commitMessages = map[string]string{
-		"1234": "subject: 1234\n\nbody",
-		"5678": "subject: 5678\n\nother body",
+		"1234": commitMsg1234,
+		"5678": commitMsg5678,
 	}
 
 	head = privGoRepo.History()[0]
@@ -236,21 +236,21 @@ security_patches:
 		"internal-release-branch.go1.4.2": {
 			{
 				changeID: "1234",
-				message:  "[release-branch.go1.4] subject: 1234\n\nbody",
+				message:  "[release-branch.go1.4] " + commitMsg1234,
 			},
 			{
 				changeID: "5678",
-				message:  "[release-branch.go1.4] subject: 5678\n\nother body",
+				message:  "[release-branch.go1.4] " + commitMsg5678,
 			},
 		},
 		"internal-release-branch.go1.3.2": {
 			{
 				changeID: "1234",
-				message:  "[release-branch.go1.3] subject: 1234\n\nbody",
+				message:  "[release-branch.go1.3] " + commitMsg1234,
 			},
 			{
 				changeID: "5678",
-				message:  "[release-branch.go1.3] subject: 5678\n\nother body",
+				message:  "[release-branch.go1.3] " + commitMsg5678,
 			},
 		},
 	}
@@ -259,11 +259,11 @@ security_patches:
 		expected["internal-release-branch.go1.5rc1"] = []cherryPickedCommit{
 			{
 				changeID: "1234",
-				message:  "[release-branch.go1.5] subject: 1234\n\nbody",
+				message:  "[release-branch.go1.5] " + commitMsg1234,
 			},
 			{
 				changeID: "5678",
-				message:  "[release-branch.go1.5] subject: 5678\n\nother body",
+				message:  "[release-branch.go1.5] " + commitMsg5678,
 			},
 		}
 	}
@@ -274,3 +274,8 @@ security_patches:
 		}
 	}
 }
+
+const (
+	commitMsg1234 = "go2/types: type confusion inverts flux capacitor\n\nFixes CVE-1985-0703\nFixes golang/go#1"
+	commitMsg5678 = "cmd/compile: import rustc to fix go\n\nFixes CVE-1970-0001\nFixes #4294967296"
+)

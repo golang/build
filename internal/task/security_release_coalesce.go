@@ -166,8 +166,10 @@ func fetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneN
 }
 
 func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, clNums []string) ([]*gerrit.ChangeInfo, error) {
-	var cls []*gerrit.ChangeInfo
-
+	var (
+		cls      []*gerrit.ChangeInfo
+		lintErrs []error
+	)
 	for _, num := range clNums {
 		ci, err := x.PrivateGerrit.GetChange(ctx, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
 		if err != nil {
@@ -183,11 +185,26 @@ func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, clNums [
 		if ra["submit"] == nil || !ra["submit"].Enabled {
 			return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(num))
 		}
+		cm, err := x.PrivateGerrit.GetCommitMessage(ctx, num)
+		if err != nil {
+			return nil, err
+		}
+		if !cveRE.MatchString(cm) {
+			lintErrs = append(lintErrs, fmt.Errorf("Change %s is missing CVE reference", internalGerritChangeURL(num)))
+		}
+		if !githubIssueRE.MatchString(cm) {
+			lintErrs = append(lintErrs, fmt.Errorf("Change %s is missing GitHub issue reference", internalGerritChangeURL(num)))
+		}
 		cls = append(cls, ci)
 	}
 
-	return cls, nil
+	return cls, errors.Join(lintErrs...)
 }
+
+var (
+	cveRE         = regexp.MustCompile(`(?m)^Fixes CVE-\d{4}-\d+`)
+	githubIssueRE = regexp.MustCompile(`(?m)^Fixes (?:golang/go)?#(\d+)`)
+)
 
 func (x *SecurityReleaseCoalesceTask) CreateCheckpoint(ctx *wf.TaskContext, bi branchInfo) (string, error) {
 	publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, "go", "public")
