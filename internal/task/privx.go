@@ -12,12 +12,15 @@ import (
 	"net/mail"
 	"regexp"
 	"slices"
+	"strings"
 	"text/template"
 	"time"
 
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/relmeta"
+	"golang.org/x/sync/errgroup"
 )
 
 type PrivXPatch struct {
@@ -33,73 +36,103 @@ type PrivXPatch struct {
 }
 
 func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
-	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam, groups.SecurityTeam}})
-	// TODO: this should be simpler, CL number + patchset?
-	clNumber := wf.Param(wd, wf.ParamDef[string]{Name: "go-internal CL number", Example: "536316"})
-	reviewers := wf.Param(wd, reviewersParam)
-	repoName := wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "net"})
-	// TODO: probably always want to skip, might make sense to not include this
-	skipPostSubmit := wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
-	cve := wf.Param(wd, wf.ParamDef[string]{Name: "CVE"})
-	githubIssue := wf.Param(wd, wf.ParamDef[string]{Name: "GitHub issue", Doc: "A link to the GitHub issue for the report.", Example: "https://go.dev/issue/70779"})
-	relNote := wf.Param(wd, wf.ParamDef[string]{Name: "Release note", ParamType: wf.LongString})
-	acknowledgement := wf.Param(wd, wf.ParamDef[string]{Name: "Acknowledgement"})
+	var (
+		wd = wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
+		// TODO(nealpatel): SecurityMilestoneParameter says "Go release" which
+		// is technically incorrect documentation for the parameter here.
+		milestoneNum = wf.Param(wd, SecurityMilestoneParameter)
+		targetRepo   = wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "net"})
+		// TODO: probably always want to skip, might make sense to not include this
+		skipPostSubmit = wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
+		reviewers      = wf.Param(wd, reviewersParam) // We don't fill this.
+	)
 
-	repos := wf.Task0(wd, "Load all repositories", tagx.SelectRepos)
+	availableRepos := wf.Task0(wd, "Load all repositories", tagx.SelectRepos)
 
-	// check change is ready
-	checkedChange := wf.Task3(wd, "Check change", x.CheckChange, clNumber, repoName, repos)
+	rm := wf.Task1(wd, "Pull release milestone", x.PullMilestone, milestoneNum)
+	patches := wf.Task3(wd, "Get changes for target x repo", x.FilterPatches, rm, targetRepo, availableRepos)
+	branch := wf.Task1(wd, "Create checkpoint branch", x.CreateCheckpoint, targetRepo)
+	patches = wf.Task2(wd, "Move and rebase all changes per x repo", x.MoveAndRebaseAll, branch, patches)
+	patches = wf.Task1(wd, "Waiting for submissions", x.AwaitSubmissions, patches)
 
-	// create checkpoint branch
-	checkpointBranch := wf.Task1(wd, "Create checkpoint branch", x.CreateCheckpoint, repoName, wf.After(checkedChange))
-
-	// move and rebase change onto checkpoint branch
-	movedChange := wf.Task2(wd, "Move change+rebase onto checkpoint branch", x.MoveAndRebase, checkedChange, checkpointBranch)
-
-	// wait for change to be submitted
-	submittedChange := wf.Task1(wd, "Await submission", x.AwaitSubmission, movedChange)
-
-	// publish change publicly
-	publicChange := wf.Task4(wd, "Publish change", x.PublishChange, submittedChange, clNumber, reviewers, repoName)
-
-	// tag repository
-	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, repos, repoName, skipPostSubmit, reviewers, wf.After(publicChange))
+	// block for manual review before pushing changes to public
+	okayToDisclose := wf.Action0(wd, "Wait to disclose", x.ApproveAction) // TODO(nealpatel): Add warning text
+	patches = wf.Task2(wd, "Publish changes", x.PublishChanges, targetRepo, patches, wf.After(okayToDisclose))
+	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, availableRepos, targetRepo, skipPostSubmit, reviewers, wf.After(patches))
 
 	// wait for manual approval of the announcement message
 	okayToAnnounce := wf.Action0(wd, "Wait to Announce", x.ApproveAction, wf.After(tagged))
-
-	// send announcement email
-	wf.Task5(wd, "Mail announcement", x.MailAnnouncement, tagged, cve, githubIssue, relNote, acknowledgement, wf.After(okayToAnnounce))
-
+	wf.Task2(wd, "Mail announcement", x.MailAnnouncement, tagged, rm, wf.After(okayToAnnounce))
 	wf.Output(wd, "done", tagged)
+
 	return wd
 }
 
-func (x *PrivXPatch) CheckChange(ctx *wf.TaskContext, clNumber string, repoName string, repos []TagRepo) (*gerrit.ChangeInfo, error) {
-	if !slices.ContainsFunc(repos, func(r TagRepo) bool { return r.Name == repoName }) {
-		return nil, fmt.Errorf("no repository %q", repoName)
+func (x *PrivXPatch) PullMilestone(ctx *wf.TaskContext, milestone string) (*relmeta.ReleaseMilestone, error) {
+	// TODO(nealpatel): Is this ceremony?
+	rm, err := fetchReleaseMilestone(ctx, x.PrivateGerrit, milestone)
+	return &rm, err
+}
+
+func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, target string, found []TagRepo) (patches []*ref, _ error) {
+	for _, p := range rm.Patches {
+		repo, err := repoName(p.Package)
+		if err != nil {
+			return nil, err
+		}
+		if repo != target {
+			continue
+		}
+		if !slices.ContainsFunc(found, func(r TagRepo) bool { return r.Name == repo }) {
+			return nil, fmt.Errorf("no repository %q", repo)
+		}
+
+		var cls []*gerrit.ChangeInfo
+		for _, clLink := range p.Changelists {
+			clNum := clLink[strings.LastIndex(clLink, "/")+1:]
+			ci, err := x.PrivateGerrit.GetChange(ctx, clNum, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION", "SUBMITTABLE"}})
+			if err != nil {
+				return nil, err
+			}
+			if !strings.Contains(p.Package, ci.Project) {
+				return nil, fmt.Errorf("CL is for unexpected project, got: %s, want %s", ci.Project, p.Package)
+			}
+			if !ci.Submittable {
+				return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNum))
+			}
+			ra, err := x.PrivateGerrit.GetRevisionActions(ctx, clNum, "current")
+			if err != nil {
+				return nil, err
+			}
+			if ra["submit"] == nil || !ra["submit"].Enabled {
+				return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNum))
+			}
+			// TODO: Add regex for CVE / GH
+			// TODO(nealpatel): Edge case; order matters for stacked changes.
+			cls = append(cls, ci)
+		}
+		patches = append(patches, &ref{Patch: p, Changes: cls})
 	}
 
-	changeInfo, err := x.PrivateGerrit.GetChange(ctx, clNumber, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION", "SUBMITTABLE"}})
-	if err != nil {
-		return nil, err
-	}
-	if changeInfo.Project != repoName {
-		return nil, fmt.Errorf("CL is for unexpected project, got: %s, want %s", changeInfo.Project, repoName)
-	}
+	return patches, nil
+}
 
-	if !changeInfo.Submittable {
-		return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNumber))
-	}
-	ra, err := x.PrivateGerrit.GetRevisionActions(ctx, clNumber, "current")
-	if err != nil {
-		return nil, err
-	}
-	if ra["submit"] == nil || !ra["submit"].Enabled {
-		return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNumber))
-	}
+type ref struct {
+	Patch   *relmeta.SecurityPatch
+	Changes []*gerrit.ChangeInfo
+}
 
-	return changeInfo, nil
+func repoName(modPkg string) (string, error) {
+	// TODO(nealpatel): This is brittle. Surely, something more idiomatic.
+	pkg, found := strings.CutPrefix(modPkg, "golang.org/x/")
+	if !found {
+		return "", fmt.Errorf("malformed package: %q", modPkg)
+	}
+	repo, _, _ := strings.Cut(pkg, "/")
+	if repo == "" {
+		return "", fmt.Errorf("malformed package: %q", modPkg)
+	}
+	return repo, nil
 }
 
 func (x *PrivXPatch) CreateCheckpoint(ctx *wf.TaskContext, repoName string) (string, error) {
@@ -114,74 +147,96 @@ func (x *PrivXPatch) CreateCheckpoint(ctx *wf.TaskContext, repoName string) (str
 	return checkpointName, nil
 }
 
-func (x *PrivXPatch) MoveAndRebase(ctx *wf.TaskContext, change *gerrit.ChangeInfo, checkpointBranch string) (*gerrit.ChangeInfo, error) {
-	movedCI, err := x.PrivateGerrit.MoveChange(ctx, change.ID, checkpointBranch)
-	if err != nil {
-		// In case we need to re-run the Move step, tolerate the case where the change
-		// is already on the branch.
-		var httpErr *gerrit.HTTPError
-		if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
-			return nil, err
+func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, branch string, patches []*ref) ([]*ref, error) {
+	for _, p := range patches {
+		for i, ci := range p.Changes {
+			movedCI, err := x.PrivateGerrit.MoveChange(ctx, ci.ID, branch)
+			if err != nil {
+				// In case we need to re-run the Move step, tolerate the case where the change
+				// is already on the branch.
+				var httpErr *gerrit.HTTPError
+				if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
+					return nil, err
+				}
+			} else {
+				ci = &movedCI
+			}
+			rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx, ci.ID, "")
+			if err != nil {
+				// Don't fail if the branch is already up to date.
+				var httpErr *gerrit.HTTPError
+				if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
+					return nil, err
+				}
+			} else {
+				ci = &rebasedCI
+			}
+			p.Changes[i] = ci
 		}
-	} else {
-		change = &movedCI
 	}
-	rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx, change.ID, "")
-	if err != nil {
-		// Don't fail if the branch is already up to date.
-		var httpErr *gerrit.HTTPError
-		if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
-			return nil, err
-		}
-	} else {
-		change = &rebasedCI
-	}
-	return change, nil
+	return patches, nil
 }
 
-func (x *PrivXPatch) AwaitSubmission(ctx *wf.TaskContext, change *gerrit.ChangeInfo) (*gerrit.ChangeInfo, error) {
-	var submitted gerrit.ChangeInfo
-	if _, err := AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
-		// The ChangeInfo object returned by RebaseChange doesn't contain
-		// information about submittability, so we need to refetch it using
-		// GetChange.
-		ci, err := x.PrivateGerrit.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
-		if err != nil {
-			return "", false, err
+func (x *PrivXPatch) AwaitSubmissions(ctx *wf.TaskContext, patches []*ref) ([]*ref, error) {
+	var g errgroup.Group
+	for _, p := range patches {
+		for _, cl := range p.Changes {
+			g.Go(func() error {
+				_, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
+					// The ChangeInfo object returned by RebaseChange doesn't contain
+					// information about submittability, so we need to refetch it using
+					// GetChange.
+					ci, err := x.PrivateGerrit.GetChange(ctx, cl.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+					if err != nil {
+						return "", false, err
+					}
+					if !ci.Submittable {
+						return "", false, nil
+					}
+					_, err = x.PrivateGerrit.SubmitChange(ctx, ci.ID)
+					if err != nil {
+						return "", false, err
+					}
+					return "", true, nil
+				})
+				return err
+			})
 		}
-
-		if !ci.Submittable {
-			return "", false, nil
-		}
-
-		submitted, err = x.PrivateGerrit.SubmitChange(ctx, ci.ID)
-		if err != nil {
-			return "", false, err
-		}
-		return "", true, nil
-
-	}); err != nil {
-		return nil, err
 	}
-
-	return &submitted, nil
+	return patches, g.Wait()
 }
 
-func (x *PrivXPatch) PublishChange(ctx *wf.TaskContext, change *gerrit.ChangeInfo, clNumber string, reviewers []string, repoName string) (*gerrit.ChangeInfo, error) {
+func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, patches []*ref) ([]*ref, error) {
+	clRE := regexp.MustCompile(fmt.Sprintf(`https://go-review\.googlesource\.com/c/%s/\+/(\d+)`, regexp.QuoteMeta(repoName)))
+	for _, p := range patches {
+		for i, change := range p.Changes {
+			if err := x.publishChange(ctx, repoName, p.Patch.Changelists[i], change, clRE); err != nil {
+				return nil, err
+			}
+		}
+	}
+	// TODO(nealpatel): Is changeInfo supposed to be
+	// stored in .Changes similarly the other workflow?
+	//
+	// If not, this can be an ActionN.
+	return patches, nil
+}
+
+func (x *PrivXPatch) publishChange(ctx *wf.TaskContext, repoName, clLink string, change *gerrit.ChangeInfo, clRE *regexp.Regexp) error {
 	changeInfo, err := x.PrivateGerrit.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION"}})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if changeInfo.Status != gerrit.ChangeStatusMerged {
-		return nil, fmt.Errorf("CL %s not merged, status is %s", clNumber, changeInfo.Status)
+		return fmt.Errorf("CL %s not merged, status is %s", clLink, changeInfo.Status)
 	}
 	rev, ok := changeInfo.Revisions[changeInfo.CurrentRevision]
 	if !ok {
-		return nil, errors.New("current revision not found")
+		return errors.New("current revision not found")
 	}
 	fetch, ok := rev.Fetch["http"]
 	if !ok {
-		return nil, errors.New("fetch info not found")
+		return errors.New("fetch info not found")
 	}
 	origin, ref := fetch.URL, fetch.Ref
 
@@ -193,24 +248,27 @@ func (x *PrivXPatch) PublishChange(ctx *wf.TaskContext, change *gerrit.ChangeInf
 	// directly, which makes the process extremely simple.
 	repo, err := x.Git.Clone(ctx, x.PublicRepoURL(repoName))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer repo.Close()
 	ctx.Printf("cloned repo into %s", repo.dir)
 
 	ctx.Printf("fetching %s from %s", ref, origin)
 	if _, err := repo.RunCommand(ctx, "fetch", origin, ref); err != nil {
-		return nil, err
+		return err
 	}
 	ctx.Printf("fetched")
 	if _, err := repo.RunCommand(ctx, "cherry-pick", "FETCH_HEAD"); err != nil {
-		return nil, err
+		return err
 	}
 	ctx.Printf("cherry-picked")
 	refspec := "HEAD:refs/for/master%l=Auto-Submit,l=Commit-Queue+1"
-	reviewerEmails, err := coordinatorEmails(reviewers)
+	// We don't typically specify reviews in the historical releases;
+	// so this should NOT be hardcoded; instead, it should pull from
+	// some ACL somewhere?
+	reviewerEmails, err := coordinatorEmails([]string{})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, reviewer := range reviewerEmails {
 		refspec += ",r=" + reviewer
@@ -222,17 +280,12 @@ func (x *PrivXPatch) PublishChange(ctx *wf.TaskContext, change *gerrit.ChangeInf
 	ctx.Printf("pushing %s to %s", refspec, x.PublicRepoURL(repoName))
 	gitPushOutput, err := repo.RunGitPush(ctx, x.PublicRepoURL(repoName), refspec)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// Extract the CL number from the output using a simple regexp.
-	re, err := regexp.Compile(fmt.Sprintf(`https:\/\/go-review\.googlesource\.com\/c\/%s\/\+\/(\d+)`, regexp.QuoteMeta(repoName)))
-	if err != nil {
-		return nil, fmt.Errorf("failed to compile regexp: %s", err)
-	}
-	matches := re.FindSubmatch(gitPushOutput)
+	matches := clRE.FindSubmatch(gitPushOutput)
 	if len(matches) != 2 {
-		return nil, errors.New("unable to find CL number")
+		return errors.New("unable to find CL number")
 	}
 	changeID := string(matches[1])
 
@@ -240,21 +293,33 @@ func (x *PrivXPatch) PublishChange(ctx *wf.TaskContext, change *gerrit.ChangeInf
 	_, err = AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
 		return x.PublicGerrit.Submitted(ctx, changeID, "")
 	})
-	if err != nil {
-		return nil, err
-	}
-	return change, nil
+	return err
 }
 
-func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, cve string, githubIssue string, relNote string, acknowledgement string) (string, error) {
+func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *relmeta.ReleaseMilestone) (string, error) {
+	var (
+		relNotes    []string
+		subjectNoun = "Vulnerability"
+		bodyPhrase  = "address a security issue:"
+	)
+	for _, p := range rm.Patches {
+		if !strings.Contains(p.Package, tagged.ModPath) {
+			continue
+		}
+		relNotes = append(relNotes, p.ReleaseNote)
+	}
+	if len(relNotes) > 1 {
+		subjectNoun = "Vulnerabilities"
+		bodyPhrase = "address the following security issues:"
+	}
+
 	var buf bytes.Buffer
-	if err := privXPatchAnnouncementTmpl.Execute(&buf, map[string]string{
-		"Module":          tagged.ModPath,
-		"Version":         tagged.NewerVersion,
-		"RelNote":         relNote,
-		"Acknowledgement": acknowledgement,
-		"CVE":             cve,
-		"GithubIssue":     githubIssue,
+	if err := privXPatchAnnouncementTmpl.Execute(&buf, map[string]any{
+		"Module":                tagged.ModPath,
+		"Version":               tagged.NewerVersion,
+		"MaybePluralizeSubject": subjectNoun,
+		"MaybePluralizeBody":    bodyPhrase,
+		"RelNotes":              relNotes,
 	}); err != nil {
 		return "", err
 	}
@@ -282,17 +347,13 @@ func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, cve s
 	return "", nil
 }
 
-var privXPatchAnnouncementTmpl = template.Must(template.New("").Parse(`Subject: [security] Vulnerability in {{.Module}}
+var privXPatchAnnouncementTmpl = template.Must(template.New("").Parse(`Subject: [security] {{.MaybePluralizeSubject}} in {{.Module}}
 
 Hello gophers,
 
-We have tagged version {{.Version}} of {{.Module}} in order to address a security issue.
-
-{{.RelNote}}
-
-Thanks to {{.Acknowledgement}} for reporting this issue.
-
-This is {{.CVE}} and Go issue {{.GithubIssue}}.
-
+We have tagged version {{.Version}} of {{.Module}} in order to {{.MaybePluralizeBody}}
+{{range .RelNotes}}
+{{.}}
+{{end}}
 Cheers,
 Go Security team`))
