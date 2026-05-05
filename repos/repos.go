@@ -138,6 +138,12 @@ func init() {
 		WebsiteDesc:        "Go extension for Visual Studio Code",
 		MirrorToCSRProject: "go-vscode-go",
 	})
+
+	add(&Repo{
+		GoGerritProject: "dot-github",
+		MirrorToGitHub:  true,
+		GitHubRepo:      "golang/.github",
+	})
 }
 
 type modifyRepo func(*Repo)
