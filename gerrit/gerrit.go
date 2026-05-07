@@ -153,7 +153,7 @@ func (c *Client) do(ctx context.Context, dst any, method, path string, opts ...d
 	}
 
 	// slashA is either "/a" (for authenticated requests) or "" for unauthenticated.
-	// See https://gerrit-review.googlesource.com/Documentation/rest-api.html#authentication
+	// See https://gerrit-review.googlesource.com/Documentation/rest-api.html#authentication.
 	slashA := "/a"
 	if _, ok := c.auth.(noAuth); ok {
 		slashA = ""

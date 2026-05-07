@@ -360,7 +360,7 @@ func (c *RealGerritClient) ReadDir(ctx context.Context, project, commit, dir str
 	var resp struct {
 		Entries []struct{ Name string }
 	}
-	err := fetchGitilesJSON(ctx, c.GitilesAuth, c.Gitiles+"/"+url.PathEscape(project)+"/+/"+url.PathEscape(commit)+"/"+url.PathEscape(dir)+"?format=JSON", &resp)
+	err := c.fetchGitilesJSON(ctx, "/"+url.PathEscape(project)+"/+/"+url.PathEscape(commit)+"/"+url.PathEscape(dir)+"?format=JSON", &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -377,20 +377,27 @@ func (c *RealGerritClient) ListCommits(ctx context.Context, project, head, base 
 	var resp struct {
 		Log []CommitInfo
 	}
-	err := fetchGitilesJSON(ctx, c.GitilesAuth, c.Gitiles+"/"+url.PathEscape(project)+"/+log/"+url.PathEscape(base)+".."+url.PathEscape(head)+"?format=JSON", &resp)
+	err := c.fetchGitilesJSON(ctx, "/"+url.PathEscape(project)+"/+log/"+url.PathEscape(base)+".."+url.PathEscape(head)+"?format=JSON", &resp)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Log, nil
 }
 
-func fetchGitilesJSON(ctx context.Context, auth oauth2.TokenSource, url string, v any) error {
+func (c *RealGerritClient) fetchGitilesJSON(ctx context.Context, path string, v any) error {
+	// slashA is either "/a" (for authenticated requests) or "" for unauthenticated.
+	// See https://gerrit-review.googlesource.com/Documentation/rest-api.html#authentication.
+	var slashA = "/a"
+	if c.GitilesAuth == nil {
+		slashA = ""
+	}
+	url := c.Gitiles + slashA + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	if auth != nil {
-		t, err := auth.Token()
+	if c.GitilesAuth != nil {
+		t, err := c.GitilesAuth.Token()
 		if err != nil {
 			return err
 		}

@@ -98,8 +98,8 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 		changes: make(map[string]string),
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{repo}/+archive/{archive}", result.serveArchive) // Serve a revision tarball (.tar.gz) like Gerrit does.
-	mux.HandleFunc("GET /{repo}/+/{rev}/{path...}", result.serveGitiles)
+	mux.HandleFunc("GET /a/{repo}/+archive/{archive}", result.serveArchive) // Serve a revision tarball (.tar.gz) like Gerrit does.
+	mux.HandleFunc("GET /a/{repo}/+/{rev}/{path...}", result.serveGitiles)
 	mux.HandleFunc("GET /{repo}/info/refs", result.serveGitInfoRefs) // Serve a git repository over HTTP like Gerrit does.
 	mux.HandleFunc("POST /{repo}/git-upload-pack", result.serveGitUploadPack)
 	mux.HandleFunc("POST /{repo}/git-receive-pack", result.serveGitReceivePack) // Receive pushes to "refs/for/" over HTTP like Gerrit does.
