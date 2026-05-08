@@ -93,7 +93,7 @@ require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/apache/arrow/go/v12 v12.0.0 // indirect
-	github.com/apache/thrift v0.16.0 // indirect
+	github.com/apache/thrift v0.23.0 // indirect
 	github.com/bazelbuild/remote-apis v0.0.0-20230411132548-35aee1c4a425 // indirect
 	github.com/bazelbuild/remote-apis-sdks v0.0.0-20230809203756-67f2ffbec0ef // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
