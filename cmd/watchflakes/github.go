@@ -397,7 +397,11 @@ func readComments(issue *Issue) {
 // placing the issue in the Test Flakes project.
 // It automatically caps issue body length and adds signature to it.
 func postNew(title, body string) *github.Issue {
-	args := []any{testFlakes}
+	var args []any
+	if lab := labels["Automation"]; lab != nil {
+		args = append(args, lab)
+	}
+	args = append(args, testFlakes)
 
 	if len(body) > 50000 {
 		// As of 2025-11-27, GitHub GraphQL API limits body length to 65536.
@@ -415,6 +419,9 @@ func postNew(title, body string) *github.Issue {
 // It automatically adds signature to the body.
 func postNewBrokenBot(title, body string) (*github.Issue, error) {
 	var args []any
+	if lab := labels["Automation"]; lab != nil {
+		args = append(args, lab)
+	}
 	if lab := labels["Builders"]; lab != nil {
 		args = append(args, lab)
 	}
