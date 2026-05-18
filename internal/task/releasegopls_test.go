@@ -1074,7 +1074,10 @@ func TestGoplsReleaseFlow(t *testing.T) {
 		// goplsGoMod specifies the content of gopls/go.mod in x/tools' master
 		// branch before the flow execution.
 		goplsGoMod string
-		release    releaseVersion
+		// license specifies the content of gopls/internal/licenses/licenses.go in
+		// x/tools' master branch before the flow execution.
+		license string
+		release releaseVersion
 
 		// The fields below are the desired states.
 		// wantPrereleaseTag is the expected prerelease tag in x/tools repo
@@ -1086,11 +1089,15 @@ func TestGoplsReleaseFlow(t *testing.T) {
 		// wantGoplsGoMod specifies the desired content of gopls/go.mod in x/tools'
 		// master branch after the flow execution.
 		wantGoplsGoMod string
+		// wantLicense specifies the desired content of gopls/internal/licenses/licenses.go
+		// in x/tools' master branch after the flow execution.
+		wantLicense string
 	}{
 		{
 			name:              "release patch v0.16.3-pre.3, update vscode-go release and master branch",
 			commitTags:        []string{"gopls/v0.16.2", "gopls/v0.16.3-pre.1", "gopls/v0.16.3-pre.2", "gopls/v0.16.3-pre.3"},
 			goplsGoMod:        "foo",
+			license:           "old",
 			release:           releaseVersion{Major: 0, Minor: 16, Patch: 3},
 			wantPrereleaseTag: "gopls/v0.16.3-pre.3",
 			wantCommit: map[string]map[string]bool{
@@ -1102,11 +1109,13 @@ func TestGoplsReleaseFlow(t *testing.T) {
 				},
 			},
 			wantGoplsGoMod: "foo",
+			wantLicense:    "old",
 		},
 		{
 			name:              "release minor v0.17.0-pre.2, update vscode-go release and master branch, update tools gopls go.mod",
 			commitTags:        []string{"gopls/v0.16.0", "gopls/v0.17.0-pre.1", "gopls/v0.17.0-pre.2"},
 			goplsGoMod:        "foo",
+			license:           "old",
 			release:           releaseVersion{Major: 0, Minor: 17, Patch: 0},
 			wantPrereleaseTag: "gopls/v0.17.0-pre.2",
 			wantCommit: map[string]map[string]bool{
@@ -1118,11 +1127,13 @@ func TestGoplsReleaseFlow(t *testing.T) {
 				},
 			},
 			wantGoplsGoMod: "bar",
+			wantLicense:    "new",
 		},
 		{
 			name:              "release minor v0.17.0-pre.2, update vscode-go release and master branch, skip update tools gopls go.mod",
 			commitTags:        []string{"gopls/v0.16.0", "gopls/v0.17.0-pre.1", "gopls/v0.17.0-pre.2"},
 			goplsGoMod:        "bar",
+			license:           "new",
 			release:           releaseVersion{Major: 0, Minor: 17, Patch: 0},
 			wantPrereleaseTag: "gopls/v0.17.0-pre.2",
 			wantCommit: map[string]map[string]bool{
@@ -1134,6 +1145,7 @@ func TestGoplsReleaseFlow(t *testing.T) {
 				},
 			},
 			wantGoplsGoMod: "bar",
+			wantLicense:    "new",
 		},
 	}
 
@@ -1154,8 +1166,9 @@ func TestGoplsReleaseFlow(t *testing.T) {
 
 			tools := NewFakeRepo(t, "tools")
 			initial = tools.Commit(map[string]string{
-				"gopls/go.mod": tc.goplsGoMod,
-				"gopls/go.sum": "\n",
+				"gopls/go.mod":                        tc.goplsGoMod,
+				"gopls/go.sum":                        "\n",
+				"gopls/internal/licenses/licenses.go": tc.license,
 			})
 			tools.Branch(releaseBranch, initial)
 			for i, tag := range tc.commitTags {
@@ -1193,6 +1206,8 @@ func TestGoplsReleaseFlow(t *testing.T) {
 			// installation.
 			// - go run will write "bar" content to file in vscode-go project
 			// containing gopls versions and gopls settings.
+			// - go generate will write "new" content to license file in x/tools
+			// master branch to simulate license changes.
 			var fakeGo = `#!/bin/bash -exu
 
 case "$1" in
@@ -1215,6 +1230,10 @@ case "$1" in
 				echo -n "bar" > docs/settings.md
 			fi
 	done
+	exit 0
+	;;
+"generate")
+	echo -n "new" > internal/licenses/licenses.go
 	exit 0
 	;;
 *)
@@ -1328,6 +1347,12 @@ esac
 					branch: "master",
 					path:   "gopls/go.mod",
 					want:   tc.wantGoplsGoMod,
+				},
+				{
+					repo:   "tools",
+					branch: "master",
+					path:   "gopls/internal/licenses/licenses.go",
+					want:   tc.wantLicense,
 				},
 				{
 					repo:   "vscode-go",

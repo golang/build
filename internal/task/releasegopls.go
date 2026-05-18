@@ -869,8 +869,9 @@ func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewe
 pwd
 go get -u all
 go mod tidy -compat=1.19
+go generate ./internal/licenses
 `
-	changed, err := executeAndMonitorChange(ctx, r.CloudBuild, "tools", "master", script, []string{"gopls/go.mod", "gopls/go.sum"})
+	changed, err := executeAndMonitorChange(ctx, r.CloudBuild, "tools", "master", script, []string{"gopls/go.mod", "gopls/go.sum", "gopls/internal/licenses/licenses.go"})
 	if err != nil {
 		return "", err
 	}
