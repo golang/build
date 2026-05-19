@@ -918,8 +918,7 @@ func (s *FakeSignService) fakeGPGFile(jobID, f string) string {
 
 var _ CloudBuildClient = (*FakeCloudBuild)(nil)
 
-const fakeGcloud = `
-#!/bin/bash -eux
+const fakeGcloud = `#!/bin/bash -eux
 
 case "$1 $2" in
 "storage cp")
@@ -945,8 +944,7 @@ case "$1 $2" in
 esac
 `
 
-const fakeEmptyBinary = `
-#!/bin/bash -eux
+const fakeEmptyBinary = `#!/bin/bash -eux
 echo "this binary will always exit without any error"
 exit 0
 `
