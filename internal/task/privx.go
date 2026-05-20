@@ -98,14 +98,14 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 				return nil, fmt.Errorf("CL is for unexpected project, got: %s, want %s", ci.Project, p.Package)
 			}
 			if !ci.Submittable {
-				return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNum))
+				return nil, fmt.Errorf("Change %s is not submittable", internalXRepoChangeURL(target, clNum))
 			}
 			ra, err := x.PrivateGerrit.GetRevisionActions(ctx, clNum, "current")
 			if err != nil {
 				return nil, err
 			}
 			if ra["submit"] == nil || !ra["submit"].Enabled {
-				return nil, fmt.Errorf("Change %s is not submittable", internalGerritChangeURL(clNum))
+				return nil, fmt.Errorf("Change %s is not submittable", internalXRepoChangeURL(target, clNum))
 			}
 			// TODO: Add regex for CVE / GH
 			// TODO(nealpatel): Edge case; order matters for stacked changes.
@@ -115,6 +115,10 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 	}
 
 	return patches, nil
+}
+
+func internalXRepoChangeURL[T int | string](xrepo string, clNum T) string {
+	return fmt.Sprintf("https://go-internal-review.git.corp.google.com/c/%s/+/%v", xrepo, clNum)
 }
 
 type ref struct {
