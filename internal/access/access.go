@@ -55,22 +55,36 @@ func IAPFromContext(ctx context.Context) (*IAPFields, error) {
 	return &iap, nil
 }
 
+// RequireIAPAuthHandler creates an HTTP handler which ensures that the caller has
+// successfully authenticated via IAP before calling h. If the caller has
+// authenticated, the headers created by IAP will be added to the request scope
+// context.
+// See https://cloud.google.com/iap/docs/signed-headers-howto.
 func RequireIAPAuthHandler(h http.Handler, audience string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		jwt := r.Header.Get("x-goog-iap-jwt-assertion")
+	return iapAuthHandler(h, audience, idtoken.Validate)
+}
+
+// iapAuthHandler creates an HTTP handler which ensures that the caller has
+// successfully authenticated via IAP before calling h. If the caller has
+// authenticated, the headers created by IAP will be added to the request scope
+// context.
+// See https://cloud.google.com/iap/docs/signed-headers-howto.
+func iapAuthHandler(h http.Handler, audience string, validatorFn validator) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		jwt := req.Header.Get(iapHeaderJWT)
 		if jwt == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprintf(w, "must run under IAP\n")
 			return
 		}
-		iap, err := validateIAPJWT(r.Context(), jwt, audience, idtoken.Validate)
+		iap, err := validateIAPJWT(req.Context(), jwt, audience, validatorFn)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			log.Printf("JWT validation error: %v", err)
 			return
 		}
-		ctx := ContextWithIAP(r.Context(), iap)
-		h.ServeHTTP(w, r.WithContext(ctx))
+		ctx := ContextWithIAP(req.Context(), iap)
+		h.ServeHTTP(w, req.WithContext(ctx))
 	})
 }
 
@@ -78,7 +92,7 @@ func RequireIAPAuthHandler(h http.Handler, audience string) http.Handler {
 // It ensures that the caller has successfully authenticated via IAP. If the caller
 // has authenticated, the headers created by IAP will be added to the request scope
 // context passed down to the server implementation.
-// https://cloud.google.com/iap/docs/signed-headers-howto
+// See https://cloud.google.com/iap/docs/signed-headers-howto.
 func iapAuthFunc(audience string, validatorFn validator) grpcauth.AuthFunc {
 	return func(ctx context.Context) (context.Context, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -162,7 +176,7 @@ type validator func(ctx context.Context, token, audiance string) (*idtoken.Paylo
 // IAPAudienceGCE returns the jwt audience for GCE and GKE services.
 // The project number is the numerical GCP project number the service is deployed in.
 // The service ID is the identifier for the backend service used to route IAP requests.
-// https://cloud.google.com/iap/docs/signed-headers-howto
+// See https://cloud.google.com/iap/docs/signed-headers-howto.
 func IAPAudienceGCE(projectNumber int64, serviceID string) string {
 	return fmt.Sprintf("/projects/%d/global/backendServices/%s", projectNumber, serviceID)
 }
@@ -170,7 +184,7 @@ func IAPAudienceGCE(projectNumber int64, serviceID string) string {
 // IAPAudienceAppEngine returns the JWT audience for App Engine services.
 // The project number is the numerical GCP project number the service is deployed in.
 // The project ID is the textual identifier for the GCP project that the App Engine instance is deployed in.
-// https://cloud.google.com/iap/docs/signed-headers-howto
+// See https://cloud.google.com/iap/docs/signed-headers-howto.
 func IAPAudienceAppEngine(projectNumber int64, projectID string) string {
 	return fmt.Sprintf("/projects/%d/apps/%s", projectNumber, projectID)
 }
