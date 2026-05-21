@@ -89,6 +89,9 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 
 		var cls []*gerrit.ChangeInfo
 		for _, clLink := range p.Changelists {
+			if p.Track == relmeta.Public {
+				continue
+			}
 			clNum := clLink[strings.LastIndex(clLink, "/")+1:]
 			ci, err := x.PrivateGerrit.GetChange(ctx, clNum, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION", "SUBMITTABLE"}})
 			if err != nil {
