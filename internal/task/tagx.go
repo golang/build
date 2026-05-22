@@ -598,6 +598,8 @@ func (x *TagXReposTasks) findMissingBuilders(ctx *wf.TaskContext, repo TagRepo, 
 		}
 		var props struct {
 			BuilderMode int    `json:"mode"`
+			CompileOnly bool   `json:"compile_only"`
+			MiscPorts   bool   `json:"misc_ports"`
 			Project     string `json:"project"`
 			IsGoogle    bool   `json:"is_google"`
 			KnownIssue  int    `json:"known_issue"`
@@ -606,7 +608,14 @@ func (x *TagXReposTasks) findMissingBuilders(ctx *wf.TaskContext, repo TagRepo, 
 		if err := json.Unmarshal([]byte(b.Properties), &props); err != nil {
 			return nil, fmt.Errorf("error unmarshaling properties for %v: %v", name, err)
 		}
-		if props.Project != repo.Name || !props.IsGoogle || !releasetargets.IsFirstClass(props.Target.GOOS, props.Target.GOARCH) {
+		if props.Project != repo.Name {
+			continue
+		}
+		// The misccompile mod indicates that the builder should act as a "misc-compile" builder,
+		// that is to cross-compile all non-first-class ports to quickly flag portability issues.
+		misccompile := props.CompileOnly && props.MiscPorts
+		if !releasetargets.IsFirstClass(props.Target.GOOS, props.Target.GOARCH) || misccompile || !props.IsGoogle {
+			// Builder is not in scope for determining "green" in the context of tagging.
 			continue
 		}
 		var skip []string // Log-worthy causes of skip, if any.
