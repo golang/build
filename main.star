@@ -567,6 +567,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-amd64_15.0": known_issue(issue_number = 77411, hide_from_presubmit = False),
     "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
     "openbsd-riscv64": known_issue(issue_number = 73569, hide_from_presubmit = False),
+    "linux-amd64-misccompile@gotip in net": known_issue(issue_number = 79605, hide_from_presubmit = False),
 
     # The known issue for these builder types tracks the work of starting to add them.
     # Skip the builder definitions for x/ repos to reduce noise.
