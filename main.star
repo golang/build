@@ -1049,6 +1049,7 @@ RUN_MODS = {
                 "src/cmd/go/.+",
             ],
             "protobuf": [],
+            "vuln": [],
         }),
     ),
 
