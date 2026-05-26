@@ -311,7 +311,7 @@ unzip -q llvm.zip llvm-project-${REV}/compiler-rt/*
 if [ "$LLVM_PATCH" != "" ]; then
   (cd llvm-project-${REV}/ && patch -p1 < ../patch.patch)
 fi
-(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && ./buildgo.sh)
+(cd llvm-project-${REV}/compiler-rt/lib/tsan/go && EXTRA_CFLAGS=-mno-outline-atomics ./buildgo.sh)
 cp llvm-project-${REV}/compiler-rt/lib/tsan/go/race_linux_arm64.syso go/src/runtime/race
 # work around gomote gettar issue #64195
 mkdir outdir
