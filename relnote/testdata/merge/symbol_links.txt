@@ -14,5 +14,6 @@ This: s[math] is not a link.
 
 #### [`bytes`](/pkg/bytes/)
 
+<!-- stdlib/minor/bytes/x.md -->
 Inside this file, [`Buffer`](/pkg/bytes#Buffer) can be used instead of
 [`bytes.Buffer`](/pkg/bytes#Buffer).
