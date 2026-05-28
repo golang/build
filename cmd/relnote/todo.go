@@ -29,6 +29,8 @@ import (
 type ToDo struct {
 	message    string // what is to be done
 	provenance string // where the TODO came from
+	summary    string // summary of the CL or issue
+	isIssue    bool   // is this an issue or a CL
 }
 
 // todo prints a report to w on which release notes need to be written.
@@ -100,7 +102,8 @@ func infoFromDocFiles(fsys fs.FS, mentioned mentioned, addToDo func(ToDo)) error
 		if err != nil {
 			return err
 		}
-		if !d.IsDir() && strings.HasSuffix(path, ".md") {
+		// Don't recursively process 9-todo.md itself
+		if !d.IsDir() && strings.HasSuffix(path, ".md") && d.Name() != "9-todo.md" {
 			if err := infoFromFile(fsys, path, mentioned, addToDo); err != nil {
 				return err
 			}
@@ -202,6 +205,10 @@ func todosFromCLs(cutoff time.Time, mentioned mentioned, add func(ToDo)) error {
 	})
 }
 
+func clProvenance(cl *maintner.GerritCL) string {
+	return fmt.Sprintf("RELNOTE comment in [CL %d](/cl/%[1]d)", cl.Number)
+}
+
 func todoFromRelnote(ctx context.Context, cl *maintner.GerritCL, gc *gerrit.Client, add func(ToDo)) error {
 	comments, err := gc.ListChangeComments(ctx, fmt.Sprint(cl.Number))
 	if err != nil {
@@ -213,7 +220,8 @@ func todoFromRelnote(ctx context.Context, cl *maintner.GerritCL, gc *gerrit.Clie
 		}
 		add(ToDo{
 			message:    "TODO: " + rn,
-			provenance: fmt.Sprintf("RELNOTE comment in https://go.dev/cl/%d", cl.Number),
+			provenance: clProvenance(cl),
+			summary:    cl.Commit.Msg,
 		})
 	}
 	return nil
@@ -227,9 +235,18 @@ func todoFromProposal(cl *maintner.GerritCL, gh *maintner.GitHubRepo, mentionedI
 		if issue := gh.Issue(int32(num)); issue != nil && hasLabel(issue, "Proposal-Accepted") {
 			// Add a TODO for all issues, regardless of when or whether they are closed.
 			// Any work on an accepted proposal is potentially worthy of a release note.
+
+			message := fmt.Sprintf("TODO: accepted [proposal %d](/issue/%[1]d)", num)
+			// This add can create duplicate entries, to be filtered out after sorting.
 			add(ToDo{
-				message:    fmt.Sprintf("TODO: accepted proposal https://go.dev/issue/%d", num),
-				provenance: fmt.Sprintf("https://go.dev/cl/%d", cl.Number),
+				message: message,
+				summary: issue.Title,
+				isIssue: true,
+			})
+			add(ToDo{
+				message:    message,
+				provenance: clProvenance(cl),
+				summary:    cl.Commit.Msg,
 			})
 		}
 	}
@@ -319,23 +336,75 @@ func issueNumbers(cl *maintner.GerritCL) []int {
 	return slices.Compact(list)
 }
 
+func fixURL(s string) string {
+	return strings.ReplaceAll(s, "https://go.dev/", "/")
+}
+
 func writeToDos(w io.Writer, todos []ToDo) error {
 	// Group TODOs with the same message. This simplifies the output when a single
 	// issue is implemented by multiple CLs.
+
+	// sort for deterministic output
+	slices.SortFunc(todos, func(a, b ToDo) int {
+		// Sort issues first, for canonical ordering
+		// of the summary information and for duplicate
+		// removal.
+		if a.isIssue != b.isIssue {
+			if a.isIssue {
+				return -1
+			}
+			return 1
+		}
+		if c := strings.Compare(a.message, b.message); c != 0 {
+			return c
+		}
+		return strings.Compare(a.provenance, b.provenance)
+		// TODO LATER: the "best" sort order might be by the summary
+		// line of the issue, since those tend to lead with packages
+		// and that would group packages together in the output.
+	})
+
 	byMessage := map[string][]ToDo{}
-	for _, td := range todos {
+
+	for i, td := range todos {
+		// there will be duplicates marked isIssue, skip the non-first ones
+		if i > 0 && td.isIssue && td.message == todos[i-1].message {
+			continue
+		}
 		byMessage[td.message] = append(byMessage[td.message], td)
 	}
 	msgs := slices.Sorted(maps.Keys(byMessage)) // sort for deterministic output
 	for _, msg := range msgs {
 		var provs []string
+		var summaries []string
 		for _, td := range byMessage[msg] {
-			provs = append(provs, td.provenance)
+			summaries = append(summaries, fixURL(td.summary))
+			if td.provenance != "" {
+				provs = append(provs, fixURL(td.provenance))
+			}
 		}
-		slices.Sort(provs) // for deterministic output
-		if _, err := fmt.Fprintf(w, "%s (from %s)\n", msg, strings.Join(provs, ", ")); err != nil {
+
+		// Lead with newline to put some space between the TODO blocks
+		if _, err := fmt.Fprintf(w, "\n### %s (from %s)\n", fixURL(msg), strings.Join(provs, ", ")); err != nil {
 			return err
 		}
+		for _, s := range summaries {
+			if s == "" {
+				continue
+			}
+			if n := strings.Index(s, "\n"); n >= 0 {
+				s = s[:n]
+			}
+			if strings.Index(s, "`") != -1 {
+				// Per https://daringfireball.net/projects/markdown/syntax#code
+				// this is how to code-wrap text containing *single* backticks.
+				// Not planning to support multiple consecutive backticks here.
+				fmt.Fprintf(w, "- `` %s ``\n", s)
+			} else {
+				fmt.Fprintf(w, "- `%s`\n", s)
+			}
+		}
 	}
+	fmt.Fprintf(w, "\nThe ###TODO markdown above this line is usually copied or appended to doc/next/9-todo.md\n")
 	return nil
 }
