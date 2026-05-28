@@ -1087,8 +1087,21 @@ func (cb *FakeCloudBuild) GenerateAutoSubmitChange(ctx *wf.TaskContext, input ge
 		return "", fmt.Errorf("FakeCloudBuild.GenerateAutoSubmitChange: not implemented for branch %q", input.Branch)
 	}
 
+	// Use the commit message as is, as much as possible.
+	// Some concessions may be needed to make it easier to run tests.
+	commitMessage := strings.NewReplacer(
+		// The CreateUpdateStdlibIndexCL task needs to use a golang.org/dl/go1.NrcM command
+		// because it happens to include API files needed to regenerate an x/tools package.
+		// The test needs to run before said go1.NrcM command is available, so replace it
+		// with a normal "go" command invocation. We can be sure this isn't reducing the
+		// signal provided by the test too much. See go.dev/issue/78894.
+		`go run golang.org/dl/go1.27rc1@latest download
+go run golang.org/dl/go1.27rc1@latest `,
+		"go ",
+	).Replace(input.Subject)
+
 	// Create an empty commit with the git-generate script in commit message.
-	r.runGit("commit", "--allow-empty", "-m", input.Subject)
+	r.runGit("commit", "--allow-empty", "-m", commitMessage)
 
 	// Run git-generate.
 	//
@@ -1098,7 +1111,7 @@ func (cb *FakeCloudBuild) GenerateAutoSubmitChange(ctx *wf.TaskContext, input ge
 	// To make it possible to use a fake go binary with tasks that use GenerateAutoSubmitChange this probably
 	// needs to switch to using go install. Resolving this hasn't been a priority so far because it worked
 	// okay to stay with the normal go binary, since most GenerateAutoSubmitChange-using tasks can be faked
-	// by providing a fake go:generate directive.
+	// by providing a fake go:generate directive and by adjusting the commit message as done above.
 	cmd := exec.CommandContext(ctx, "go", "run", "rsc.io/rf/git-generate@"+gitGenerateVersion)
 	cmd.Dir = r.dir.dir
 	tempDir := cb.t.TempDir()

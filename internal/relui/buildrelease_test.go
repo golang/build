@@ -59,7 +59,6 @@ func TestRelease(t *testing.T) {
 		testRelease(t, "go1.26", 27, "go1.27beta1", task.KindBeta)
 	})
 	t.Run("rc", func(t *testing.T) {
-		t.Skip("skipping go1.27rc1 test") // see go.dev/issue/78894
 		testRelease(t, "go1.26", 27, "go1.27rc1", task.KindRC)
 	})
 	t.Run("major", func(t *testing.T) {
