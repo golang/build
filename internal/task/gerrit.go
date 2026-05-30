@@ -78,7 +78,7 @@ type GerritClient interface {
 	// Both head and base must be non-empty strings, otherwise an error is returned.
 	// If either head or base refers to a commit that doesn't exist,
 	// an error matching gerrit.ErrResourceNotExist is returned.
-	// The commits are returned in order from head to base (i.e., first element is newest commit, last element is oldest comit),
+	// The commits are returned in order from head to base (i.e., first element is newest commit, last element is oldest commit),
 	// capped in length to an implementation-defined page size. The caller can inspect
 	// the parents of the last commit if it needs to detect the page size being insufficient.
 	ListCommits(ctx context.Context, project, head, base string) ([]CommitInfo, error)

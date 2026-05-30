@@ -73,7 +73,7 @@ func (c *Client) nsEndpoint() string {
 // with success, then that is an error).
 //
 // It returns the pod status once it has entered the Running phase.
-// An error is returned if the pod can not be created, or if ctx.Done
+// An error is returned if the pod cannot be created, or if ctx.Done
 // is closed.
 func (c *Client) RunLongLivedPod(ctx context.Context, pod *api.Pod) (*api.PodStatus, error) {
 	var podJSON bytes.Buffer

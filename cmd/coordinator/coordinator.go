@@ -1649,7 +1649,7 @@ func (ts *trySet) wanted() bool {
 	return ok
 }
 
-// cancelBuilds run in its own goroutine and cancels this trySet's
+// cancelBuilds runs in its own goroutine and cancels this trySet's
 // currently-active builds because they're no longer wanted.
 func (ts *trySet) cancelBuilds() {
 	ts.mu.Lock()

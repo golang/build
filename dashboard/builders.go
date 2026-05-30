@@ -823,7 +823,7 @@ type BuildConfig struct {
 	// storage.
 	StopAfterMake bool
 
-	// privateGoProxy for builder has it's own Go proxy instead of
+	// privateGoProxy for a builder has its own Go proxy instead of
 	// proxy.golang.org, pre-set in GOPROXY on the builder.
 	privateGoProxy bool
 
@@ -1138,7 +1138,7 @@ func (c *BuildConfig) AllScript() string {
 
 func (c *BuildConfig) IsTryOnly() bool { return c.tryOnly }
 
-// PrivateGoProxy for builder has it's own Go proxy instead of proxy.golang.org
+// PrivateGoProxy for a builder has its own Go proxy instead of proxy.golang.org
 func (c *BuildConfig) PrivateGoProxy() bool { return c.privateGoProxy }
 
 // BuildsRepoPostSubmit reports whether the build configuration type c

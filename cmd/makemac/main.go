@@ -9,7 +9,7 @@
 //   - Detects MacService leases that MacService thinks are running, but never
 //     connected to LUCI (failed to boot?) and destroys them.
 //   - Detects MacService leases that MacService thinks are running, but LUCI
-//     thinks are dead (froze/crashed?) and destoys them.
+//     thinks are dead (froze/crashed?) and destroys them.
 //   - Renews MacService leases that both MacService and LUCI agree are healthy
 //     to ensure they don't expire.
 //   - Destroys MacService leases with images that are not requested by the
@@ -331,7 +331,7 @@ func handleMissingBots(mc macServiceClient, bots map[string]*spb.BotInfo, leases
 }
 
 // handleDeadBots detects MacService leases that MacService thinks are running,
-// but LUCI thinks are dead (froze/crashed?) and destoys them.
+// but LUCI thinks are dead (froze/crashed?) and destroys them.
 //
 // These are bots that perhaps froze/crashed at some point after starting.
 func handleDeadBots(mc macServiceClient, bots map[string]*spb.BotInfo, leases map[string]macservice.Instance) {

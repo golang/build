@@ -527,7 +527,7 @@ var ErrTimeout = errors.New("buildlet: timeout waiting for command to complete")
 // Two errors are returned: one is whether the command succeeded
 // remotely (remoteErr), and the second (execErr) is whether there
 // were system errors preventing the command from being started or
-// seen to completition. If execErr is non-nil, the remoteErr is
+// seen to completion. If execErr is non-nil, the remoteErr is
 // meaningless.
 //
 // If the context's deadline is exceeded while waiting for the command

@@ -12,7 +12,7 @@
 // using the main Go issue tracker. If a new repo is unusual in some way that
 // causes a notable problem, some simple options include:
 //   - adding the repo to skipAll to ignore the repo entirely
-//   - adding the repo to the skip field on individiual rules
+//   - adding the repo to the skip field on individual rules
 //   - updating the usesTracker and packageExample functions if needed
 //
 // A rule is primarily defined via a function that takes a Change (CL or PR) as input

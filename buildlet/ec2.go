@@ -74,7 +74,7 @@ func (c *EC2Client) StartNewVM(ctx context.Context, buildEnv *buildenv.Environme
 		return nil, err
 	}
 	// once the VM is up and running then all of the configuration data is available
-	// when the API is querried for the VM.
+	// when the API is queried for the VM.
 	vm, err = c.client.Instance(ctx, vm.ID)
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve instance %q information: %w", vm.ID, err)

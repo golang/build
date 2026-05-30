@@ -100,7 +100,7 @@ type SigningRequest struct {
 	// unique identifier for the request. This would normally reside within
 	// the metadata. This is primarily used to route requests between
 	// caller/responder. The server and client must use the same id for each
-	// corresponging request.
+	// corresponding request.
 	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	// Request type for the signing client.
 	//
@@ -371,7 +371,7 @@ type SigningStatus struct {
 	// unique identifier for the request. This would normally reside within
 	// the metadata. This is primarily used to route requests between
 	// caller/responder. The server and client must use the same id for each
-	// corresponging request.
+	// corresponding request.
 	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
 	// The status type of the signing request.
 	//

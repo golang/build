@@ -95,7 +95,7 @@ type Quantity struct {
 	Format
 }
 
-// Format lists the three possible formattings of a quantity.
+// Format lists the three possible formats of a quantity.
 type Format string
 
 const (
@@ -234,7 +234,7 @@ func removeFactors(d, factor *big.Int) (result *big.Int, times int) {
 // Note about BinarySI:
 //   - If q.Format is set to BinarySI and q.Amount represents a non-zero value between
 //     -1 and +1, it will be emitted as if q.Format were DecimalSI.
-//   - Otherwise, if q.Format is set to BinarySI, frational parts of q.Amount will be
+//   - Otherwise, if q.Format is set to BinarySI, fractional parts of q.Amount will be
 //     rounded up. (1.1i becomes 2i.)
 func (q *Quantity) Canonicalize() (string, suffix) {
 	if q.Amount == nil {

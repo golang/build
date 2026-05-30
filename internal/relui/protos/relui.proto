@@ -26,7 +26,7 @@ message SigningRequest {
   // unique identifier for the request. This would normally reside within
   // the metadata. This is primarily used to route requests between
   // caller/responder. The server and client must use the same id for each
-  // corresponging request.
+  // corresponding request.
   string message_id = 1;
 
   // Request type for the signing client.
@@ -82,7 +82,7 @@ message SigningStatus {
   // unique identifier for the request. This would normally reside within
   // the metadata. This is primarily used to route requests between
   // caller/responder. The server and client must use the same id for each
-  // corresponging request.
+  // corresponding request.
   string message_id = 1;
 
   // The status type of the signing request.

@@ -367,7 +367,7 @@ func TestManualRetry(t *testing.T) {
 // Test that manual retry works on tasks that come from different expansions.
 //
 // This is similar to how the Go minor release workflow plans builders for
-// both releases. It previously failed due to expansions racing with with other,
+// both releases. It previously failed due to expansions racing with each other,
 // leading to "unknown task" errors when retrying. See go.dev/issue/70249.
 func TestManualRetryMultipleExpansions(t *testing.T) {
 	// Create two sub-workflows, each one with an expansion that adds one work task.

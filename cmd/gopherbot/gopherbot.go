@@ -1758,7 +1758,7 @@ func (b *gopherbot) openCherryPickIssues(ctx context.Context) error {
 		if err := gi.ForeachComment(func(c *maintner.GitHubComment) error {
 			if c.User.Login == "gopherbot" && strings.HasPrefix(c.Body, "Backport issue(s) opened") {
 				// Assume a strict ordering of request and response comments,
-				// such that if we already saw a backportComment, we assumne
+				// such that if we already saw a backportComment, we assume
 				// this comment is the one that fulfills that request. As such
 				// ignore the previous backportComment and look for a new one.
 				backportComment = nil

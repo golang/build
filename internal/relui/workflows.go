@@ -797,7 +797,7 @@ type sourceSpec struct {
 }
 
 // ArchiveURL returns a Gitiles URL that requires authentication
-// pointing to a .tar.gz archive of the the source spec.
+// pointing to a .tar.gz archive of the source spec.
 func (s *sourceSpec) ArchiveURL() string {
 	return fmt.Sprintf("%s/a/%s/+archive/%s.tar.gz", s.GitilesURL, s.Project, s.Revision)
 }

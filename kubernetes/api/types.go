@@ -2184,7 +2184,7 @@ const (
 	// match).
 	CauseTypeFieldValueInvalid CauseType = "FieldValueInvalid"
 	// CauseTypeFieldValueNotSupported is used to report valid (as per formatting rules)
-	// values that can not be handled (e.g. an enumerated string).
+	// values that cannot be handled (e.g. an enumerated string).
 	CauseTypeFieldValueNotSupported CauseType = "FieldValueNotSupported"
 )
 

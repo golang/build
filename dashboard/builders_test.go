@@ -878,7 +878,7 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 		t.Fatal("listPorts:", err)
 	}
 
-	// knownMissing tracks Go ports that that are known to be
+	// knownMissing tracks Go ports that are known to be
 	// completely missing TryBot (pre-submit) test coverage.
 	//
 	// All completed ports should have either a real TryBot or at least a misc-compile TryBot,
@@ -958,7 +958,7 @@ func TestTryBotsCompileAllPorts(t *testing.T) {
 	}
 }
 
-// The 'linux-arm-arm5' pseduo-port is supported by src/buildall.bash
+// The 'linux-arm-arm5' pseudo-port is supported by src/buildall.bash
 // and tests linux/arm with GOARM=5 set. Since it's not a normal port,
 // the TestTryBotsCompileAllPorts wouldn't report if the misc-compile
 // TryBot that covers is accidentally removed. Check it explicitly.

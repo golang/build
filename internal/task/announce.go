@@ -797,7 +797,7 @@ func renderMarkdown(r io.Reader) (html, text string, _ error) {
 // though there is very lightweight formatting applied (links are written as "text <URL>").
 //
 // We can in theory choose to delete this renderer at any time if its maintenance costs
-// start to outweight its benefits, since Markdown by definition is designed to be human
+// start to outweigh its benefits, since Markdown by definition is designed to be human
 // readable and can be used as plain text without any processing.
 type markdownToTextRenderer struct{}
 

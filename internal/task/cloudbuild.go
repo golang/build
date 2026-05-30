@@ -63,7 +63,7 @@ type CloudBuildClient interface {
 	ResultFS(ctx context.Context, build CloudBuild) (fs.FS, error)
 }
 
-// CloudBuildOptions allows to customize CloudBuild configurations.
+// CloudBuildOptions allows customizing CloudBuild configurations.
 type CloudBuildOptions struct {
 	AvailableSecrets *cloudbuildpb.Secrets
 }

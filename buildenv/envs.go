@@ -376,7 +376,7 @@ func CheckUserCredentials() {
 }
 
 // diagnoseFailureTokenSource is an oauth2.TokenSource wrapper that,
-// upon failure, diagnoses why the token acquistion might've failed.
+// upon failure, diagnoses why the token acquisition might've failed.
 type diagnoseFailureTokenSource struct {
 	ts oauth2.TokenSource
 }
