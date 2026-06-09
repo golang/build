@@ -245,6 +245,7 @@ func init() {
 	addPerson("Alex Kohler", "alexjohnkohler@gmail.com", "@alexkohler")
 	addPerson("Alex Myasoedov", "msoedov@gmail.com", "@msoedov")
 	addPerson("Alex Plugaru", "alex@plugaru.org", "@xarg")
+	addPerson("Alex Putman", "aputman@golang.org", "aputman@google.com", "@aputman")
 	addPerson("Alex Schroeder", "alex@gnu.org", "@kensanata")
 	addPerson("Alex Sergeyev", "abc@alexsergeyev.com", "@asergeyev")
 	addPerson("Alex Seubert", "alexseubert@gmail.com")
