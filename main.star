@@ -466,6 +466,7 @@ BUILDER_TYPES = [
     "linux-amd64-noopt",
     "linux-amd64-race",
     "linux-amd64-racecompile",
+    "linux-amd64-racegocommand",
     "linux-amd64-racegocommand-noopt",
     "linux-amd64-runtimefreegc",
     "linux-amd64-simd",
@@ -565,6 +566,7 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
 # An optional "@go_branch_short" suffix means to apply the known issue only for the named Go branch.
 # An optional " in repo" suffix means to apply the known issue only for the named Go repository.
 KNOWN_ISSUE_BUILDER_TYPES = {
+    "linux-amd64-racegocommand": known_issue(issue_number = 79779, hide_from_presubmit = False),
     "linux-amd64-racegocommand-noopt": known_issue(issue_number = 79779, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
