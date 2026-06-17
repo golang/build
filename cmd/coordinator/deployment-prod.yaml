@@ -15,9 +15,6 @@ spec:
     metadata:
       labels:
         app: coordinator
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/coordinator: docker/default
-        container.apparmor.security.beta.kubernetes.io/coordinator: runtime/default
     spec:
       serviceAccountName: coordinator
       containers:
@@ -25,11 +22,15 @@ spec:
         image: gcr.io/symbolic-datum-552/coordinator:latest
         imagePullPolicy: Always
         command: ["/coordinator", "-listen-http=:80", "-listen-https-autocert=:443", "-autocert-bucket=farmer-golang-org-autocert-cache", "-listen-https-selfsigned=:444"]
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          appArmorProfile:
+            type: RuntimeDefault
         ports:
         - containerPort: 80
         - containerPort: 443
         - containerPort: 444
-        - containerPort: 2222 # ssh proxy port
         - containerPort: 8123 # module proxy port (internal, not accessible directly from public)
         resources:
           requests:
@@ -52,9 +53,6 @@ spec:
     - port: 443
       targetPort: 443
       name: https
-    - port: 2222
-      targetPort: 2222
-      name: ssh
   selector:
     app: coordinator
   type: LoadBalancer
@@ -106,4 +104,4 @@ spec:
     enabled: true
     oauthclientCredentials:
       secretName: iap-oauth
-  timeoutSec: 86400  # For long-running gomote RPCs. See https://go.dev/issue/56423.
+  timeoutSec: 86400  # For long-running coordinator RPCs. See https://go.dev/issue/56423.

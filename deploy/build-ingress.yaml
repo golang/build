@@ -49,13 +49,6 @@ spec:
             port:
               number: 444
       - pathType: ImplementationSpecific
-        path: /protos.GomoteService/*
-        backend:
-          service:
-            name: coordinator-internal-iap
-            port:
-              number: 444
-      - pathType: ImplementationSpecific
         path: /protos.Coordinator/*
         backend:
           service:
