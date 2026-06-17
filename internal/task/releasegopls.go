@@ -375,12 +375,10 @@ func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, release 
 	if err != nil {
 		return "", err
 	}
-	// TODO(hxjiang): Remove -compat flag once gopls no longer supports building
-	// with older Go versions.
 	script := fmt.Sprintf(`cd gopls
 go mod edit -dropreplace=golang.org/x/tools
 go get golang.org/x/tools@%s
-go mod tidy -compat=1.19
+go mod tidy
 `, head)
 
 	changedFiles, err := executeAndMonitorChange(ctx, r.CloudBuild, "tools", branch, script, []string{"gopls/go.mod", "gopls/go.sum"})
@@ -863,12 +861,10 @@ func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewe
 		return openCL, nil
 	}
 
-	// TODO(hxjiang): Remove -compat flag once gopls no longer supports building
-	// with older Go versions.
 	const script = `cd gopls
 pwd
 go get -u all
-go mod tidy -compat=1.19
+go mod tidy
 go generate ./internal/licenses
 `
 	changed, err := executeAndMonitorChange(ctx, r.CloudBuild, "tools", "master", script, []string{"gopls/go.mod", "gopls/go.sum", "gopls/internal/licenses/licenses.go"})
