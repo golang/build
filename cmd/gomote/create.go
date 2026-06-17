@@ -6,15 +6,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,61 +19,6 @@ import (
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/sync/errgroup"
 )
-
-type builderType struct {
-	Name      string
-	IsReverse bool
-	ExpectNum int
-}
-
-func builders() (bt []builderType) {
-	type builderInfo struct {
-		HostType string
-	}
-	type hostInfo struct {
-		IsReverse      bool
-		ExpectNum      int
-		ContainerImage string
-		VMImage        string
-	}
-	// resj is the response JSON from the builders.
-	var resj struct {
-		Builders map[string]builderInfo
-		Hosts    map[string]hostInfo
-	}
-	res, err := http.Get("https://farmer.golang.org/builders?mode=json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		log.Fatalf("fetching builder types: %s", res.Status)
-	}
-	if err := json.NewDecoder(res.Body).Decode(&resj); err != nil {
-		log.Fatalf("decoding builder types: %v", err)
-	}
-	for b, bi := range resj.Builders {
-		if strings.HasPrefix(b, "misc-compile") {
-			continue
-		}
-		hi, ok := resj.Hosts[bi.HostType]
-		if !ok {
-			continue
-		}
-		if !hi.IsReverse && hi.ContainerImage == "" && hi.VMImage == "" {
-			continue
-		}
-		bt = append(bt, builderType{
-			Name:      b,
-			IsReverse: hi.IsReverse,
-			ExpectNum: hi.ExpectNum,
-		})
-	}
-	sort.Slice(bt, func(i, j int) bool {
-		return bt[i].Name < bt[j].Name
-	})
-	return
-}
 
 func swarmingBuilders() ([]string, error) {
 	ctx := context.Background()
@@ -127,20 +69,6 @@ func create(args []string) error {
 		log.Print()
 		log.Print("Flags:")
 		fs.PrintDefaults()
-		if luciDisabled() {
-			log.Print("\nValid types:")
-			for _, bt := range builders() {
-				var warn string
-				if bt.IsReverse {
-					if bt.ExpectNum > 0 {
-						warn = fmt.Sprintf("   [limited capacity: %d machines]", bt.ExpectNum)
-					} else {
-						warn = "   [limited capacity]"
-					}
-				}
-				log.Printf("  * %s%s\n", bt.Name, warn)
-			}
-		}
 		os.Exit(1)
 	}
 	var listBuilders bool
@@ -154,12 +82,6 @@ func create(args []string) error {
 
 	fs.Parse(args)
 	if listBuilders {
-		if luciDisabled() {
-			for _, bt := range builders() {
-				fmt.Fprintln(os.Stdout, bt.Name)
-			}
-			return nil
-		}
 		swarmingBuilders, err := swarmingBuilders()
 		if err != nil {
 			return err

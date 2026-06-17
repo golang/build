@@ -32,7 +32,6 @@ To list the subcommands, run "gomote" without arguments:
 	  ping       test whether a buildlet is alive and reachable
 	  push       sync your GOROOT directory to the buildlet
 	  put        put files on a buildlet
-	  put14      put Go 1.4 in place
 	  puttar     extract a tar.gz to a buildlet
 	  rm         delete files or directories
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
@@ -72,16 +71,6 @@ The "gomote run" command has many of its own flags:
 	        expands to the buildlet's temp workdir.
 	  -system
 	        run inside the system, and not inside the workdir; this is implicit if cmd starts with '/'
-
-# Debugging buildlets directly
-
-Using "gomote create" contacts the build coordinator
-(farmer.golang.org) and requests that it create the buildlet on your
-behalf. All subsequent commands (such as "gomote run" or "gomote ls")
-then proxy your request via the coordinator.  To access a buildlet
-directly (for example, when working on the buildlet code), you can
-skip the "gomote create" step and use the special builder name
-"<build-config-name>@ip[:port>", such as "windows-amd64-2008@10.1.5.3".
 
 # Groups
 
@@ -140,11 +129,6 @@ to reproduce a rare failure, like so:
 	$ export GOMOTE_GROUP=debug
 	$ GOROOT=/path/to/goroot gomote create -setup -count=10 linux-amd64
 	$ gomote run -until='unexpected return pc' -collect go/bin/go run -run="MyFlakyTest" -count=100 runtime
-
-# Legacy Infrastructure
-
-Setting the GOMOTEDISABLELUCI environmental variable equal to true will set the gomote client to communicate with
-the coordinator instead of the gomote server.
 */
 package main
 
@@ -157,8 +141,6 @@ import (
 	"sort"
 	"strconv"
 
-	"golang.org/x/build/buildenv"
-	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/iapclient"
 	"google.golang.org/grpc/codes"
@@ -166,7 +148,6 @@ import (
 )
 
 var (
-	buildEnv    *buildenv.Environment
 	activeGroup *groupData
 	usageLogger *log.Logger = log.New(os.Stderr, "", 0)
 )
@@ -223,7 +204,6 @@ func registerCommands() {
 	registerCommand("ping", "test whether a buildlet is alive and reachable ", ping)
 	registerCommand("push", "sync your GOROOT directory to the buildlet", push)
 	registerCommand("put", "put files on a buildlet", put)
-	registerCommand("putbootstrap", "put bootstrap toolchain in place", putBootstrap)
 	registerCommand("puttar", "extract a tar.gz to a buildlet", putTar)
 	registerCommand("repro", "reproduce a build environment in a new buildlet", repro)
 	registerCommand("rdp", "Unimplimented: RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
@@ -242,7 +222,6 @@ func main() {
 
 	// Set up and parse global flags.
 	groupName := flag.String("group", os.Getenv("GOMOTE_GROUP"), "name of the gomote group to apply commands to (default is $GOMOTE_GROUP)")
-	buildlet.RegisterFlags()
 	registerCommands()
 	flag.Usage = usage
 	flag.Parse()
@@ -250,11 +229,10 @@ func main() {
 	if len(args) == 0 {
 		usage()
 	}
-	if luciDisabled() {
-		*serverAddr = "build.golang.org:443"
+	if on, _ := strconv.ParseBool(os.Getenv("GOMOTEDISABLELUCI")); on {
+		log.Fatalln("GOMOTEDISABLELUCI is set. Access to the legacy coordinator gomotes has been deprecated.")
 	}
 	// Set up globals.
-	buildEnv = buildenv.FromFlags()
 	if *groupName != "" {
 		var err error
 		activeGroup, err = loadGroup(*groupName)
@@ -315,9 +293,4 @@ func instanceDoesNotExist(err error) bool {
 		err = errors.Unwrap(err)
 	}
 	return false
-}
-
-func luciDisabled() bool {
-	on, _ := strconv.ParseBool(os.Getenv("GOMOTEDISABLELUCI"))
-	return on
 }

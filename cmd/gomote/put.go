@@ -203,57 +203,6 @@ func doPutTar(ctx context.Context, name, dir string, tgz io.Reader) error {
 	return nil
 }
 
-// putBootstrap places the bootstrap version of go in the workdir
-func putBootstrap(args []string) error {
-	fs := flag.NewFlagSet("putbootstrap", flag.ContinueOnError)
-	fs.Usage = func() {
-		log.Print("putbootstrap usage: gomote putbootstrap [instance]")
-		fmt.Fprintln(os.Stderr)
-		log.Print("Instance name is optional if a group is specified.")
-		fs.PrintDefaults()
-		os.Exit(1)
-	}
-	fs.Parse(args)
-
-	var putSet []string
-	switch fs.NArg() {
-	case 0:
-		if activeGroup == nil {
-			log.Print("no active group found; need an active group with only 1 argument")
-			fs.Usage()
-		}
-		for _, inst := range activeGroup.Instances {
-			putSet = append(putSet, inst)
-		}
-	case 1:
-		putSet = []string{fs.Arg(0)}
-	default:
-		log.Print("error: too many arguments")
-		fs.Usage()
-	}
-
-	eg, ctx := errgroup.WithContext(context.Background())
-	for _, inst := range putSet {
-		eg.Go(func() error {
-			// TODO(66635) remove once gomotes can no longer be created via the coordinator.
-			if luciDisabled() {
-				client := gomoteServerClient(ctx)
-				resp, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
-					GomoteId: inst,
-				})
-				if err != nil {
-					return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
-				}
-				if resp.GetBootstrapGoUrl() == "" {
-					fmt.Printf("No GoBootstrapURL defined for %q; ignoring. (may be baked into image)\n", inst)
-				}
-			}
-			return nil
-		})
-	}
-	return eg.Wait()
-}
-
 // put single file
 func put(args []string) error {
 	fs := flag.NewFlagSet("put", flag.ContinueOnError)

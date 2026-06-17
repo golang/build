@@ -116,20 +116,6 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 			}
 		}
 	}
-	// TODO(66635) remove once gomotes can no longer be created via the coordinator.
-	if luciDisabled() {
-		logf("installing go-bootstrap version in the working directory")
-		if dryRun {
-			logf("(Dry-run) Would have pushed go-bootstrap")
-		} else {
-			_, err := client.AddBootstrap(ctx, &protos.AddBootstrapRequest{
-				GomoteId: name,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to add bootstrap version of Go to instance: %w", err)
-			}
-		}
-	}
 
 	type fileInfo struct {
 		fi   os.FileInfo

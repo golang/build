@@ -30,9 +30,6 @@ import (
 )
 
 func repro(args []string) error {
-	if luciDisabled() {
-		return fmt.Errorf("repro subcommand is only available for LUCI builds")
-	}
 	fs := flag.NewFlagSet("repro", flag.ContinueOnError)
 	fs.Usage = func() {
 		log := usageLogger

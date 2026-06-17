@@ -124,9 +124,6 @@ func sshConnect(name string, priKey, certPath string) error {
 		return fmt.Errorf("path to ssh not found: %w", err)
 	}
 	sshServer := "gomotessh.golang.org"
-	if luciDisabled() {
-		sshServer = "farmer.golang.org"
-	}
 	cli := []string{"-o", fmt.Sprintf("CertificateFile=%s", certPath), "-i", priKey, "-p", "2222", name + "@" + sshServer}
 	fmt.Printf("$ %s %s\n", ssh, strings.Join(cli, " "))
 	cmd := exec.Command(ssh, cli...)
