@@ -861,9 +861,12 @@ func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewe
 		return openCL, nil
 	}
 
+	// TODO(hxjiang): remove hardcoded fsnotify@v1.9.0 after fsnotify version is
+	// settled.
 	const script = `cd gopls
 pwd
 go get -u all
+go get github.com/fsnotify/fsnotify@v1.9.0
 go mod tidy
 go generate ./internal/licenses
 `
