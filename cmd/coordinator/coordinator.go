@@ -37,7 +37,6 @@ import (
 	"unicode"
 
 	"cloud.google.com/go/compute/metadata"
-	"cloud.google.com/go/storage"
 	"go.chromium.org/luci/auth"
 	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
 	"go.chromium.org/luci/grpc/prpc"
@@ -56,10 +55,7 @@ import (
 	"golang.org/x/build/internal/cloud"
 	"golang.org/x/build/internal/coordinator/pool"
 	"golang.org/x/build/internal/coordinator/pool/queue"
-	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
-	"golang.org/x/build/internal/gomote"
-	gomoteprotos "golang.org/x/build/internal/gomote/protos"
 	"golang.org/x/build/internal/https"
 	"golang.org/x/build/internal/metrics"
 	"golang.org/x/build/internal/migration"
@@ -70,7 +66,6 @@ import (
 	"golang.org/x/build/revdial/v2"
 	"golang.org/x/build/types"
 	"golang.org/x/time/rate"
-	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -116,7 +111,6 @@ var (
 	buildEnvName  = flag.String("env", "", "The build environment configuration to use. Not required if running in dev mode locally or prod mode on GCE.")
 	devEnableGCE  = flag.Bool("dev_gce", false, "Whether or not to enable the GCE pool when in dev mode. The pool is enabled by default in prod mode.")
 	devEnableEC2  = flag.Bool("dev_ec2", false, "Whether or not to enable the EC2 pool when in dev mode. The pool is enabled by default in prod mode.")
-	sshAddr       = flag.String("ssh_addr", ":2222", "Address the gomote SSH server should listen on")
 )
 
 // LOCK ORDER:
@@ -253,8 +247,7 @@ func main() {
 	// TODO(golang.org/issue/36841): remove after key functions are moved into
 	// a shared package.
 	pool.SetBuilderMasterKey(masterKey())
-	sp := remote.NewSessionPool(context.Background())
-	err := pool.InitGCE(sc, &basePinErr, sp.IsSession, *buildEnvName, *mode)
+	err := pool.InitGCE(sc, &basePinErr, func(string) bool { return false }, *buildEnvName, *mode)
 	if err != nil {
 		if *mode == "" {
 			*mode = "dev"
@@ -286,7 +279,7 @@ func main() {
 	if *mode == "prod" || (*mode == "dev" && *devEnableEC2) {
 		// TODO(golang.org/issues/38337) the coordinator will use a package scoped pool
 		// until the coordinator is refactored to not require them.
-		ec2PoolClose := mustCreateEC2BuildletPool(sc, sp.IsSession)
+		ec2PoolClose := mustCreateEC2BuildletPool(sc, func(string) bool { return false })
 		defer ec2PoolClose()
 	}
 
@@ -345,9 +338,6 @@ func main() {
 	}
 	maintnerClient = apipb.NewMaintnerServiceClient(cc)
 
-	sshCA := mustRetrieveSSHCertificateAuthority()
-
-	var gomoteBucket string
 	var opts []grpc.ServerOption
 	if *buildEnvName == "" && *mode != "dev" && metadata.OnGCE() {
 		projectID, err := metadata.ProjectID()
@@ -355,7 +345,6 @@ func main() {
 			log.Fatalf("metadata.ProjectID() = %v", err)
 		}
 		env := buildenv.ByProjectID(projectID)
-		gomoteBucket = env.GomoteTransferBucket
 		var coordinatorBackend, iapAudience = "coordinator-internal-iap", ""
 		if iapAudience = env.IAPServiceAudience(coordinatorBackend); iapAudience == "" {
 			log.Fatalf("unable to retrieve IAP audience for backend service=%q", coordinatorBackend)
@@ -393,10 +382,7 @@ func main() {
 	dashV1 := legacydash.Handler(gce.GoDSClient(), maintnerClient, luciPoll, string(masterKey()), grpcServer)
 	dashV2 := &builddash.Handler{Datastore: gce.GoDSClient(), Maintner: maintnerClient, LUCI: luciPoll}
 	gs := &gRPCServer{dashboardURL: "https://build.golang.org"}
-	setSessionPool(sp)
-	gomoteServer := gomote.New(sp, sched, sshCA, gomoteBucket, mustStorageClient())
 	protos.RegisterCoordinatorServer(grpcServer, gs)
-	gomoteprotos.RegisterGomoteServiceServer(grpcServer, gomoteServer)
 	mux.HandleFunc("/", grpcHandlerFunc(grpcServer, handleStatus)) // Serve a status page at farmer.golang.org.
 	mux.Handle("build.golang.org/", dashV1)                        // Serve a build dashboard at build.golang.org.
 	mux.Handle("build-staging.golang.org/", dashV1)
@@ -430,30 +416,6 @@ func main() {
 		// TODO(cmang): gccgo will need its own findWorkLoop
 	}
 
-	ctx := context.Background()
-	configureSSHServer := func() (*remote.SSHServer, error) {
-		privateKey, publicKey, err := retrieveSSHKeys(ctx, sc, *mode)
-		if err != nil {
-			return nil, fmt.Errorf("unable to retrieve keys for SSH Server: %v", err)
-		}
-		return remote.NewSSHServer(*sshAddr, privateKey, publicKey, sshCA, sp)
-	}
-	sshServ, err := configureSSHServer()
-	if err != nil {
-		log.Printf("unable to configure SSH server: %s", err)
-	} else {
-		go func() {
-			log.Printf("running SSH server on %s", *sshAddr)
-			err := sshServ.ListenAndServe()
-			log.Printf("SSH server ended with error: %v", err)
-		}()
-		defer func() {
-			err := sshServ.Close()
-			if err != nil {
-				log.Printf("unable to close SSH server: %s", err)
-			}
-		}()
-	}
 	if *mode == "dev" {
 		// Use hostPathHandler in local development mode (only) to improve
 		// convenience of testing multiple domains that coordinator serves.
@@ -2276,46 +2238,4 @@ func mustCreateEC2BuildletPool(sc *secret.Client, isRemoteBuildlet func(instName
 		log.Fatalf("unable to create EC2 buildlet pool: %s", err)
 	}
 	return ec2Pool.Close
-}
-
-func mustRetrieveSSHCertificateAuthority() (privateKey []byte) {
-	privateKey, _, err := remote.SSHKeyPair()
-	if err != nil {
-		log.Fatalf("unable to create SSH CA cert: %s", err)
-	}
-	return
-}
-
-func mustStorageClient() *storage.Client {
-	if metadata.OnGCE() {
-		return pool.NewGCEConfiguration().StorageClient()
-	}
-	storageClient, err := storage.NewClient(context.Background(), option.WithoutAuthentication())
-	if err != nil {
-		log.Fatalf("unable to create storage client: %s", err)
-	}
-	return storageClient
-}
-
-func fromSecret(ctx context.Context, sc *secret.Client, secretName string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return sc.Retrieve(ctx, secretName)
-}
-
-func retrieveSSHKeys(ctx context.Context, sc *secret.Client, m string) (publicKey, privateKey []byte, err error) {
-	if m == "dev" {
-		return remote.SSHKeyPair()
-	} else if metadata.OnGCE() {
-		privateKeyS, err := fromSecret(ctx, sc, secret.NameGomoteSSHPrivateKey)
-		if err != nil {
-			return nil, nil, err
-		}
-		publicKeyS, err := fromSecret(ctx, sc, secret.NameGomoteSSHPublicKey)
-		if err != nil {
-			return nil, nil, err
-		}
-		return []byte(privateKeyS), []byte(publicKeyS), nil
-	}
-	return nil, nil, fmt.Errorf("unable to retrieve ssh keys")
 }

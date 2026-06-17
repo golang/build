@@ -62,8 +62,6 @@
                   <td class="QueueStats-queueTableColumn">
                     {{if $build.IsRelease}}
                       Release
-                    {{else if $build.IsGomote}}
-                      Gomote
                     {{else if $build.IsTry}}
                       Trybot
                     {{else}}

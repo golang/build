@@ -27,9 +27,6 @@
     </li>
     {{end}}</ul>
 
-<h2 id=gomote>Gomote Remote buildlets <a href='#gomote'>¶</a></h2>
-{{.GomoteInstances}}
-
 <h2 id=trybots>Active Trybot Runs <a href='#trybots'>¶</a></h2>
 {{- if .TrybotsErr}}
   <b>trybots disabled:</b>: {{.TrybotsErr}}
@@ -41,9 +38,8 @@
 <ul>
     {{range .SchedState.HostTypes}}
       <li><b>{{.HostType}}</b>: {{.Total.Count}} waiting (oldest {{.Total.Oldest}}, newest {{.Total.Newest}}{{if .LastProgress}}, progress {{.LastProgress}}{{end}})
-          {{if or .Gomote.Count .Try.Count}}<ul>
-              {{if .Gomote.Count}}<li>gomote: {{.Gomote.Count}} (oldest {{.Gomote.Oldest}}, newest {{.Gomote.Newest}})</li>{{end}}
-              {{if .Try.Count}}<li>try: {{.Try.Count}} (oldest {{.Try.Oldest}}, newest {{.Try.Newest}})</li>{{end}}
+          {{if .Try.Count}}<ul>
+              <li>try: {{.Try.Count}} (oldest {{.Try.Oldest}}, newest {{.Try.Newest}})</li>
           </ul>{{end}}
       </li>
     {{end}}

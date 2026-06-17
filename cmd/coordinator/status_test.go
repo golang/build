@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/build/internal/coordinator/remote"
 	"golang.org/x/build/internal/coordinator/schedule"
 )
 
@@ -75,7 +74,6 @@ func TestHandleStatus_HealthFormatting(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)
-	setSessionPool(remote.NewSessionPool(ctx))
 	handleStatus(rec, req)
 	const pre = "<h2 id=health>Health"
 	const suf = "<h2 id=trybots>Active Trybot Runs"
@@ -125,7 +123,6 @@ func TestStatusSched(t *testing.T) {
 				{
 					HostType: "gomote-and-try",
 					Total:    schedule.SchedulerWaitingState{Count: 6, Newest: 3 * time.Second, Oldest: 4 * time.Minute},
-					Gomote:   schedule.SchedulerWaitingState{Count: 2, Newest: 3 * time.Second, Oldest: 4 * time.Minute},
 					Try:      schedule.SchedulerWaitingState{Count: 1},
 					Regular:  schedule.SchedulerWaitingState{Count: 3},
 				},
@@ -141,7 +138,6 @@ func TestStatusSched(t *testing.T) {
 		`(?s)<li><b>no-special</b>: 10 waiting \(oldest 1h1m0s, newest 5m0s, progress 5m0s\)\s+</li>`,
 		`<li>try: 1 \(oldest 5m0s, newest 2s\)</li>`,
 		`(?s)<li><b>gomote-and-try</b>: 6 waiting \(oldest 4m0s, newest 3s\)`, // checks for no ", progress"
-		`<li>gomote: 2 \(oldest 4m0s, newest 3s\)</li>`,
 	}
 	for _, rx := range wantMatch {
 		matched, err := regexp.Match(rx, buf.Bytes())
