@@ -441,6 +441,7 @@ BUILDER_TYPES = [
     "ios-amd64",
     "ios-arm64",
     "js-wasm",
+    "js-wasm-simd",
     "linux-386",
     "linux-386-clang15",
     "linux-386_debiansid",
@@ -501,6 +502,7 @@ BUILDER_TYPES = [
     "linux-arm64-longtest",
     "linux-arm64-msan-clang15",
     "linux-arm64-race",
+    "linux-arm64-simd",
     "linux-arm64-sizespecializedmalloc",
     "linux-arm64_c4as16-perf_vs_gopls_0_11",
     "linux-arm64_c4as16-perf_vs_parent",
@@ -987,6 +989,18 @@ def define_for_projects_except(projects):
 
     return f
 
+# define the builder for SIMD experiment, which starts at different versions for different ports.
+def define_for_simd():
+    def f(port, project, go_branch_short):
+        if port.endswith("-amd64"):
+            min_ver = "go1.26"
+        else:
+            min_ver = "go1.27"
+        run = project == "go" and (go_branch_short == "gotip" or go_branch_short >= min_ver)
+        return (run, False, run, [])
+
+    return f
+
 # RUN_MODS is a list of valid run-time modifications to the way we
 # build and test our various projects.
 RUN_MODS = {
@@ -1223,7 +1237,7 @@ RUN_MODS = {
     # default across the board.
     "simd": make_run_mod(
         add_env = {"GOEXPERIMENT": "simd"},
-        enabled = define_for_go_starting_at("go1.26", presubmit = False),
+        enabled = define_for_simd(),
     ),
 
     # Build and test with GOEXPERIMENT=sizespecializedmalloc.
