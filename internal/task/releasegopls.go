@@ -254,25 +254,6 @@ func (r *ReleaseGoplsTasks) createBranchIfMinor(ctx *wf.TaskContext, release rel
 	return err
 }
 
-// openCL checks if an open CL with the given title exists in the specified
-// branch.
-//
-// It returns an empty string if no such CL is found, otherwise it returns the
-// CL's change ID.
-func openCL(ctx *wf.TaskContext, gerrit GerritClient, repo, branch, title string) (string, error) {
-	// Query for an existing pending config CL, to avoid duplication.
-	query := fmt.Sprintf(`message:%q status:open owner:gobot@golang.org repo:%s branch:%q -age:7d`, title, repo, branch)
-	changes, err := gerrit.QueryChanges(ctx, query)
-	if err != nil {
-		return "", err
-	}
-	if len(changes) == 0 {
-		return "", nil
-	}
-
-	return changes[0].ChangeID, nil
-}
-
 // updateCodeReviewConfig checks if codereview.cfg has the desired configuration.
 //
 // It returns the change ID required to update the config if changes are needed,
@@ -281,16 +262,6 @@ func (r *ReleaseGoplsTasks) updateCodeReviewConfig(ctx *wf.TaskContext, release 
 	const configFile = "codereview.cfg"
 
 	branch := goplsReleaseBranchName(release)
-	clTitle := fmt.Sprintf("all: update %s for %s", configFile, branch)
-
-	openCL, err := openCL(ctx, r.Gerrit, "tools", branch, clTitle)
-	if err != nil {
-		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
-	}
-	if openCL != "" {
-		ctx.Printf("not creating CL: found existing CL %s", openCL)
-		return openCL, nil
-	}
 
 	head, err := r.Gerrit.ReadBranchHead(ctx, "tools", branch)
 	if err != nil {
@@ -311,6 +282,7 @@ parent-branch: master
 		return "", nil
 	}
 
+	clTitle := fmt.Sprintf("all: update %s for %s", configFile, branch)
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",
 		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the %s.\n\nFor golang/go#%v", clTitle, configFile, issue),
@@ -361,15 +333,6 @@ func (r *ReleaseGoplsTasks) updateXToolsDependency(ctx *wf.TaskContext, release 
 	}
 
 	branch := goplsReleaseBranchName(release)
-	clTitle := fmt.Sprintf("gopls: update go.mod for %s-%s", release, pre)
-	openCL, err := openCL(ctx, r.Gerrit, "tools", branch, clTitle)
-	if err != nil {
-		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
-	}
-	if openCL != "" {
-		ctx.Printf("not creating CL: found existing CL %s", openCL)
-		return openCL, nil
-	}
 
 	head, err := r.Gerrit.ReadBranchHead(ctx, "tools", branch)
 	if err != nil {
@@ -391,6 +354,7 @@ go mod tidy
 		return "", nil
 	}
 
+	clTitle := fmt.Sprintf("gopls: update go.mod for %s-%s", release, pre)
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",
 		Branch:  branch,
@@ -714,18 +678,6 @@ func (r *ReleaseGoplsTasks) updateVSCodeGoGoplsSetting(ctx *wf.TaskContext, revi
 		return "", nil
 	}
 
-	// TODO(hxjiang): also update the change log if not already.
-	// Example: https://go-review.git.corp.google.com/c/vscode-go/+/627276
-	clTitle := fmt.Sprintf(`extension: update gopls %s settings`, version)
-	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", "master", clTitle)
-	if err != nil {
-		return "", fmt.Errorf("failed to find the open CL of title %q in master branch: %w", clTitle, err)
-	}
-	if openCL != "" {
-		ctx.Printf("not creating CL: found existing CL %s", openCL)
-		return openCL, nil
-	}
-
 	files := []string{
 		"extension/src/goToolsInformation.ts", // gopls version info
 		"extension/package.json",              // gopls setting info
@@ -808,6 +760,9 @@ mv jq /workspace/tools`,
 		return "", nil
 	}
 
+	// TODO(hxjiang): also update the change log if not already.
+	// Example: https://go-review.git.corp.google.com/c/vscode-go/+/627276
+	clTitle := fmt.Sprintf(`extension: update gopls %s settings`, version)
 	changeInput := gerrit.ChangeInput{
 		Project: "vscode-go",
 		Branch:  "master",
@@ -851,16 +806,6 @@ func (r *ReleaseGoplsTasks) updateDependencyIfMinor(ctx *wf.TaskContext, reviewe
 		return "", nil
 	}
 
-	clTitle := fmt.Sprintf("gopls/go.mod: update dependencies following the %s release", release)
-	openCL, err := openCL(ctx, r.Gerrit, "tools", "master", clTitle)
-	if err != nil {
-		return "", fmt.Errorf("failed to find the open CL of title %q in master branch: %w", clTitle, err)
-	}
-	if openCL != "" {
-		ctx.Printf("not creating CL: found existing CL %s", openCL)
-		return openCL, nil
-	}
-
 	// TODO(hxjiang): remove hardcoded fsnotify@v1.9.0 after fsnotify version is
 	// settled.
 	const script = `cd gopls
@@ -880,6 +825,7 @@ go generate ./internal/licenses
 		return "", nil
 	}
 
+	clTitle := fmt.Sprintf("gopls/go.mod: update dependencies following the %s release", release)
 	changeInput := gerrit.ChangeInput{
 		Project: "tools",
 		Branch:  "master",

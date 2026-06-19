@@ -847,19 +847,6 @@ func (r *ReleaseVSCodeGoTasks) updatePackageJSONVersionInMasterBranch(ctx *wf.Ta
 // updatePackageJSONVersion updates the "package.json" and "package-lock.json"
 // files in the given branch of the vscode-go repository with the desired version.
 func (r *ReleaseVSCodeGoTasks) updatePackageJSONVersion(ctx *wf.TaskContext, branch string, version string, reviewers []string) (string, error) {
-	clTitle := "extension/package.json: update version to " + version
-	if branch != "master" {
-		clTitle = "[" + branch + "]" + clTitle
-	}
-	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", branch, clTitle)
-	if err != nil {
-		return "", fmt.Errorf("failed to find the open CL of title %q in branch %q: %w", clTitle, branch, err)
-	}
-	if openCL != "" {
-		ctx.Printf("not creating CL: found existing CL %s", openCL)
-		return openCL, nil
-	}
-
 	steps := func(resultURL string) []*cloudbuildpb.BuildStep {
 		script := fmt.Sprintf(cloudBuildClientScriptPrefix+`
 # Make a copy of interested files.
@@ -937,6 +924,10 @@ cat npx-output.log
 		return "", nil
 	}
 
+	clTitle := "extension/package.json: update version to " + version
+	if branch != "master" {
+		clTitle = "[" + branch + "] " + clTitle
+	}
 	changeID, err := r.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: "vscode-go",
 		Branch:  branch,
@@ -1157,17 +1148,6 @@ func vscodeGoMilestone(release releaseVersion) string {
 // pre-defined content.
 // For more details on changelog format, see: https://keepachangelog.com/en/1.1.0/
 func (r *ReleaseVSCodeGoTasks) addChangeLog(ctx *wf.TaskContext, release releaseVersion, reviewers []string) (string, error) {
-	clTitle := "CHANGELOG.md: add release heading for " + release.String()
-
-	openCL, err := openCL(ctx, r.Gerrit, "vscode-go", "master", clTitle)
-	if err != nil {
-		return "", err
-	}
-	if openCL != "" {
-		ctx.Printf("not creating CL: found existing CL %s", openCL)
-		return openCL, nil
-	}
-
 	head, err := r.Gerrit.ReadBranchHead(ctx, "vscode-go", "master")
 	if err != nil {
 		return "", err
@@ -1234,6 +1214,7 @@ func (r *ReleaseVSCodeGoTasks) addChangeLog(ctx *wf.TaskContext, release release
 		}
 	}
 
+	clTitle := "CHANGELOG.md: add release heading for " + release.String()
 	cl, err := r.Gerrit.CreateAutoSubmitChange(ctx, gerrit.ChangeInput{
 		Project: "vscode-go",
 		Branch:  "master",
