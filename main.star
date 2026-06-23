@@ -358,7 +358,7 @@ SLOW_HOSTS = {
     "linux-riscv64": struct(scale = 2),
     "linux-s390x": struct(scale = 2),  # see go.dev/issue/60413
     "netbsd-arm": struct(
-        scale = 5,
+        scale = 10,
         scope = ["go", "net", "sys"],  # not tools; see go.dev/issue/72061#issuecomment-2695226251
     ),
     "netbsd-arm64": struct(scale = 2),
@@ -1718,6 +1718,11 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     # TODO(go.dev/issue/70213): Throttle back the load average.
     if builder_type == "openbsd-ppc64":
         base_props["env"]["GOMAXPROCS"] = "8"
+
+    # Reduce stress on this underpowered hardware.
+    # See go.dev/issue/73820 and go.dev/issue/72061#issuecomment-2695226251.
+    if builder_type == "netbsd-arm":
+        base_props["env"]["GOMAXPROCS"] = "2"
 
     # Construct the basic dimensions for the build/test running part of the build.
     #
