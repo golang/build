@@ -185,9 +185,6 @@ var entries = map[string]*Entry{
 		Primary:   []Owner{thanm},
 		Secondary: []Owner{compilerTeam},
 	},
-	"go/src/cmd/doc": {
-		Primary: []Owner{r},
-	},
 	"go/src/cmd/go": {
 		Primary: []Owner{commandlineTeam},
 	},
@@ -361,7 +358,6 @@ var entries = map[string]*Entry{
 		Primary: []Owner{r},
 	},
 	"go/src/fmt": {
-		// Same as internal/fmtsort.
 		Primary:   []Owner{r},
 		Secondary: []Owner{martisch},
 	},
@@ -421,8 +417,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{securityTeam},
 	},
 	"go/src/image": {
-		Primary:   []Owner{nigeltao},
-		Secondary: []Owner{r},
+		Primary: []Owner{nigeltao},
 	},
 	"go/src/index/suffixarray": {
 		Primary: []Owner{gri},
@@ -488,8 +483,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{neild},
 	},
 	"go/src/internal/fmtsort": {
-		// Same as fmt.
-		Primary:   []Owner{r},
+		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{martisch},
 	},
 	"go/src/internal/fuzz": {
@@ -691,7 +685,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{iant, bradfitz},
 	},
 	"go/src/log": {
-		Primary: []Owner{r},
+		Primary: []Owner{jba},
 	},
 	"go/src/log/slog": {
 		Primary: []Owner{jba},
@@ -744,10 +738,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{bradfitz},
 	},
 	"go/src/net/rpc": {
-		Primary: []Owner{r},
+		Primary: []Owner{rsc},
 	},
 	"go/src/net/rpc/jsonrpc": {
-		Primary: []Owner{r},
+		Primary: []Owner{rsc},
 	},
 	"go/src/net/smtp": {
 		Primary:   []Owner{},
@@ -776,10 +770,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{kevinburke},
 	},
 	"go/src/path": {
-		Primary: []Owner{r, rsc},
+		Primary: []Owner{rsc},
 	},
 	"go/src/path/filepath": {
-		Primary: []Owner{r, rsc},
+		Primary: []Owner{rsc},
 	},
 	"go/src/plugin": {
 		Primary:   []Owner{runtimeTeam},
@@ -874,7 +868,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{rsc},
 	},
 	"go/src/unicode": {
-		Primary:   []Owner{securityTeam, r},
+		Primary:   []Owner{securityTeam},
 		Secondary: []Owner{mpvl},
 	},
 	"go/src/unicode/utf16": {
