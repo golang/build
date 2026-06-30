@@ -406,19 +406,21 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		return err
 	}
 	type release struct {
-		major  int
-		kind   task.ReleaseKind
-		suffix string
+		major       int
+		kind        task.ReleaseKind
+		suffix      string
+		useMetadata bool
 	}
 	releases := []release{
-		{currentMajor + 1, task.KindMajor, "final"},
-		{currentMajor + 1, task.KindRC, "next RC"},
-		{currentMajor + 1, task.KindBeta, "next beta"},
-		{currentMajor, task.KindMinor, "next minor"},     // Current minor only.
-		{currentMajor - 1, task.KindMinor, "next minor"}, // Previous minor only.
+		{currentMajor + 1, task.KindMajor, "final", false},
+		{currentMajor + 1, task.KindRC, "next RC (manually input security comms)", false},
+		{currentMajor + 1, task.KindRC, "next RC (metadata-based security comms)", true},
+		{currentMajor + 1, task.KindBeta, "next beta", false},
+		{currentMajor, task.KindMinor, "next minor", false},     // Current minor only.
+		{currentMajor - 1, task.KindMinor, "next minor", false}, // Previous minor only.
 	}
 	if time.Since(majorReleaseTime) < 7*24*time.Hour {
-		releases = append(releases, release{currentMajor, task.KindMajor, "final"})
+		releases = append(releases, release{currentMajor, task.KindMajor, "final", false})
 	}
 	for _, r := range releases {
 		wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
@@ -430,8 +432,14 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		securitySummary := wf.Const("")
 		securityFixes := wf.Slice[string]()
 		if r.kind == task.KindMinor || r.kind == task.KindRC {
-			securitySummary = wf.Param(wd, securitySummaryParameter)
-			securityFixes = wf.Param(wd, securityFixesParameter)
+			if r.useMetadata {
+				milestoneNum := wf.Param(wd, task.SecurityMilestoneParameter)
+				securitySummary = wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum)
+				securityFixes = wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
+			} else {
+				securitySummary = wf.Param(wd, securitySummaryParameter)
+				securityFixes = wf.Param(wd, securityFixesParameter)
+			}
 		}
 		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators)
 		if r.major >= currentMajor {
