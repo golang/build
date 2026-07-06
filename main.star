@@ -491,6 +491,11 @@ BUILDER_TYPES = [
     "linux-amd64_c3h88-perf_vs_release",
     "linux-amd64_c3h88-perf_vs_tip",
     "linux-amd64_c3h88-perf_vs_oldest_stable",
+    "linux-amd64_c4dh96-perf_pgo_vs_oldest_stable",
+    "linux-amd64_c4dh96-perf_vs_parent",
+    "linux-amd64_c4dh96-perf_vs_release",
+    "linux-amd64_c4dh96-perf_vs_tip",
+    "linux-amd64_c4dh96-perf_vs_oldest_stable",
     "linux-amd64_debiansid",
     "linux-amd64_docker",
     "linux-arm",
@@ -1426,7 +1431,7 @@ def dimensions_of(host_type):
             # linux-amd64_debian11  -> Debian-11
             # linux-amd64_debiansid -> Debian-13
             os = suffix.replace("debian", "Debian-").replace("sid", "13")
-        elif goos == "linux" and suffix in ["avx512", "c2s16", "c3h88", "c4as16", "c4ah72"]:
+        elif goos == "linux" and suffix in ["avx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"]:
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
@@ -1459,6 +1464,8 @@ def dimensions_of(host_type):
                 machine_type = "c2-standard-16"
             elif suffix == "c3h88":
                 machine_type = "c3-highcpu-88"
+            elif suffix == "c4dh96":
+                machine_type = "c4d-highcpu-96"
             elif suffix == "avx512":
                 machine_type = "c3-standard-8"
             else:
