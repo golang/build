@@ -63,6 +63,18 @@ func TestCheckBlockers(t *testing.T) {
 			version: "go1.20rc2", kind: KindRC,
 			want: errManualApproval,
 		},
+		{
+			name:    "RC 2 with one hard blocker",
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			version: "go1.27rc2", kind: KindRC,
+			want: errManualApproval,
+		},
+		{
+			name:    "RC 2 with one blocker marked okay-after-rc2",
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: github.String("release-blocker")}, {Name: github.String("okay-after-rc2")}}, Milestone: &github.Milestone{ID: github.Int64(1)}}},
+			version: "go1.27rc2", kind: KindRC,
+			want: nil, // Want no error.
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tasks := &MilestoneTasks{

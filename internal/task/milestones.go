@@ -121,7 +121,8 @@ func (m *MilestoneTasks) CheckBlockers(ctx *wf.TaskContext, milestones ReleaseMi
 		releaseBlocker := labels["release-blocker"]
 		switch {
 		case kind == KindBeta && strings.HasSuffix(version, "beta1") && labels["okay-after-beta1"],
-			kind == KindRC && strings.HasSuffix(version, "rc1") && labels["okay-after-rc1"]:
+			kind == KindRC && strings.HasSuffix(version, "rc1") && labels["okay-after-rc1"],
+			kind == KindRC && strings.HasSuffix(version, "rc2") && labels["okay-after-rc2"]:
 			releaseBlocker = false
 		}
 		if releaseBlocker {
@@ -216,6 +217,8 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 			removeLabel("okay-after-beta1")
 		} else if kind == KindRC && strings.HasSuffix(version, "rc1") {
 			removeLabel("okay-after-rc1")
+		} else if kind == KindRC && strings.HasSuffix(version, "rc2") {
+			removeLabel("okay-after-rc2")
 		} else if kind == KindMajor || kind == KindMinor {
 			newMilestone = &milestones.Next
 			actions = append(actions, fmt.Sprintf("pushed to milestone %d", milestones.Next))
