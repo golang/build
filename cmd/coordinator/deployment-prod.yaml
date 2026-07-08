@@ -34,11 +34,11 @@ spec:
         - containerPort: 8123 # module proxy port (internal, not accessible directly from public)
         resources:
           requests:
-            cpu: "4"
-            memory: "32Gi"
+            cpu: "2"
+            memory: "2Gi"
           limits:
-            cpu: "6"
-            memory: "36Gi"
+            cpu: "4"
+            memory: "4Gi"
 ---
 apiVersion: v1
 kind: Service
@@ -104,4 +104,3 @@ spec:
     enabled: true
     oauthclientCredentials:
       secretName: iap-oauth
-  timeoutSec: 86400  # For long-running coordinator RPCs. See https://go.dev/issue/56423.
