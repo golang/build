@@ -622,6 +622,7 @@ var defaultBenchmarks = map[string][]BenchmarkKey{
 		{"geomean/go/vs_release/c4as16", "go"},
 		{"geomean/go/vs_release/c3h88", "go"},
 		{"geomean/go/vs_release/c4ah72", "go"},
+		{"geomean/go/vs_release/c4dh96", "go"},
 	},
 	"tools": []BenchmarkKey{
 		{"geomean/x_tools/vs_gopls_0_11/c2s16", "tools"},
