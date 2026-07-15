@@ -638,7 +638,7 @@ SECOND_GO = "go1.25"
 # GO_BRANCHES lists the branches of the "go" project to build and test against.
 # Keys in this map are shortened aliases while values are the git branch name.
 GO_BRANCHES = {
-    "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.24.6"),
+    "gotip": struct(branch = MAIN_BRANCH_NAME, bootstrap = "1.26.0"),
     NEXTUP_GO: struct(branch = "release-branch." + NEXTUP_GO, bootstrap = "1.24.6"),
     LATEST_GO: struct(branch = "release-branch." + LATEST_GO, bootstrap = "1.24.6"),
     SECOND_GO: struct(branch = "release-branch." + SECOND_GO, bootstrap = "1.22.6"),
