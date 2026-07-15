@@ -127,7 +127,7 @@ func (c *Client) do(ctx context.Context, dst any, method, path string, opts ...d
 	var arg url.Values
 	var requestBody io.Reader
 	var contentType string
-	var wantStatus = http.StatusOK
+	wantStatus := http.StatusOK
 	var responseBody *io.ReadCloser
 	for _, opt := range opts {
 		switch opt := opt.(type) {
@@ -437,10 +437,7 @@ type GitPersonInfo struct {
 
 func (gpi *GitPersonInfo) Equal(v *GitPersonInfo) bool {
 	if gpi == nil {
-		if gpi != v {
-			return false
-		}
-		return true
+		return gpi == v
 	}
 	return gpi.Name == v.Name && gpi.Email == v.Email && gpi.Date.Equal(v.Date) &&
 		gpi.TZOffset == v.TZOffset
@@ -895,6 +892,13 @@ func (c *Client) CreateBranch(ctx context.Context, project, branch string, input
 	var res BranchInfo
 	err := c.do(ctx, &res, "PUT", fmt.Sprintf("/projects/%s/branches/%s", url.PathEscape(project), url.PathEscape(branch)), reqBodyJSON{&input}, wantResStatus(http.StatusCreated))
 	return res, err
+}
+
+// DeleteBranch deletes a branch in the project.
+//
+// See https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#delete-branch.
+func (c *Client) DeleteBranch(ctx context.Context, project, branch string) error {
+	return c.do(ctx, nil, http.MethodDelete, fmt.Sprintf("/projects/%s/branches/%s", url.PathEscape(project), url.PathEscape(branch)), wantResStatus(http.StatusNoContent))
 }
 
 // GetFileContent gets a file's contents at a particular commit.

@@ -5,8 +5,10 @@
 package task
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/mail"
 	"path"
 	"path/filepath"
@@ -14,14 +16,36 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/relmeta"
+	"golang.org/x/vulndb/report"
+	yaml "gopkg.in/yaml.v3"
 )
 
 type fakePrivXGerrit struct {
 	*FakeGerrit
 
 	changes map[string]*gerrit.ChangeInfo
+}
+
+type fakePrivXGitHub struct {
+	*FakeGitHub
+
+	t          *testing.T
+	gerrit     *FakeGerrit
+	vulndbBase string
+}
+
+func (g *fakePrivXGitHub) EditIssue(ctx context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	head, err := g.gerrit.ReadBranchHead(ctx, "vulndb", "master")
+	if err != nil {
+		g.t.Errorf("EditIssue(%d): reading vulndb head: %v", number, err)
+	} else if head == g.vulndbBase {
+		g.t.Errorf("EditIssue(%d) called before vuln reports were submitted", number)
+	}
+	return g.FakeGitHub.EditIssue(ctx, owner, repo, number, issue)
 }
 
 func (g *fakePrivXGerrit) GetChange(_ context.Context, changeID string, _ ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error) {
@@ -85,8 +109,11 @@ security_patches:
         Thanks to a very levitated gopher for reporting this issue.
 
         This is CVE-1970-0001 and Go issue https://go.dev/issue/4294967296.
+      target_releases:
+        - 1.1.0
       cve: CVE-1970-0001
       github_issue_id: 4294967296
+      vuln_report_id: GO-1970-0001
       credits:
         - a very levitated gopher
     - id: 10002
@@ -104,10 +131,36 @@ security_patches:
         Thanks to a confused poet for reporting this issue.
 
         This is CVE-1970-0002 and Go issue https://go.dev/issue/4294967297.
+      target_releases:
+        - 1.1.0
       cve: CVE-1970-0002
       github_issue_id: 4294967297
+      vuln_report_id: GO-1970-0002
       credits:
-        - a confused poet`
+        - a confused poet
+    - id: 10003
+      package: golang.org/x/net/http2
+      track: PRIVATE
+      changelists:
+        - https://go-internal-review.git.corp.google.com/c/net/+/4444
+        - https://go-internal-review.git.corp.google.com/c/net/+/5555
+      release_note: |
+        net/http2: turbulence in the frame buffers causes gophers to levitate.
+
+        Sending a specially crafted SETTINGS frame with the
+        ENABLE_LEVITATION=1 causes all subsequent gophers to
+        float indefinitely.
+
+        Thanks to a very levitated gopher for reporting this issue.
+
+        This is CVE-1970-0003 and Go issue https://go.dev/issue/4294967298.
+      target_releases:
+        - 1.1.0
+      cve: CVE-1970-0003
+      github_issue_id: 4294967298
+      vuln_report_id: GO-1970-0003
+      credits:
+        - a very levitated gopher`
 
 func TestPrivXPatch(t *testing.T) {
 	netRepo := NewFakeRepo(t, "net")
@@ -126,8 +179,12 @@ func TestPrivXPatch(t *testing.T) {
 	netRepo.runGit("update-ref", "refs/changes/1111/1", privCommit)
 	privCommit2 := netRepo.CommitOnBranch("master", map[string]string{"fix2.go": "package fix"})
 	netRepo.runGit("update-ref", "refs/changes/2222/1", privCommit2)
-	privCommit3 := netRepo.CommitOnBranch("master", map[string]string{"fix3.go": "package fix"})
-	netRepo.runGit("update-ref", "refs/changes/3333/1", privCommit3)
+	// privCommit3 := netRepo.CommitOnBranch("master", map[string]string{"fix3.go": "package fix"})
+	// netRepo.runGit("update-ref", "refs/changes/3333/1", privCommit3)
+	privCommit4 := netRepo.CommitOnBranch("master", map[string]string{"fix4.go": "package fix"})
+	netRepo.runGit("update-ref", "refs/changes/4444/1", privCommit4)
+	privCommit5 := netRepo.CommitOnBranch("master", map[string]string{"fix5.go": "package fix"})
+	netRepo.runGit("update-ref", "refs/changes/5555/1", privCommit5)
 
 	privGerrit := &fakePrivXGerrit{
 		FakeGerrit: NewFakeGerrit(t, netRepo, smRepo),
@@ -172,21 +229,41 @@ func TestPrivXPatch(t *testing.T) {
 					},
 				},
 			},
-			"3333": {
-				ID:              "3333",
-				ChangeID:        "3333",
-				ChangeNumber:    3333,
+			"4444": {
+				ID:              "4444",
+				ChangeID:        "4444",
+				ChangeNumber:    4444,
 				Project:         "net",
 				Branch:          "public",
 				Submittable:     true,
-				CurrentRevision: "rev3333",
+				CurrentRevision: "rev4444",
 				Status:          gerrit.ChangeStatusMerged,
 				Revisions: map[string]gerrit.RevisionInfo{
-					"rev3333": {
+					"rev4444": {
 						Fetch: map[string]*gerrit.FetchInfo{
 							"http": {
 								URL: netRepo.dir.dir,
-								Ref: "refs/changes/3333/1",
+								Ref: "refs/changes/4444/1",
+							},
+						},
+					},
+				},
+			},
+			"5555": {
+				ID:              "5555",
+				ChangeID:        "5555",
+				ChangeNumber:    5555,
+				Project:         "net",
+				Branch:          "public",
+				Submittable:     true,
+				CurrentRevision: "rev5555",
+				Status:          gerrit.ChangeStatusMerged,
+				Revisions: map[string]gerrit.RevisionInfo{
+					"rev5555": {
+						Fetch: map[string]*gerrit.FetchInfo{
+							"http": {
+								URL: netRepo.dir.dir,
+								Ref: "refs/changes/5555/1",
 							},
 						},
 					},
@@ -210,9 +287,24 @@ echo
 echo "  https://go-review.googlesource.com/c/net/+/558675 some change [NEW]"
 echo`)
 
+	vulndbRepo := NewFakeRepo(t, "vulndb")
+	vulndbBase := vulndbRepo.CommitOnBranch("master", map[string]string{"README": "vulndb"})
+
 	pubBase, _ := strings.CutSuffix(pubRepo.dir.dir, filepath.Base(pubRepo.dir.dir))
-	pubGerrit := NewFakeGerrit(t, pubRepo)
+	pubGerrit := NewFakeGerrit(t, pubRepo, vulndbRepo)
 	pubGerrit.ConsiderChangeSubmitted(pubRepo, "558675")
+
+	fakeGH := &FakeGitHub{Issues: map[int]*github.Issue{
+		4294967296: {Number: github.Ptr(4294967296)},
+		4294967297: {Number: github.Ptr(4294967297)},
+		4294967298: {Number: github.Ptr(4294967298)},
+	}}
+	orderedGH := &fakePrivXGitHub{
+		FakeGitHub: fakeGH,
+		t:          t,
+		gerrit:     pubGerrit,
+		vulndbBase: vulndbBase,
+	}
 
 	var announcementHeader MailHeader
 	var announcementMessage MailContent
@@ -223,6 +315,7 @@ echo`)
 		PublicRepoURL: func(repo string) string {
 			return pubBase + "/" + repo
 		},
+		GitHub:        orderedGH,
 		ApproveAction: func(*wf.TaskContext) error { return nil },
 		SendMail: func(_ *wf.TaskContext, mh MailHeader, mc MailContent) error {
 			announcementHeader, announcementMessage = mh, mc
@@ -231,6 +324,9 @@ echo`)
 		AnnounceMailHeader: MailHeader{
 			From: mail.Address{Address: "security@golang.org"},
 			To:   mail.Address{Address: "golang-announce@googlegroups.com"},
+		},
+		AwaitAnnounceMail: func(_ *wf.TaskContext, m SentMail) (string, error) {
+			return "https://groups.google.com/g/golang-announce/c/test", nil
 		},
 	}
 
@@ -285,6 +381,16 @@ Thanks to a confused poet for reporting this issue.
 
 This is CVE-1970-0002 and Go issue https://go.dev/issue/4294967297.
 
+net/http2: turbulence in the frame buffers causes gophers to levitate.
+
+Sending a specially crafted SETTINGS frame with the
+ENABLE_LEVITATION=1 causes all subsequent gophers to
+float indefinitely.
+
+Thanks to a very levitated gopher for reporting this issue.
+
+This is CVE-1970-0003 and Go issue https://go.dev/issue/4294967298.
+
 Cheers,
 Go Security team
 `
@@ -306,11 +412,219 @@ tokenizer replaces all div elements with haikus about the<br>
 Go garbage collector.</p>
 <p>Thanks to a confused poet for reporting this issue.</p>
 <p>This is CVE-1970-0002 and Go issue <a href="https://go.dev/issue/4294967297">https://go.dev/issue/4294967297</a>.</p>
+<p>net/http2: turbulence in the frame buffers causes gophers to levitate.</p>
+<p>Sending a specially crafted SETTINGS frame with the<br>
+ENABLE_LEVITATION=1 causes all subsequent gophers to<br>
+float indefinitely.</p>
+<p>Thanks to a very levitated gopher for reporting this issue.</p>
+<p>This is CVE-1970-0003 and Go issue <a href="https://go.dev/issue/4294967298">https://go.dev/issue/4294967298</a>.</p>
 <p>Cheers,<br>
 Go Security team</p>
 `
 	if announcementMessage.BodyHTML != wantHTML {
 		t.Errorf("announcement HTML:\ngot:\n%s\nwant:\n%s", announcementMessage.BodyHTML, wantHTML)
+	}
+
+	// Verify that vuln reports were submitted to vulndb.
+	vulndbHead, err := pubGerrit.ReadBranchHead(ctx, "vulndb", "master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rm relmeta.ReleaseMilestone
+	if err := yaml.Unmarshal([]byte(privXMilestoneYAML), &rm); err != nil {
+		t.Fatal(err)
+	}
+
+	const announceURL = "https://groups.google.com/g/golang-announce/c/test"
+	for _, p := range rm.Patches {
+		reportPath := path.Join("data", "reports", p.VulnReportID+".yaml")
+		b, err := pubGerrit.ReadFile(ctx, "vulndb", vulndbHead, reportPath)
+		if err != nil {
+			t.Fatalf("patch %d: reading %s: %v", p.ID, reportPath, err)
+		}
+		if !bytes.Contains(b, []byte(announceURL)) {
+			t.Errorf("patch %d: report %s does not contain %s", p.ID, reportPath, announceURL)
+		}
+		var vr report.Report
+		if err := yaml.Unmarshal(b, &vr); err != nil {
+			t.Fatalf("patch %d: unmarshal %s: %v", p.ID, reportPath, err)
+		}
+
+		if vr.ID != p.VulnReportID {
+			t.Errorf("patch %d: ID = %q, want %q", p.ID, vr.ID, p.VulnReportID)
+		}
+
+		// Module and package.
+		if len(vr.Modules) != 1 {
+			t.Errorf("patch %d: got %d modules, want 1", p.ID, len(vr.Modules))
+			continue
+		}
+		mod := vr.Modules[0]
+		if mod.Module != "golang.org/x/net" {
+			t.Errorf("patch %d: module = %q, want %q", p.ID, mod.Module, "golang.org/x/net")
+		}
+		if len(mod.Packages) != 1 || mod.Packages[0].Package != p.Package {
+			t.Errorf("patch %d: package = %q, want %q", p.ID, mod.Packages[0].Package, p.Package)
+		}
+
+		// CVE metadata.
+		if vr.CVEMetadata == nil {
+			t.Errorf("patch %d: CVEMetadata is nil", p.ID)
+			continue
+		}
+		if vr.CVEMetadata.ID != p.CVE {
+			t.Errorf("patch %d: CVEMetadata.ID = %q, want %q", p.ID, vr.CVEMetadata.ID, p.CVE)
+		}
+
+		// Credits.
+		if !reflect.DeepEqual(vr.Credits, p.Credits) {
+			t.Errorf("patch %d: credits = %v, want %v", p.ID, vr.Credits, p.Credits)
+		}
+
+		// Description must be non-empty.
+		if vr.Description == "" {
+			t.Errorf("patch %d: description is empty", p.ID)
+		}
+
+		// Summary must be non-empty.
+		if vr.Summary == "" {
+			t.Errorf("patch %d: summary is empty", p.ID)
+		}
+
+		// ReviewStatus must be Reviewed.
+		if vr.ReviewStatus != report.Reviewed {
+			t.Errorf("patch %d: review_status = %v, want Reviewed", p.ID, vr.ReviewStatus)
+		}
+
+		// Source metadata.
+		if vr.SourceMeta == nil || vr.SourceMeta.ID != "go-security-team" {
+			t.Errorf("patch %d: source meta = %v, want id=go-security-team", p.ID, vr.SourceMeta)
+		}
+
+		// References: must contain a REPORT ref for the GitHub issue, FIX refs
+		// for each changelist, and a WEB ref for the announcement URL.
+		refsByType := map[report.ReferenceType][]string{}
+		for _, ref := range vr.References {
+			refsByType[ref.Type] = append(refsByType[ref.Type], ref.URL)
+		}
+		if p.GitHubIssueID != 0 {
+			wantIssueURL := fmt.Sprintf("https://go.dev/issue/%d", p.GitHubIssueID)
+			if urls := refsByType[report.ReferenceTypeReport]; len(urls) != 1 || urls[0] != wantIssueURL {
+				t.Errorf("patch %d: REPORT refs = %v, want [%s]", p.ID, urls, wantIssueURL)
+			}
+		}
+		if got, want := len(refsByType[report.ReferenceTypeFix]), len(p.Changelists); got != want {
+			t.Errorf("patch %d: got %d FIX refs, want %d", p.ID, got, want)
+		}
+		if urls := refsByType[report.ReferenceTypeWeb]; len(urls) != 1 || urls[0] != announceURL {
+			t.Errorf("patch %d: WEB refs = %v, want [%s]", p.ID, urls, announceURL)
+		}
+	}
+
+	// Verify that GitHub issues were updated with the release note + trailer.
+	for _, p := range rm.Patches {
+		issue, ok := fakeGH.Issues[int(p.GitHubIssueID)]
+		if !ok {
+			t.Errorf("patch %d: GitHub issue %d not found", p.ID, p.GitHubIssueID)
+			continue
+		}
+		body := issue.GetBody()
+		if !strings.Contains(body, p.ReleaseNote) {
+			t.Errorf("patch %d: issue body missing release note", p.ID)
+		}
+		wantTrailer := fmt.Sprintf("This was a %s issue originally tracked in http://b/%d.", p.Track, p.ID)
+		if !strings.Contains(body, wantTrailer) {
+			t.Errorf("patch %d: issue body missing trailer, got:\n%s", p.ID, body)
+		}
+	}
+}
+
+func TestResolveVulnerableVersion(t *testing.T) {
+	tests := []struct {
+		name       string
+		tags       []string
+		cutVersion string
+		want       string
+		wantErr    bool
+	}{
+		{
+			"predecessor without new tag in list",
+			[]string{"v0.1.0", "v0.2.0", "v0.3.0"},
+			"v0.4.0",
+			"0.3.0",
+			false,
+		},
+		{
+			"predecessor with new tag in list",
+			[]string{"v0.1.0", "v0.2.0", "v0.3.0", "v0.4.0"},
+			"v0.4.0",
+			"0.3.0",
+			false,
+		},
+		{
+			"non-version tags ignored",
+			[]string{"v0.5.0", "release", "nightly", "v0.6.0"},
+			"v0.7.0",
+			"0.6.0",
+			false,
+		},
+		{
+			"semantic ordering not lexical",
+			[]string{"v0.2.0", "v0.10.0", "v0.9.0"},
+			"v0.11.0",
+			"0.10.0",
+			false,
+		},
+		{
+			"no predecessor",
+			[]string{"v0.1.0"},
+			"v0.1.0",
+			"",
+			true,
+		},
+		{
+			"no version tags",
+			[]string{"release", "nightly"},
+			"v0.1.0",
+			"",
+			true,
+		},
+		{
+			"no tags at all",
+			nil,
+			"v0.1.0",
+			"",
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := NewFakeRepo(t, "net")
+			head := repo.Commit(map[string]string{"go.mod": "module golang.org/x/net\n"})
+			for _, tag := range tt.tags {
+				repo.Tag(tag, head)
+			}
+
+			fg := NewFakeGerrit(t, repo)
+			x := &PrivXPatch{PublicGerrit: fg}
+			ctx := &wf.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t: t},
+			}
+
+			tagged := TagRepo{Name: "net", NewerVersion: tt.cutVersion}
+			got, err := x.ResolveVulnerableVersion(ctx, tagged)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ResolveVulnerableVersion: err = %v, wantErr = %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			want := report.VulnerableAt(tt.want)
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("ResolveVulnerableVersion = %v, want %v", got, want)
+			}
+		})
 	}
 }
 

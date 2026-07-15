@@ -71,7 +71,7 @@ func mapToTgz(files map[string]string) ([]byte, error) {
 			Typeflag:   tar.TypeReg,
 			Name:       name,
 			Size:       int64(len(contents)),
-			Mode:       0777,
+			Mode:       0o777,
 			ModTime:    time.Now(),
 			AccessTime: time.Now(),
 			ChangeTime: time.Now(),
@@ -90,6 +90,22 @@ func mapToTgz(files map[string]string) ([]byte, error) {
 		return nil, err
 	}
 	return w.Bytes(), nil
+}
+
+// NewGerritHTTPError constructs a *gerrit.HTTPError that matches the shape of
+// the errors the real *gerrit.Client returns when a Gerrit API call responds
+// with an unexpected status.
+//
+// See [gerrit.Client.do], which builds the equivalent [gerrit.HTTPError].
+func NewGerritHTTPError(statusCode int, body string) *gerrit.HTTPError {
+	return &gerrit.HTTPError{
+		Res: &http.Response{
+			Status:     fmt.Sprintf("%d %s", statusCode, http.StatusText(statusCode)),
+			StatusCode: statusCode,
+			Request:    httptest.NewRequest("GET", "/", nil),
+		},
+		Body: []byte(body),
+	}
 }
 
 func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
@@ -133,7 +149,7 @@ func NewFakeRepo(t *testing.T, name string) *FakeRepo {
 
 	tmpDir := t.TempDir()
 	repoDir := filepath.Join(tmpDir, name)
-	if err := os.Mkdir(repoDir, 0700); err != nil {
+	if err := os.Mkdir(repoDir, 0o700); err != nil {
 		t.Fatalf("failed to create repository directory: %s", err)
 	}
 	r := &FakeRepo{
@@ -156,7 +172,7 @@ func CloneFakeRepo(t *testing.T, name string, from *FakeRepo) *FakeRepo {
 
 	tmpDir := t.TempDir()
 	repoDir := filepath.Join(tmpDir, name)
-	if err := os.Mkdir(repoDir, 0700); err != nil {
+	if err := os.Mkdir(repoDir, 0o700); err != nil {
 		t.Fatalf("failed to create repository directory: %s", err)
 	}
 	r := &FakeRepo{
@@ -176,7 +192,7 @@ func CloneFakeRepo(t *testing.T, name string, from *FakeRepo) *FakeRepo {
 // SetHook sets a git hook in the fake repo.
 func (repo *FakeRepo) SetHook(hook, script string) {
 	repo.t.Helper()
-	if err := os.WriteFile(filepath.Join(repo.dir.dir, ".git", "hooks", hook), []byte(script), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(repo.dir.dir, ".git", "hooks", hook), []byte(script), 0o777); err != nil {
 		repo.t.Fatalf("failed to write git %s hook: %s", hook, err)
 	}
 }
@@ -200,18 +216,25 @@ func (repo *FakeRepo) Commit(contents map[string]string) string {
 }
 
 func (repo *FakeRepo) CommitOnBranch(branch string, contents map[string]string) string {
+	return repo.CommitOnBranchWithMessage(branch, "", contents)
+}
+
+// CommitOnBranchWithMessage is like but commits contents onto
+// branch using message.
+func (repo *FakeRepo) CommitOnBranchWithMessage(branch, message string, contents map[string]string) string {
 	repo.runGit("switch", branch)
 	for k, v := range contents {
 		full := filepath.Join(repo.dir.dir, k)
-		if err := os.MkdirAll(filepath.Dir(full), 0777); err != nil {
+		if err := os.MkdirAll(filepath.Dir(full), 0o777); err != nil {
 			repo.t.Fatal(err)
 		}
-		if err := os.WriteFile(full, []byte(v), 0777); err != nil {
+		if err := os.WriteFile(full, []byte(v), 0o777); err != nil {
 			repo.t.Fatal(err)
 		}
 	}
 	repo.runGit("add", ".")
-	repo.runGit("commit", "--allow-empty-message", "-m", "")
+	// TODO(nealpatel): Fold this with CommitOnBranch.
+	repo.runGit("commit", "--allow-empty-message", "-m", message)
 	return strings.TrimSpace(string(repo.runGit("rev-parse", "HEAD")))
 }
 
@@ -327,10 +350,31 @@ func (g *FakeGerrit) CreateBranch(ctx context.Context, project, branch string, i
 		return "", err
 	}
 	if _, err = repo.dir.RunCommand(ctx, "branch", branch, input.Revision); err != nil {
+		// Real Gerrit reports a branch that already exists as a 409 Conflict with
+		// a "branch ... already exists" body, not an underlying git error.
+		if strings.Contains(err.Error(), "already exists") {
+			return "", NewGerritHTTPError(http.StatusConflict, fmt.Sprintf("branch %q already exists\n", "refs/heads/"+branch))
+		}
 		return "", err
 	}
 
 	return g.ReadBranchHead(ctx, project, branch)
+}
+
+func (g *FakeGerrit) DeleteBranch(ctx context.Context, project, branch string) error {
+	repo, err := g.repo(project)
+	if err != nil {
+		return err
+	}
+	if _, err = repo.dir.RunCommand(ctx, "branch", "-D", branch); err != nil {
+		// Real Gerrit reports a DELETE on a branch that doesn't exist as a
+		// 404 Not Found, not an underlying git error.
+		if strings.Contains(err.Error(), "not found") {
+			return NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("branch %q not found\n", "refs/heads/"+branch))
+		}
+		return err
+	}
+	return nil
 }
 
 func (g *FakeGerrit) ReadFile(ctx context.Context, project, commit, file string) ([]byte, error) {
@@ -544,6 +588,7 @@ func (g *FakeGerrit) serveGitInfoRefs(w http.ResponseWriter, req *http.Request) 
 		w.WriteHeader(http.StatusNotFound)
 	}
 }
+
 func (g *FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request) {
 	repo, err := g.repo(req.PathValue("repo"))
 	if err != nil {
@@ -568,6 +613,7 @@ func (g *FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request
 	w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
 	io.Copy(w, &buf)
 }
+
 func (g *FakeGerrit) serveGitReceivePack(w http.ResponseWriter, req *http.Request) {
 	repo, err := g.repo(req.PathValue("repo"))
 	if err != nil {
@@ -768,7 +814,7 @@ func (s *FakeSignService) CancelSigning(_ context.Context, jobID string) error {
 	return fmt.Errorf("intentional fake error")
 }
 
-func (s *FakeSignService) fakeConstructPKG(jobID, f, meta, msg string) string {
+func (s *FakeSignService) fakeConstructPKG(jobID, f, meta, _ string) string {
 	// Check installer metadata.
 	b, err := os.ReadFile(strings.TrimPrefix(meta, "file://"))
 	if err != nil {
@@ -803,7 +849,7 @@ func (s *FakeSignService) fakeConstructPKG(jobID, f, meta, msg string) string {
 	return s.writeOutput(jobID, path.Base(f)+".pkg", append([]byte("I'm a PKG!\n"), b...))
 }
 
-func (s *FakeSignService) fakeConstructMSI(jobID, f, meta, msg string) string {
+func (s *FakeSignService) fakeConstructMSI(jobID, f, meta, _ string) string {
 	// Check installer metadata.
 	b, err := os.ReadFile(strings.TrimPrefix(meta, "file://"))
 	if err != nil {
@@ -860,10 +906,10 @@ func (s *FakeSignService) fakeSignPKG(jobID, f, msg string) string {
 
 func (s *FakeSignService) writeOutput(jobID, base string, contents []byte) string {
 	path := path.Join(s.outputDir, jobID, base)
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		panic(fmt.Errorf("fake signing service: os.MkdirAll: %v", err))
 	}
-	if err := os.WriteFile(path, contents, 0600); err != nil {
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
 		panic(fmt.Errorf("fake signing service: os.WriteFile: %v", err))
 	}
 	return "file://" + path
@@ -958,12 +1004,12 @@ type FakeBinary struct {
 
 func NewFakeCloudBuild(t *testing.T, gerrit *FakeGerrit, project string, allowedTriggers map[string]map[string]string, fakeBinaries ...FakeBinary) *FakeCloudBuild {
 	toolDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(toolDir, "gcloud"), []byte(fakeGcloud), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(toolDir, "gcloud"), []byte(fakeGcloud), 0o777); err != nil {
 		t.Fatal(err)
 	}
 
 	for _, binary := range fakeBinaries {
-		if err := os.WriteFile(filepath.Join(toolDir, binary.Name), []byte(binary.Implementation), 0777); err != nil {
+		if err := os.WriteFile(filepath.Join(toolDir, binary.Name), []byte(binary.Implementation), 0o777); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1057,7 +1103,7 @@ func (cb *FakeCloudBuild) RunScript(ctx context.Context, script string, gerritPr
 	if runErr == nil {
 		for _, out := range outputs {
 			target := filepath.Join(resultDir, out)
-			os.MkdirAll(filepath.Dir(target), 0777)
+			os.MkdirAll(filepath.Dir(target), 0o777)
 			if err := os.Rename(filepath.Join(wd, out), target); err != nil {
 				runErr = fmt.Errorf("collecting outputs: %v", err)
 				break
@@ -1221,10 +1267,10 @@ type FakeSwarmingClient struct {
 
 func NewFakeSwarmingClient(t *testing.T, fakeGo string) *FakeSwarmingClient {
 	toolDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(toolDir, "go"), []byte(fakeGo), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(toolDir, "go"), []byte(fakeGo), 0o777); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(toolDir, "gcloud"), []byte(fakeGcloud), 0777); err != nil {
+	if err := os.WriteFile(filepath.Join(toolDir, "gcloud"), []byte(fakeGcloud), 0o777); err != nil {
 		t.Fatal(err)
 	}
 	return &FakeSwarmingClient{
@@ -1462,8 +1508,19 @@ func (f *FakeGitHub) TagExists(ctx context.Context, owner, repo, tag string) (bo
 	return f.Tags[tag], nil
 }
 
-func (*FakeGitHub) EditIssue(_ context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
-	return nil, nil, nil
+func (f *FakeGitHub) EditIssue(_ context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	if f.Issues == nil {
+		f.Issues = map[int]*github.Issue{}
+	}
+	existing, ok := f.Issues[number]
+	if !ok {
+		existing = &github.Issue{Number: &number}
+		f.Issues[number] = existing
+	}
+	if issue.Body != nil {
+		existing.Body = issue.Body
+	}
+	return existing, nil, nil
 }
 
 func (f *FakeGitHub) CreateIssue(ctx context.Context, owner, repo string, request *github.IssueRequest) (*github.Issue, *github.Response, error) {

@@ -309,7 +309,7 @@ func TestGetProjectTags(t *testing.T) {
 		t.Errorf("expected Path to be '/projects/go/tags/', got %s", path)
 	}
 	expectedTags := map[string]TagInfo{
-		"refs/tags/v1.0": TagInfo{
+		"refs/tags/v1.0": {
 			Ref:      "refs/tags/v1.0",
 			Revision: "49ce77fdcfd3398dc0dedbe016d1a425fd52d666",
 			Object:   "1624f5af8ae89148d1a3730df8c290413e3dcf30",
@@ -321,7 +321,7 @@ func TestGetProjectTags(t *testing.T) {
 				TZOffset: 540,
 			},
 		},
-		"refs/tags/v2.0": TagInfo{
+		"refs/tags/v2.0": {
 			Ref:      "refs/tags/v2.0",
 			Revision: "1624f5af8ae89148d1a3730df8c290413e3dcf30",
 		},

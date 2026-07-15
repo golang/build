@@ -73,6 +73,11 @@ type GerritClient interface {
 	ListBranches(ctx context.Context, project string) ([]gerrit.BranchInfo, error)
 	// CreateBranch creates the given branch and returns the created branch's revision.
 	CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error)
+	// DeleteBranch deletes the given branch.
+	// Deleting a branch that doesn't exist returns an error satisfying
+	// [errors.Is](err, [gerrit.ErrResourceNotExist]); callers that delete
+	// unconditionally (e.g. delete-then-recreate) must tolerate that error.
+	DeleteBranch(ctx context.Context, project, branch string) error
 
 	// ListCommits lists commits in project between head and base (including head, not including base).
 	// Both head and base must be non-empty strings, otherwise an error is returned.
@@ -103,11 +108,12 @@ type GerritClient interface {
 	// SetHashtags modifies the hashtags for a CL.
 	SetHashtags(ctx context.Context, changeID string, hashtags gerrit.HashtagsInput) error
 
-	// CreateCherryPick creates a cherry-pick change. If there are no merge
-	// conflicts, it starts trybots. If commitMessage is provided, the commit
-	// message is updated, otherwise it is taken from the original change.
-	// Reviewers are taken from the original change.
+	// CreateCherryPick creates a cherry-pick change from a Gerrit change.
+	//
+	// If no merge conflicts exist, it starts trybots; if commitMessage is
+	// provided, it is updated; otherwise, is is taken from the original change.
 	CreateCherryPick(ctx context.Context, changeID string, branch string, commitMessage string) (_ gerrit.ChangeInfo, conflicts bool, _ error)
+
 	// RebaseChange rebases a change onto a base revision. If revision is empty,
 	// the change is rebased directly on top of the target branch.
 	RebaseChange(ctx context.Context, changeID string, revision string) (gerrit.ChangeInfo, error)
@@ -335,6 +341,10 @@ func (c *RealGerritClient) CreateBranch(ctx context.Context, project, branch str
 	return branchInfo.Revision, nil
 }
 
+func (c *RealGerritClient) DeleteBranch(ctx context.Context, project, branch string) error {
+	return c.Client.DeleteBranch(ctx, project, branch)
+}
+
 func (c *RealGerritClient) ListProjects(ctx context.Context) ([]string, error) {
 	projects, err := c.Client.ListProjects(ctx)
 	if err != nil {
@@ -387,7 +397,7 @@ func (c *RealGerritClient) ListCommits(ctx context.Context, project, head, base 
 func (c *RealGerritClient) fetchGitilesJSON(ctx context.Context, path string, v any) error {
 	// slashA is either "/a" (for authenticated requests) or "" for unauthenticated.
 	// See https://gerrit-review.googlesource.com/Documentation/rest-api.html#authentication.
-	var slashA = "/a"
+	slashA := "/a"
 	if c.GitilesAuth == nil {
 		slashA = ""
 	}
@@ -423,7 +433,7 @@ func (c *RealGerritClient) fetchGitilesJSON(ctx context.Context, path string, v 
 		}
 	}
 	const magicPrefix = ")]}'\n"
-	var buf = make([]byte, len(magicPrefix))
+	buf := make([]byte, len(magicPrefix))
 	if _, err := io.ReadFull(resp.Body, buf); err != nil {
 		return err
 	} else if !bytes.Equal(buf, []byte(magicPrefix)) {
