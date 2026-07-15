@@ -110,8 +110,11 @@ func NewGerritHTTPError(statusCode int, body string) *gerrit.HTTPError {
 
 func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 	result := &FakeGerrit{
-		repos:   make(map[string]*FakeRepo),
-		changes: make(map[string]string),
+		repos:          make(map[string]*FakeRepo),
+		changes:        make(map[string]string),
+		cls:            make(map[string]*gerrit.ChangeInfo),
+		commitMessages: make(map[string]string),
+		clProjects:     make(map[string]string),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /a/{repo}/+archive/{archive}", result.serveArchive) // Serve a revision tarball (.tar.gz) like Gerrit does.
@@ -134,6 +137,12 @@ type FakeGerrit struct {
 	repos     map[string]*FakeRepo // Repo name → repo.
 	changesMu sync.Mutex
 	changes   map[string]string // Change ID → commit hash.
+
+	// CL state tracking for security release tests. Populated via AddChange.
+	cls            map[string]*gerrit.ChangeInfo // CL ID → state.
+	commitMessages map[string]string             // CL ID → commit message.
+	clProjects     map[string]string             // CL ID → project name.
+	nextCL         int                           // Counter for generated cherry-pick CL IDs.
 }
 
 type FakeRepo struct {
@@ -494,6 +503,22 @@ func (g *FakeGerrit) ConsiderChangeSubmitted(repo *FakeRepo, changeID string) {
 	g.changesMu.Unlock()
 }
 
+// AddChange registers a CL for stateful tracking. Methods like GetChange,
+// SubmitChange, MoveChange, etc. will use this state when the CL is found;
+// otherwise they fall back to their default stub behavior.
+//
+// If ci is nil, only the commit message and project are updated (the existing
+// ChangeInfo, if any, is preserved).
+func (g *FakeGerrit) AddChange(project string, id string, ci *gerrit.ChangeInfo, commitMsg string) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	if ci != nil {
+		g.cls[id] = ci
+	}
+	g.commitMessages[id] = commitMsg
+	g.clProjects[id] = project
+}
+
 func (g *FakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
 	g.changesMu.Lock()
 	commit, ok := g.changes[changeID]
@@ -702,40 +727,143 @@ func (g *FakeGerrit) serveGitiles(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (*FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.ChangeInfo, error) {
-	return nil, nil
+func (g *FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.ChangeInfo, error) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	if len(g.cls) == 0 {
+		return nil, nil
+	}
+	var wantBranch, wantChangeID string
+	for _, tok := range strings.Fields(query) {
+		if rest, ok := strings.CutPrefix(tok, "branch:"); ok {
+			wantBranch = rest
+		}
+		if rest, ok := strings.CutPrefix(tok, "change:"); ok {
+			wantChangeID = rest
+		}
+	}
+	var results []*gerrit.ChangeInfo
+	for _, ci := range g.cls {
+		if ci.Status == "ABANDONED" {
+			continue
+		}
+		if wantBranch != "" && ci.Branch != wantBranch {
+			continue
+		}
+		if wantChangeID != "" && ci.ChangeID != wantChangeID {
+			continue
+		}
+		results = append(results, ci)
+	}
+	return results, nil
 }
 
 func (*FakeGerrit) SetHashtags(_ context.Context, changeID string, _ gerrit.HashtagsInput) error {
 	return fmt.Errorf("pretend that SetHashtags failed")
 }
 
-func (*FakeGerrit) GetChange(_ context.Context, _ string, _ ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error) {
-	return nil, nil
+func (g *FakeGerrit) GetChange(_ context.Context, changeID string, _ ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	ci, ok := g.cls[changeID]
+	if !ok {
+		return nil, nil
+	}
+	return ci, nil
 }
 
-func (*FakeGerrit) SubmitChange(ctx context.Context, changeID string) (gerrit.ChangeInfo, error) {
-	return gerrit.ChangeInfo{}, nil
+func (g *FakeGerrit) SubmitChange(_ context.Context, changeID string) (gerrit.ChangeInfo, error) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	ci, ok := g.cls[changeID]
+	if !ok {
+		return gerrit.ChangeInfo{}, nil
+	}
+	if ci.Status == gerrit.ChangeStatusMerged {
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "change is merged\n")
+	}
+	project := g.clProjects[changeID]
+	repo, err := g.repo(project)
+	if err != nil {
+		return gerrit.ChangeInfo{}, err
+	}
+	repo.CommitOnBranchWithMessage(ci.Branch, g.commitMessages[changeID], map[string]string{"security-" + changeID + ".txt": "fix from " + changeID})
+	ci.Status = gerrit.ChangeStatusMerged
+	ci.Submittable = false
+	return *ci, nil
 }
 
-func (*FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, branch string, message string) (gerrit.ChangeInfo, bool, error) {
-	return gerrit.ChangeInfo{}, false, nil
+func (g *FakeGerrit) CreateCherryPick(_ context.Context, changeID string, branch string, message string) (gerrit.ChangeInfo, bool, error) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	orig, ok := g.cls[changeID]
+	if !ok {
+		return gerrit.ChangeInfo{}, false, nil
+	}
+	g.nextCL++
+	cpID := fmt.Sprintf("cp-%d", g.nextCL)
+	cp := &gerrit.ChangeInfo{
+		ID:           cpID,
+		ChangeID:     orig.ChangeID,
+		ChangeNumber: g.nextCL,
+		Branch:       branch,
+		Status:       "NEW",
+		Submittable:  true,
+		Mergeable:    true,
+	}
+	g.cls[cpID] = cp
+	g.commitMessages[cpID] = message
+	g.clProjects[cpID] = g.clProjects[changeID]
+	return *cp, false, nil
 }
 
-func (*FakeGerrit) MoveChange(ctx context.Context, changeID string, branch string) (gerrit.ChangeInfo, error) {
-	return gerrit.ChangeInfo{}, nil
+func (g *FakeGerrit) MoveChange(_ context.Context, changeID string, branch string) (gerrit.ChangeInfo, error) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	ci, ok := g.cls[changeID]
+	if !ok {
+		return gerrit.ChangeInfo{}, nil
+	}
+	if ci.Status == gerrit.ChangeStatusMerged {
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "Change is merged\n")
+	}
+	if ci.Branch == branch {
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "Change is already destined for the specified branch\n")
+	}
+	ci.Branch = branch
+	return *ci, nil
 }
 
-func (*FakeGerrit) RebaseChange(ctx context.Context, changeID string, baseRev string) (gerrit.ChangeInfo, error) {
-	return gerrit.ChangeInfo{}, nil
+func (g *FakeGerrit) RebaseChange(_ context.Context, changeID string, baseRev string) (gerrit.ChangeInfo, error) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	ci, ok := g.cls[changeID]
+	if !ok {
+		return gerrit.ChangeInfo{}, nil
+	}
+	if ci.Status == gerrit.ChangeStatusMerged {
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, fmt.Sprintf("Change %s is merged\n", changeID))
+	}
+	return *ci, nil
 }
 
-func (*FakeGerrit) GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error) {
-	return map[string]*gerrit.ActionInfo{}, nil
+func (g *FakeGerrit) GetRevisionActions(_ context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	ci, ok := g.cls[changeID]
+	if !ok {
+		return map[string]*gerrit.ActionInfo{}, nil
+	}
+	if ci.Status == gerrit.ChangeStatusMerged {
+		return map[string]*gerrit.ActionInfo{}, nil
+	}
+	return map[string]*gerrit.ActionInfo{"submit": {Enabled: true}}, nil
 }
 
-func (*FakeGerrit) GetCommitMessage(ctx context.Context, changeID string) (string, error) {
-	return "", nil
+func (g *FakeGerrit) GetCommitMessage(_ context.Context, changeID string) (string, error) {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	return g.commitMessages[changeID], nil
 }
 
 // NewFakeSignService returns a fake signing service that can sign PKGs, MSIs,

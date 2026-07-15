@@ -309,6 +309,7 @@ func main() {
 		V3: github.NewClient(githubHTTPClient),
 		V4: githubv4.NewClient(githubHTTPClient),
 	}
+	buildTasks.GitHub = githubClient
 	milestoneTasks := &task.MilestoneTasks{
 		Client:        githubClient,
 		RepoOwner:     "golang",
@@ -416,17 +417,13 @@ func main() {
 		PublicRepoURL: func(repo string) string {
 			return "https://go.googlesource.com/" + repo
 		},
+		GitHub:             githubClient,
 		ApproveAction:      relui.ApproveActionDep(dbPool),
 		SendMail:           mailFunc,
 		AnnounceMailHeader: annMail,
+		AwaitAnnounceMail:  commTasks.AnnounceMailTasks.AwaitAnnounceMail,
 	}
 	dh.RegisterDefinition("Publish a private patch to a x/ repo", privateXPatchTask.NewDefinition(tagTasks))
-
-	securityReleaseCoalesceTask := &task.SecurityReleaseCoalesceTask{
-		PrivateGerrit: privateGerritClient,
-		Version:       versionTasks,
-	}
-	dh.RegisterDefinition("Prepare internal security release branches", securityReleaseCoalesceTask.NewDefinition())
 
 	var base *url.URL
 	if *baseURL != "" {

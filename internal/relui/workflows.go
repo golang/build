@@ -43,8 +43,11 @@ import (
 	"golang.org/x/build/internal/relui/sign"
 	"golang.org/x/build/internal/task"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/relmeta"
 	"golang.org/x/net/context/ctxhttp"
+	"golang.org/x/vulndb/report"
 	"google.golang.org/protobuf/types/known/structpb"
+	yaml "gopkg.in/yaml.v3"
 )
 
 // DefinitionHolder holds workflow definitions.
@@ -121,7 +124,7 @@ It must not reveal details beyond what's allowed by the security policy.`,
 		Example:   "CVE-2023-XXXX",
 		Doc:       "List of CVEs for PRIVATE track fixes contained in the release to be included in the pre-announcement.",
 		Check: func(cves []string) error {
-			var m = make(map[string]bool)
+			m := make(map[string]bool)
 			for _, c := range cves {
 				switch {
 				case !cveRE.MatchString(c):
@@ -441,7 +444,9 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 				securityFixes = wf.Param(wd, securityFixesParameter)
 			}
 		}
-		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators)
+
+		rm := wf.Const[*relmeta.ReleaseMilestone](nil)
+		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators, rm)
 		if r.major >= currentMajor {
 			wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, published)
 		}
@@ -449,19 +454,11 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		h.RegisterDefinition(fmt.Sprintf("Go 1.%d %s", r.major, r.suffix), wd)
 	}
 
-	for _, v := range [...]struct {
-		UseMetadata bool
-		Description string
-	}{
-		{false, "manually input security comms"},
-		{true, "metadata-based security comms"},
-	} {
-		wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, currentMajor-1, currentMajor, v.UseMetadata)
-		if err != nil {
-			return err
-		}
-		h.RegisterDefinition(fmt.Sprintf("Minor releases for Go 1.%d and 1.%d (%s)", currentMajor-1, currentMajor, v.Description), wd)
+	wd, err := createMinorReleaseWorkflow(build, milestone, version, comm, currentMajor-1, currentMajor)
+	if err != nil {
+		return err
 	}
+	h.RegisterDefinition(fmt.Sprintf("Minor releases for Go 1.%d and 1.%d", currentMajor-1, currentMajor), wd)
 
 	return nil
 }
@@ -488,27 +485,53 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 	h.RegisterDefinition(fmt.Sprintf("dry-run (build, test, and sign only): Go 1.%d next beta", major), wd)
 }
 
-func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int, useMetadata bool) (*wf.Definition, error) {
+func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int) (*wf.Definition, error) {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
-
 	coordinators := wf.Param(wd, releaseCoordinators)
-	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators)
-	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindMinor, coordinators)
+	milestoneNum := wf.Param(wd, task.SecurityMilestoneParameter)
+
+	rm := wf.Task1(wd, "Fetch security milestone", build.fetchSecurityMilestone, milestoneNum)
+
+	// cls are drafted by patch owners against `public`
+	// branch of sso://go-internal/go. Typically, no
+	// human should submit these patches; however, the
+	// workflow is hardened against accidental submission
+	// in order to provide idempotent checkpoint branches.
+	cls := wf.Task1(wd, "Check private changes", build.checkPrivateChanges, rm)
 
 	var (
-		securitySummary wf.Value[string]
-		securityFixes   wf.Value[[]string]
+		nextMinors = wf.Task1(wd, "Get next minor versions", version.GetNextMinorVersions, wf.Const([]int{currentMajor, prevMajor}))
+		vt         = wf.Const(version)
+		major      = wf.Const(currentMajor)
 	)
-	if useMetadata {
-		milestoneNum := wf.Param(wd, task.SecurityMilestoneParameter)
-		securitySummary = wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum)
-		securityFixes = wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
-	} else {
-		securitySummary = wf.Param(wd, securitySummaryParameter)
-		securityFixes = wf.Param(wd, securityFixesParameter)
-	}
+	branchInfo := wf.Task3(wd, "Compute security branch names", computeSecurityBranchInfo, vt, major, nextMinors, wf.After(cls))
 
-	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators)
+	// checkpoint is created with a timestamp trailer
+	// to ensure that workflow restarts are idempotent.
+	checkpoint := wf.Task2(wd, "Create checkpoint branch", build.createSecurityCheckpoint, branchInfo, cls)
+	cls = wf.Task2(wd, "Move and rebase private changes", build.moveAndRebasePrivateChanges, checkpoint, cls)
+	cls = wf.Task1(wd, "Submit private changes", build.submitPrivateChanges, cls)
+
+	// internalBranches are NOT created with a timestamp
+	// trailer; instead, they are deleted lazily before
+	// creation to make workflow restarts idempotent.
+	internalBranches := wf.Task2(wd, "Create internal release branches", build.createInternalReleaseBranches, branchInfo, cls)
+	cherryPicks := wf.Task2(wd, "Create cherry-picks", build.createSecurityCherryPicks, internalBranches, cls)
+	coalesced := wf.Task1(wd, "Submit cherry-picks", build.submitCherryPicks, cherryPicks)
+
+	// once all internal branches have their
+	// respective cherrypicked patches, the
+	// security release coalescing is done
+	// and any single-release workflows can
+	// proceed by reaching the branch state.
+	wf.Output(wd, "Cherry-picks", coalesced)
+
+	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators, coalesced)
+	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindMinor, coordinators, coalesced)
+
+	securitySummary := wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum)
+	securityFixes := wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
+	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators, rm)
 	wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, currPublished)
 
 	return wd, nil
@@ -516,7 +539,8 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 
 func addCommTasks(
 	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
-	kind task.ReleaseKind, published wf.Value[[]task.Published], securitySummary wf.Value[string], securityFixes, coordinators wf.Value[[]string],
+	kind task.ReleaseKind, published wf.Value[[]task.Published], securitySummary wf.Value[string],
+	securityFixes, coordinators wf.Value[[]string], rm wf.Value[*relmeta.ReleaseMilestone],
 ) {
 	okayToAnnounce := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(published))
 
@@ -527,10 +551,37 @@ func addCommTasks(
 	mastodonURL := wf.Task4(wd, "post-mastodon", comm.TrumpetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 	blueskyURL := wf.Task4(wd, "post-bluesky", comm.SkeetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 
+	vulndbChangeID := wf.Task2(wd, "file-vulndb-reports", build.createVulnReports, rm, announcementURL)
+
+	wf.Action2(wd, "Update GitHub issues", task.UpdateGitHubIssues, wf.Const(build.GitHub), rm, wf.After(vulndbChangeID))
+
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)
 	wf.Output(wd, "Mastodon URL", mastodonURL)
 	wf.Output(wd, "Bluesky URL", blueskyURL)
+	wf.Output(wd, "VulnDB Change ID", vulndbChangeID)
+}
+
+// createVulnReports builds and submits vulndb reports for std/cmd
+// security patches. It no-ops when rm is nil or has no patches
+// (non-security minor release or major-release path).
+func (b *BuildReleaseTasks) createVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, announceURL string) (string, error) {
+	if rm == nil || len(rm.Patches) == 0 {
+		return "", nil
+	}
+	var reports []*report.Report
+	for _, p := range rm.Patches {
+		mod, err := task.DeriveVulnModuleInfo(p)
+		if err != nil {
+			return "", err
+		}
+		r, err := task.VulnReport(p, mod, announceURL)
+		if err != nil {
+			return "", err
+		}
+		reports = append(reports, r)
+	}
+	return task.MailVulnReports(ctx, b.GerritClient, reports)
 }
 
 func now(_ context.Context) (time.Time, error) {
@@ -540,6 +591,7 @@ func now(_ context.Context) (time.Time, error) {
 func addSingleReleaseWorkflow(
 	build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks,
 	wd *wf.Definition, major int, kind task.ReleaseKind, coordinators wf.Value[[]string],
+	securityPrereqs ...wf.Dependency,
 ) wf.Value[task.Published] {
 	kindVal := wf.Const(kind)
 	branch := fmt.Sprintf("release-branch.go1.%d", major)
@@ -557,8 +609,9 @@ func addSingleReleaseWorkflow(
 	milestones := wf.Task2(wd, "Pick milestones", milestone.FetchMilestones, nextVersion, kindVal)
 	checkedStartingBlockingIssues := wf.Action3(wd, "Check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal)
 
-	// Look up the prepared security commit for this release, if any.
-	securityCommit := wf.Task1(wd, "Read security ref", build.readSecurityRef, nextVersion)
+	// Read the security ref for internal branches.
+	securityCommit := wf.Task1(wd, "Read security ref", build.readSecurityRef, nextVersion, wf.After(securityPrereqs...))
+
 	confirmPrivateSecurityFixes := wf.Action4(wd, "Confirm PRIVATE-track security CLs", func(ctx *wf.TaskContext,
 		version, targetBranch, startingHead, securityCommit string,
 	) error {
@@ -591,7 +644,12 @@ func addSingleReleaseWorkflow(
 		if bottomSecurityCL := commits[len(commits)-1]; len(bottomSecurityCL.Parents) != 1 {
 			return fmt.Errorf("bottom-most security commit %q has %d parents, want 1 parent", bottomSecurityCL.Commit, len(bottomSecurityCL.Parents))
 		} else if bottomSecurityCL.Parents[0] != startingHead {
-			return fmt.Errorf("bottom-most security commit %q's parent is %q, want %q", bottomSecurityCL.Commit, bottomSecurityCL.Parents[0], startingHead)
+			// The security fixes were coalesced onto a public head that has since
+			// diverged from the current public release-branch head. Because each
+			// coalesce run now produces a fresh timestamped checkpoint and the old
+			// artifacts are left untouched, the cheap and safe remedy is to restart
+			// the workflow so the coalesce re-runs against the current head.
+			return fmt.Errorf("bottom-most security commit %q's parent is %q, but the current public %s head is %q; the coalesced security fixes are stale. Restart the release workflow to re-coalesce against the current head", bottomSecurityCL.Commit, bottomSecurityCL.Parents[0], targetBranch, startingHead)
 		}
 		var summary strings.Builder
 		fmt.Fprintf(&summary, "Will build with %d security fix CL(s) on top of public %s:\n\n", len(commits), targetBranch)
@@ -623,23 +681,23 @@ func addSingleReleaseWorkflow(
 		// Detect and handle the unexpected case of either the public or internal release branches
 		// changing from the time the workflow was started.
 		if releaseDayPublicHead, err := build.GerritClient.ReadBranchHead(ctx, build.GerritProject, targetBranch); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading public branch head (safe to retry this step): %w", err)
 		} else if releaseDayPublicHead != startingHead {
 			// Something is unexpected if the public release branch now doesn't match what it was
 			// when the workflow started. Whether or not it's possible to proceed depends on what
 			// exactly happened. For now handle this by refusing to proceed, but if we learn that
 			// it's worth handling this differently, we'll revisit this.
-			return nil, fmt.Errorf("head of public %q branch %q unexpectedly differs from head at workflow start %q", targetBranch, releaseDayPublicHead, startingHead)
+			return nil, fmt.Errorf("head of public %q branch is %q, but was %q when the workflow started; retrying this step alone will not help; restart the release workflow to re-coalesce against the current head", targetBranch, releaseDayPublicHead, startingHead)
 		}
 		internalBranch := fmt.Sprintf("internal-release-branch.%s", version)
 		if releaseDayPrivateHead, err := build.PrivateGerritClient.ReadBranchHead(ctx, build.PrivateGerritProject, internalBranch); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("reading private branch head (safe to retry this step): %w", err)
 		} else if releaseDayPrivateHead != securityCommit {
 			// Something is unexpected if the internal release branch now doesn't match what it was
 			// when the workflow started. Whether or not it's possible to proceed depends on what
 			// exactly happened. For now handle this by refusing to proceed, but if we learn that
 			// it's worth handling this differently, we'll revisit this.
-			return nil, fmt.Errorf("head of private %q branch %q unexpectedly differs from head at workflow start %q", internalBranch, releaseDayPrivateHead, securityCommit)
+			return nil, fmt.Errorf("head of private %q branch is %q, but was %q when the workflow started; retrying this step alone will not help; restart the release workflow to re-coalesce against the current head", internalBranch, releaseDayPrivateHead, securityCommit)
 		}
 
 		/*
@@ -664,7 +722,7 @@ func addSingleReleaseWorkflow(
 		publicOrigin := build.GerritClient.GitRepoURL(build.GerritProject)
 		repo, err := build.Git.CloneBranch(ctx, publicOrigin, targetBranch)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("cloning public repo (safe to retry this step): %w", err)
 		}
 		defer repo.Close()
 		ctx.Printf("cloned public repo")
@@ -672,18 +730,18 @@ func addSingleReleaseWorkflow(
 		privateOrigin, privateRef := build.PrivateGerritClient.GitRepoURL(build.PrivateGerritProject), "refs/heads/"+internalBranch
 		ctx.Printf("fetching %s from %s", privateRef, privateOrigin)
 		if _, err := repo.RunCommand(ctx, "fetch", privateOrigin, privateRef); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("fetching private branch (safe to retry this step): %w", err)
 		}
 		ctx.Printf("fetched")
 		if _, err := repo.RunCommand(ctx, "cherry-pick", startingHead+".."+securityCommit); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("cherry-picking security fixes (safe to retry this step): %w", err)
 		}
 		ctx.Printf("cherry-picked")
 		var refspec strings.Builder
 		fmt.Fprintf(&refspec, "HEAD:refs/for/%s%%l=Auto-Submit+1,l=TryBot-Bypass+1", targetBranch)
 		reviewerEmails, err := task.CoordinatorEmails(reviewers)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("resolving coordinator emails (safe to retry this step): %w", err)
 		}
 		for _, r := range reviewerEmails {
 			fmt.Fprintf(&refspec, ",r=%s", r)
@@ -696,7 +754,7 @@ func addSingleReleaseWorkflow(
 		ctx.Printf("pushing %s to %s", refspec.String(), publicOrigin)
 		gitPushOutput, err := repo.RunGitPush(ctx, publicOrigin, refspec.String())
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("pushing security CLs to public Gerrit (manual intervention required): %w", err)
 		}
 		ctx.Printf("git push output:\n%s\n", gitPushOutput)
 
@@ -926,6 +984,7 @@ type BuildReleaseTasks struct {
 	BuildBucketClient        task.BuildBucketClient
 	SwarmingClient           task.SwarmingClient
 	ApproveAction            func(*wf.TaskContext) error
+	GitHub                   task.GitHubClientInterface
 }
 
 // readSecurityRef reads the head of the internal release branch that corresponds
@@ -938,20 +997,334 @@ func (b *BuildReleaseTasks) readSecurityRef(ctx *wf.TaskContext, version string)
 		return "", nil
 	}
 
-	// Read the internal release branch prepared by the 'Prepare internal security release branches'
-	// workflow for this version, if any.
 	internalBranch := fmt.Sprintf("internal-release-branch.%s", version)
 	commit, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, internalBranch)
 	if errors.Is(err, gerrit.ErrResourceNotExist) {
-		// The internal release branch doesn't exist.
-		//
-		// This is okay. It happens when there are no PRIVATE-track security fixes for this release,
-		// and the public release branch is used as the source. Proceed without a security commit.
 		return "", nil
 	} else if err != nil {
 		return "", fmt.Errorf("error reading private Gerrit project's branch %q head: %v", internalBranch, err)
 	}
 	return commit, nil
+}
+
+func (b *BuildReleaseTasks) fetchSecurityMilestone(ctx *wf.TaskContext, milestoneNum string) (*relmeta.ReleaseMilestone, error) {
+	if b.PrivateGerritClient == nil || b.PrivateGerritProject == "" {
+		ctx.Printf("Private Gerrit fields are unset, no security milestone to fetch.")
+		return nil, nil
+	}
+	if milestoneNum == "" || milestoneNum == "0" {
+		ctx.Printf("No security milestone specified, no security milestone to fetch.")
+		return nil, nil
+	}
+	const project = "security-metadata"
+	head, err := b.PrivateGerritClient.ReadBranchHead(ctx, project, "main")
+	if err != nil {
+		return nil, err
+	}
+	raw, err := b.PrivateGerritClient.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
+	if err != nil {
+		return nil, err
+	}
+	var rm relmeta.ReleaseMilestone
+	if err := yaml.Unmarshal(raw, &rm); err != nil {
+		return nil, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
+	}
+	return &rm, nil
+}
+
+type securityBranchInfo struct {
+	CheckpointName        string
+	PublicReleaseBranches []string
+}
+
+// computeSecurityBranchInfo derives the checkpoint branch name and the set of
+// public release branches the PRIVATE-track security coalesce targets, given the
+// next minor versions for the two release series. If the next major's release
+// branch already exists, the next RC is included as well.
+func computeSecurityBranchInfo(ctx *wf.TaskContext, version *task.VersionTasks, currentMajor int, nextMinors []string) (securityBranchInfo, error) {
+	bi := securityBranchInfo{
+		CheckpointName: strings.Join(nextMinors, "-") + "-checkpoint",
+	}
+	for _, v := range nextMinors {
+		bi.PublicReleaseBranches = append(bi.PublicReleaseBranches, "release-branch."+v)
+	}
+	// If the next major's release branch already exists, include an RC.
+	switch _, err := version.Gerrit.ReadBranchHead(ctx, version.GoProject, fmt.Sprintf("release-branch.go1.%d", currentMajor+1)); {
+	case errors.Is(err, gerrit.ErrResourceNotExist):
+		// No RC branch; minors only.
+	case err == nil:
+		nextRC, err := version.GetNextVersion(ctx, currentMajor+1, task.KindRC)
+		if err != nil {
+			return securityBranchInfo{}, err
+		}
+		bi.CheckpointName = nextRC + "-" + bi.CheckpointName
+		bi.PublicReleaseBranches = append([]string{"release-branch." + nextRC}, bi.PublicReleaseBranches...)
+	default:
+		return securityBranchInfo{}, err
+	}
+	return bi, nil
+}
+
+var (
+	commitCVERE         = regexp.MustCompile(`(?m)^Fixes CVE-\d{4}-\d+`)
+	commitGitHubIssueRE = regexp.MustCompile(`(?m)^Fixes (?:golang/go)?#(\d+)`)
+)
+
+func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) ([]*gerrit.ChangeInfo, error) {
+	if rm == nil {
+		return nil, nil
+	}
+	var (
+		cls      []*gerrit.ChangeInfo
+		lintErrs []error
+	)
+	for _, patch := range rm.Patches {
+		if patch.Track == relmeta.Public {
+			continue
+		}
+		for _, clURL := range patch.Changelists {
+			_, num, _ := strings.Cut(clURL, "/+/")
+			ci, err := b.PrivateGerritClient.GetChange(ctx, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+			if err != nil {
+				return nil, err
+			}
+			if ci.Status == gerrit.ChangeStatusMerged {
+				cls = append(cls, ci)
+				continue
+			}
+			if !ci.Submittable {
+				return nil, fmt.Errorf("change %s is not submittable", privateChangeURL(num))
+			}
+			ra, err := b.PrivateGerritClient.GetRevisionActions(ctx, num, "current")
+			if err != nil {
+				return nil, err
+			}
+			if ra["submit"] == nil || !ra["submit"].Enabled {
+				return nil, fmt.Errorf("change %s is not submittable", privateChangeURL(num))
+			}
+			cm, err := b.PrivateGerritClient.GetCommitMessage(ctx, num)
+			if err != nil {
+				return nil, err
+			}
+			if !commitCVERE.MatchString(cm) {
+				lintErrs = append(lintErrs, fmt.Errorf("change %s is missing CVE reference", privateChangeURL(num)))
+			}
+			if !commitGitHubIssueRE.MatchString(cm) {
+				lintErrs = append(lintErrs, fmt.Errorf("change %s is missing GitHub issue reference", privateChangeURL(num)))
+			}
+			cls = append(cls, ci)
+		}
+	}
+	if len(cls) == 0 {
+		ctx.Printf("No non-PUBLIC security patches to prepare.")
+	}
+	return cls, errors.Join(lintErrs...)
+}
+
+func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi securityBranchInfo, cls []*gerrit.ChangeInfo) (string, error) {
+	if len(cls) == 0 {
+		ctx.Printf("No PRIVATE-track security patches; skipping checkpoint branch creation.")
+		return "", nil
+	}
+	publicHead, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, "public")
+	if err != nil {
+		return "", err
+	}
+
+	// Append the formatted timestamp to make any restarts idempotent.
+	checkpointName := bi.CheckpointName + "-" + time.Now().UTC().Format("20060102-150405")
+	if _, err := b.PrivateGerritClient.CreateBranch(ctx, b.PrivateGerritProject, checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
+		return "", err
+	}
+	return checkpointName, nil
+}
+
+func (b *BuildReleaseTasks) moveAndRebasePrivateChanges(ctx *wf.TaskContext, checkpointBranch string, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
+	for i, ci := range cls {
+		// Idempotent. Changes can be in the MERGED (HTTP 409) state which means
+		// that they cannot be moved or rebased. Refetch it and if it is MERGED,
+		// skip it similarly to submitPrivateChanges.
+		fresh, err := b.PrivateGerritClient.GetChange(ctx, ci.ID)
+		if err != nil {
+			return nil, err
+		}
+		if fresh.Status == gerrit.ChangeStatusMerged {
+			cls[i] = fresh
+			continue
+		}
+		movedCI, err := b.PrivateGerritClient.MoveChange(ctx, ci.ID, checkpointBranch)
+		if err != nil {
+			var httpErr *gerrit.HTTPError
+			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
+				return nil, err
+			}
+			movedCI = *ci
+		} else {
+			cls[i] = &movedCI
+		}
+		rebasedCI, err := b.PrivateGerritClient.RebaseChange(ctx, movedCI.ID, "")
+		if err != nil {
+			var httpErr *gerrit.HTTPError
+			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
+				return nil, err
+			}
+		} else {
+			cls[i] = &rebasedCI
+		}
+	}
+	return cls, nil
+}
+
+func (b *BuildReleaseTasks) submitPrivateChanges(ctx *wf.TaskContext, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
+	if _, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
+		unsubmitted := len(cls)
+		for i, change := range cls {
+			if change.Status == gerrit.ChangeStatusMerged {
+				unsubmitted--
+				continue
+			}
+			ci, err := b.PrivateGerritClient.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+			if err != nil {
+				return "", false, err
+			}
+			if !ci.Submittable {
+				continue
+			}
+			submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
+			if err != nil {
+				return "", false, err
+			}
+			cls[i] = &submitted
+			unsubmitted--
+		}
+		if unsubmitted == 0 {
+			return "", true, nil
+		}
+		return "", false, nil
+	}); err != nil {
+		return nil, err
+	}
+	return cls, nil
+}
+
+func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, bi securityBranchInfo, cls []*gerrit.ChangeInfo) ([]string, error) {
+	if len(cls) == 0 {
+		ctx.Printf("No PRIVATE-track security patches; skipping internal release branch creation.")
+		return nil, nil
+	}
+	var internalBranches []string
+	for _, next := range bi.PublicReleaseBranches {
+		publicHead, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, majorFromMinor(next))
+		if err != nil {
+			return nil, err
+		}
+		internalReleaseBranch := "internal-" + next
+
+		// `internal-<relver>` branches are not timestamped; we must
+		// try to delete existing branches to preserve idempotency.
+		if err := b.PrivateGerritClient.DeleteBranch(ctx, b.PrivateGerritProject, internalReleaseBranch); err != nil && !errors.Is(err, gerrit.ErrResourceNotExist) {
+			return nil, err
+		}
+		if _, err := b.PrivateGerritClient.CreateBranch(ctx, b.PrivateGerritProject, internalReleaseBranch, gerrit.BranchInput{Revision: publicHead}); err != nil {
+			return nil, err
+		}
+		internalBranches = append(internalBranches, internalReleaseBranch)
+	}
+	return internalBranches, nil
+}
+
+func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, releaseBranches []string, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
+	var cherryPicks []*gerrit.ChangeInfo
+	for _, ci := range cls {
+		for _, releaseBranch := range releaseBranches {
+			// Check whether a non-abandoned cherry-pick of this
+			// change already exists on the target branch (e.g. from
+			// a prior run). The Change-Id footer is preserved in
+			// the cherry-pick commit message, so we query by it.
+			existing, err := b.PrivateGerritClient.QueryChanges(ctx,
+				fmt.Sprintf("project:%s branch:%s change:%s -is:abandoned",
+					b.PrivateGerritProject, releaseBranch, ci.ChangeID))
+			if err != nil {
+				return nil, err
+			}
+			if len(existing) > 0 {
+				ctx.Printf("Skipping cherry-pick of %s to %s: existing CL %s (status %s)",
+					ci.ChangeID, releaseBranch,
+					privateChangeURL(existing[0].ChangeNumber),
+					existing[0].Status)
+				cherryPicks = append(cherryPicks, existing[0])
+				continue
+			}
+
+			commitMessage, err := b.PrivateGerritClient.GetCommitMessage(ctx, ci.ID)
+			if err != nil {
+				return nil, err
+			}
+			commitMessage = fmt.Sprintf("[%s] %s", majorFromMinor(strings.TrimPrefix(releaseBranch, "internal-")), commitMessage)
+
+			cpCI, conflicts, err := b.PrivateGerritClient.CreateCherryPick(ctx, ci.ID, releaseBranch, commitMessage)
+			if err != nil {
+				return nil, err
+			}
+			if conflicts {
+				ctx.Printf("Cherry-pick of %s has merge conflicts against %s: %s", privateChangeURL(ci.ChangeNumber), releaseBranch, privateChangeURL(cpCI.ChangeNumber))
+			}
+			cp := cpCI
+			cherryPicks = append(cherryPicks, &cp)
+		}
+	}
+	return cherryPicks, nil
+}
+
+// submitCherryPicks waits for the cherry-pick CLs to become submittable and
+// submits them, landing the security fixes on the internal release branches.
+// It returns a display map of internal release branch to submitted CL URLs.
+func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks []*gerrit.ChangeInfo) (map[string][]string, error) {
+	if _, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
+		unsubmitted := len(cherryPicks)
+		for i, cp := range cherryPicks {
+			if cp.Status == gerrit.ChangeStatusMerged {
+				unsubmitted--
+				continue
+			}
+			ci, err := b.PrivateGerritClient.GetChange(ctx, cp.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+			if err != nil {
+				return "", false, err
+			}
+			if !ci.Submittable {
+				continue
+			}
+			submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
+			if err != nil {
+				return "", false, err
+			}
+			cherryPicks[i] = &submitted
+			unsubmitted--
+		}
+		if unsubmitted == 0 {
+			return "", true, nil
+		}
+		return "", false, nil
+	}); err != nil {
+		return nil, err
+	}
+	submitted := map[string][]string{}
+	for _, cp := range cherryPicks {
+		submitted[cp.Branch] = append(submitted[cp.Branch], privateChangeURL(cp.ChangeNumber))
+	}
+	return submitted, nil
+}
+
+// majorFromMinor converts a release branch name from its minor version form to
+// its major version form (i.e., release-branch.go1.2.3 to release-branch.go1.2).
+func majorFromMinor(branch string) string {
+	stripped := strings.TrimPrefix(branch, "release-branch.")
+	major := goversion.Lang(stripped)
+	return "release-branch." + major
+}
+
+func privateChangeURL[T int | string](clNum T) string {
+	return fmt.Sprintf("https://go-internal-review.git.corp.google.com/c/go/+/%v", clNum)
 }
 
 // getGitSource selects a source spec from the provided inputs.
@@ -1204,7 +1577,6 @@ func (b *BuildReleaseTasks) reproduceDistpack(ctx *wf.TaskContext, target *relea
 		_, err = io.Copy(w, distpack)
 		return err
 	})
-
 }
 
 func (b *BuildReleaseTasks) checkDistpacksMatch(ctx *wf.TaskContext, linux, windows artifact) error {
@@ -1279,21 +1651,6 @@ func (b *BuildReleaseTasks) modFilesFromDistpack(ctx *wf.TaskContext, distpack a
 		return moduleArtifact{}, err
 	}
 	result.ZipScratch = artifact.Scratch
-	return result, nil
-}
-
-func (b *BuildReleaseTasks) modFilesFromBinary(ctx *wf.TaskContext, version string, t time.Time, tar artifact) (moduleArtifact, error) {
-	result := moduleArtifact{Target: tar.Target}
-	a, err := b.runBuildStep(ctx, nil, tar, "mod.zip", func(r io.Reader, w io.Writer) error {
-		ctx.DisableWatchdog() // The zipping process can be time consuming and is unlikely to hang.
-		var err error
-		result.Mod, result.Info, err = task.TarToModFiles(tar.Target, version, t, r, w)
-		return err
-	})
-	if err != nil {
-		return moduleArtifact{}, err
-	}
-	result.ZipScratch = a.Scratch
 	return result, nil
 }
 
@@ -1524,7 +1881,7 @@ func (b *BuildReleaseTasks) computeGPG(ctx *wf.TaskContext, artifacts []artifact
 	}
 	// All done, we have our GPG signatures.
 	// Put them in a base name → scratch path map.
-	var signatures = make(map[string]string)
+	signatures := make(map[string]string)
 	for _, o := range out {
 		signatures[path.Base(o)] = o
 	}
@@ -1727,7 +2084,6 @@ func (b *BuildReleaseTasks) runAdvisoryTest(ctx *wf.TaskContext, name string, sk
 		return testResult{name, false}, b.ApproveAction(ctx)
 	}
 	return testResult{name, true}, nil
-
 }
 
 func (b *BuildReleaseTasks) checkTestResults(ctx *wf.TaskContext, results []testResult) error {
@@ -1948,7 +2304,7 @@ func (tasks *BuildReleaseTasks) uploadFile(ctx *wf.TaskContext, servingFS fs.FS,
 // It returns the Go version and files that have been successfully published.
 func (tasks *BuildReleaseTasks) publishArtifacts(ctx *wf.TaskContext, version string, artifacts []artifact) (task.Published, error) {
 	// Each release artifact corresponds to a single website file.
-	var files = make([]task.WebsiteFile, len(artifacts))
+	files := make([]task.WebsiteFile, len(artifacts))
 	for i, a := range artifacts {
 		// Define website file metadata.
 		f := task.WebsiteFile{

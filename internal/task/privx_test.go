@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
@@ -349,8 +350,8 @@ echo`)
 		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(announcementHeader, p.AnnounceMailHeader) {
-		t.Errorf("announcement header: got %#v, want %#v", announcementHeader, p.AnnounceMailHeader)
+	if diff := cmp.Diff(p.AnnounceMailHeader, announcementHeader); diff != "" {
+		t.Errorf("announcement header mismatch (-want +got):\n%s", diff)
 	}
 	wantSubject := `[security] Vulnerabilities in golang.org/x/net`
 	if announcementMessage.Subject != wantSubject {
@@ -394,8 +395,8 @@ This is CVE-1970-0003 and Go issue https://go.dev/issue/4294967298.
 Cheers,
 Go Security team
 `
-	if announcementMessage.BodyText != wantText {
-		t.Errorf("announcement text:\ngot:\n%s\nwant:\n%s", announcementMessage.BodyText, wantText)
+	if diff := cmp.Diff(wantText, announcementMessage.BodyText); diff != "" {
+		t.Errorf("announcement text mismatch (-want +got):\n%s", diff)
 	}
 
 	wantHTML := `<p>Hello gophers,</p>
@@ -421,8 +422,8 @@ float indefinitely.</p>
 <p>Cheers,<br>
 Go Security team</p>
 `
-	if announcementMessage.BodyHTML != wantHTML {
-		t.Errorf("announcement HTML:\ngot:\n%s\nwant:\n%s", announcementMessage.BodyHTML, wantHTML)
+	if diff := cmp.Diff(wantHTML, announcementMessage.BodyHTML); diff != "" {
+		t.Errorf("announcement HTML mismatch (-want +got):\n%s", diff)
 	}
 
 	// Verify that vuln reports were submitted to vulndb.
@@ -463,7 +464,11 @@ Go Security team</p>
 		if mod.Module != "golang.org/x/net" {
 			t.Errorf("patch %d: module = %q, want %q", p.ID, mod.Module, "golang.org/x/net")
 		}
-		if len(mod.Packages) != 1 || mod.Packages[0].Package != p.Package {
+		if len(mod.Packages) != 1 {
+			t.Errorf("patch %d: got %d packages, want 1", p.ID, len(mod.Packages))
+			continue
+		}
+		if mod.Packages[0].Package != p.Package {
 			t.Errorf("patch %d: package = %q, want %q", p.ID, mod.Packages[0].Package, p.Package)
 		}
 
@@ -477,8 +482,8 @@ Go Security team</p>
 		}
 
 		// Credits.
-		if !reflect.DeepEqual(vr.Credits, p.Credits) {
-			t.Errorf("patch %d: credits = %v, want %v", p.ID, vr.Credits, p.Credits)
+		if diff := cmp.Diff(p.Credits, vr.Credits); diff != "" {
+			t.Errorf("patch %d: credits mismatch (-want +got):\n%s", p.ID, diff)
 		}
 
 		// Description must be non-empty.
@@ -626,6 +631,59 @@ func TestResolveVulnerableVersion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUpdateGitHubIssues(t *testing.T) {
+	ctx := &wf.TaskContext{
+		Context: context.Background(),
+		Logger:  &testLogger{t: t},
+	}
+
+	t.Run("nil milestone", func(t *testing.T) {
+		if err := UpdateGitHubIssues(ctx, nil, nil); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("patches", func(t *testing.T) {
+		fakeGH := &FakeGitHub{}
+		rm := &relmeta.ReleaseMilestone{
+			Patches: []*relmeta.SecurityPatch{
+				{
+					ID:            100,
+					Track:         relmeta.Private,
+					Package:       "crypto/tls",
+					ReleaseNote:   "crypto/tls: bad handshake.\n\nA crafted ClientHello causes a panic.",
+					GitHubIssueID: 11111,
+				},
+				{
+					ID:            200,
+					Track:         relmeta.Public,
+					Package:       "net/http",
+					ReleaseNote:   "net/http: request smuggling.\n\nMalformed headers bypass validation.",
+					GitHubIssueID: 22222,
+				},
+			},
+		}
+		if err := UpdateGitHubIssues(ctx, fakeGH, rm); err != nil {
+			t.Fatalf("UpdateGitHubIssues: %v", err)
+		}
+		for _, p := range rm.Patches {
+			issue, ok := fakeGH.Issues[int(p.GitHubIssueID)]
+			if !ok {
+				t.Errorf("patch %d: GitHub issue %d not found", p.ID, p.GitHubIssueID)
+				continue
+			}
+			body := issue.GetBody()
+			if !strings.Contains(body, p.ReleaseNote) {
+				t.Errorf("patch %d: issue body missing release note", p.ID)
+			}
+			wantTrailer := fmt.Sprintf("This was a %s issue originally tracked in http://b/%d.", p.Track, p.ID)
+			if !strings.Contains(body, wantTrailer) {
+				t.Errorf("patch %d: issue body missing trailer, got:\n%s", p.ID, body)
+			}
+		}
+	})
 }
 
 func TestRepoName(t *testing.T) {

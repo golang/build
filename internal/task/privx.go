@@ -6,12 +6,10 @@ package task
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
-	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -26,44 +24,7 @@ import (
 	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/vulndb/report"
-	yaml "gopkg.in/yaml.v3"
 )
-
-// Security release parameter definitions.
-var (
-	SecurityMilestoneParameter = wf.ParamDef[string]{
-		Name:      "Release Milestone",
-		ParamType: wf.BasicString,
-		Doc: `Release Milestone is the security-metadata milestone for the security patch(es) being included in a Go release.
-
-You can check with the security release coordinator for this release to confirm this input.`,
-		Example: "123456",
-		Check: func(num string) error {
-			if !numOnlyRE.MatchString(num) {
-				return errors.New("milestone number must contain only numbers")
-			}
-			return nil
-		},
-	}
-	numOnlyRE = regexp.MustCompile(`^\d+$`)
-)
-
-func fetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
-	const project = "security-metadata"
-	head, err := private.ReadBranchHead(ctx, project, "main")
-	if err != nil {
-		return relmeta.ReleaseMilestone{}, err
-	}
-	b, err := private.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
-	if err != nil {
-		return relmeta.ReleaseMilestone{}, err
-	}
-	var rm relmeta.ReleaseMilestone
-	if err := yaml.Unmarshal(b, &rm); err != nil {
-		return relmeta.ReleaseMilestone{}, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
-	}
-	return rm, nil
-}
 
 type PrivXPatch struct {
 	Git           *Git
@@ -495,10 +456,19 @@ func (x *PrivXPatch) vulnModuleInfo(p *relmeta.SecurityPatch, tagged TagRepo, vu
 var vulndbReviewers = []string{"neal@golang.org", "nsh@golang.org"}
 
 func (x *PrivXPatch) UpdateGitHubIssues(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) error {
+	return UpdateGitHubIssues(ctx, x.GitHub, rm)
+}
+
+// UpdateGitHubIssues updates the body of each security issue in rm
+// with a disclosure notice. It is a no-op when rm is nil or has no patches.
+func UpdateGitHubIssues(ctx *wf.TaskContext, gh GitHubClientInterface, rm *relmeta.ReleaseMilestone) error {
+	if rm == nil {
+		return nil
+	}
 	for _, p := range rm.Patches {
 		body := fmt.Sprintf(disclosureBody, p.ReleaseNote, p.Track, p.ID)
 		req := &github.IssueRequest{Body: &body}
-		if _, _, err := x.GitHub.EditIssue(ctx, "golang", "go", int(p.GitHubIssueID), req); err != nil {
+		if _, _, err := gh.EditIssue(ctx, "golang", "go", int(p.GitHubIssueID), req); err != nil {
 			return err
 		}
 		ctx.Printf("Updated https://go.dev/issue/%d", p.GitHubIssueID)

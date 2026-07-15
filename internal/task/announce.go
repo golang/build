@@ -6,6 +6,7 @@ package task
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -15,6 +16,8 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"path"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -32,7 +35,9 @@ import (
 	"golang.org/x/build/internal/secret"
 	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/maintner/maintnerd/maintapi/version"
+	"golang.org/x/build/relmeta"
 	"golang.org/x/net/html"
+	yaml "gopkg.in/yaml.v3"
 )
 
 type releaseAnnouncement struct {
@@ -126,6 +131,7 @@ func (d Date) String() string { return d.Format("2006-01-02") }
 func (d Date) Format(layout string) string {
 	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.UTC).Format(layout)
 }
+
 func (d Date) After(year int, month time.Month, day int) bool {
 	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.UTC).
 		After(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
@@ -634,7 +640,6 @@ func (t AnnounceMailTasks) AwaitAnnounceMail(ctx *workflow.TaskContext, m SentMa
 			return "", false, nil
 		}
 		return threadURL, threadURL != "", nil
-
 	}
 	return AwaitCondition(ctx, 10*time.Second, check)
 }
@@ -807,9 +812,8 @@ func (markdownToTextRenderer) Render(w io.Writer, source []byte, n ast.Node) err
 		n.Dump(source, 0)
 	}
 
-	var (
-		markers []byte // Stack of list markers, from outermost to innermost.
-	)
+	var markers []byte // Stack of list markers, from outermost to innermost.
+
 	walk := func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if entering {
 			if n.Type() == ast.TypeBlock && n.PreviousSibling() != nil {
@@ -976,4 +980,39 @@ func (t SecurityCommunicationTasks) GetSecurityReleaseNotes(ctx *workflow.TaskCo
 		releaseNotes = append(releaseNotes, p.ReleaseNote)
 	}
 	return releaseNotes, nil
+}
+
+var (
+	SecurityMilestoneParameter = workflow.ParamDef[string]{
+		Name:      "Release Milestone",
+		ParamType: workflow.BasicString,
+		Doc: `Release Milestone is the security-metadata milestone for the security patch(es) being included in a Go release.
+
+You can check with the security release coordinator for this release to confirm this input.`,
+		Example: "123456",
+		Check: func(num string) error {
+			if !numOnlyRE.MatchString(num) {
+				return errors.New("milestone number must contain only numbers")
+			}
+			return nil
+		},
+	}
+	numOnlyRE = regexp.MustCompile(`^\d+$`)
+)
+
+func fetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
+	const project = "security-metadata"
+	head, err := private.ReadBranchHead(ctx, project, "main")
+	if err != nil {
+		return relmeta.ReleaseMilestone{}, err
+	}
+	b, err := private.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
+	if err != nil {
+		return relmeta.ReleaseMilestone{}, err
+	}
+	var rm relmeta.ReleaseMilestone
+	if err := yaml.Unmarshal(b, &rm); err != nil {
+		return relmeta.ReleaseMilestone{}, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
+	}
+	return rm, nil
 }
