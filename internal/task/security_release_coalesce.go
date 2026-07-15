@@ -5,12 +5,10 @@
 package task
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	goversion "go/version"
 	"net/http"
-	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -19,26 +17,6 @@ import (
 	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/build/relmeta"
-	yaml "gopkg.in/yaml.v3"
-)
-
-// Security release parameter definitions.
-var (
-	SecurityMilestoneParameter = wf.ParamDef[string]{
-		Name:      "Release Milestone",
-		ParamType: wf.BasicString,
-		Doc: `Release Milestone is the security-metadata milestone for the security patch(es) being included in a Go release.
-
-You can check with the security release coordinator for this release to confirm this input.`,
-		Example: "123456",
-		Check: func(num string) error {
-			if !numOnlyRE.MatchString(num) {
-				return errors.New("milestone number must contain only numbers")
-			}
-			return nil
-		},
-	}
-	numOnlyRE = regexp.MustCompile(`^\d+$`)
 )
 
 // SecurityReleaseCoalesceTask is the workflow used to preparing patches for
@@ -146,23 +124,6 @@ func (x *SecurityReleaseCoalesceTask) GetPrivateChangelists(ctx *wf.TaskContext,
 		}
 	}
 	return clNums, nil
-}
-
-func fetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
-	const project = "security-metadata"
-	head, err := private.ReadBranchHead(ctx, project, "main")
-	if err != nil {
-		return relmeta.ReleaseMilestone{}, err
-	}
-	b, err := private.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
-	if err != nil {
-		return relmeta.ReleaseMilestone{}, err
-	}
-	var rm relmeta.ReleaseMilestone
-	if err := yaml.Unmarshal(b, &rm); err != nil {
-		return relmeta.ReleaseMilestone{}, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
-	}
-	return rm, nil
 }
 
 func (x *SecurityReleaseCoalesceTask) CheckChanges(ctx *wf.TaskContext, clNums []string) ([]*gerrit.ChangeInfo, error) {

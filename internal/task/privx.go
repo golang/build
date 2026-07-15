@@ -6,10 +6,12 @@ package task
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -21,7 +23,44 @@ import (
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/build/relmeta"
 	"golang.org/x/sync/errgroup"
+	yaml "gopkg.in/yaml.v3"
 )
+
+// Security release parameter definitions.
+var (
+	SecurityMilestoneParameter = wf.ParamDef[string]{
+		Name:      "Release Milestone",
+		ParamType: wf.BasicString,
+		Doc: `Release Milestone is the security-metadata milestone for the security patch(es) being included in a Go release.
+
+You can check with the security release coordinator for this release to confirm this input.`,
+		Example: "123456",
+		Check: func(num string) error {
+			if !numOnlyRE.MatchString(num) {
+				return errors.New("milestone number must contain only numbers")
+			}
+			return nil
+		},
+	}
+	numOnlyRE = regexp.MustCompile(`^\d+$`)
+)
+
+func fetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
+	const project = "security-metadata"
+	head, err := private.ReadBranchHead(ctx, project, "main")
+	if err != nil {
+		return relmeta.ReleaseMilestone{}, err
+	}
+	b, err := private.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
+	if err != nil {
+		return relmeta.ReleaseMilestone{}, err
+	}
+	var rm relmeta.ReleaseMilestone
+	if err := yaml.Unmarshal(b, &rm); err != nil {
+		return relmeta.ReleaseMilestone{}, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
+	}
+	return rm, nil
+}
 
 type PrivXPatch struct {
 	Git           *Git
