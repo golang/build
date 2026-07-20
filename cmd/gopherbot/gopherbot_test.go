@@ -708,6 +708,11 @@ func TestLongestPrefixMatch(t *testing.T) {
 		{"runtime/internal/sys", true, "prefix match: runtime/internal/sys -> runtime"},
 		{"runtime/internal/atomic", true, "prefix match: runtime/internal/atomic -> runtime"},
 		{"internal/runtime/atomic/value", true, "prefix match: internal/runtime/atomic/value -> internal/runtime/atomic"},
+		{"runtime/metric", true, "prefix match: runtime/metric -> runtime (1 level below)"},
+		{"x/sys/unix/foo", true, "prefix match: x/sys/unix/foo -> x/sys/unix"},
+		{"cmd/asm/internal/arch", true, "prefix match: cmd/asm/internal/arch -> cmd/asm"},
+		{"runtime/pprof/internal", true, "prefix match: runtime/pprof/internal -> runtime/pprof"},
+		{"cmd/compile/internal/noder/a/b/c", true, "prefix match: deeply nested (6 levels) -> cmd/compile"},
 
 		// No match: packages not under any compiler/runtime-owned prefix.
 		{"net/http", false, "no match: net/http not in crtPackages"},
@@ -733,6 +738,23 @@ func TestLongestPrefixMatch(t *testing.T) {
 		got := longestPrefixMatch(tt.pkg, crtPackages)
 		if got != tt.want {
 			t.Errorf("longestPrefixMatch(%q) = %v, want %v — %s", tt.pkg, got, tt.want, tt.desc)
+		}
+	}
+}
+
+func TestLongestPrefixMatchEmpty(t *testing.T) {
+	// Edge case: empty crtPackages should never match.
+	empty := map[string]struct{}{}
+	tests := []string{
+		"cmd/compile",
+		"runtime",
+		"net/http",
+		"",
+		"cmd/compile/internal/noder",
+	}
+	for _, pkg := range tests {
+		if longestPrefixMatch(pkg, empty) {
+			t.Errorf("longestPrefixMatch(%q, empty) = true, want false", pkg)
 		}
 	}
 }
