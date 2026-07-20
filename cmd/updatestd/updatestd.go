@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// updatestd is an experimental program that has been used to update
-// the standard library modules as part of golang.org/issue/36905 in
-// CL 255860 and CL 266898. It's expected to be modified to meet the
-// ongoing needs of that recurring maintenance work.
+// updatestd is a command used to update dependency versions
+// in the Go standard library as part of go.dev/issue/36905.
+// It's expected to be modified to meet the ongoing needs of
+// that recurring maintenance work.
 package main
 
 import (
@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"io"
@@ -139,6 +140,41 @@ func main() {
 	//
 	log.Println("updating bundles in", r.dir)
 	r.run(goCmd, "generate", "-run=bundle", "std", "cmd")
+
+	// Update the golang.org/x/pkgsite/cmd/internal/doc version used
+	// as the underlying implementation of 'go doc -http'.
+	if goVersion == 25 { // TODO: Delete this case after Go 1.25 stops being supported.
+		log.Println(`skipping updating x/pkgsite/cmd/internal/doc version:
+
+on Go 1.25 release branch, this maintenance is done manually by editing the version constant in doPkgsite:
+
+	$EDITOR src/cmd/internal/doc/main.go
+	(see https://cs.opensource.google/go/go/+/release-branch.go1.25:src/cmd/internal/doc/main.go;l=246;drc=b4309ece66ca989a38ed65404850a49ae8f92742)
+
+automated updatestd maintenance support currently applies to Go 1.27+`)
+	} else if goVersion == 26 { // TODO: Delete this case after Go 1.26 stops being supported.
+		log.Println(`skipping updating x/pkgsite/cmd/internal/doc version:
+
+on Go 1.26 release branch, this maintenance is done manually by editing the version constant in doPkgsite:
+
+	$EDITOR src/cmd/go/internal/doc/pkgsite.go
+	(see https://cs.opensource.google/go/go/+/release-branch.go1.26:src/cmd/go/internal/doc/pkgsite.go;l=74;drc=866e461b9689d03dbbf2df19b86cace21270865b)
+
+automated updatestd maintenance support currently applies to Go 1.27+`)
+	} else if pkgsiteHash := hashes["pkgsite"]; pkgsiteHash != "" {
+		log.Println("updating x/pkgsite/cmd/internal/doc version to", pkgsiteHash)
+		out := r.runOut(goCmd, "list", "-mod=readonly", "-m", "-json", "golang.org/x/pkgsite/cmd/internal/doc@"+pkgsiteHash)
+		var mod struct{ Version string }
+		if err := json.Unmarshal(out, &mod); err != nil {
+			log.Fatalf("error parsing go list -m -json output: %v", err)
+		}
+		err := editPkgsiteVersion(*goroot, mod.Version)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	} else {
+		log.Println("skipping updating x/pkgsite/cmd/internal/doc version because x/pkgsite doesn't have a branch named", *branch)
+	}
 }
 
 type Work struct {
@@ -235,7 +271,7 @@ func gorootVersion(goroot string) (int, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filepath.Join(goroot, "src", "internal", "goversion", "goversion.go"), nil, 0)
 	if os.IsNotExist(err) {
-		return 0, fmt.Errorf("did not find goversion.go file (%v); wrong goroot or did internal/goversion package change?", err)
+		return 0, fmt.Errorf("did not find goversion.go file (%v); wrong goroot or internal/goversion package changed", err)
 	} else if err != nil {
 		return 0, err
 	}
@@ -253,10 +289,59 @@ func gorootVersion(goroot string) (int, error) {
 			if !ok || l.Kind != token.INT {
 				continue
 			}
+			// Found it.
 			return strconv.Atoi(l.Value)
 		}
 	}
-	return 0, fmt.Errorf("did not find Version declaration in %s; wrong goroot or did internal/goversion package change?", fset.File(f.Pos()).Name())
+	return 0, fmt.Errorf("did not find Version declaration in %s; wrong goroot or internal/goversion package changed", fset.File(f.Pos()).Name())
+}
+
+// editPkgsiteVersion reads the GOROOT/src/cmd/go/internal/doc/pkgsite.go
+// file and edits the pkgsiteCmdInternalDocVersion constant found therein.
+func editPkgsiteVersion(goroot, version string) error {
+	// Parse the pkgsite.go file, extract the declaration from the AST,
+	// edit it in place and overwrite the file.
+	//
+	// This is a pragmatic approach that relies on the trajectory of the
+	// cmd/go/internal/doc package being predictable and in our control.
+	// This small helper is easy to replace with something else if it
+	// becomes desirable to start using another approach for this task.
+	//
+	filename := filepath.Join(goroot, "src", "cmd", "go", "internal", "doc", "pkgsite.go")
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("did not find pkgsite.go file (%v); wrong goroot or cmd/go/internal/doc package changed", err)
+	} else if err != nil {
+		return err
+	}
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, s := range g.Specs {
+			v, ok := s.(*ast.ValueSpec)
+			if !ok || len(v.Names) != 1 || v.Names[0].String() != "pkgsiteCmdInternalDocVersion" || len(v.Values) != 1 {
+				continue
+			}
+			l, ok := v.Values[0].(*ast.BasicLit)
+			if !ok || l.Kind != token.STRING {
+				continue
+			}
+
+			// Found it.
+			// Edit its value and overwrite the existing file.
+			l.Value = fmt.Sprintf("%q", version)
+			var buf bytes.Buffer
+			err := format.Node(&buf, fset, f)
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(filename, buf.Bytes(), 0) // file already exists, so perm is unused
+		}
+	}
+	return fmt.Errorf("did not find pkgsiteCmdInternalDocVersion declaration in %s; wrong goroot or cmd/go/internal/doc package changed", fset.File(f.Pos()).Name())
 }
 
 type runner struct{ dir string }
