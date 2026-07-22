@@ -15,15 +15,17 @@ spec:
     metadata:
       labels:
         app: devapp
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/devapp: docker/default
-        container.apparmor.security.beta.kubernetes.io/devapp: runtime/default
     spec:
       containers:
       - name: devapp
         image: gcr.io/go-dashboard-dev/devapp:latest
         imagePullPolicy: Always
         command: ["/devapp", "-listen=:80", "-autocert-bucket=golang-devapp-dev-autocert"]
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          appArmorProfile:
+            type: RuntimeDefault
         readinessProbe:
           httpGet:
             path: /healthz

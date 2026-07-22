@@ -18,9 +18,6 @@ spec:
     metadata:
       labels:
         app: maintnerd
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/maintnerd: docker/default
-        container.apparmor.security.beta.kubernetes.io/maintnerd: runtime/default
     spec:
       serviceAccountName: maintnerd
       volumes:
@@ -32,6 +29,11 @@ spec:
         image: gcr.io/symbolic-datum-552/maintnerd:latest
         imagePullPolicy: Always
         command: ["/usr/bin/tini", "--", "/maintnerd", "--config=go", "--bucket=golang-maintner-log", "--verbose", "--data-dir=/cache", "-listen-https-selfsigned=:444"]
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          appArmorProfile:
+            type: RuntimeDefault
         volumeMounts:
         - mountPath: /cache
           name: maintner-cache

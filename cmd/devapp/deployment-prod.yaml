@@ -16,9 +16,6 @@ spec:
     metadata:
       labels:
         app: devapp
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/devapp: docker/default
-        container.apparmor.security.beta.kubernetes.io/devapp: runtime/default
     spec:
       serviceAccountName: devapp
       containers:
@@ -26,6 +23,11 @@ spec:
         image: gcr.io/symbolic-datum-552/devapp:latest
         imagePullPolicy: Always
         command: ["/devapp", "-listen-https-selfsigned=:444"]
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          appArmorProfile:
+            type: RuntimeDefault
         readinessProbe:
           httpGet:
             path: /healthz

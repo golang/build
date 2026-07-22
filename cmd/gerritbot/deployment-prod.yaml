@@ -16,9 +16,6 @@ spec:
     metadata:
       labels:
         app: gerritbot
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/gerritbot: docker/default
-        container.apparmor.security.beta.kubernetes.io/gerritbot: runtime/default
     spec:
       serviceAccountName: gerritbot
       containers:
@@ -26,6 +23,11 @@ spec:
         image: gcr.io/symbolic-datum-552/gerritbot:latest
         imagePullPolicy: Always
         command: ["/sbin/tini", "--", "/gerritbot", "-listen-https-selfsigned=:444", "-gitcookies-file=/gitcookies"]
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          appArmorProfile:
+            type: RuntimeDefault
         ports:
         - containerPort: 443
         resources:

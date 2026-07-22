@@ -16,9 +16,6 @@ spec:
     metadata:
       labels:
         app: pubsubhelper
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/pubsubhelper: docker/default
-        container.apparmor.security.beta.kubernetes.io/pubsubhelper: runtime/default
     spec:
       serviceAccountName: pubsubhelper
       containers:
@@ -26,6 +23,11 @@ spec:
         image: gcr.io/symbolic-datum-552/pubsubhelper:latest
         imagePullPolicy: Always
         command: ["/pubsubhelper", "-listen-http=:80", "-listen-https-autocert=:443", "-autocert-bucket=golang-pubsubhelper-autocert"]
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          appArmorProfile:
+            type: RuntimeDefault
         ports:
         - containerPort: 25
         - containerPort: 80

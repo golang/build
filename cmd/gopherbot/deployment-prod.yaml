@@ -16,9 +16,6 @@ spec:
     metadata:
       labels:
         app: gopherbot
-      annotations:
-        container.seccomp.security.alpha.kubernetes.io/gopherbot: docker/default
-        container.apparmor.security.beta.kubernetes.io/gopherbot: runtime/default
     spec:
       serviceAccountName: gopherbot
       volumes:
@@ -32,6 +29,11 @@ spec:
         - name: XDG_CACHE_HOME
           value: "/cache"
         command: ["/gopherbot", "--daemon"]
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          appArmorProfile:
+            type: RuntimeDefault
         volumeMounts:
         - mountPath: /cache
           name: cache-volume
