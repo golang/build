@@ -669,3 +669,92 @@ func TestForeachIssue(t *testing.T) {
 		t.Errorf("got %+v, want all true", got)
 	}
 }
+
+func TestLongestPrefixMatch(t *testing.T) {
+	// Simulate the crtPackages set as built by labelCompilerRuntimeIssues.
+	crtPackages := map[string]struct{}{
+		"cmd/compile":                     {},
+		"cmd/compile/internal/amd64":      {},
+		"cmd/compile/internal/ssa":        {},
+		"cmd/compile/internal/syntax":     {},
+		"cmd/compile/internal/types":      {},
+		"cmd/link":                        {},
+		"runtime":                         {},
+		"runtime/metrics":                 {},
+		"runtime/pprof":                   {},
+		"internal/abi":                    {},
+		"internal/runtime/atomic":         {},
+		"x/sys/unix":                      {},
+		"cmd/asm":                         {},
+	}
+
+	tests := []struct {
+		pkg  string
+		want bool
+		desc string
+	}{
+		// Exact matches should still work.
+		{"cmd/compile", true, "exact match: cmd/compile"},
+		{"runtime", true, "exact match: runtime"},
+		{"runtime/metrics", true, "exact match: runtime/metrics"},
+		{"x/sys/unix", true, "exact match: x/sys/unix"},
+		{"internal/abi", true, "exact match: internal/abi"},
+
+		// Prefix matches: sub-packages not explicitly in owners but under known packages.
+		{"cmd/compile/internal/noder", true, "prefix match: cmd/compile/internal/noder -> cmd/compile"},
+		{"cmd/compile/internal/ir", true, "prefix match: cmd/compile/internal/ir -> cmd/compile"},
+		{"cmd/compile/internal/noder/reader", true, "prefix match: cmd/compile/internal/noder/reader -> cmd/compile"},
+		{"cmd/link/internal/ld", true, "prefix match: cmd/link/internal/ld -> cmd/link"},
+		{"runtime/internal/sys", true, "prefix match: runtime/internal/sys -> runtime"},
+		{"runtime/internal/atomic", true, "prefix match: runtime/internal/atomic -> runtime"},
+		{"internal/runtime/atomic/value", true, "prefix match: internal/runtime/atomic/value -> internal/runtime/atomic"},
+		{"runtime/metric", true, "prefix match: runtime/metric -> runtime (1 level below)"},
+		{"x/sys/unix/foo", true, "prefix match: x/sys/unix/foo -> x/sys/unix"},
+		{"cmd/asm/internal/arch", true, "prefix match: cmd/asm/internal/arch -> cmd/asm"},
+		{"runtime/pprof/internal", true, "prefix match: runtime/pprof/internal -> runtime/pprof"},
+		{"cmd/compile/internal/noder/a/b/c", true, "prefix match: deeply nested (6 levels) -> cmd/compile"},
+
+		// No match: packages not under any compiler/runtime-owned prefix.
+		{"net/http", false, "no match: net/http not in crtPackages"},
+		{"fmt", false, "no match: fmt not in crtPackages"},
+		{"cmd/go", false, "no match: cmd/go not in crtPackages"},
+		{"os", false, "no match: os not in crtPackages"},
+		{"cmd/vet", false, "no match: cmd/vet not in crtPackages"},
+
+		// No match: package that shares prefix with a known package but is NOT a child.
+		// "cmd/compilefoo" starts with "cmd/compile" but "cmd/compile" is not an ancestor
+		// (no '/' after "cmd/compile" in "cmd/compilefoo").
+		{"cmd/compilefoo", false, "no match: cmd/compilefoo is not under cmd/compile (no trailing /)"},
+
+		// Empty string.
+		{"", false, "no match: empty string"},
+
+		// Prefer longer prefix match.
+		{"runtime/metrics/something", true, "prefix match: prefers runtime/metrics over runtime"},
+		{"internal/runtime/atomic/something", true, "prefix match: prefers internal/runtime/atomic over internal/abi"},
+	}
+
+	for _, tt := range tests {
+		got := longestPrefixMatch(tt.pkg, crtPackages)
+		if got != tt.want {
+			t.Errorf("longestPrefixMatch(%q) = %v, want %v — %s", tt.pkg, got, tt.want, tt.desc)
+		}
+	}
+}
+
+func TestLongestPrefixMatchEmpty(t *testing.T) {
+	// Edge case: empty crtPackages should never match.
+	empty := map[string]struct{}{}
+	tests := []string{
+		"cmd/compile",
+		"runtime",
+		"net/http",
+		"",
+		"cmd/compile/internal/noder",
+	}
+	for _, pkg := range tests {
+		if longestPrefixMatch(pkg, empty) {
+			t.Errorf("longestPrefixMatch(%q, empty) = true, want false", pkg)
+		}
+	}
+}

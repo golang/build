@@ -1113,6 +1113,29 @@ func (b *gopherbot) labelBuildIssues(ctx context.Context) error {
 	})
 }
 
+// longestPrefixMatch finds the compiler/runtime package from crtPackages
+// that is the longest prefix of pkg. It resolves the issue where sub-packages
+// like "cmd/compile/internal/noder" are not explicitly listed in the owners
+// file but clearly belong to the compiler team (because "cmd/compile" is).
+//
+// Returns true for exact matches, and for prefix matches where the candidate
+// is a proper ancestor of pkg (pkg has a '/' immediately after the prefix).
+func longestPrefixMatch(pkg string, crtPackages map[string]struct{}) bool {
+	if _, ok := crtPackages[pkg]; ok {
+		return true
+	}
+	var best string
+	for candidate := range crtPackages {
+		if strings.HasPrefix(pkg, candidate) &&
+			(len(candidate) == len(pkg) || pkg[len(candidate)] == '/') {
+			if len(candidate) > len(best) {
+				best = candidate
+			}
+		}
+	}
+	return best != ""
+}
+
 func (b *gopherbot) labelCompilerRuntimeIssues(ctx context.Context) error {
 	entries, err := getAllCodeOwners(ctx)
 	if err != nil {
@@ -1140,7 +1163,7 @@ func (b *gopherbot) labelCompilerRuntimeIssues(ctx context.Context) error {
 			return nil
 		}
 		for p := range strings.SplitSeq(strings.TrimSpace(components[0]), ",") {
-			if _, ok := crtPackages[strings.TrimSpace(p)]; !ok {
+			if !longestPrefixMatch(strings.TrimSpace(p), crtPackages) {
 				continue
 			}
 			// TODO(mknyszek): Add this issue to the GitHub project as well.
