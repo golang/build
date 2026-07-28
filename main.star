@@ -447,7 +447,6 @@ BUILDER_TYPES = [
     "linux-386_debiansid",
     "linux-386-longtest",
     "linux-386-nogreenteagc",
-    "linux-386-sizespecializedmalloc",
     "linux-386-softfloat",
     "linux-amd64",
     "linux-amd64-asan-clang15",
@@ -471,7 +470,6 @@ BUILDER_TYPES = [
     "linux-amd64-racegocommand-noopt",
     "linux-amd64-runtimefreegc",
     "linux-amd64-simd",
-    "linux-amd64-sizespecializedmalloc",
     "linux-amd64-spectre",
     "linux-amd64-ssacheck",
     "linux-amd64-staticlockranking",
@@ -481,13 +479,11 @@ BUILDER_TYPES = [
     "linux-amd64_c2s16-perf_pgo_vs_oldest_stable",
     "linux-amd64_c2s16-perf_vs_gopls_0_11",
     "linux-amd64_c2s16-perf_vs_parent",
-    "linux-amd64_c2s16-perf_vs_parent-sizespecializedmalloc",
     "linux-amd64_c2s16-perf_vs_release",
     "linux-amd64_c2s16-perf_vs_tip",
     "linux-amd64_c2s16-perf_vs_oldest_stable",
     "linux-amd64_c3h88-perf_pgo_vs_oldest_stable",
     "linux-amd64_c3h88-perf_vs_parent",
-    "linux-amd64_c3h88-perf_vs_parent-sizespecializedmalloc",
     "linux-amd64_c3h88-perf_vs_release",
     "linux-amd64_c3h88-perf_vs_tip",
     "linux-amd64_c3h88-perf_vs_oldest_stable",
@@ -508,15 +504,12 @@ BUILDER_TYPES = [
     "linux-arm64-msan-clang15",
     "linux-arm64-race",
     "linux-arm64-simd",
-    "linux-arm64-sizespecializedmalloc",
     "linux-arm64_c4as16-perf_vs_gopls_0_11",
     "linux-arm64_c4as16-perf_vs_parent",
-    "linux-arm64_c4as16-perf_vs_parent-sizespecializedmalloc",
     "linux-arm64_c4as16-perf_vs_release",
     "linux-arm64_c4as16-perf_vs_tip",
     "linux-arm64_c4as16-perf_vs_oldest_stable",
     "linux-arm64_c4ah72-perf_vs_parent",
-    "linux-arm64_c4ah72-perf_vs_parent-sizespecializedmalloc",
     "linux-arm64_c4ah72-perf_vs_release",
     "linux-arm64_c4ah72-perf_vs_tip",
     "linux-arm64_c4ah72-perf_vs_oldest_stable",
@@ -1242,12 +1235,6 @@ RUN_MODS = {
     "simd": make_run_mod(
         add_env = {"GOEXPERIMENT": "simd"},
         enabled = define_for_simd(),
-    ),
-
-    # Build and test with GOEXPERIMENT=sizespecializedmalloc.
-    "sizespecializedmalloc": make_run_mod(
-        add_env = {"GOEXPERIMENT": "sizespecializedmalloc"},
-        enabled = define_for_gotip_postsubmit_or_presubmit_with_filters(["src/runtime/[^/]+"]),
     ),
 
     # Build and test with GO386=softfloat, which makes the compiler emit non-floating-point
