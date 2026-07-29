@@ -12,11 +12,12 @@ import (
 
 	"golang.org/x/build/internal/task"
 	wf "golang.org/x/build/internal/workflow"
+	repospkg "golang.org/x/build/repos"
 )
 
-func TestSelectGolangOrgXReposLive(t *testing.T) {
-	if !testing.Verbose() || flag.Lookup("test.run").Value.String() != "^TestSelectGolangOrgXReposLive$" {
-		t.Skip("not running a live test requiring manual verification if not explicitly requested with go test -v -run=^TestSelectGolangOrgXReposLive$")
+func TestSelectGoDirectiveReposLive(t *testing.T) {
+	if !testing.Verbose() || flag.Lookup("test.run").Value.String() != "^TestSelectGoDirectiveReposLive$" {
+		t.Skip("not running a live test requiring manual verification if not explicitly requested with go test -v -run=^TestSelectGoDirectiveReposLive$")
 	}
 
 	tasks := task.GoDirectiveXReposTasks{}
@@ -30,6 +31,10 @@ func TestSelectGolangOrgXReposLive(t *testing.T) {
 	}
 	slices.Sort(repos)
 	for _, r := range repos {
-		t.Logf("%#v", "golang.org/x/"+r)
+		if repoInfo, ok := repospkg.ByGerritProject[r]; ok {
+			t.Logf("%#v", repoInfo.ImportPath)
+		} else {
+			t.Errorf("repo not found %#v", r)
+		}
 	}
 }

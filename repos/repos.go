@@ -43,8 +43,12 @@ type Repo struct {
 	// the next minor release version should be done for this golang.org/x repo.
 	// See issue 48523.
 	AutoTagNextMinorVersion bool
-	// AutoMaintainGoDirective controls whether automatic go directive
-	// maintenance should be done for this golang.org/x repo.
+	// AutoMaintainGoDirective controls whether automatic go directive maintenance
+	// should be done for this repo.
+	//
+	// If true, the repo must be hosted on Go's Gerrit ([Repo.GoGerritProject]
+	// must be defined) and contain Go code ([Repo.ImportPath] must be defined).
+	//
 	// See proposal 69095.
 	AutoMaintainGoDirective bool
 
@@ -132,11 +136,13 @@ func init() {
 	})
 
 	add(&Repo{
-		GoGerritProject:    "vscode-go",
-		MirrorToGitHub:     true,
-		GitHubRepo:         "golang/vscode-go",
-		WebsiteDesc:        "Go extension for Visual Studio Code",
-		MirrorToCSRProject: "go-vscode-go",
+		GoGerritProject:         "vscode-go",
+		MirrorToGitHub:          true,
+		ImportPath:              "github.com/golang/vscode-go",
+		GitHubRepo:              "golang/vscode-go",
+		WebsiteDesc:             "Go extension for Visual Studio Code",
+		MirrorToCSRProject:      "go-vscode-go",
+		AutoMaintainGoDirective: true,
 	})
 
 	add(&Repo{
@@ -215,8 +221,8 @@ func add(r *Repo) {
 	if r.AutoTagNextMinorVersion && !strings.HasPrefix(r.ImportPath, "golang.org/x/") {
 		panic(fmt.Sprintf("project %+v has AutoTagNextMinorVersion but it's not a golang.org/x repo", r))
 	}
-	if r.AutoMaintainGoDirective && !strings.HasPrefix(r.ImportPath, "golang.org/x/") {
-		panic(fmt.Sprintf("project %+v has AutoMaintainGoDirective but it's not a golang.org/x repo", r))
+	if r.AutoMaintainGoDirective && (r.GoGerritProject == "" || r.ImportPath == "") {
+		panic(fmt.Sprintf("project %+v has AutoMaintainGoDirective but is not hosted on Go Gerrit or does not contain Go code", r))
 	}
 
 	if p := r.GoGerritProject; p != "" {

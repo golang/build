@@ -31,12 +31,9 @@ func (x GoDirectiveXReposTasks) SelectRepos(ctx *wf.TaskContext) ([]string, erro
 		return x.ForceRepos, nil
 	}
 	var repos []string
-	for importPath, r := range repospkg.ByImportPath {
-		if !strings.HasPrefix(importPath, "golang.org/x/") {
-			ctx.Printf("Skipping %s because it's not a golang.org/x repo.", importPath)
-			continue
-		} else if !r.AutoMaintainGoDirective {
-			ctx.Printf("Skipping %s because its go directive maintenance is disabled.", importPath)
+	for _, r := range repospkg.ByGerritProject {
+		if !r.AutoMaintainGoDirective {
+			ctx.Printf("Skipping %s because its go directive maintenance is disabled.", r.GoGerritProject)
 			continue
 		}
 		repos = append(repos, r.GoGerritProject)
@@ -55,7 +52,7 @@ func (x GoDirectiveXReposTasks) BuildPlan(wd *wf.Definition, repos []string, goV
 }
 
 // MaintainGoDirectiveAndMailCL mails a CL that performs go directive maintenance for
-// the specified repository. repo must be a Gerrit project holding a golang.org/x module.
+// the specified repository. repo must be a Gerrit project.
 // goVer is a number like 24, when Go 1.24.0 is the most recently released major Go release.
 //
 // See go.dev/issue/69095 and go.dev/design/69095-x-repo-continuous-go for details.
@@ -102,9 +99,8 @@ func (x GoDirectiveXReposTasks) MaintainGoDirectiveAndMailCL(ctx *wf.TaskContext
 				return err
 			}
 
-			if !strings.HasPrefix(f.Module.Mod.Path, "golang.org/x/") {
-				// This shouldn't happen because repo is expected to be a Gerrit project for a golang.org/x module.
-				return fmt.Errorf("unexpectedly ran into a non-'golang.org/x' module %q defined in %s of project %s", f.Module.Mod.Path, path, repo)
+			if f.Module == nil || f.Module.Mod.Path == "" {
+				return fmt.Errorf("unexpectedly ran into a module without a module path defined in %s of project %s", path, repo)
 			}
 			if f.Go != nil && goversion.Compare("go"+f.Go.Version, fmt.Sprintf("go1.%d.0", prevGoVer)) >= 0 {
 				fmt.Fprintf(&script, "(cd %v && echo 'skipping because it already has go%s >= go1.%d.0, nothing to do')\n", dir, f.Go.Version, prevGoVer)
