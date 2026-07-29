@@ -669,3 +669,140 @@ func TestForeachIssue(t *testing.T) {
 		t.Errorf("got %+v, want all true", got)
 	}
 }
+
+func TestShouldCloseWatchflakesIssue(t *testing.T) {
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	fiveMonthsAgo := now.AddDate(0, -5, 0)
+	sevenMonthsAgo := now.AddDate(0, -7, 0)
+	threshold := 180 * 24 * time.Hour
+
+	testCases := []struct {
+		desc     string
+		issue    *maintner.GitHubIssue
+		comments []*maintner.GitHubComment
+		want     bool
+	}{
+		{
+			desc: "not watchflakes issue (missing script and signature)",
+			issue: &maintner.GitHubIssue{
+				User:    &maintner.GitHubUser{Login: "gopherbot"},
+				Body:    "Some random issue",
+				Created: sevenMonthsAgo,
+			},
+			want: false,
+		},
+		{
+			desc: "not watchflakes issue (wrong reporter)",
+			issue: &maintner.GitHubIssue{
+				User:    &maintner.GitHubUser{Login: "rsc"},
+				Body:    "```\n#!watchflakes\n```",
+				Created: sevenMonthsAgo,
+			},
+			want: false,
+		},
+		{
+			desc: "closed issue",
+			issue: &maintner.GitHubIssue{
+				Closed:  true,
+				User:    &maintner.GitHubUser{Login: "gopherbot"},
+				Body:    "```\n#!watchflakes\n```",
+				Created: sevenMonthsAgo,
+			},
+			want: false,
+		},
+		{
+			desc: "pull request",
+			issue: &maintner.GitHubIssue{
+				PullRequest: true,
+				User:        &maintner.GitHubUser{Login: "gopherbot"},
+				Body:        "```\n#!watchflakes\n```",
+				Created:     sevenMonthsAgo,
+			},
+			want: false,
+		},
+		{
+			desc: "new issue (no comments)",
+			issue: &maintner.GitHubIssue{
+				User:    &maintner.GitHubUser{Login: "gopherbot"},
+				Body:    "```\n#!watchflakes\n```",
+				Created: fiveMonthsAgo,
+			},
+			want: false,
+		},
+		{
+			desc: "old issue (no comments)",
+			issue: &maintner.GitHubIssue{
+				User:    &maintner.GitHubUser{Login: "gopherbot"},
+				Body:    "```\n#!watchflakes\n```",
+				Created: sevenMonthsAgo,
+			},
+			want: true,
+		},
+		{
+			desc: "old bot issue (signature, no script)",
+			issue: &maintner.GitHubIssue{
+				User:    &maintner.GitHubUser{Login: "gopherbot"},
+				Body:    "The bot linux-mips64le has been reported as broken.\n\n— [watchflakes](https://go.dev/wiki/Watchflakes)",
+				Created: sevenMonthsAgo,
+			},
+			want: true,
+		},
+		{
+			desc: "old issue with recent watchflakes comment",
+			issue: &maintner.GitHubIssue{
+				User:    &maintner.GitHubUser{Login: "gopherbot"},
+				Body:    "```\n#!watchflakes\n```",
+				Created: sevenMonthsAgo,
+			},
+			comments: []*maintner.GitHubComment{
+				{
+					Body:    "New failure...\n\n— watchflakes",
+					Created: fiveMonthsAgo,
+				},
+			},
+			want: false,
+		},
+		{
+			desc: "old issue with old watchflakes comment",
+			issue: &maintner.GitHubIssue{
+				User:    &maintner.GitHubUser{Login: "gopherbot"},
+				Body:    "```\n#!watchflakes\n```",
+				Created: sevenMonthsAgo,
+			},
+			comments: []*maintner.GitHubComment{
+				{
+					Body:    "New failure...\n\n— watchflakes",
+					Created: sevenMonthsAgo.Add(time.Hour),
+				},
+			},
+			want: true,
+		},
+		{
+			desc: "old issue with recent human comment (should still close)",
+			issue: &maintner.GitHubIssue{
+				User:    &maintner.GitHubUser{Login: "gopherbot"},
+				Body:    "```\n#!watchflakes\n```",
+				Created: sevenMonthsAgo,
+			},
+			comments: []*maintner.GitHubComment{
+				{
+					Body:    "I will look at this",
+					Created: fiveMonthsAgo,
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			getComments := func() []*maintner.GitHubComment {
+				return tc.comments
+			}
+			got := shouldCloseWatchflakesIssue(tc.issue, getComments, now, threshold)
+			if got != tc.want {
+				t.Errorf("shouldCloseWatchflakesIssue() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

@@ -478,6 +478,7 @@ var tasks = []struct {
 	{"freeze old issues", (*gopherbot).freezeOldIssues},
 	{"label documentation issues", (*gopherbot).labelDocumentationIssues},
 	{"close stale WaitingForInfo", (*gopherbot).closeStaleWaitingForInfo},
+	{"close stale watchflakes issues", (*gopherbot).closeStaleWatchflakesIssues},
 	{"apply labels from comments", (*gopherbot).applyLabelsFromComments},
 
 	// Gerrit tasks are applied to all projects by default.
@@ -677,6 +678,10 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, repo *maintner.GitHubR
 			return nil
 		}
 	}
+	if *dryRun {
+		log.Printf("[dry-run] would add comment to github.com/%s/issues/%d: %v", repo.ID(), issueNum, msg)
+		return nil
+	}
 	// See if there is a dup comment from when gopherbot last got
 	// its data from maintner.
 	opt := &github.IssueListCommentsOptions{ListOptions: github.ListOptions{PerPage: 1000}}
@@ -699,10 +704,6 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, repo *maintner.GitHubR
 			// Dup.
 			return nil
 		}
-	}
-	if *dryRun {
-		log.Printf("[dry-run] would add comment to github.com/%s/issues/%d: %v", repo.ID(), issueNum, msg)
-		return nil
 	}
 	_, resp, createError := b.ghc.Issues.CreateComment(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueComment{
 		Body: github.String(msg),
@@ -1320,6 +1321,69 @@ func (b *gopherbot) closeStaleWaitingForInfo(ctx context.Context) error {
 			return b.closeGitHubIssue(ctx, repo.ID(), gi.Number, notPlanned)
 		})
 	})
+}
+
+const watchflakesStaleThreshold = 180 * 24 * time.Hour // approx 6 months
+
+func (b *gopherbot) closeStaleWatchflakesIssues(ctx context.Context) error {
+	now := time.Now()
+	return b.corpus.GitHub().ForeachRepo(func(repo *maintner.GitHubRepo) error {
+		if repo.ID().Owner != "golang" || repo.ID().Repo != "go" {
+			return nil
+		}
+		return b.foreachIssue(repo, open, func(gi *maintner.GitHubIssue) error {
+			getComments := func() []*maintner.GitHubComment {
+				var comments []*maintner.GitHubComment
+				gi.ForeachComment(func(c *maintner.GitHubComment) error {
+					comments = append(comments, c)
+					return nil
+				})
+				return comments
+			}
+
+			if !shouldCloseWatchflakesIssue(gi, getComments, now, watchflakesStaleThreshold) {
+				return nil
+			}
+
+			printIssue("close-stale-watchflakes-issue", repo.ID(), gi)
+			commentBody := "No watchflakes activity for 6 months. Closing.\n\n(Reopening will happen automatically if watchflakes detects new failures.)"
+			if err := b.addGitHubComment(ctx, repo, gi.Number, commentBody); err != nil {
+				return fmt.Errorf("b.addGitHubComment(_, %v, %v) = %w", repo.ID(), gi.Number, err)
+			}
+			if err := b.closeGitHubIssue(ctx, repo.ID(), gi.Number, notPlanned); err != nil {
+				return fmt.Errorf("b.closeGitHubIssue(_, %v, %v) = %w", repo.ID(), gi.Number, err)
+			}
+			return nil
+		})
+	})
+}
+
+func isWatchflakesContent(text string) bool {
+	return strings.Contains(text, "#!watchflakes") ||
+		strings.Contains(text, "— watchflakes") ||
+		strings.Contains(text, "— [watchflakes](")
+}
+
+func shouldCloseWatchflakesIssue(gi *maintner.GitHubIssue, getComments func() []*maintner.GitHubComment, now time.Time, ageThreshold time.Duration) bool {
+	if gi.Closed || gi.PullRequest || gi.NotExist {
+		return false
+	}
+	if gi.User == nil || gi.User.Login != "gopherbot" {
+		return false
+	}
+	if !isWatchflakesContent(gi.Body) {
+		return false
+	}
+
+	lastWatchflakesAct := gi.Created
+	for _, c := range getComments() {
+		if isWatchflakesContent(c.Body) && c.Created.After(lastWatchflakesAct) {
+			lastWatchflakesAct = c.Created
+		}
+	}
+
+	cutoff := now.Add(-ageThreshold)
+	return lastWatchflakesAct.Before(cutoff)
 }
 
 // cl2issue writes "Change https://go.dev/cl/NNNN mentions this issue"
