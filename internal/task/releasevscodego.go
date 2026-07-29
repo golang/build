@@ -778,6 +778,10 @@ func (r *ReleaseVSCodeGoTasks) NewInsiderDefinition() *wf.Definition {
 
 	changelogChangeID := wf.Task2(wd, "update CHANGELOG.md in the master branch", r.addChangeLog, release, reviewers, wf.After(tagged))
 	changelogSubmitted := wf.Task1(wd, "await CHANGELOG.md CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changelogChangeID)
+
+	depsChangeID := wf.Task2(wd, "update dependencies in master branch", r.updateDependenciesIfMinor, release, reviewers, wf.After(changelogSubmitted))
+	_ = wf.Task1(wd, "await dependencies CL submission", clAwaiter{r.Gerrit}.awaitSubmission, depsChangeID)
+
 	// Publish only after the CHANGELOG.md update is merged to ensure the change
 	// log reflects the latest released version.
 	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(changelogSubmitted))
@@ -1226,4 +1230,44 @@ func (r *ReleaseVSCodeGoTasks) addChangeLog(ctx *wf.TaskContext, release release
 
 	ctx.Printf("created auto-submit change %s under branch master in vscode-go repo.", cl)
 	return cl, nil
+}
+
+// updateDependenciesIfMinor updates Go module dependencies in the master branch
+// of vscode-go following a minor insider version release.
+func (r *ReleaseVSCodeGoTasks) updateDependenciesIfMinor(ctx *wf.TaskContext, release releaseVersion, reviewers []string) (string, error) {
+	if minor := release.Patch == 0; !minor || !isVSCodeGoInsiderVersion(release, "") {
+		return "", nil
+	}
+
+	const script = `go get -u work && go mod tidy
+(cd docs && go get -u work && go mod tidy)
+(cd extension && go get -u work && go mod tidy)
+(cd survey && go get -u work && go mod tidy)
+`
+	watchFiles := []string{
+		"go.mod", "go.sum",
+		"docs/go.mod", "docs/go.sum",
+		"extension/go.mod", "extension/go.sum",
+		"survey/go.mod", "survey/go.sum",
+	}
+
+	changed, err := executeAndMonitorChange(ctx, r.CloudBuild, "vscode-go", "master", script, watchFiles)
+	if err != nil {
+		return "", err
+	}
+
+	if len(changed) == 0 {
+		ctx.Printf("No dependencies needed updating.")
+		return "", nil
+	}
+
+	clTitle := fmt.Sprintf("go.mod: update dependencies following the %s release", release)
+	changeInput := gerrit.ChangeInput{
+		Project: "vscode-go",
+		Branch:  "master",
+		Subject: fmt.Sprintf("%s\n\nThis is an automated CL which updates the go.mod and go.sum.\n", clTitle),
+	}
+
+	ctx.Printf("creating auto-submit change under master branch in vscode-go repo.")
+	return r.Gerrit.CreateAutoSubmitChange(ctx, changeInput, reviewers, changed)
 }

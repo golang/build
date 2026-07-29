@@ -1072,3 +1072,87 @@ CHANGE FOR v0.42.1
 		})
 	}
 }
+
+func TestUpdateDependenciesIfMinor(t *testing.T) {
+	mustHaveShell(t)
+
+	testcases := []struct {
+		name     string
+		release  releaseVersion
+		modified bool
+		wantCL   bool
+	}{
+		{
+			name:     "insider patch version skips update",
+			release:  releaseVersion{Major: 0, Minor: 57, Patch: 1},
+			modified: true,
+			wantCL:   false,
+		},
+		{
+			name:     "stable minor version skips update",
+			release:  releaseVersion{Major: 0, Minor: 56, Patch: 0},
+			modified: true,
+			wantCL:   false,
+		},
+		{
+			name:     "insider minor version creates CL when dependencies changed",
+			release:  releaseVersion{Major: 0, Minor: 57, Patch: 0},
+			modified: true,
+			wantCL:   true,
+		},
+		{
+			name:     "insider minor version creates no CL when no files changed",
+			release:  releaseVersion{Major: 0, Minor: 57, Patch: 0},
+			modified: false,
+			wantCL:   false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			vscodego := NewFakeRepo(t, "vscode-go")
+			vscodego.Commit(map[string]string{
+				"go.mod":           "module github.com/golang/vscode-go\n\ngo 1.23\n",
+				"go.sum":           "\n",
+				"docs/go.mod":      "module github.com/golang/vscode-go/docs\n\ngo 1.21\n",
+				"docs/go.sum":      "\n",
+				"extension/go.mod": "module github.com/golang/vscode-go/extension\n\ngo 1.23\n",
+				"extension/go.sum": "\n",
+				"survey/go.mod":    "module github.com/golang/vscode-go/survey\n\ngo 1.23\n",
+				"survey/go.sum":    "\n",
+			})
+
+			gerrit := NewFakeGerrit(t, vscodego)
+			ctx := &workflow.TaskContext{
+				Context: context.Background(),
+				Logger:  &testLogger{t, ""},
+			}
+
+			var fakeBinaries []FakeBinary
+			if tc.modified {
+				fakeGo := `#!/bin/bash -exu
+if [ "$1" = "get" ]; then
+    echo "// updated" >> go.mod
+fi
+`
+				fakeBinaries = append(fakeBinaries, FakeBinary{Name: "go", Implementation: fakeGo})
+			}
+
+			tasks := &ReleaseVSCodeGoTasks{
+				CloudBuild: NewFakeCloudBuild(t, gerrit, "vscode-go", nil, fakeBinaries...),
+				Gerrit:     gerrit,
+			}
+
+			cl, err := tasks.updateDependenciesIfMinor(ctx, tc.release, []string{"reviewer@example.com"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if tc.wantCL && cl == "" {
+				t.Errorf("updateDependenciesIfMinor() returned empty CL, want non-empty CL")
+			} else if !tc.wantCL && cl != "" {
+				t.Errorf("updateDependenciesIfMinor() returned CL %q, want empty CL", cl)
+			}
+		})
+	}
+}
