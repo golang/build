@@ -37,6 +37,7 @@ To list the subcommands, run "gomote" without arguments:
 	  rdp        RDP (Remote Desktop Protocol) to a Windows buildlet
 	  repro      reproduce a build by LUCI build ID
 	  run        run a command on a buildlet
+	  scp        copy files to or from a buildlet
 	  ssh        ssh to a buildlet
 
 To list all the builder types available, run "create" with no arguments:
@@ -209,6 +210,7 @@ func registerCommands() {
 	registerCommand("rdp", "Unimplimented: RDP (Remote Desktop Protocol) to a Windows buildlet", rdp)
 	registerCommand("rm", "delete files or directories", rm)
 	registerCommand("run", "run a command on a buildlet", run)
+	registerCommand("scp", "copy files to or from a buildlet", scp)
 	registerCommand("ssh", "ssh to a buildlet", ssh)
 }
 

@@ -31,6 +31,7 @@ import (
 
 	"github.com/creack/pty"
 	gssh "github.com/gliderlabs/ssh"
+	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/envutil"
 	"golang.org/x/crypto/ssh"
@@ -138,6 +139,9 @@ func NewSSHServer(addr string, hostPrivateKey, gomotePublicKey, caPrivateKey []b
 		},
 	}
 	s.server.Handler = s.HandleIncomingSSHPostAuth
+	s.server.SubsystemHandlers = map[string]gssh.SubsystemHandler{
+		"sftp": func(sess gssh.Session) { s.handleDirect(sess) },
+	}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -166,7 +170,7 @@ func (ss *SSHServer) HandleIncomingSSHPostAuth(s gssh.Session) {
 	inst := s.User()
 	ptyReq, winCh, isPty := s.Pty()
 	if !isPty {
-		fmt.Fprintf(s, "scp etc not yet supported; https://golang.org/issue/21140\n")
+		ss.handleDirect(s)
 		return
 	}
 	rs, err := ss.sessionPool.Session(inst)
@@ -215,47 +219,13 @@ func (ss *SSHServer) HandleIncomingSSHPostAuth(s gssh.Session) {
 		return
 	}
 	if useLocalSSHProxy {
-		sshConn, err := bc.ConnectSSH(sshUser, ss.gomotePublicKey)
-		log.Printf("buildlet(%q).ConnectSSH = %T, %v", inst, sshConn, err)
+		port, cleanup, err := ss.proxyBuildletSSH(bc, inst, sshUser)
 		if err != nil {
-			fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
+			fmt.Fprintf(s, "%v\n", err)
 			return
 		}
-		defer sshConn.Close()
-
-		// Now listen on some localhost port that we'll proxy to sshConn.
-		// The openssh ssh command line tool will connect to this IP.
-		ln, err := net.Listen("tcp", "localhost:0")
-		if err != nil {
-			fmt.Fprintf(s, "local listen error: %v\n", err)
-			return
-		}
-		localProxyPort = ln.Addr().(*net.TCPAddr).Port
-		log.Printf("ssh local proxy port for %s: %v", inst, localProxyPort)
-		var lnCloseOnce sync.Once
-		lnClose := func() { lnCloseOnce.Do(func() { ln.Close() }) }
-		defer lnClose()
-
-		// Accept at most one connection from localProxyPort and proxy
-		// it to sshConn.
-		go func() {
-			c, err := ln.Accept()
-			lnClose()
-			if err != nil {
-				return
-			}
-			defer c.Close()
-			errc := make(chan error, 1)
-			go func() {
-				_, err := io.Copy(c, sshConn)
-				errc <- err
-			}()
-			go func() {
-				_, err := io.Copy(sshConn, c)
-				errc <- err
-			}()
-			err = <-errc
-		}()
+		defer cleanup()
+		localProxyPort = port
 	}
 	workDir, err := bc.WorkDir(ctx)
 	if err != nil {
@@ -275,12 +245,7 @@ func (ss *SSHServer) HandleIncomingSSHPostAuth(s gssh.Session) {
 	var cmd *exec.Cmd
 	switch bconf.GOOS() {
 	default:
-		cmd = exec.Command("ssh",
-			"-p", strconv.Itoa(localProxyPort),
-			"-o", "UserKnownHostsFile=/dev/null",
-			"-o", "StrictHostKeyChecking=no",
-			"-i", ss.privateHostKeyFile,
-			sshUser+"@localhost")
+		cmd = exec.Command("ssh", buildletSSHArgs(localProxyPort, ss.privateHostKeyFile, sshUser, "", "")...)
 	case "plan9":
 		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
 		if ipErr != nil {
@@ -317,7 +282,7 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 	inst := s.User()
 	ptyReq, winCh, isPty := s.Pty()
 	if !isPty {
-		fmt.Fprintf(s, "scp etc not yet supported; https://go.dev/issue/21140\n")
+		ss.handleDirect(s)
 		return
 	}
 	rs, err := ss.sessionPool.Session(inst)
@@ -331,8 +296,11 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 		log.Printf("ssh: KeepAlive on session=%s failed: %s", inst, err)
 	}
 
-	sshUser := "swarming"
-	isPlan9 := strings.Contains(rs.HostType, "plan9")
+	sshUser, isPlan9, err := ss.sessionSSHUser(rs)
+	if err != nil {
+		fmt.Fprintf(s, "%v\n", err)
+		return
+	}
 	useLocalSSHProxy := !isPlan9
 	if sshUser == "" && useLocalSSHProxy {
 		fmt.Fprintf(s, "instance %q host type %q does not have SSH configured\n", inst, rs.HostType)
@@ -351,47 +319,13 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 		return
 	}
 	if useLocalSSHProxy {
-		sshConn, err := bc.ConnectSSH(sshUser, ss.gomotePublicKey)
-		log.Printf("buildlet(%q).ConnectSSH = %T, %v", inst, sshConn, err)
+		port, cleanup, err := ss.proxyBuildletSSH(bc, inst, sshUser)
 		if err != nil {
-			fmt.Fprintf(s, "failed to connect to ssh on %s: %v\n", inst, err)
+			fmt.Fprintf(s, "%v\n", err)
 			return
 		}
-		defer sshConn.Close()
-
-		// Now listen on some localhost port that we'll proxy to sshConn.
-		// The openssh ssh command line tool will connect to this IP.
-		ln, err := net.Listen("tcp", "localhost:0")
-		if err != nil {
-			fmt.Fprintf(s, "local listen error: %v\n", err)
-			return
-		}
-		localProxyPort = ln.Addr().(*net.TCPAddr).Port
-		log.Printf("ssh local proxy port for %s: %v", inst, localProxyPort)
-		var lnCloseOnce sync.Once
-		lnClose := func() { lnCloseOnce.Do(func() { ln.Close() }) }
-		defer lnClose()
-
-		// Accept at most one connection from localProxyPort and proxy
-		// it to sshConn.
-		go func() {
-			c, err := ln.Accept()
-			lnClose()
-			if err != nil {
-				return
-			}
-			defer c.Close()
-			errc := make(chan error, 1)
-			go func() {
-				_, err := io.Copy(c, sshConn)
-				errc <- err
-			}()
-			go func() {
-				_, err := io.Copy(sshConn, c)
-				errc <- err
-			}()
-			err = <-errc
-		}()
+		defer cleanup()
+		localProxyPort = port
 	}
 	workDir, err := bc.WorkDir(ctx)
 	if err != nil {
@@ -407,12 +341,7 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 	fmt.Fprint(s, "# Happy debugging.\n")
 
 	log.Printf("ssh to %s: starting ssh -p %d for %s@localhost", inst, localProxyPort, sshUser)
-	cmd := exec.Command("ssh",
-		"-p", strconv.Itoa(localProxyPort),
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "StrictHostKeyChecking=no",
-		"-i", ss.privateHostKeyFile,
-		sshUser+"@localhost")
+	cmd := exec.Command("ssh", buildletSSHArgs(localProxyPort, ss.privateHostKeyFile, sshUser, "", "")...)
 	if isPlan9 {
 		fmt.Fprintf(s, "# Plan9 user/pass: glenda/glenda123\n")
 		if ipErr != nil {
@@ -439,6 +368,172 @@ func (ss *SSHServer) HandleIncomingSSHPostAuthSwarming(s gssh.Session) {
 	io.Copy(s, f)    // stdout
 	cmd.Process.Kill()
 	cmd.Wait()
+}
+
+// handleDirect handles a session that did not request a pty: an exec
+// request ("gomote ssh instance cmd..."), a shell session reading
+// commands from piped standard input, or the sftp subsystem that scp
+// and sftp use (go.dev/issue/21140). It connects the ssh client to
+// the session's own streams instead of a pty, so data passes through
+// byte for byte, and it propagates the remote exit status.
+//
+// Unlike the interactive handlers, it prints no banners: standard
+// output belongs to whatever protocol the command is running,
+// and diagnostics go to the session's standard error.
+func (ss *SSHServer) handleDirect(s gssh.Session) {
+	fail := func(format string, args ...any) {
+		fmt.Fprintf(s.Stderr(), format, args...)
+		s.Exit(255)
+	}
+	inst := s.User()
+	rs, err := ss.sessionPool.Session(inst)
+	if err != nil {
+		fail("unknown instance %q\n", inst)
+		return
+	}
+	sshUser, isPlan9, err := ss.sessionSSHUser(rs)
+	if err != nil {
+		fail("%v\n", err)
+		return
+	}
+	if isPlan9 {
+		fail("non-interactive sessions are not supported on plan9\n")
+		return
+	}
+	if sshUser == "" {
+		fail("instance %q host type %q does not have SSH configured\n", inst, rs.HostType)
+		return
+	}
+
+	ctx, cancel := context.WithCancel(s.Context())
+	defer cancel()
+	if err := ss.sessionPool.KeepAlive(ctx, inst); err != nil {
+		log.Printf("ssh: KeepAlive on session=%s failed: %s", inst, err)
+	}
+
+	bc, err := ss.sessionPool.BuildletClient(inst)
+	if err != nil {
+		fail("failed to connect to ssh on %s: %v\n", inst, err)
+		return
+	}
+	localProxyPort, cleanup, err := ss.proxyBuildletSSH(bc, inst, sshUser)
+	if err != nil {
+		fail("%v\n", err)
+		return
+	}
+	defer cleanup()
+
+	log.Printf("ssh to %s: starting direct ssh -p %d for %s@localhost (subsystem %q, command %q)",
+		inst, localProxyPort, sshUser, s.Subsystem(), s.RawCommand())
+	cmd := exec.CommandContext(ctx, "ssh",
+		buildletSSHArgs(localProxyPort, ss.privateHostKeyFile, sshUser, s.Subsystem(), s.RawCommand())...)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		fail("%v\n", err)
+		return
+	}
+	cmd.Stdout = s
+	cmd.Stderr = s.Stderr()
+	if err := cmd.Start(); err != nil {
+		fail("running ssh client to %s: %v\n", inst, err)
+		return
+	}
+	// Copy session input on the side: the copy blocks until the client
+	// sends EOF or disconnects, which must not keep Wait from returning
+	// once the command exits.
+	go func() {
+		io.Copy(stdin, s)
+		stdin.Close()
+	}()
+	err = cmd.Wait()
+	code := 0
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if code = exitErr.ExitCode(); code < 0 {
+			code = 255
+		}
+	} else if err != nil {
+		fail("running ssh client to %s: %v\n", inst, err)
+		return
+	}
+	s.Exit(code)
+}
+
+// sessionSSHUser returns the user for ssh connections to rs's buildlet
+// and whether the buildlet is a plan9 system, which the ssh command
+// cannot reach.
+func (ss *SSHServer) sessionSSHUser(rs *Session) (sshUser string, isPlan9 bool, err error) {
+	return "swarming", strings.Contains(rs.HostType, "plan9"), nil
+}
+
+// proxyBuildletSSH connects to the SSH server on inst's buildlet as
+// sshUser and starts a localhost listener that proxies a single
+// connection to it, for the ssh command line tool to connect to.
+// It returns the listener's port and a cleanup function that closes
+// the listener and the buildlet connection.
+func (ss *SSHServer) proxyBuildletSSH(bc buildlet.Client, inst, sshUser string) (port int, cleanup func(), err error) {
+	sshConn, err := bc.ConnectSSH(sshUser, ss.gomotePublicKey)
+	log.Printf("buildlet(%q).ConnectSSH = %T, %v", inst, sshConn, err)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to connect to ssh on %s: %v", inst, err)
+	}
+	ln, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		sshConn.Close()
+		return 0, nil, fmt.Errorf("local listen error: %v", err)
+	}
+	port = ln.Addr().(*net.TCPAddr).Port
+	log.Printf("ssh local proxy port for %s: %v", inst, port)
+	var lnCloseOnce sync.Once
+	lnClose := func() { lnCloseOnce.Do(func() { ln.Close() }) }
+
+	// Accept at most one connection and proxy it to sshConn.
+	go func() {
+		c, err := ln.Accept()
+		lnClose()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		errc := make(chan error, 1)
+		go func() {
+			_, err := io.Copy(c, sshConn)
+			errc <- err
+		}()
+		go func() {
+			_, err := io.Copy(sshConn, c)
+			errc <- err
+		}()
+		<-errc
+	}()
+	return port, func() { lnClose(); sshConn.Close() }, nil
+}
+
+// buildletSSHArgs returns the ssh client arguments for a session to
+// sshUser@localhost:port through the local buildlet proxy: an sftp
+// subsystem request if subsystem is set, an exec of rawCmd if that is
+// set, and otherwise a shell (interactive on the pty paths, reading
+// standard input on the direct path).
+func buildletSSHArgs(port int, keyFile, sshUser, subsystem, rawCmd string) []string {
+	args := []string{
+		"-p", strconv.Itoa(port),
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "StrictHostKeyChecking=no",
+		// Suppress the "Permanently added ... known hosts" warning,
+		// which would otherwise arrive on the stderr of every session.
+		"-o", "LogLevel=ERROR",
+		"-i", keyFile,
+	}
+	if subsystem != "" {
+		return append(args, "-s", sshUser+"@localhost", subsystem)
+	}
+	args = append(args, sshUser+"@localhost")
+	if rawCmd != "" {
+		// One argument: ssh passes it to the remote shell verbatim,
+		// preserving the client's own quoting.
+		args = append(args, rawCmd)
+	}
+	return args
 }
 
 // setupRemoteSSHEnv sets up environment variables on the remote system.

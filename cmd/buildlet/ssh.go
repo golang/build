@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -19,8 +20,9 @@ import (
 
 func startSSHServerSwarming() {
 	buildletSSHServer = &ssh.Server{
-		Addr:    "localhost:" + sshPort(),
-		Handler: sshHandler,
+		Addr:              "localhost:" + sshPort(),
+		Handler:           sshHandler,
+		SubsystemHandlers: sshSubsystems,
 		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
 			allowed, _, _, _, err := ssh.ParseAuthorizedKey(buldletAuthKeys)
 			if err != nil {
@@ -42,10 +44,20 @@ func startSSHServerSwarming() {
 	})
 }
 
+// shellCommand returns a command that runs rawCmd using the shell,
+// or the shell itself reading commands from standard input
+// if rawCmd is empty.
+func shellCommand(ctx context.Context, rawCmd string) *exec.Cmd {
+	if rawCmd == "" {
+		return exec.CommandContext(ctx, shell())
+	}
+	return exec.CommandContext(ctx, shell(), "-c", rawCmd)
+}
+
 func sshHandler(s ssh.Session) {
 	ptyReq, winCh, isPty := s.Pty()
 	if !isPty {
-		fmt.Fprint(s, "scp is not supported\n")
+		sshHandlerDirect(s)
 		return
 	}
 	var cmd *exec.Cmd

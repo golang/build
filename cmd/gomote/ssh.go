@@ -13,23 +13,31 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"golang.org/x/build/internal/gomote/protos"
 )
 
+// sshServer is the ssh proxy through which ssh and scp
+// reach buildlets.
+const sshServer = "gomotessh.golang.org"
+
 func ssh(args []string) error {
 	fs := flag.NewFlagSet("ssh", flag.ContinueOnError)
 	fs.Usage = func() {
-		usageLogger.Print("ssh usage: gomote ssh <instance>")
+		usageLogger.Print("ssh usage: gomote ssh [-n] <instance> [cmd...]")
 		fs.PrintDefaults()
 		os.Exit(1)
 	}
+	printOnly := fs.Bool("n", false, "print the ssh command line but do not run it")
 	fs.Parse(args)
 
 	var name string
-	if fs.NArg() == 1 {
+	var remoteCmd []string
+	if fs.NArg() >= 1 {
 		name = fs.Arg(0)
+		remoteCmd = fs.Args()[1:]
 	} else if activeGroup != nil {
 		if len(activeGroup.Instances) != 1 {
 			return fmt.Errorf("command only supports groups with exactly one member")
@@ -39,17 +47,98 @@ func ssh(args []string) error {
 		fs.Usage()
 	}
 
-	sshKeyDir, err := sshConfigDirectory()
+	priKey, certPath, err := sshCertificate(name)
 	if err != nil {
 		return err
+	}
+	return sshConnect(name, priKey, certPath, remoteCmd, *printOnly)
+}
+
+// scp copies files to or from buildlets.
+// Arguments of the form instance:path name files on that instance;
+// all other arguments, including scp flags, pass through to scp.
+func scp(args []string) error {
+	instances, rewritten := scpArgs(args)
+	if len(instances) == 0 {
+		usageLogger.Print("scp usage: gomote scp [scp-args] [<instance>:]file... [<instance>:]file")
+		os.Exit(1)
+	}
+	scpPath, err := exec.LookPath("scp")
+	if err != nil {
+		return fmt.Errorf("path to scp not found: %w", err)
+	}
+	cli := []string{"-P", "2222"}
+	var priKey string
+	for _, inst := range instances {
+		pk, certPath, err := sshCertificate(inst)
+		if err != nil {
+			return err
+		}
+		priKey = pk
+		cli = append(cli, "-o", "CertificateFile="+certPath)
+	}
+	cli = append(cli, "-i", priKey)
+	cli = append(cli, rewritten...)
+	fmt.Printf("$ %s\n", shellJoin(append([]string{scpPath}, cli...)))
+	cmd := exec.Command(scpPath, cli...)
+	cmd.Stdout = os.Stdout
+	cmd.Stdin = os.Stdin
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("unable to scp: %w", err)
+	}
+	return nil
+}
+
+// scpArgs rewrites the arguments for an scp command, replacing
+// arguments of the form instance:path with instance@sshServer:path
+// and returning the instances mentioned along with the rewritten
+// argument list.
+func scpArgs(args []string) (instances, rewritten []string) {
+	for _, arg := range args {
+		inst, ok := scpInstance(arg)
+		if !ok {
+			rewritten = append(rewritten, arg)
+			continue
+		}
+		if !slices.Contains(instances, inst) {
+			instances = append(instances, inst)
+		}
+		rewritten = append(rewritten, inst+"@"+sshServer+strings.TrimPrefix(arg, inst))
+	}
+	return instances, rewritten
+}
+
+// scpInstance reports the instance name if arg has the remote form
+// instance:path, using scp's own rule: an argument is remote if it
+// contains a colon before any slash. Flags and arguments that
+// already name a user with @ are left alone.
+func scpInstance(arg string) (string, bool) {
+	if strings.HasPrefix(arg, "-") {
+		return "", false
+	}
+	i := strings.IndexAny(arg, ":/@")
+	if i <= 0 || arg[i] != ':' {
+		return "", false
+	}
+	return arg[:i], true
+}
+
+// sshCertificate signs the local SSH public key for the named
+// instance, returning the paths of the local private key and the
+// signed certificate.
+func sshCertificate(name string) (priKey, certPath string, err error) {
+	sshKeyDir, err := sshConfigDirectory()
+	if err != nil {
+		return "", "", err
 	}
 	pubKey, priKey, err := localKeyPair(sshKeyDir)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	pubKeyBytes, err := os.ReadFile(pubKey)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	ctx := context.Background()
 	client := gomoteServerClient(ctx)
@@ -58,13 +147,13 @@ func ssh(args []string) error {
 		PublicSshKey: []byte(pubKeyBytes),
 	})
 	if err != nil {
-		return fmt.Errorf("unable to retrieve SSH certificate: %w", err)
+		return "", "", fmt.Errorf("unable to retrieve SSH certificate: %w", err)
 	}
-	certPath, err := writeCertificateToDisk(resp.GetSignedPublicSshKey())
+	certPath, err = writeCertificateToDisk(resp.GetSignedPublicSshKey())
 	if err != nil {
-		return err
+		return "", "", err
 	}
-	return sshConnect(name, priKey, certPath)
+	return priKey, certPath, nil
 }
 
 func sshConfigDirectory() (string, error) {
@@ -118,14 +207,18 @@ func writeCertificateToDisk(b []byte) (string, error) {
 	return tf.Name(), tf.Close()
 }
 
-func sshConnect(name string, priKey, certPath string) error {
+func sshConnect(name string, priKey, certPath string, remoteCmd []string, printOnly bool) error {
 	ssh, err := exec.LookPath("ssh")
 	if err != nil {
 		return fmt.Errorf("path to ssh not found: %w", err)
 	}
-	sshServer := "gomotessh.golang.org"
 	cli := []string{"-o", fmt.Sprintf("CertificateFile=%s", certPath), "-i", priKey, "-p", "2222", name + "@" + sshServer}
-	fmt.Printf("$ %s %s\n", ssh, strings.Join(cli, " "))
+	cli = append(cli, remoteCmd...)
+	if printOnly {
+		fmt.Println(shellJoin(append([]string{ssh}, cli...)))
+		return nil
+	}
+	fmt.Printf("$ %s\n", shellJoin(append([]string{ssh}, cli...)))
 	cmd := exec.Command(ssh, cli...)
 	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
@@ -134,6 +227,23 @@ func sshConnect(name string, priKey, certPath string) error {
 		return fmt.Errorf("unable to ssh into instance: %w", err)
 	}
 	return nil
+}
+
+// shellQuote quotes s as needed for use in a shell command line.
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$&|;<>()*?[]#~`!{}") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// shellJoin joins args into a shell command line, quoting as needed.
+func shellJoin(args []string) string {
+	quoted := make([]string, len(args))
+	for i, arg := range args {
+		quoted[i] = shellQuote(arg)
+	}
+	return strings.Join(quoted, " ")
 }
 
 func fileExists(path string) bool {
