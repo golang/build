@@ -66,7 +66,7 @@ func Get(log *Log, url string) (_ []byte, err error) {
 				v, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
 				return nil, tooManyRequestsError{
 					errorText:  err.Error(),
-					RetryAfter: time.Duration(v),
+					RetryAfter: time.Duration(v) * time.Second,
 				}
 			} else if resp.StatusCode/100 == 5 {
 				// Consider a 5xx server response to possibly succeed later.
