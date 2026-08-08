@@ -47,6 +47,7 @@ var (
 	jba           = gh("jba")
 	jbd           = gh("rakyll")
 	joetsai       = gh("dsnet")
+	jorropo       = gh("jorropo")
 	kardianos     = gh("kardianos")
 	katie         = gh("katiehockman")
 	kevinburke    = gh("kevinburke")
@@ -168,7 +169,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/internal/ssa": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, martisch},
+		Secondary: []Owner{khr, martisch, jorropo},
 	},
 	"go/src/cmd/compile/internal/wasm": {
 		Primary:   []Owner{compilerTeam},

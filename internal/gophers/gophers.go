@@ -1544,6 +1544,7 @@ func init() {
 	addPerson("Joonas Kuorilehto", "joneskoo@derbian.fi", "14770@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Joonas Kuorilehto", "joneskoo@derbian.fi", "@joneskoo")
 	addPerson("Joop Kiefte", "joop@kiefte.net", "@LaPingvino")
+	addPerson("Jorropo", "jorropo.pgm@gmail.com", "@jorropo", "55763@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Jordan Lewis", "jordanthelewis@gmail.com", "@jordanlewis")
 	addPerson("Jordan Liggitt", "jliggitt@redhat.com")
 	addPerson("Jordan Rhee", "jordanrh@microsoft.com", "28473@62eb7196-b449-3ce5-99f1-c037f21e1705")
