@@ -9,7 +9,7 @@ require (
 	github.com/shurcooL/httpgzip v0.0.0-20230704072819-d1585fc322fa
 	github.com/shurcooL/issues v0.0.0-20230810033912-5ed542b06cb5
 	github.com/shurcooL/issuesapp v0.0.0-20230810034243-80666a8809f4
-	golang.org/x/build v0.0.0-20260708222831-c49463d7ff26
+	golang.org/x/build v0.0.0-20260810133158-d955bf84b4b9
 )
 
 require (
@@ -19,7 +19,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/google/go-github/v74 v74.0.0 // indirect
-	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7 // indirect
@@ -50,13 +50,13 @@ require (
 	github.com/sourcegraph/go-diff v0.7.0 // indirect
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
 	go4.org v0.0.0-20180809161055-417644f6feb5 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.48.0 // indirect
+	golang.org/x/tools v0.49.0 // indirect
 	golang.org/x/tools/godoc v0.1.0-deprecated // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
