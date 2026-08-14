@@ -857,7 +857,16 @@ func (c *client) ConnectSSH(user, authorizedPubKey string) (net.Conn, error) {
 		return nil, fmt.Errorf("unexpected /connect-ssh response: %v, %s", res.Status, slurp)
 	}
 	conn.SetDeadline(time.Time{})
-	return conn, nil
+	return &bufConn{Conn: conn, r: bufr}, nil
+}
+
+type bufConn struct {
+	net.Conn
+	r io.Reader
+}
+
+func (c *bufConn) Read(p []byte) (int, error) {
+	return c.r.Read(p)
 }
 
 func condRun(fn func()) {
