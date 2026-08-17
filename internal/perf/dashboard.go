@@ -152,7 +152,7 @@ func fluxRecordToValueJSON(rec *query.FluxRecord) (ValueJSON, error) {
 
 // validateRe is an allowlist of characters for a Flux string literal. The
 // string will be quoted, so we must not allow ending the quote sequence.
-var validateRe = regexp.MustCompile(`^[a-zA-Z0-9(),=/_:;.-]+$`)
+var validateRe = regexp.MustCompile(`^[a-zA-Z0-9(),=/_:;.|×%*-]+$`)
 
 func validateFluxString(s string) error {
 	if !validateRe.MatchString(s) {
