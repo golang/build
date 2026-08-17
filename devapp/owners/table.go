@@ -82,17 +82,16 @@ var (
 	tombergan     = gh("tombergan")
 	zpavlinovic   = gh("zpavlinovic")
 
-	commandlineTeam = gh("golang/command-line")
-	compilerTeam    = gh("golang/compiler")
-	oscarTeam       = gh("golang/oscar-team")
-	pkgsiteTeam     = gh("golang/pkgsite")
-	releaseTeam     = gh("golang/release")
-	runtimeTeam     = gh("golang/runtime")
-	securityTeam    = gh("golang/security")
-	telemetryTeam   = gh("golang/telemetry")
-	toolsTeam       = gh("golang/tools-team")
-	vulndbTeam      = gh("golang/vulndb")
-	windowsTeam     = gh("golang/windows")
+	compilerTeam  = gh("golang/compiler")
+	oscarTeam     = gh("golang/oscar-team")
+	pkgsiteTeam   = gh("golang/pkgsite")
+	releaseTeam   = gh("golang/release")
+	runtimeTeam   = gh("golang/runtime")
+	securityTeam  = gh("golang/security")
+	telemetryTeam = gh("golang/telemetry")
+	toolsTeam     = gh("golang/tools-team")
+	vulndbTeam    = gh("golang/vulndb")
+	windowsTeam   = gh("golang/windows")
 )
 
 // entries is a map of <repo name>/<path>, <domain>, or <branch> to Owner
@@ -187,7 +186,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{compilerTeam},
 	},
 	"go/src/cmd/go": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/cmd/gofmt": {
 		Primary:   []Owner{gri},
@@ -446,7 +445,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{gri},
 	},
 	"go/src/internal/cfg": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/internal/cgrouptest": {
 		Primary:   []Owner{runtimeTeam},
@@ -473,7 +472,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{austin, rsc},
 	},
 	"go/src/internal/diff": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/internal/exportdata": {
 		Primary:   []Owner{compilerTeam},
@@ -512,10 +511,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mknyszek, prattmic},
 	},
 	"go/src/internal/goroot": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/internal/gover": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/internal/goversion": {
 		Primary: []Owner{releaseTeam},
@@ -525,10 +524,10 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{prattmic},
 	},
 	"go/src/internal/lazyregexp": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/internal/lazytemplate": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/internal/msan": {
 		Primary:   []Owner{runtimeTeam},
@@ -650,7 +649,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{roland, austin},
 	},
 	"go/src/internal/testlog": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/internal/testpty": {
 		// Same as internal/testpty.
@@ -662,7 +661,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mknyszek, prattmic},
 	},
 	"go/src/internal/texttar": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"go/src/internal/types": {
 		// Same as go/types.
@@ -930,7 +929,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{hajimehoshi},
 	},
 	"mod": {
-		Primary: []Owner{commandlineTeam},
+		Primary: []Owner{matloob},
 	},
 	"net": {
 		Primary: []Owner{neild, iant, nsh},
@@ -994,9 +993,6 @@ var entries = map[string]*Entry{
 	"tools/cmd/bundle": {
 		Primary: []Owner{adonovan},
 	},
-	"tools/cmd/auth": {
-		Primary: []Owner{commandlineTeam},
-	},
 	"tools/cmd/godoc": {
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
 	},
@@ -1012,14 +1008,14 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/analysis": {
 		Primary:   []Owner{adonovan},
-		Secondary: []Owner{matloob, findleyr},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/ast": {
 		Primary:   []Owner{adonovan, gri},
 		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/buildutil": {
-		Primary:   []Owner{adonovan, matloob},
+		Primary:   []Owner{adonovan},
 		Secondary: []Owner{dmitshur},
 	},
 	"tools/go/callgraph": {
@@ -1036,7 +1032,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/internal/packagesdriver": {
 		Primary:   []Owner{adonovan},
-		Secondary: []Owner{matloob},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/loader": {
 		Primary:   []Owner{adonovan},
@@ -1044,7 +1040,7 @@ var entries = map[string]*Entry{
 	},
 	"tools/go/packages": {
 		Primary:   []Owner{adonovan},
-		Secondary: []Owner{matloob},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/ssa": {
 		Primary:   []Owner{adonovan},
