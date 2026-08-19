@@ -365,8 +365,7 @@ func (cl *GerritCL) References(ref GitHubIssueRef) bool {
 func (cl *GerritCL) Branch() string { return cl.branch }
 
 func (cl *GerritCL) updateBranch() {
-	for i := len(cl.Metas) - 1; i >= 0; i-- {
-		mc := cl.Metas[i]
+	for _, mc := range slices.Backward(cl.Metas) {
 		branch := lineValue(mc.Commit.Msg, "Branch:")
 		if branch != "" {
 			cl.branch = strings.TrimPrefix(branch, "refs/heads/")
@@ -1396,8 +1395,7 @@ func (m *GerritMeta) Hashtags() GerritHashtags {
 	// than m.
 	sawThisMeta := false // whether we've seen 'm'
 	metas := m.CL.Metas
-	for i := len(metas) - 1; i >= 0; i-- {
-		mp := metas[i]
+	for _, mp := range slices.Backward(metas) {
 		if mp.Commit.Hash == m.Commit.Hash {
 			sawThisMeta = true
 			continue

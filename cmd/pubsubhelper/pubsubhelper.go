@@ -22,6 +22,7 @@ import (
 	"net/textproto"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -164,8 +165,7 @@ func handleRecent(w http.ResponseWriter, r *http.Request) {
 	mu.Lock()
 	buf.WriteString("[\n")
 	n := 0
-	for i := len(recent) - 1; i >= 0; i-- {
-		ev := recent[i]
+	for _, ev := range slices.Backward(recent) {
 		if ev.Time.Time().Before(after) {
 			continue
 		}

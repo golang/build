@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -763,8 +764,7 @@ func (s apiService) addGoCommits(oldestSkipped time.Time, commits []*apipb.DashC
 		}
 	}
 
-	for i := len(commits) - 1; i >= 0; i-- { // walk from oldest to newest
-		dc := commits[i]
+	for i, dc := range slices.Backward(commits) { // walk from oldest to newest
 		var maxGoAge time.Time
 		if i == 0 {
 			maxGoAge = oldestSkipped

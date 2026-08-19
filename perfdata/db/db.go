@@ -404,7 +404,8 @@ func parseQuery(q string) (sql []string, args []any, err error) {
 func (db *DB) Query(q string) *Query {
 	ret := &Query{q: q}
 
-	query := "SELECT r.Content FROM "
+	var query strings.Builder
+	query.WriteString("SELECT r.Content FROM ")
 
 	sql, args, err := parseQuery(q)
 	if err != nil {
@@ -413,24 +414,24 @@ func (db *DB) Query(q string) *Query {
 	}
 	for i, part := range sql {
 		if i > 0 {
-			query += " INNER JOIN "
+			query.WriteString(" INNER JOIN ")
 		}
-		query += fmt.Sprintf("(%s) t%d", part, i)
+		fmt.Fprintf(&query, "(%s) t%d", part, i)
 		if i > 0 {
-			query += " USING (UploadID, RecordID)"
+			query.WriteString(" USING (UploadID, RecordID)")
 		}
 	}
 
 	if len(sql) > 0 {
-		query += " LEFT JOIN"
+		query.WriteString(" LEFT JOIN")
 	}
-	query += " Records r"
+	query.WriteString(" Records r")
 	if len(sql) > 0 {
-		query += " USING (UploadID, RecordID)"
+		query.WriteString(" USING (UploadID, RecordID)")
 	}
 
-	ret.sqlQuery, ret.sqlArgs = query, args
-	ret.rows, ret.err = db.sql.Query(query, args...)
+	ret.sqlQuery, ret.sqlArgs = query.String(), args
+	ret.rows, ret.err = db.sql.Query(query.String(), args...)
 	return ret
 }
 
@@ -586,9 +587,10 @@ func (db *DB) ListUploads(q string, extraLabels []string, limit int) *UploadList
 	ret := &UploadList{q: q, extraLabels: extraLabels}
 
 	var args []any
-	query := "SELECT j.UploadID, rCount"
+	var query strings.Builder
+	query.WriteString("SELECT j.UploadID, rCount")
 	for i, label := range extraLabels {
-		query += fmt.Sprintf(", (SELECT l%d.Value FROM RecordLabels l%d WHERE l%d.UploadID = j.UploadID AND Name = ? LIMIT 1)", i, i, i)
+		fmt.Fprintf(&query, ", (SELECT l%d.Value FROM RecordLabels l%d WHERE l%d.UploadID = j.UploadID AND Name = ? LIMIT 1)", i, i, i)
 		args = append(args, label)
 	}
 	sql, qArgs, err := parseQuery(q)
@@ -598,41 +600,41 @@ func (db *DB) ListUploads(q string, extraLabels []string, limit int) *UploadList
 	}
 	if len(sql) == 0 {
 		// Optimize empty query.
-		query += " FROM (SELECT UploadID, (SELECT COUNT(*) FROM Records r WHERE r.UploadID = u.UploadID) AS rCount FROM Uploads u "
+		query.WriteString(" FROM (SELECT UploadID, (SELECT COUNT(*) FROM Records r WHERE r.UploadID = u.UploadID) AS rCount FROM Uploads u ")
 		switch db.driverName {
 		case "sqlite3":
-			query += "WHERE"
+			query.WriteString("WHERE")
 		default:
-			query += "HAVING"
+			query.WriteString("HAVING")
 		}
-		query += " rCount > 0 ORDER BY u.Day DESC, u.Seq DESC, u.UploadID DESC"
+		query.WriteString(" rCount > 0 ORDER BY u.Day DESC, u.Seq DESC, u.UploadID DESC")
 		if limit != 0 {
-			query += fmt.Sprintf(" LIMIT %d", limit)
+			fmt.Fprintf(&query, " LIMIT %d", limit)
 		}
-		query += ") j"
+		query.WriteString(") j")
 	} else {
 		// Join individual queries.
-		query += " FROM (SELECT UploadID, COUNT(*) as rCount FROM "
+		query.WriteString(" FROM (SELECT UploadID, COUNT(*) as rCount FROM ")
 		args = append(args, qArgs...)
 		for i, part := range sql {
 			if i > 0 {
-				query += " INNER JOIN "
+				query.WriteString(" INNER JOIN ")
 			}
-			query += fmt.Sprintf("(%s) t%d", part, i)
+			fmt.Fprintf(&query, "(%s) t%d", part, i)
 			if i > 0 {
-				query += " USING (UploadID, RecordID)"
+				query.WriteString(" USING (UploadID, RecordID)")
 			}
 		}
 
-		query += " LEFT JOIN Records r USING (UploadID, RecordID)"
-		query += " GROUP BY UploadID) j LEFT JOIN Uploads u USING (UploadID) ORDER BY u.Day DESC, u.Seq DESC, u.UploadID DESC"
+		query.WriteString(" LEFT JOIN Records r USING (UploadID, RecordID)")
+		query.WriteString(" GROUP BY UploadID) j LEFT JOIN Uploads u USING (UploadID) ORDER BY u.Day DESC, u.Seq DESC, u.UploadID DESC")
 		if limit != 0 {
-			query += fmt.Sprintf(" LIMIT %d", limit)
+			fmt.Fprintf(&query, " LIMIT %d", limit)
 		}
 	}
 
-	ret.sqlQuery, ret.sqlArgs = query, args
-	ret.rows, ret.err = db.sql.Query(query, args...)
+	ret.sqlQuery, ret.sqlArgs = query.String(), args
+	ret.rows, ret.err = db.sql.Query(query.String(), args...)
 	return ret
 }
 

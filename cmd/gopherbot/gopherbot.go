@@ -1664,8 +1664,8 @@ func (b *gopherbot) unwaitCLs(ctx context.Context) error {
 			if tags.Contains("wait-author") {
 				// Figure out the last index at which "wait-author" was added.
 				waitAuthorIndex := -1
-				for i := len(cl.Metas) - 1; i >= 0; i-- {
-					if cl.Metas[i].HashtagsAdded().Contains("wait-author") {
+				for i, v := range slices.Backward(cl.Metas) {
+					if v.HashtagsAdded().Contains("wait-author") {
 						waitAuthorIndex = i
 						break
 					}
@@ -1745,8 +1745,8 @@ func (b *gopherbot) onLatestCL(ctx context.Context, cl *maintner.GerritCL, f fun
 	latestGerritID := ci.Messages[len(ci.Messages)-1].ID
 	// Check all metas and not just the latest, because there are some meta commits
 	// that don't have a corresponding message in the Gerrit REST API response.
-	for i := len(cl.Metas) - 1; i >= 0; i-- {
-		metaHash := cl.Metas[i].Commit.Hash.String()
+	for _, v := range slices.Backward(cl.Metas) {
+		metaHash := v.Commit.Hash.String()
 		if metaHash == latestGerritID {
 			// latestGerritID is contained by maintner metadata for this CL, so run f().
 			return f()
@@ -1780,8 +1780,8 @@ func (b *gopherbot) fetchReleases(ctx context.Context) (major []string, nextMino
 	rs := resp.Releases // Supported Go releases, sorted with latest first.
 
 	nextMinor = make(map[string]string)
-	for i := len(rs) - 1; i >= 0; i-- {
-		x, y, z := rs[i].Major, rs[i].Minor, rs[i].Patch
+	for _, r := range slices.Backward(rs) {
+		x, y, z := r.Major, r.Minor, r.Patch
 		major = append(major, fmt.Sprintf("%d.%d", x, y))
 		nextMinor[fmt.Sprintf("%d.%d", x, y)] = fmt.Sprintf("%d.%d.%d", x, y, z+1)
 	}

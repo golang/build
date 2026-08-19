@@ -491,8 +491,7 @@ func (c *LUCIClient) GetBuildResult(ctx context.Context, repo string, builder Bu
 		// Fetch the stderr of the failed step.
 		steps := b.GetSteps()
 	stepLoop:
-		for i := len(steps) - 1; i >= 0; i-- {
-			s := steps[i]
+		for _, s := range slices.Backward(steps) {
 			if s.GetStatus() == bbpb.Status_FAILURE {
 				for _, l := range s.GetLogs() {
 					if l.GetName() == "stderr" || l.GetName() == "output" {

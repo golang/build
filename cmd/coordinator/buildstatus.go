@@ -92,7 +92,7 @@ type buildStatus struct {
 	ctx             context.Context    // used to start the build
 	cancel          context.CancelFunc // used to cancel context; for use by setDone only
 
-	hasBuildlet int32 // atomic: non-zero if this build has a buildlet; for status.go.
+	hasBuildlet atomic.Int32 // non-zero if this build has a buildlet; for status.go.
 
 	mu              sync.Mutex       // guards following
 	canceled        bool             // whether this build was forcefully canceled, so errors should be ignored
@@ -383,7 +383,7 @@ func (st *buildStatus) getBuildlet() (buildlet.Client, error) {
 		go st.reportErr(err)
 		return nil, err
 	}
-	atomic.StoreInt32(&st.hasBuildlet, 1)
+	st.hasBuildlet.Store(1)
 
 	st.mu.Lock()
 	st.bc = bc
@@ -506,7 +506,7 @@ func (st *buildStatus) build() error {
 	return nil
 }
 
-func (st *buildStatus) HasBuildlet() bool { return atomic.LoadInt32(&st.hasBuildlet) != 0 }
+func (st *buildStatus) HasBuildlet() bool { return st.hasBuildlet.Load() != 0 }
 
 // useKeepGoingFlag reports whether this build should use -k flag of 'go tool
 // dist test', which makes it keep going even when some tests have failed.
@@ -889,8 +889,7 @@ func (st *buildStatus) latestRelease(submodule string) (string, error) {
 	semver.Sort(versions)
 
 	// Return latest non-prerelease version.
-	for i := len(versions) - 1; i >= 0; i-- {
-		ver := versions[i]
+	for _, ver := range slices.Backward(versions) {
 		if !semver.IsValid(ver) {
 			continue
 		}

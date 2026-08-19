@@ -159,7 +159,7 @@ func (s *server) updateHelpWantedIssues() {
 			return nil
 		}
 		if i.HasLabelID(labelHelpWantedID) {
-			prefix := strings.SplitN(i.Title, ":", 2)[0]
+			prefix, _, _ := strings.Cut(i.Title, ":")
 			issues = append(issues, issueData{id: i.Number, titlePrefix: prefix})
 		}
 		return nil

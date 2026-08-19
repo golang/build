@@ -679,21 +679,22 @@ func addSingleReleaseWorkflow(
 			return nil, err
 		}
 		ctx.Printf("cherry-picked")
-		refspec := fmt.Sprintf("HEAD:refs/for/%s%%l=Auto-Submit+1,l=TryBot-Bypass+1", targetBranch)
+		var refspec strings.Builder
+		fmt.Fprintf(&refspec, "HEAD:refs/for/%s%%l=Auto-Submit+1,l=TryBot-Bypass+1", targetBranch)
 		reviewerEmails, err := task.CoordinatorEmails(reviewers)
 		if err != nil {
 			return nil, err
 		}
 		for _, r := range reviewerEmails {
-			refspec += ",r=" + r
+			fmt.Fprintf(&refspec, ",r=%s", r)
 		}
 
 		// What's coming up next involves side-effects in external systems,
 		// so beyond this point of the task we want manual retries only, not automated ones.
 		ctx.DisableRetries()
 
-		ctx.Printf("pushing %s to %s", refspec, publicOrigin)
-		gitPushOutput, err := repo.RunGitPush(ctx, publicOrigin, refspec)
+		ctx.Printf("pushing %s to %s", refspec.String(), publicOrigin)
+		gitPushOutput, err := repo.RunGitPush(ctx, publicOrigin, refspec.String())
 		if err != nil {
 			return nil, err
 		}

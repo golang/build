@@ -20,7 +20,7 @@ var _ rateLimiter = (*fakeRateLimiter)(nil)
 var rateExceededErr = errors.New("rate limit exceeded")
 
 type fakeRateLimiter struct {
-	waitCalledCount int64
+	waitCalledCount atomic.Int64
 	waitCallLimit   int64
 }
 
@@ -33,7 +33,7 @@ func (frl *fakeRateLimiter) Wait(ctx context.Context) (err error) {
 }
 
 func (frl *fakeRateLimiter) WaitN(ctx context.Context, n int) (err error) {
-	count := atomic.AddInt64(&frl.waitCalledCount, int64(n))
+	count := frl.waitCalledCount.Add(int64(n))
 	if count > frl.waitCallLimit {
 		return rateExceededErr
 	}
@@ -41,7 +41,7 @@ func (frl *fakeRateLimiter) WaitN(ctx context.Context, n int) (err error) {
 }
 
 func (frl *fakeRateLimiter) called() bool {
-	if atomic.LoadInt64(&frl.waitCalledCount) > 0 {
+	if frl.waitCalledCount.Load() > 0 {
 		return true
 	}
 	return false

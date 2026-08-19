@@ -269,7 +269,8 @@ func (x *PrivXPatch) publishChange(ctx *wf.TaskContext, repoName, clLink string,
 		return err
 	}
 	ctx.Printf("cherry-picked")
-	refspec := "HEAD:refs/for/master%l=Auto-Submit,l=Commit-Queue+1"
+	var refspec strings.Builder
+	refspec.WriteString("HEAD:refs/for/master%l=Auto-Submit,l=Commit-Queue+1")
 	// We don't typically specify reviews in the historical releases;
 	// so this should NOT be hardcoded; instead, it should pull from
 	// some ACL somewhere?
@@ -278,14 +279,14 @@ func (x *PrivXPatch) publishChange(ctx *wf.TaskContext, repoName, clLink string,
 		return err
 	}
 	for _, reviewer := range reviewerEmails {
-		refspec += ",r=" + reviewer
+		fmt.Fprintf(&refspec, ",r=%s", reviewer)
 	}
 
 	// Beyond this point we don't want to retry any of the following steps.
 	ctx.DisableRetries()
 
-	ctx.Printf("pushing %s to %s", refspec, x.PublicRepoURL(repoName))
-	gitPushOutput, err := repo.RunGitPush(ctx, x.PublicRepoURL(repoName), refspec)
+	ctx.Printf("pushing %s to %s", refspec.String(), x.PublicRepoURL(repoName))
+	gitPushOutput, err := repo.RunGitPush(ctx, x.PublicRepoURL(repoName), refspec.String())
 	if err != nil {
 		return err
 	}

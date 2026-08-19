@@ -2151,15 +2151,13 @@ func latestTryTerms(work *apipb.GerritTryWorkItem) []string {
 
 func latestTryMessage(work *apipb.GerritTryWorkItem) string {
 	// Prioritize exact version matches first
-	for i := len(work.TryMessage) - 1; i >= 0; i-- {
-		m := work.TryMessage[i]
+	for _, m := range slices.Backward(work.TryMessage) {
 		if m.Version == work.Version {
 			return m.Message
 		}
 	}
 	// Otherwise the latest message at all
-	for i := len(work.TryMessage) - 1; i >= 0; i-- {
-		m := work.TryMessage[i]
+	for _, m := range slices.Backward(work.TryMessage) {
 		if m.Message != "" {
 			return m.Message
 		}

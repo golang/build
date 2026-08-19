@@ -46,24 +46,24 @@ func ParseCommitMessage(repo string, text string) (Change, error) {
 	// by GerritBot and/or Gerrit).
 	body := lines[2:]
 	sawFooter := false
-	for i := len(body) - 1; i >= 0; i-- {
-		if match(`^[a-zA-Z][^ ]*: `, body[i]) {
+	for i, b := range slices.Backward(body) {
+		if match(`^[a-zA-Z][^ ]*: `, b) {
 			body = body[:i]
 			sawFooter = true
 			continue
 		}
-		if match(`^\(cherry picked from commit [a-f0-9]+\)$`, body[i]) {
+		if match(`^\(cherry picked from commit [a-f0-9]+\)$`, b) {
 			// One CL in our corpus (CL 346093) has this intermixed with the footers.
 			continue
 		}
-		if body[i] == "" {
+		if b == "" {
 			if !sawFooter {
 				continue // We leniently skip any blank lines at bottom of commit message.
 			}
 			body = body[:i]
 			break
 		}
-		return Change{}, fmt.Errorf("rules: ParseCommitMessage: found non-footer line at end of commit message. line: %q, commit message: %q", body[i], text)
+		return Change{}, fmt.Errorf("rules: ParseCommitMessage: found non-footer line at end of commit message. line: %q, commit message: %q", b, text)
 	}
 	if !sawFooter {
 		return Change{}, fmt.Errorf("rules: ParseCommitMessage: did not find any footers preceded by blank line for commit message: %q", text)

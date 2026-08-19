@@ -1423,7 +1423,7 @@ func handleLs(w http.ResponseWriter, r *http.Request) {
 				if sha1, err := fileSHA1(path); err != nil {
 					return err
 				} else {
-					io.WriteString(w, "\t"+sha1)
+					fmt.Fprintf(w, "\t%s", sha1)
 				}
 			}
 		} else if fi.Mode().IsDir() {
