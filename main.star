@@ -456,7 +456,6 @@ BUILDER_TYPES = [
     "linux-amd64-longtest",
     "linux-amd64-longtest-git2.24.0",
     "linux-amd64-longtest-race",
-    "linux-amd64-longtest-noswissmap",
     "linux-amd64-misccompile",
     "linux-amd64-msan-clang15",
     "linux-amd64-mapsplitgroup",
@@ -1108,15 +1107,6 @@ RUN_MODS = {
     "noopt": make_run_mod(
         add_env = {"GO_GCFLAGS": "-N -l"},
         enabled = define_for_postsubmit(["go"]),
-    ),
-
-    # Build and test with the swissmap GOEXPERIMENT disabled.
-    #
-    # GOEXPERIMENT=swissmap was deleted in Go 1.26. This can be deleted when Go
-    # 1.25 is no longer supported.
-    "noswissmap": make_run_mod(
-        add_env = {"GOEXPERIMENT": "noswissmap"},
-        enabled = define_for_go_range("go1.24", "go1.25", presubmit = False),
     ),
 
     # Run performance tests with PGO against the oldest stable Go release.
@@ -2123,18 +2113,12 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Filter out old OS versions from new branches.
-    if os == "darwin" and suffix == "12" and go_branch_short not in ["go1.25", "go1.26"]:
+    if os == "darwin" and suffix == "12" and go_branch_short not in ["go1.26"]:
         # Go 1.26 is last to support macOS 12. See go.dev/issue/75836.
         return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Filter out new ports on old release branches.
     # Nothing to do here at this time.
-
-    # Don't test x/vulndb on Go 1.25. It requires 1.26.0+ as of CL 747200,
-    # so Go 1.25 builders that test with GOTOOLCHAIN=local have no choice
-    # but to skip testing this module.
-    if project == "vulndb" and go_branch_short == "go1.25":
-        return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Docker builder should only be used in VSCode-Go repo.
     if suffix == "docker" and project != "vscode-go":
