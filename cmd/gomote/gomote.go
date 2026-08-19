@@ -270,8 +270,7 @@ func main() {
 func gomoteServerClient(ctx context.Context) protos.GomoteServiceClient {
 	grpcClient, err := iapclient.GRPCClient(ctx, *serverAddr)
 	if err != nil {
-		var authErr iapclient.AuthenticationError
-		if errors.As(err, &authErr) {
+		if _, ok := errors.AsType[iapclient.AuthenticationError](err); ok {
 			logAndExitf("Authentication error: %s\n\tLogin via: gomote login\n", err)
 		}
 		logAndExitf("dialing the server=%s failed with: %s\n", *serverAddr, err)

@@ -238,7 +238,7 @@ func (m *MilestoneTasks) PushIssues(ctx *wf.TaskContext, milestones ReleaseMiles
 	}
 	if kind == KindMajor || kind == KindMinor {
 		_, _, err := m.Client.EditMilestone(ctx, m.RepoOwner, m.RepoName, milestones.Current, &github.Milestone{
-			State: github.String("closed"),
+			State: new("closed"),
 		})
 		if err != nil {
 			return err
@@ -311,7 +311,7 @@ func (m *MilestoneTasks) PingEarlyIssues(ctx *wf.TaskContext, develVersion int, 
 		if !q.Repository.Issues.PageInfo.HasNextPage {
 			break
 		}
-		variables["issueCursor"] = githubv4.NewString(q.Repository.Issues.PageInfo.EndCursor)
+		variables["issueCursor"] = new(q.Repository.Issues.PageInfo.EndCursor)
 	}
 
 	// Ping them.
@@ -410,7 +410,7 @@ func (c *GitHubClient) FetchMilestone(ctx context.Context, owner, repo, name str
 		return 0, fmt.Errorf("no milestone named %q found, and creation was disabled", name)
 	}
 	m, _, createErr := c.V3.Issues.CreateMilestone(ctx, owner, repo, &github.Milestone{
-		Title: github.String(name),
+		Title: new(name),
 	})
 	if createErr != nil {
 		return 0, fmt.Errorf("could not find an open milestone named %q and creating it failed: %v", name, createErr)
@@ -453,7 +453,7 @@ func (c *GitHubClient) PublishRelease(ctx context.Context, owner, repo string, r
 		return release, nil
 	}
 	release, _, err := c.V3.Repositories.EditRelease(ctx, owner, repo, release.GetID(), &github.RepositoryRelease{
-		Draft: github.Bool(false),
+		Draft: new(false),
 	})
 	return release, err
 }

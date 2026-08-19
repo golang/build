@@ -1894,8 +1894,8 @@ func (p *githubRepoPoller) syncCommentsOnIssue(ctx context.Context, issueNum int
 	morePages := true // at least try the first. might be empty.
 	for morePages {
 		opt := &github.IssueListCommentsOptions{
-			Direction:   github.String("asc"),
-			Sort:        github.String("updated"),
+			Direction:   new("asc"),
+			Sort:        new("updated"),
 			ListOptions: github.ListOptions{PerPage: 100},
 		}
 		if !since.IsZero() {

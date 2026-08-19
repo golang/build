@@ -162,11 +162,11 @@ func TestProcessMutation_Github(t *testing.T) {
 
 func TestNewMutationsFromIssue(t *testing.T) {
 	gh := &github.Issue{
-		Number:    github.Int(5),
+		Number:    new(5),
 		CreatedAt: &github.Timestamp{Time: t1},
 		UpdatedAt: &github.Timestamp{Time: t2},
-		Body:      github.String("body of the issue"),
-		State:     github.String("closed"),
+		Body:      new("body of the issue"),
+		State:     new("closed"),
 	}
 	gr := &GitHubRepo{
 		id: GitHubRepoID{"golang", "go"},
@@ -191,7 +191,7 @@ func TestNewMutationsFromIssue(t *testing.T) {
 
 func TestNewAssigneesHandlesNil(t *testing.T) {
 	users := []*github.User{
-		&github.User{Login: github.String("foo"), ID: github.Int64(3)},
+		&github.User{Login: new("foo"), ID: github.Int64(3)},
 	}
 	got := newAssignees(nil, users)
 	want := []*maintpb.GithubUser{&maintpb.GithubUser{
@@ -230,8 +230,8 @@ func TestAssigneesDeleted(t *testing.T) {
 	}
 
 	mutation := gr.newMutationFromIssue(issue, &github.Issue{
-		Number:    github.Int(3),
-		Assignees: []*github.User{&github.User{ID: github.Int64(u2.ID)}},
+		Number:    new(3),
+		Assignees: []*github.User{&github.User{ID: new(u2.ID)}},
 	})
 	c.addMutation(mutation)
 	gi := gr.issues[3]
@@ -267,8 +267,8 @@ func TestSync(t *testing.T) {
 	}
 
 	mutation := gr.newMutationFromIssue(issue, &github.Issue{
-		Number:    github.Int(3),
-		Assignees: []*github.User{&github.User{ID: github.Int64(u2.ID)}},
+		Number:    new(3),
+		Assignees: []*github.User{&github.User{ID: new(u2.ID)}},
 	})
 	c.addMutation(mutation)
 	ctx := context.Background()

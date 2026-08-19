@@ -176,10 +176,10 @@ func (x *ReleaseGovulncheckActionTasks) createGitHubRelease(ctx *wf.TaskContext,
 	ctx.DisableRetries()
 	ctx.Printf("Creating GitHub release for %s", version)
 	_, err := x.GitHub.CreateRelease(ctx, "golang", "govulncheck-action", &github.RepositoryRelease{
-		TagName:              github.Ptr(version),
-		Name:                 github.Ptr(version),
-		GenerateReleaseNotes: github.Ptr(true),
-		Draft:                github.Ptr(false),
+		TagName:              new(version),
+		Name:                 new(version),
+		GenerateReleaseNotes: new(true),
+		Draft:                new(false),
 	})
 	return err
 }

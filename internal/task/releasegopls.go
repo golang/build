@@ -206,11 +206,11 @@ func (r *ReleaseGoplsTasks) findOrCreateGitHubIssue(ctx *wf.TaskContext, release
 		return 0, fmt.Errorf("failed to find the coordinator %q", coordinators[0])
 	}
 	issue, _, err := r.GitHub.CreateIssue(ctx, "golang", "go", &github.IssueRequest{
-		Title:     github.String(title),
-		Body:      github.String(content),
+		Title:     new(title),
+		Body:      new(content),
 		Labels:    &[]string{"gopls", "Tools"},
-		Assignee:  github.String(assignee.GitHub),
-		Milestone: github.Int(milestoneID),
+		Assignee:  new(assignee.GitHub),
+		Milestone: new(milestoneID),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to create release tracking issue for %q: %w", versionString, err)
@@ -845,12 +845,12 @@ func (r *ReleaseGoplsTasks) createGitHubRelease(ctx *wf.TaskContext, release rel
 
 	ctx.DisableRetries()
 	_, err := r.GitHub.CreateRelease(ctx, "golang", "tools", &github.RepositoryRelease{
-		TagName:              github.Ptr(tagName),
-		Name:                 github.Ptr(fmt.Sprintf("gopls %s", version)),
-		Body:                 github.Ptr(body), // body is pre-pended to the automatically generated release notes
-		Prerelease:           github.Ptr(false),
-		Draft:                github.Ptr(false), // publish immediately instead of creating a draft
-		GenerateReleaseNotes: github.Ptr(true),  // automatically generates contributor list
+		TagName:              new(tagName),
+		Name:                 new(fmt.Sprintf("gopls %s", version)),
+		Body:                 new(body), // body is pre-pended to the automatically generated release notes
+		Prerelease:           new(false),
+		Draft:                new(false), // publish immediately instead of creating a draft
+		GenerateReleaseNotes: new(true),  // automatically generates contributor list
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create GitHub release: %w", err)

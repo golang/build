@@ -175,7 +175,7 @@ func TestEC2RateLimitInterceptorTerminateInstancesWithContext(t *testing.T) {
 	}
 	fn := func() error {
 		_, err := i.TerminateInstancesWithContext(context.Background(), &ec2.TerminateInstancesInput{
-			InstanceIds: []*string{aws.String("foo")},
+			InstanceIds: []*string{new("foo")},
 		}, request.WithAppendUserAgent("test-agent"))
 		return err
 	}

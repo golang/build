@@ -637,8 +637,7 @@ func (r *resultDetail) Kind() string {
 
 func (r *resultDetail) UnmarshalJSON(result []byte) error {
 	v := reflect.ValueOf(r).Elem()
-	for i := 0; i < v.NumField(); i++ {
-		f := v.Field(i)
+	for _, f := range v.Fields() {
 		if err := json.Unmarshal(result, f.Addr().Interface()); err == nil {
 			if f.IsZero() {
 				continue

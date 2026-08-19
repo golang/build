@@ -484,7 +484,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			create:  true,
 			fakeGitHub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
-				Issues:     map[int]*github.Issue{2: {Number: github.Int(2), Title: github.String("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
+				Issues:     map[int]*github.Issue{2: {Number: new(2), Title: new("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			},
 			wantErr:   false,
 			wantIssue: 2,
@@ -495,7 +495,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			create:  false,
 			fakeGitHub: FakeGitHub{
 				Milestones: map[int]string{1: "gopls/v0.16.2"},
-				Issues:     map[int]*github.Issue{2: {Number: github.Int(2), Title: github.String("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
+				Issues:     map[int]*github.Issue{2: {Number: new(2), Title: new("x/tools/gopls: release version v0.16.2"), Milestone: &github.Milestone{ID: github.Int64(1)}}},
 			},
 			wantErr:   false,
 			wantIssue: 2,
@@ -1254,8 +1254,8 @@ esac
 					},
 					Issues: map[int]*github.Issue{
 						1: {
-							Number:    github.Int(1),
-							Title:     github.String(fmt.Sprintf("x/tools/gopls: release version %s", tc.release)),
+							Number:    new(1),
+							Title:     new(fmt.Sprintf("x/tools/gopls: release version %s", tc.release)),
 							Milestone: &github.Milestone{ID: github.Int64(1)},
 						},
 					},

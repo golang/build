@@ -244,10 +244,10 @@ CC @aclements, @ianlancetaylor, @golang/release.`))
 		return 0, err
 	}
 	issue, _, err := t.GitHub.CreateIssue(ctx, "golang", "go", &github.IssueRequest{
-		Title:     github.String(title),
-		Body:      github.String(body.String()),
+		Title:     new(title),
+		Body:      new(body.String()),
 		Labels:    &[]string{"NeedsDecision", "release-blocker", "ExpertNeeded"},
-		Milestone: github.Int(tracking.Milestone),
+		Milestone: new(tracking.Milestone),
 	})
 	if err != nil {
 		return 0, err

@@ -1482,7 +1482,7 @@ func (f *FakeGitHub) CreateIssue(ctx context.Context, owner, repo string, reques
 		if _, ok := f.Milestones[*request.Milestone]; !ok {
 			return nil, nil, fmt.Errorf("the milestone does not exist: %v", *request.Milestone)
 		}
-		f.Issues[issueNumber].Milestone = &github.Milestone{ID: github.Int64(int64(*request.Milestone))}
+		f.Issues[issueNumber].Milestone = &github.Milestone{ID: new(int64(*request.Milestone))}
 	}
 	return f.GetIssue(ctx, owner, repo, issueNumber)
 }

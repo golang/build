@@ -648,7 +648,7 @@ func (b *gopherbot) setMilestone(ctx context.Context, repoID maintner.GitHubRepo
 		return nil
 	}
 	_, resp, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(gi.Number), &github.IssueRequest{
-		Milestone: github.Int(m.Number),
+		Milestone: new(m.Number),
 	})
 	if err != nil && resp != nil && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone) {
 		// An issue can become gone on GitHub without maintner realizing it. See go.dev/issue/30184.
@@ -706,7 +706,7 @@ func (b *gopherbot) addGitHubComment(ctx context.Context, repo *maintner.GitHubR
 		}
 	}
 	_, resp, createError := b.ghc.Issues.CreateComment(ctx, repo.ID().Owner, repo.ID().Repo, int(issueNum), &github.IssueComment{
-		Body: github.String(msg),
+		Body: new(msg),
 	})
 	if createError != nil && resp != nil && resp.StatusCode == http.StatusUnprocessableEntity {
 		// While maintner's tracking of deleted issues is incomplete (see go.dev/issue/30184),
@@ -761,8 +761,8 @@ func (b *gopherbot) createGitHubIssue(ctx context.Context, title, msg string, la
 		return 4242, nil
 	}
 	i, _, err := b.ghc.Issues.Create(ctx, "golang", "go", &github.IssueRequest{
-		Title:  github.String(title),
-		Body:   github.String(msg),
+		Title:  new(title),
+		Body:   new(msg),
 		Labels: &labels,
 	})
 	return i.GetNumber(), err
@@ -773,8 +773,8 @@ func (b *gopherbot) createGitHubIssue(ctx context.Context, title, msg string, la
 type issueCloseReason *string
 
 var (
-	completed  issueCloseReason = github.String("completed")   // Done, closed, fixed, resolved.
-	notPlanned issueCloseReason = github.String("not_planned") // Won't fix, can't repro, duplicate, stale.
+	completed  issueCloseReason = new("completed")   // Done, closed, fixed, resolved.
+	notPlanned issueCloseReason = new("not_planned") // Won't fix, can't repro, duplicate, stale.
 )
 
 // closeGitHubIssue closes a GitHub issue.
@@ -789,7 +789,7 @@ func (b *gopherbot) closeGitHubIssue(ctx context.Context, repoID maintner.GitHub
 		return nil
 	}
 	_, _, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(number), &github.IssueRequest{
-		State:       github.String("closed"),
+		State:       new("closed"),
 		StateReason: reason,
 	})
 	return err

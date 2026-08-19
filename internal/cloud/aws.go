@@ -124,7 +124,7 @@ type AWSOpt func(*AWSClient)
 // NewAWSClient creates a new AWS client.
 func NewAWSClient(region, keyID, accessKey string, opts ...AWSOpt) (*AWSClient, error) {
 	s, err := session.NewSession(&aws.Config{
-		Region:      aws.String(region),
+		Region:      new(region),
 		Credentials: credentials.NewStaticCredentials(keyID, accessKey, ""), // Token is only required for STS
 	})
 	if err != nil {
@@ -143,7 +143,7 @@ func NewAWSClient(region, keyID, accessKey string, opts ...AWSOpt) (*AWSClient, 
 // Instance retrieves an EC2 instance by instance ID.
 func (ac *AWSClient) Instance(ctx context.Context, instID string) (*Instance, error) {
 	dio, err := ac.ec2Client.DescribeInstancesWithContext(ctx, &ec2.DescribeInstancesInput{
-		InstanceIds: []*string{aws.String(instID)},
+		InstanceIds: []*string{new(instID)},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve instance %q information: %w", instID, err)
@@ -171,7 +171,7 @@ func (ac *AWSClient) RunningInstances(ctx context.Context) ([]*Instance, error) 
 	err := ac.ec2Client.DescribeInstancesPagesWithContext(ctx, &ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{
 			{
-				Name:   aws.String("instance-state-name"),
+				Name:   new("instance-state-name"),
 				Values: []*string{aws.String(ec2.InstanceStateNameRunning), aws.String(ec2.InstanceStateNamePending)},
 			},
 		},
@@ -215,7 +215,7 @@ func (ac *AWSClient) DestroyInstances(ctx context.Context, instIDs ...string) er
 // - 40 requests are made with a 15 second delay between each request.
 func (ac *AWSClient) WaitUntilInstanceRunning(ctx context.Context, instID string) error {
 	err := ac.ec2Client.WaitUntilInstanceRunningWithContext(ctx, &ec2.DescribeInstancesInput{
-		InstanceIds: []*string{aws.String(instID)},
+		InstanceIds: []*string{new(instID)},
 	})
 	if err != nil {
 		return fmt.Errorf("failed waiting for vm instance: %w", err)
@@ -266,8 +266,8 @@ func (ac *AWSClient) InstanceTypesARM(ctx context.Context) ([]*InstanceType, err
 func (ac *AWSClient) Quota(ctx context.Context, service, code string) (int64, error) {
 	// TODO(golang.org/issue/36841): use ctx
 	sq, err := ac.quotaClient.GetServiceQuota(&servicequotas.GetServiceQuotaInput{
-		QuotaCode:   aws.String(code),
-		ServiceCode: aws.String(service),
+		QuotaCode:   new(code),
+		ServiceCode: new(service),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to retrieve quota: %w", err)
@@ -315,37 +315,37 @@ func ec2ToInstance(inst *ec2.Instance) *Instance {
 // vmConfig converts a configuration into a request to create an instance.
 func vmConfig(config *EC2VMConfiguration) *ec2.RunInstancesInput {
 	ri := &ec2.RunInstancesInput{
-		ImageId:      aws.String(config.ImageID),
-		InstanceType: aws.String(config.Type),
+		ImageId:      new(config.ImageID),
+		InstanceType: new(config.Type),
 		MinCount:     aws.Int64(1),
 		MaxCount:     aws.Int64(1),
 		Placement: &ec2.Placement{
-			AvailabilityZone: aws.String(config.Zone),
+			AvailabilityZone: new(config.Zone),
 		},
-		KeyName:                           aws.String(config.SSHKeyID),
+		KeyName:                           new(config.SSHKeyID),
 		InstanceInitiatedShutdownBehavior: aws.String(ec2.ShutdownBehaviorTerminate),
 		TagSpecifications: []*ec2.TagSpecification{
 			{
-				ResourceType: aws.String("instance"),
+				ResourceType: new("instance"),
 				Tags: []*ec2.Tag{
 					{
-						Key:   aws.String(tagName),
-						Value: aws.String(config.Name),
+						Key:   new(tagName),
+						Value: new(config.Name),
 					},
 					{
-						Key:   aws.String(tagDescription),
-						Value: aws.String(config.Description),
+						Key:   new(tagDescription),
+						Value: new(config.Description),
 					},
 				},
 			},
 		},
 		SecurityGroups: aws.StringSlice(config.SecurityGroups),
-		UserData:       aws.String(config.UserData),
+		UserData:       new(config.UserData),
 	}
 	for k, v := range config.Tags {
 		ri.TagSpecifications[0].Tags = append(ri.TagSpecifications[0].Tags, &ec2.Tag{
-			Key:   aws.String(k),
-			Value: aws.String(v),
+			Key:   new(k),
+			Value: new(v),
 		})
 	}
 	return ri

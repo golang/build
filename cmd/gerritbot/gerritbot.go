@@ -367,9 +367,9 @@ func (b *bot) claApproved(ctx context.Context, repo maintner.GitHubRepoID, pr *g
 		return false, fmt.Errorf("no head SHA for PR %v %v", repo, pr.GetNumber())
 	}
 	runs, _, err := b.githubClient.Checks.ListCheckRunsForRef(ctx, repo.Owner, repo.Repo, pr.GetHead().GetSHA(), &github.ListCheckRunsOptions{
-		CheckName: github.String("cla/google"),
-		Status:    github.String("completed"),
-		Filter:    github.String("latest"),
+		CheckName: new("cla/google"),
+		Status:    new("completed"),
+		Filter:    new("latest"),
 		// TODO(heschi): filter for App ID once supported by go-github
 	})
 	if err != nil {
@@ -590,7 +590,7 @@ func (b *bot) closePR(ctx context.Context, pr *github.PullRequest, ch *gerrit.Ch
 	}
 
 	req := &github.IssueRequest{
-		State: github.String("closed"),
+		State: new("closed"),
 	}
 	_, resp, err := b.githubClient.Issues.Edit(ctx, repo.GetOwner().GetLogin(), repo.GetName(), pr.GetNumber(), req)
 	if err != nil {
@@ -1048,7 +1048,7 @@ func (b *bot) postGitHubMessageNoDup(ctx context.Context, org, repo string, issu
 		return nil
 	}
 	_, resp, err = b.githubClient.Issues.CreateComment(ctx, org, repo, issueNum, &github.IssueComment{
-		Body: github.String(header + msg),
+		Body: new(header + msg),
 	})
 	if err != nil {
 		return err

@@ -250,10 +250,10 @@ func (r *ReleaseVSCodeGoTasks) createReleaseMilestoneAndIssue(ctx *wf.TaskContex
 		return 0, fmt.Errorf("failed to find the coordinator %q", coordinators[0])
 	}
 	issue, _, err := r.GitHub.CreateIssue(ctx, "golang", "vscode-go", &github.IssueRequest{
-		Title:     github.String(title),
-		Body:      github.String(fmt.Sprintf(vscodeGoReleaseIssueTmplStr, version)),
-		Assignee:  github.String(assignee.GitHub),
-		Milestone: github.Int(milestoneID),
+		Title:     new(title),
+		Body:      new(fmt.Sprintf(vscodeGoReleaseIssueTmplStr, version)),
+		Assignee:  new(assignee.GitHub),
+		Milestone: new(milestoneID),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to create release tracking issue for %q: %w", version, err)
@@ -652,12 +652,12 @@ func (r *ReleaseVSCodeGoTasks) createGitHubRelease(ctx *wf.TaskContext, release 
 	versionString := versionString(release, prerelease)
 	ctx.DisableRetries() // Beyond this point we want retries to be done manually, not automatically.
 	draft, err := r.GitHub.CreateRelease(ctx, "golang", "vscode-go", &github.RepositoryRelease{
-		TagName: github.String(versionString),
-		Name:    github.String("Release " + versionString),
-		Body:    github.String(body),
+		TagName: new(versionString),
+		Name:    new("Release " + versionString),
+		Body:    new(body),
 		// Both insider and release candidate are considered as prerelease.
-		Prerelease: github.Bool(isVSCodeGoInsiderVersion(release, prerelease) || prerelease != ""),
-		Draft:      github.Bool(true),
+		Prerelease: new(isVSCodeGoInsiderVersion(release, prerelease) || prerelease != ""),
+		Draft:      new(true),
 	})
 	if err != nil {
 		return err

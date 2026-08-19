@@ -120,7 +120,7 @@ func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 			version: "v0.48.0-rc.1",
 			fakeGithub: FakeGitHub{
 				Milestones: map[int]string{999: "v0.48.0", 998: "Release v0.46.0"},
-				Issues:     map[int]*github.Issue{1000: {Number: github.Int(1000), Title: github.String("Release v0.48.0"), Milestone: &github.Milestone{ID: github.Int64(999)}}},
+				Issues:     map[int]*github.Issue{1000: {Number: new(1000), Title: new("Release v0.48.0"), Milestone: &github.Milestone{ID: github.Int64(999)}}},
 			},
 			wantIssue:     1000,
 			wantMilestone: 999,

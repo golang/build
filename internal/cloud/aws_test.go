@@ -160,17 +160,17 @@ func (f *fakeEC2Client) RunInstancesWithContext(ctx context.Context, input *ec2.
 			},
 			ImageId:          input.ImageId,
 			InstanceType:     input.InstanceType,
-			InstanceId:       aws.String(fmt.Sprintf("instance-%s", randHex(10))),
+			InstanceId:       new(fmt.Sprintf("instance-%s", randHex(10))),
 			Placement:        input.Placement,
-			PrivateIpAddress: aws.String(randIPv4()),
-			PublicIpAddress:  aws.String(randIPv4()),
+			PrivateIpAddress: new(randIPv4()),
+			PublicIpAddress:  new(randIPv4()),
 			State: &ec2.InstanceState{
-				Name: aws.String("running"),
+				Name: new("running"),
 			},
 			Tags:           []*ec2.Tag{},
 			KeyName:        input.KeyName,
 			SecurityGroups: []*ec2.GroupIdentifier{},
-			LaunchTime:     aws.Time(time.Now()),
+			LaunchTime:     new(time.Now()),
 		}
 		for _, id := range input.SecurityGroups {
 			inst.SecurityGroups = append(inst.SecurityGroups, &ec2.GroupIdentifier{
@@ -187,7 +187,7 @@ func (f *fakeEC2Client) RunInstancesWithContext(ctx context.Context, input *ec2.
 	}
 	return &ec2.Reservation{
 		Instances:     instances,
-		ReservationId: aws.String(fmt.Sprintf("reservation-%s", randHex(10))),
+		ReservationId: new(fmt.Sprintf("reservation-%s", randHex(10))),
 	}, nil
 }
 
@@ -211,7 +211,7 @@ func (f *fakeEC2Client) TerminateInstancesWithContext(ctx context.Context, input
 		inst.State.Name = aws.String(ec2.InstanceStateNameTerminated)
 		isc = append(isc, &ec2.InstanceStateChange{
 			CurrentState: &ec2.InstanceState{
-				Name: aws.String(prevState),
+				Name: new(prevState),
 			},
 			InstanceId: id,
 			PreviousState: &ec2.InstanceState{
@@ -237,7 +237,7 @@ func (f *fakeEC2Client) WaitUntilInstanceRunningWithContext(ctx context.Context,
 			return fmt.Errorf("instance %s not found", *id)
 		}
 		inst.State = &ec2.InstanceState{
-			Name: aws.String("running"),
+			Name: new("running"),
 		}
 	}
 	return nil
@@ -267,7 +267,7 @@ func (f *fakeEC2Client) GetServiceQuota(input *servicequotas.GetServiceQuotaInpu
 	}
 	return &servicequotas.GetServiceQuotaOutput{
 		Quota: &servicequotas.ServiceQuota{
-			Value: aws.Float64(v),
+			Value: new(v),
 		},
 	}, nil
 }
@@ -283,12 +283,12 @@ func WithServiceQuota(service, quota string, value float64) option {
 func WithInstanceType(name, arch string, numCPU int64) option {
 	return func(c *fakeEC2Client) {
 		c.instanceTypes = append(c.instanceTypes, &ec2.InstanceTypeInfo{
-			InstanceType: aws.String(name),
+			InstanceType: new(name),
 			ProcessorInfo: &ec2.ProcessorInfo{
-				SupportedArchitectures: []*string{aws.String(arch)},
+				SupportedArchitectures: []*string{new(arch)},
 			},
 			VCpuInfo: &ec2.VCpuInfo{
-				DefaultVCpus: aws.Int64(numCPU),
+				DefaultVCpus: new(numCPU),
 			},
 		})
 	}
@@ -610,38 +610,38 @@ func TestEC2ToInstance(t *testing.T) {
 
 	ei := &ec2.Instance{
 		CpuOptions: &ec2.CpuOptions{
-			CoreCount: aws.Int64(wantCPUCount),
+			CoreCount: new(wantCPUCount),
 		},
-		ImageId:      aws.String(wantImage),
-		InstanceId:   aws.String(wantID),
-		InstanceType: aws.String(wantType),
-		KeyName:      aws.String(wantKey),
-		LaunchTime:   aws.Time(wantCreationTime),
+		ImageId:      new(wantImage),
+		InstanceId:   new(wantID),
+		InstanceType: new(wantType),
+		KeyName:      new(wantKey),
+		LaunchTime:   new(wantCreationTime),
 		Placement: &ec2.Placement{
-			AvailabilityZone: aws.String(wantZone),
+			AvailabilityZone: new(wantZone),
 		},
-		PrivateIpAddress: aws.String(wantIPInt),
-		PublicIpAddress:  aws.String(wantIPExt),
+		PrivateIpAddress: new(wantIPInt),
+		PublicIpAddress:  new(wantIPExt),
 		SecurityGroups: []*ec2.GroupIdentifier{
 			&ec2.GroupIdentifier{
-				GroupId: aws.String(wantSecurityGroup),
+				GroupId: new(wantSecurityGroup),
 			},
 		},
 		State: &ec2.InstanceState{
-			Name: aws.String(wantState),
+			Name: new(wantState),
 		},
 		Tags: []*ec2.Tag{
 			&ec2.Tag{
-				Key:   aws.String(tagName),
-				Value: aws.String(wantName),
+				Key:   new(tagName),
+				Value: new(wantName),
 			},
 			&ec2.Tag{
-				Key:   aws.String(tagDescription),
-				Value: aws.String(wantDescription),
+				Key:   new(tagDescription),
+				Value: new(wantDescription),
 			},
 			&ec2.Tag{
-				Key:   aws.String(wantTagKey),
-				Value: aws.String(wantTagValue),
+				Key:   new(wantTagKey),
+				Value: new(wantTagValue),
 			},
 		},
 	}

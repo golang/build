@@ -17,16 +17,16 @@ import (
 
 func newPullRequest(title, body string) *github.PullRequest {
 	return &github.PullRequest{
-		Title:  github.String(title),
-		Body:   github.String(body),
-		Number: github.Int(42),
-		Head:   &github.PullRequestBranch{SHA: github.String("deadbeef")},
+		Title:  new(title),
+		Body:   new(body),
+		Number: new(42),
+		Head:   &github.PullRequestBranch{SHA: new("deadbeef")},
 		Base: &github.PullRequestBranch{
 			Repo: &github.Repository{
 				Owner: &github.User{
-					Login: github.String("golang"),
+					Login: new("golang"),
 				},
-				Name: github.String("go"),
+				Name: new("go"),
 			},
 		},
 	}
