@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -560,7 +561,8 @@ func addCommTasks(
 	mastodonURL := wf.Task4(wd, "post-mastodon", comm.TrumpetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 	blueskyURL := wf.Task4(wd, "post-bluesky", comm.SkeetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 
-	vulndbChangeID := wf.Task3(wd, "file-vulndb-reports", build.createVulnReports, rm, announcementURL, securityReviewers)
+	converted := wf.Task2(wd, "convert-internal-changelists", build.convertInternalChangelists, rm, securityReviewers, wf.After(announcementURL))
+	vulndbChangeID := wf.Task3(wd, "file-vulndb-reports", build.createVulnReports, converted, announcementURL, securityReviewers)
 
 	wf.Action2(wd, "Update GitHub issues", task.UpdateGitHubIssues, wf.Const(build.GitHub), rm, wf.After(vulndbChangeID))
 
@@ -569,6 +571,53 @@ func addCommTasks(
 	wf.Output(wd, "Mastodon URL", mastodonURL)
 	wf.Output(wd, "Bluesky URL", blueskyURL)
 	wf.Output(wd, "VulnDB Change ID", vulndbChangeID)
+}
+
+func (b *BuildReleaseTasks) convertInternalChangelists(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, reviewers []string) (*relmeta.ReleaseMilestone, error) {
+	if rm == nil || len(rm.Patches) == 0 {
+		return rm, nil
+	}
+	external := make(map[string]string)
+	for _, p := range rm.Patches {
+		if p.Track == relmeta.Public {
+			continue
+		}
+		for _, clURL := range p.Changelists {
+			_, num, ok := strings.Cut(clURL, "/+/")
+			if !ok {
+				continue
+			}
+			msg, err := b.PrivateGerritClient.GetCommitMessage(ctx, num)
+			if err != nil {
+				return nil, err
+			}
+			m := changeIDRe.FindStringSubmatch(msg)
+			if m == nil {
+				return nil, fmt.Errorf("private CL %s has no Change-Id footer (manual intervention required)", clURL)
+			}
+			query := fmt.Sprintf("project:%s branch:master change:%s", b.GerritProject, m[1])
+			ci, err := task.AwaitCondition(ctx, time.Minute, func() (*gerrit.ChangeInfo, bool, error) {
+				results, err := b.GerritClient.QueryChanges(ctx, query)
+				if err != nil {
+					return nil, false, err
+				}
+				if len(results) == 0 {
+					ctx.Printf("awaiting public master CL for %s (Change-Id %s)", clURL, m[1])
+					return nil, false, nil
+				}
+				return results[0], true, nil
+			})
+			if err != nil {
+				return nil, err
+			}
+			external[clURL] = fmt.Sprintf("https://go.dev/cl/%d", ci.ChangeNumber)
+		}
+	}
+	converted, err := task.ConvertInternalChangelists(ctx, b.PrivateGerritClient, strconv.FormatInt(rm.ID, 10), external, reviewers)
+	if err != nil {
+		return nil, err
+	}
+	return &converted, nil
 }
 
 // createVulnReports builds and submits vulndb reports for std/cmd

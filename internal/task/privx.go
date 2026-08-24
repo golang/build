@@ -73,7 +73,8 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	wf.Output(wd, "Announcement URL", announcementURL)
 
 	// post-announcement tasks
-	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, rm, vulnerableAt, tagged, announcementURL, securityReviewers)
+	converted := wf.Task3(wd, "Convert internal changelists", x.ConvertInternalChangelists, milestoneNum, patches, securityReviewers, wf.After(announcementURL))
+	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, converted, vulnerableAt, tagged, announcementURL, securityReviewers)
 	wf.Output(wd, "File VulnDB Reports", changeID)
 	wf.Action1(wd, "Update GitHub issues", x.UpdateGitHubIssues, rm, wf.After(changeID))
 
@@ -138,8 +139,9 @@ func internalXRepoChangeURL[T int | string](xrepo string, clNum T) string {
 }
 
 type ref struct {
-	Patch   *relmeta.SecurityPatch
-	Changes []*gerrit.ChangeInfo
+	Patch     *relmeta.SecurityPatch
+	Changes   []*gerrit.ChangeInfo
+	Disclosed []string
 }
 
 // repoName returns the repo implied by the
@@ -263,11 +265,13 @@ func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, patche
 	clRE := regexp.MustCompile(fmt.Sprintf(`https://go-review\.googlesource\.com/c/%s/\+/(\d+)`, regexp.QuoteMeta(repoName)))
 	var disclosed []string
 	for _, p := range patches {
+		p.Disclosed = make([]string, len(p.Changes))
 		for i, change := range p.Changes {
 			cl, err := x.publishChange(ctx, repoName, p.Patch.Changelists[i], change, clRE)
 			if err != nil {
 				return nil, err
 			}
+			p.Disclosed[i] = cl
 			disclosed = append(disclosed, cl)
 		}
 	}
@@ -408,6 +412,20 @@ func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *r
 	}
 
 	return SentMail{Subject: mc.Subject}, nil
+}
+
+func (x *PrivXPatch) ConvertInternalChangelists(ctx *wf.TaskContext, milestoneNum string, patches []*ref, reviewers []string) (*relmeta.ReleaseMilestone, error) {
+	external := make(map[string]string)
+	for _, p := range patches {
+		for i, cl := range p.Disclosed {
+			external[p.Patch.Changelists[i]] = "https://go.dev/cl/" + cl
+		}
+	}
+	rm, err := ConvertInternalChangelists(ctx, x.PrivateGerrit, milestoneNum, external, reviewers)
+	if err != nil {
+		return nil, err
+	}
+	return &rm, nil
 }
 
 func (x *PrivXPatch) CreateVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, vulnerableAt *report.Version, tagged TagRepo, announceURL string, reviewers []string) (string, error) {

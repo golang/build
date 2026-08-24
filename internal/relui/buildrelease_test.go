@@ -2371,3 +2371,85 @@ func TestMergedCLCherryPickedOntoInternalBranch(t *testing.T) {
 		t.Errorf("cherry-picks: got %d, want %d", got, wantCount)
 	}
 }
+
+func TestConvertInternalChangelists(t *testing.T) {
+	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	pubGerrit := deps.gerrit.FakeGerrit
+	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "pc1"}}
+
+	privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1\n\nChange-Id: I0000000000000000000000000000000000000001")
+	privGerrit.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1970-0001\nFixes #2\n\nChange-Id: I0000000000000000000000000000000000000002")
+	pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
+		ID:           "pub-1",
+		ChangeID:     "I0000000000000000000000000000000000000001",
+		ChangeNumber: 700001,
+		Branch:       "master",
+		Status:       gerrit.ChangeStatusMerged,
+	}, "crypto/tls: fix something\n\nChange-Id: I0000000000000000000000000000000000000001")
+	pubGerrit.AddChange("go", "pub-2", &gerrit.ChangeInfo{
+		ID:           "pub-2",
+		ChangeID:     "I0000000000000000000000000000000000000002",
+		ChangeNumber: 700002,
+		Branch:       "master",
+		Status:       gerrit.ChangeStatusMerged,
+	}, "cmd/compile: fix something else\n\nChange-Id: I0000000000000000000000000000000000000002")
+
+	rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantReviewers := []string{"vuln-reviewer-a@google.com"}
+	converted, err := deps.buildTasks.convertInternalChangelists(taskCtx, rm, wantReviewers)
+	if err != nil {
+		t.Fatalf("convertInternalChangelists: %v", err)
+	}
+	if got, want := converted.Patches[0].Changelists, []string{"https://go.dev/cl/700001", "https://go.dev/cl/700002"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("changelists = %v, want %v", got, want)
+	}
+	if !reflect.DeepEqual(privGerrit.LastReviewers, wantReviewers) {
+		t.Errorf("metadata reviewers = %v, want %v", privGerrit.LastReviewers, wantReviewers)
+	}
+	head, err := privGerrit.ReadBranchHead(deps.ctx, "security-metadata", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := privGerrit.ReadFile(deps.ctx, "security-metadata", head, path.Join("data", "milestones", "99915010.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(b, []byte("go-internal-review")) {
+		t.Errorf("milestone at head still has private links:\n%s", b)
+	}
+
+}
+
+func TestConvertInternalChangelistsEmptyMilestone(t *testing.T) {
+	deps, privGerrit := newMinorCoalesceTestDeps(t, false)
+	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "pc3"}}
+
+	empty := &relmeta.ReleaseMilestone{}
+	got, err := deps.buildTasks.convertInternalChangelists(taskCtx, empty, []string{"vuln-reviewer-a@google.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != empty {
+		t.Errorf("milestone = %p, want passthrough of %p", got, empty)
+	}
+	if privGerrit.LastReviewers != nil {
+		t.Errorf("mailed a change with reviewers %v, want none", privGerrit.LastReviewers)
+	}
+}
+
+func TestConvertInternalChangelistsMissingChangeID(t *testing.T) {
+	deps, _ := newMinorCoalesceTestDeps(t, true)
+	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "pc2"}}
+
+	rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = deps.buildTasks.convertInternalChangelists(taskCtx, rm, nil)
+	if err == nil || !strings.Contains(err.Error(), "no Change-Id footer") {
+		t.Fatalf("convertInternalChangelists error = %v, want Change-Id footer error", err)
+	}
+}

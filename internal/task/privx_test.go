@@ -561,6 +561,11 @@ Go Security team</p>
 		if got, want := len(refsByType[report.ReferenceTypeFix]), len(p.Changelists); got != want {
 			t.Errorf("patch %d: got %d FIX refs, want %d", p.ID, got, want)
 		}
+		for _, u := range refsByType[report.ReferenceTypeFix] {
+			if p.Track == relmeta.Private && u != "https://go.dev/cl/558675" {
+				t.Errorf("patch %d: FIX ref %q is not the disclosed public CL", p.ID, u)
+			}
+		}
 		if urls := refsByType[report.ReferenceTypeWeb]; len(urls) != 1 || urls[0] != announceURL {
 			t.Errorf("patch %d: WEB refs = %v, want [%s]", p.ID, urls, announceURL)
 		}
@@ -568,6 +573,20 @@ Go Security team</p>
 
 	if want := []string{"vulnreviewer@google.com"}; !reflect.DeepEqual(pubGerrit.LastReviewers, want) {
 		t.Errorf("vulndb reviewers = %v, want %v", pubGerrit.LastReviewers, want)
+	}
+	if want := []string{"vulnreviewer@google.com"}; !reflect.DeepEqual(privGerrit.LastReviewers, want) {
+		t.Errorf("metadata reviewers = %v, want %v", privGerrit.LastReviewers, want)
+	}
+	smHead, err := privGerrit.ReadBranchHead(ctx, "security-metadata", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	smBytes, err := privGerrit.ReadFile(ctx, "security-metadata", smHead, path.Join("data", "milestones", "88810010.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(smBytes, []byte("go-internal-review")) {
+		t.Errorf("milestone at head still has private links:\n%s", smBytes)
 	}
 
 	// Verify that GitHub issues were updated with the release note + trailer.

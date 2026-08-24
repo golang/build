@@ -489,3 +489,91 @@ func TestMailVulnReports(t *testing.T) {
 	})
 
 }
+
+func TestConvertInternalChangelists(t *testing.T) {
+	const milestoneYAML = `id: 77770001
+security_patches:
+    - id: 1
+      package: golang.org/x/net/http2
+      track: PRIVATE
+      changelists:
+        - https://go-internal-review.git.corp.google.com/c/net/+/1111
+        - https://go-internal-review.git.corp.google.com/c/net/+/2222
+    - id: 2
+      package: golang.org/x/net/html
+      track: PUBLIC
+      changelists:
+        - https://go.dev/cl/3333
+`
+	milestonePath := path.Join("data", "milestones", "77770001.yaml")
+	newGerrit := func(t *testing.T) *FakeGerrit {
+		smRepo := NewFakeRepo(t, "security-metadata")
+		smRepo.Branch("main", smRepo.History()[0])
+		smRepo.CommitOnBranch("main", map[string]string{milestonePath: milestoneYAML})
+		return NewFakeGerrit(t, smRepo)
+	}
+	readMilestone := func(t *testing.T, ctx context.Context, gc *FakeGerrit) string {
+		head, err := gc.ReadBranchHead(ctx, "security-metadata", "main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := gc.ReadFile(ctx, "security-metadata", head, milestonePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	external := map[string]string{
+		"https://go-internal-review.git.corp.google.com/c/net/+/1111": "https://go.dev/cl/558675",
+		"https://go-internal-review.git.corp.google.com/c/net/+/2222": "https://go.dev/cl/558676",
+	}
+	wantReviewers := []string{"reviewer-a@google.com"}
+
+	t.Run("rewrites in place and refetches", func(t *testing.T) {
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+		gc := newGerrit(t)
+		rm, err := ConvertInternalChangelists(ctx, gc, "77770001", external, wantReviewers)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := rm.Patches[0].Changelists, []string{"https://go.dev/cl/558675", "https://go.dev/cl/558676"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("private patch changelists = %v, want %v", got, want)
+		}
+		if got, want := rm.Patches[1].Changelists, []string{"https://go.dev/cl/3333"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("public patch changelists = %v, want %v", got, want)
+		}
+		if !reflect.DeepEqual(gc.LastReviewers, wantReviewers) {
+			t.Errorf("reviewers = %v, want %v", gc.LastReviewers, wantReviewers)
+		}
+		if got := readMilestone(t, ctx, gc); strings.Contains(got, "go-internal-review") {
+			t.Errorf("milestone at head still has private links:\n%s", got)
+		}
+
+		gc.LastReviewers = nil
+		again, err := ConvertInternalChangelists(ctx, gc, "77770001", external, wantReviewers)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gc.LastReviewers != nil {
+			t.Errorf("second call mailed a change with reviewers %v", gc.LastReviewers)
+		}
+		if !reflect.DeepEqual(again, rm) {
+			t.Errorf("second call milestone = %+v, want %+v", again, rm)
+		}
+	})
+
+	t.Run("nothing to convert", func(t *testing.T) {
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+		gc := newGerrit(t)
+		before := readMilestone(t, ctx, gc)
+		if _, err := ConvertInternalChangelists(ctx, gc, "77770001", nil, wantReviewers); err != nil {
+			t.Fatal(err)
+		}
+		if gc.LastReviewers != nil {
+			t.Errorf("mailed a change with reviewers %v", gc.LastReviewers)
+		}
+		if after := readMilestone(t, ctx, gc); after != before {
+			t.Errorf("milestone changed without external changelists:\ngot  %s\nwant %s", after, before)
+		}
+	})
+}
