@@ -780,6 +780,129 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 	}
 }
 
+func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
+	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+
+	privGerrit.AddChange("go", "1234", &gerrit.ChangeInfo{
+		ID:                   "1234",
+		ChangeID:             "1234",
+		ChangeNumber:         1234,
+		Branch:               "public",
+		Submittable:          true,
+		Mergeable:            true,
+		ContainsGitConflicts: true,
+	}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1")
+	privGerrit.AddChange("go", "5678", &gerrit.ChangeInfo{
+		ID:                   "5678",
+		ChangeID:             "5678",
+		ChangeNumber:         5678,
+		Branch:               "public",
+		Submittable:          true,
+		Mergeable:            true,
+		ContainsGitConflicts: true,
+	}, "cmd/compile: fix something else\n\nFixes CVE-1970-0001\nFixes #2")
+
+	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+			return nil
+		}
+		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+	}
+
+	comm := task.CommunicationTasks{
+		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+	}
+	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := workflow.Start(wd, minorReleaseParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tracker := &taskStartTracker{Listener: &verboseListener{t: t}}
+	errMsg := runToFailure(t, deps.ctx, w, "Create cherry-picks", tracker)
+
+	var (
+		changes    []*gerrit.ChangeInfo
+		conflicted = map[string]*gerrit.ChangeInfo{}
+		branches   = map[string]bool{}
+	)
+	for _, num := range []string{"1234", "5678"} {
+		if !strings.Contains(errMsg, "go-internal-review.git.corp.google.com/c/go/+/"+num) {
+			t.Errorf("error does not mention source CL %s: %s", num, errMsg)
+		}
+		ci, err := privGerrit.GetChange(deps.ctx, num)
+		if err != nil {
+			t.Fatalf("GetChange(%s): %v", num, err)
+		}
+		changes = append(changes, ci)
+		existing, err := privGerrit.QueryChanges(deps.ctx, "change:"+num)
+		if err != nil {
+			t.Fatalf("QueryChanges(%s): %v", num, err)
+		}
+		var created int
+		for _, ci := range existing {
+			if strings.HasPrefix(ci.Branch, "internal-release-branch.go1.") {
+				created++
+				conflicted[ci.ID] = ci
+				branches[ci.Branch] = true
+			}
+		}
+		if created != 2 {
+			t.Errorf("change %s: got %d conflicted cherry-picks left on internal branches, want 2", num, created)
+		}
+	}
+
+	var internalBranches []string
+	for b := range branches {
+		internalBranches = append(internalBranches, b)
+	}
+	for id, ci := range conflicted {
+		resolved := *ci
+		resolved.ContainsGitConflicts = false
+		resolved.Submittable = true
+		privGerrit.AddChange("go", id, &resolved, "")
+	}
+
+	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "cherry-picks"}}
+	retried, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, changes)
+	if err != nil {
+		t.Fatalf("createSecurityCherryPicks after resolving conflicts: %v", err)
+	}
+	if len(retried) != len(conflicted) {
+		t.Fatalf("retry returned %d cherry-picks, want %d", len(retried), len(conflicted))
+	}
+	for _, cp := range retried {
+		if _, ok := conflicted[cp.ID]; !ok {
+			t.Errorf("retry created new cherry-pick %s instead of reusing the resolved CL", cp.ID)
+		}
+	}
+	submitted, err := deps.buildTasks.submitCherryPicks(taskCtx, retried)
+	if err != nil {
+		t.Fatalf("submitCherryPicks after resolving conflicts: %v", err)
+	}
+	for _, cp := range retried {
+		ci, err := privGerrit.GetChange(deps.ctx, cp.ID)
+		if err != nil {
+			t.Fatalf("GetChange(%s): %v", cp.ID, err)
+		}
+		if ci.Status != gerrit.ChangeStatusMerged {
+			t.Errorf("cherry-pick %s status = %q, want %q; submitted = %v", cp.ID, ci.Status, gerrit.ChangeStatusMerged, submitted)
+		}
+	}
+	if !strings.Contains(errMsg, "internal-release-branch.go1.") {
+		t.Errorf("error does not mention target branch: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "merge conflicts") {
+		t.Errorf("error does not mention merge conflicts: %s", errMsg)
+	}
+	if _, started := tracker.started.Load("Submit cherry-picks"); started {
+		t.Error("Submit cherry-picks ran despite cherry-pick conflict")
+	}
+}
+
 func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "coalesce"}}
@@ -1365,6 +1488,18 @@ func (l *errorListener) TaskStateChanged(id uuid.UUID, taskID string, st *workfl
 	}
 	l.Listener.TaskStateChanged(id, taskID, st)
 	return nil
+}
+
+type taskStartTracker struct {
+	started sync.Map
+	workflow.Listener
+}
+
+func (l *taskStartTracker) TaskStateChanged(id uuid.UUID, taskID string, st *workflow.TaskState) error {
+	if st.Started && !st.Finished {
+		l.started.Store(st.Name, true)
+	}
+	return l.Listener.TaskStateChanged(id, taskID, st)
 }
 
 func fakeCDNLoad(ctx context.Context, t *testing.T, from, to string) {

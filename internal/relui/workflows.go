@@ -1224,7 +1224,10 @@ func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, b
 }
 
 func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, releaseBranches []string, changes []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
-	var cherryPicks []*gerrit.ChangeInfo
+	var (
+		cherryPicks  []*gerrit.ChangeInfo
+		conflictErrs []error
+	)
 	for _, ci := range changes {
 		for _, releaseBranch := range releaseBranches {
 			// Check whether a non-abandoned cherry-pick of this
@@ -1257,11 +1260,17 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 				return nil, err
 			}
 			if conflicts {
-				ctx.Printf("Cherry-pick of %s has merge conflicts against %s: %s", privateChangeURL(ci.ChangeNumber), releaseBranch, privateChangeURL(cpCI.ChangeNumber))
+				conflictErrs = append(conflictErrs, fmt.Errorf("cherry-pick of %s has merge conflicts against %s: %s",
+					privateChangeURL(ci.ChangeNumber), releaseBranch, privateChangeURL(cpCI.ChangeNumber)))
+				continue
 			}
 			cp := cpCI
 			cherryPicks = append(cherryPicks, &cp)
 		}
+	}
+	if len(conflictErrs) > 0 {
+		ctx.DisableRetries()
+		return nil, errors.Join(conflictErrs...)
 	}
 	return cherryPicks, nil
 }

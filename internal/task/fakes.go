@@ -828,14 +828,16 @@ func (g *FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, bran
 	}
 	g.nextCL++
 	cpID := fmt.Sprintf("cp-%d", g.nextCL)
+	conflicts := orig.ContainsGitConflicts
 	cp := &gerrit.ChangeInfo{
-		ID:           cpID,
-		ChangeID:     orig.ChangeID,
-		ChangeNumber: g.nextCL,
-		Branch:       branch,
-		Status:       "NEW",
-		Submittable:  true,
-		Mergeable:    true,
+		ID:                   cpID,
+		ChangeID:             orig.ChangeID,
+		ChangeNumber:         g.nextCL,
+		Branch:               branch,
+		Status:               "NEW",
+		Submittable:          !conflicts,
+		Mergeable:            true,
+		ContainsGitConflicts: conflicts,
 	}
 	g.cls[cpID] = cp
 	g.commitMessages[cpID] = message
@@ -850,7 +852,7 @@ func (g *FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, bran
 		return gerrit.ChangeInfo{}, false, err
 	}
 	g.clBases[cpID] = strings.TrimSpace(string(head))
-	return *cp, false, nil
+	return *cp, conflicts, nil
 }
 
 func (g *FakeGerrit) MoveChange(_ context.Context, changeID string, branch string) (gerrit.ChangeInfo, error) {
