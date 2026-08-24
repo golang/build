@@ -1310,6 +1310,7 @@ func (b *BuildReleaseTasks) moveAndRebasePrivateChanges(ctx *wf.TaskContext, che
 func (b *BuildReleaseTasks) submitPrivateChanges(ctx *wf.TaskContext, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
 	if _, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
 		unsubmitted := len(cls)
+		var blocking []string
 		for i, change := range cls {
 			if change.Status == gerrit.ChangeStatusMerged {
 				unsubmitted--
@@ -1320,6 +1321,7 @@ func (b *BuildReleaseTasks) submitPrivateChanges(ctx *wf.TaskContext, cls []*ger
 				return "", false, err
 			}
 			if !ci.Submittable {
+				blocking = append(blocking, privateChangeURL(ci.ChangeNumber))
 				continue
 			}
 			submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
@@ -1332,6 +1334,7 @@ func (b *BuildReleaseTasks) submitPrivateChanges(ctx *wf.TaskContext, cls []*ger
 		if unsubmitted == 0 {
 			return "", true, nil
 		}
+		ctx.Printf("awaiting non-submittable CL(s): %s", strings.Join(blocking, ", "))
 		return "", false, nil
 	}); err != nil {
 		return nil, err
@@ -1425,6 +1428,7 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks []*gerrit.ChangeInfo) (map[string][]string, error) {
 	if _, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
 		unsubmitted := len(cherryPicks)
+		var blocking []string
 		for i, cp := range cherryPicks {
 			if cp.Status == gerrit.ChangeStatusMerged {
 				unsubmitted--
@@ -1435,6 +1439,7 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 				return "", false, err
 			}
 			if !ci.Submittable {
+				blocking = append(blocking, privateChangeURL(ci.ChangeNumber))
 				continue
 			}
 			submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
@@ -1447,6 +1452,7 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 		if unsubmitted == 0 {
 			return "", true, nil
 		}
+		ctx.Printf("awaiting non-submittable CL(s): %s", strings.Join(blocking, ", "))
 		return "", false, nil
 	}); err != nil {
 		return nil, err
