@@ -116,10 +116,12 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 		commitMessages: make(map[string]string),
 		clProjects:     make(map[string]string),
 		clBases:        make(map[string]string),
+		changeKeys:     make(map[string]string),
 	}
 	for _, r := range repos {
 		result.repos[r.name] = r
 	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /a/{repo}/+archive/{archive}", result.serveArchive) // Serve a revision tarball (.tar.gz) like Gerrit does.
 	mux.HandleFunc("GET /a/{repo}/+/{rev}/{path...}", result.serveGitiles)
@@ -129,7 +131,6 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 	server := httptest.NewServer(mux)
 	result.serverURL = server.URL
 	t.Cleanup(server.Close)
-
 	return result
 }
 
@@ -144,6 +145,7 @@ type FakeGerrit struct {
 	commitMessages map[string]string             // CL ID → commit message.
 	clProjects     map[string]string             // CL ID → project name.
 	clBases        map[string]string
+	changeKeys     map[string]string
 	nextCL         int // Counter for generated cherry-pick CL IDs.
 
 	LastReviewers []string
@@ -537,13 +539,39 @@ func (g *FakeGerrit) AddChange(project string, id string, ci *gerrit.ChangeInfo,
 	}
 	g.commitMessages[id] = commitMsg
 	g.clProjects[id] = project
-	if ci != nil && ci.Branch != "" {
-		if repo, err := g.repo(project); err == nil {
+	if ci != nil {
+		repo, err := g.repo(project)
+		if held, ok := g.indexChange(id); !ok && err == nil {
+			repo.t.Fatalf("FakeGerrit.AddChange: change %q duplicates Change-Id %s of change %q on %s/%s", id, ci.ChangeID, held, project, ci.Branch)
+		}
+		if err == nil && ci.Branch != "" {
 			if head, err := repo.dir.RunCommand(context.Background(), "rev-parse", ci.Branch); err == nil {
 				g.clBases[id] = strings.TrimSpace(string(head))
 			}
 		}
 	}
+}
+
+func (g *FakeGerrit) changeKey(project, branch, changeID string) string {
+	return project + "~" + branch + "~" + changeID
+}
+
+func (g *FakeGerrit) indexChange(id string) (held string, ok bool) {
+	ci := g.cls[id]
+	if ci.ChangeID == "" || ci.Branch == "" {
+		return "", true
+	}
+	key := g.changeKey(g.clProjects[id], ci.Branch, ci.ChangeID)
+	if held, exists := g.changeKeys[key]; exists && held != id {
+		return held, false
+	}
+	for k, v := range g.changeKeys {
+		if v == id {
+			delete(g.changeKeys, k)
+		}
+	}
+	g.changeKeys[key] = id
+	return "", true
 }
 
 func (g *FakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
@@ -843,6 +871,17 @@ func (g *FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, bran
 	if !ok {
 		return gerrit.ChangeInfo{}, false, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
+	project := g.clProjects[changeID]
+	for id, ci := range g.cls {
+		if ci.ChangeID != orig.ChangeID || ci.Branch != branch || g.clProjects[id] != project {
+			continue
+		}
+		if ci.Status == gerrit.ChangeStatusMerged || ci.Status == gerrit.ChangeStatusAbandoned {
+			return gerrit.ChangeInfo{}, false, NewGerritHTTPError(http.StatusBadRequest, fmt.Sprintf("Cherry-pick with Change-Id %s could not update the existing change %d in destination branch %s of project %s, because the change was closed (%s)\n", ci.ChangeID, ci.ChangeNumber, branch, project, ci.Status))
+		}
+		g.commitMessages[id] = message
+		return *ci, ci.ContainsGitConflicts, nil
+	}
 	g.nextCL++
 	cpID := fmt.Sprintf("cp-%d", g.nextCL)
 	conflicts := orig.ContainsGitConflicts
@@ -858,8 +897,8 @@ func (g *FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, bran
 	}
 	g.cls[cpID] = cp
 	g.commitMessages[cpID] = message
-	project := g.clProjects[changeID]
 	g.clProjects[cpID] = project
+	g.indexChange(cpID)
 	repo, err := g.repo(project)
 	if err != nil {
 		return gerrit.ChangeInfo{}, false, err
@@ -885,7 +924,11 @@ func (g *FakeGerrit) MoveChange(_ context.Context, changeID string, branch strin
 	if ci.Branch == branch {
 		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "Change is already destined for the specified branch\n")
 	}
+	if held, exists := g.changeKeys[g.changeKey(g.clProjects[changeID], branch, ci.ChangeID)]; exists && held != changeID {
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, fmt.Sprintf("Destination %s has a different change with same change key %s\n", branch, ci.ChangeID))
+	}
 	ci.Branch = branch
+	g.indexChange(changeID)
 	return *ci, nil
 }
 

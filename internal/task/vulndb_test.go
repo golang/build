@@ -107,6 +107,11 @@ func TestStdVulnReportVersions(t *testing.T) {
 			targets: []string{"go1"},
 			wantErr: true,
 		},
+		{
+			name:    "non-numeric minor rejected",
+			targets: []string{"go1.2a.3"},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -279,6 +284,18 @@ func TestVulnReport(t *testing.T) {
 		}
 	})
 
+	t.Run("empty summary after trim", func(t *testing.T) {
+		p := &relmeta.SecurityPatch{
+			Package:       "golang.org/x/net/http2",
+			GitHubIssueID: 12345,
+			Changelists:   []string{"https://go.dev/cl/111"},
+			ReleaseNote:   "net/http2: .\n\nDetails.",
+		}
+		if _, err := VulnReport(p, mod, announceURL); err == nil {
+			t.Fatal("expected error for empty summary after trim")
+		}
+	})
+
 	t.Run("non-ascii summary", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
 			Package:       "golang.org/x/net/http2",
@@ -368,6 +385,11 @@ func TestStdVulnerableAt(t *testing.T) {
 			targets: []string{"go1"},
 			wantErr: true,
 		},
+		{
+			name:    "non-numeric minor rejected",
+			targets: []string{"go1.2a.3"},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -398,23 +420,70 @@ func TestStdVulnerableAtPrerelease(t *testing.T) {
 }
 
 func TestStdVulnModuleInfo(t *testing.T) {
-	p := &relmeta.SecurityPatch{
-		Package:        "net/http",
-		TargetReleases: []string{"go1.25.10", "go1.26.3"},
+	tests := []struct {
+		name     string
+		p        *relmeta.SecurityPatch
+		wantMod  string
+		wantVer  string
+		wantVers report.Versions
+		wantErr  bool
+	}{
+		{
+			name: "std package",
+			p: &relmeta.SecurityPatch{
+				Package:        "net/http",
+				TargetReleases: []string{"go1.25.10", "go1.26.3"},
+			},
+			wantMod:  "std",
+			wantVer:  "1.26.2",
+			wantVers: report.Versions{report.Fixed("1.25.10"), report.Introduced("1.26.0-0"), report.Fixed("1.26.3")},
+		},
+		{
+			name: "cmd package",
+			p: &relmeta.SecurityPatch{
+				Package:        "cmd/go",
+				TargetReleases: []string{"go1.26.3"},
+			},
+			wantMod:  "cmd",
+			wantVer:  "1.26.2",
+			wantVers: report.Versions{report.Fixed("1.26.3")},
+		},
+		{
+			name: "invalid target releases",
+			p: &relmeta.SecurityPatch{
+				Package:        "net/http",
+				TargetReleases: []string{"not-a-version"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty target releases",
+			p: &relmeta.SecurityPatch{
+				Package:        "net/http",
+				TargetReleases: nil,
+			},
+			wantErr: true,
+		},
 	}
-	mod, err := StdVulnModuleInfo(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mod.Module != "std" {
-		t.Errorf("got %q, want std", mod.Module)
-	}
-	if mod.VulnerableAt == nil || mod.VulnerableAt.Version != "1.26.2" {
-		t.Errorf("got %v, want 1.26.2", mod.VulnerableAt)
-	}
-	want := report.Versions{report.Fixed("1.25.10"), report.Introduced("1.26.0-0"), report.Fixed("1.26.3")}
-	if !reflect.DeepEqual(mod.Versions, want) {
-		t.Errorf("got %v, want %v", mod.Versions, want)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mod, err := StdVulnModuleInfo(tt.p)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("got %v, want %v", err, tt.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if mod.Module != tt.wantMod {
+				t.Errorf("Module = %q, want %q", mod.Module, tt.wantMod)
+			}
+			if mod.VulnerableAt == nil || mod.VulnerableAt.Version != tt.wantVer {
+				t.Errorf("VulnerableAt = %v, want %q", mod.VulnerableAt, tt.wantVer)
+			}
+			if !reflect.DeepEqual(mod.Versions, tt.wantVers) {
+				t.Errorf("Versions = %v, want %v", mod.Versions, tt.wantVers)
+			}
+		})
 	}
 }
 
@@ -519,7 +588,6 @@ func TestMailVulnReports(t *testing.T) {
 			t.Error("expected no CL to be created when open CL exists")
 		}
 	})
-
 }
 
 func TestConvertInternalChangelists(t *testing.T) {

@@ -7,6 +7,7 @@ package task
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
@@ -747,6 +748,278 @@ func TestUpdateGitHubIssues(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestMoveAndRebaseAllRebaseSuccess(t *testing.T) {
+	netRepo := NewFakeRepo(t, "net")
+	netHead := netRepo.History()[0]
+	netRepo.Branch("public", netHead)
+
+	privGerrit := &fakePrivXGerrit{
+		FakeGerrit: NewFakeGerrit(t, netRepo),
+		changes:    map[string]*gerrit.ChangeInfo{},
+	}
+	publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	privGerrit.changes["1111"] = &gerrit.ChangeInfo{
+		ID:          "1111",
+		ChangeID:    "1111",
+		Project:     "net",
+		Branch:      "public",
+		Submittable: true,
+	}
+	privGerrit.changesMu.Lock()
+	privGerrit.clBases["1111"] = strings.TrimSpace(string(publicHead))
+	privGerrit.changesMu.Unlock()
+
+	netRepo.CommitOnBranch("public", map[string]string{"advance.txt": "advance"})
+
+	newHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newHeadStr := strings.TrimSpace(string(newHead))
+
+	netRepo.Branch("checkpoint-test", newHeadStr)
+
+	privGerrit.changes["1111"].Branch = "checkpoint-test"
+
+	ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+	p := &PrivXPatch{PrivateGerrit: privGerrit}
+
+	patches := []*ref{{
+		Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
+	}}
+
+	result, err := p.MoveAndRebaseAll(ctx, "checkpoint-test", patches)
+	if err != nil {
+		t.Fatalf("MoveAndRebaseAll: %v", err)
+	}
+	if len(result) != 1 || len(result[0].Changes) != 1 {
+		t.Fatalf("unexpected result shape: %v", result)
+	}
+}
+
+func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
+	netRepo := NewFakeRepo(t, "net")
+	netHead := netRepo.History()[0]
+	netRepo.Branch("public", netHead)
+	netRepo.Branch("checkpoint-test", netHead)
+
+	privGerrit := &fakePrivXGerrit{
+		FakeGerrit: NewFakeGerrit(t, netRepo),
+		changes:    map[string]*gerrit.ChangeInfo{},
+	}
+
+	privGerrit.changes["1111"] = &gerrit.ChangeInfo{
+		ID:          "1111",
+		ChangeID:    "1111",
+		Project:     "net",
+		Branch:      "checkpoint-test",
+		Submittable: true,
+	}
+	publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	privGerrit.changesMu.Lock()
+	privGerrit.clBases["1111"] = strings.TrimSpace(string(publicHead))
+	privGerrit.changesMu.Unlock()
+
+	ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+	p := &PrivXPatch{PrivateGerrit: privGerrit}
+
+	patches := []*ref{{
+		Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
+	}}
+
+	result, err := p.MoveAndRebaseAll(ctx, "checkpoint-test", patches)
+	if err != nil {
+		t.Fatalf("MoveAndRebaseAll with already-destined CL: %v", err)
+	}
+	if len(result) != 1 || len(result[0].Changes) != 1 {
+		t.Fatalf("unexpected result shape: %v", result)
+	}
+}
+
+func TestDeleteBranch409Refusal(t *testing.T) {
+	repo := NewFakeRepo(t, "test")
+	head := repo.History()[0]
+	repo.Branch("my-branch", head)
+
+	fg := NewFakeGerrit(t, repo)
+	fg.AddChange("test", "open-cl", &gerrit.ChangeInfo{
+		ID:          "open-cl",
+		ChangeID:    "open-cl",
+		Branch:      "my-branch",
+		Status:      "NEW",
+		Submittable: true,
+	}, "open change")
+
+	ctx := context.Background()
+	err := fg.DeleteBranch(ctx, "test", "my-branch")
+	if err == nil {
+		t.Fatal("expected 409 error for branch with open CLs")
+	}
+	var httpErr *gerrit.HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("error type = %T, want *gerrit.HTTPError", err)
+	}
+	if httpErr.Res.StatusCode != http.StatusConflict {
+		t.Errorf("status = %d, want %d", httpErr.Res.StatusCode, http.StatusConflict)
+	}
+}
+
+func TestCreateCherryPickChangeIDUniqueness(t *testing.T) {
+	repo := NewFakeRepo(t, "test")
+	head := repo.History()[0]
+	repo.Branch("dest", head)
+	repo.Branch("other-dest", head)
+
+	fg := NewFakeGerrit(t, repo)
+	fg.AddChange("test", "orig", &gerrit.ChangeInfo{
+		ID:          "orig",
+		ChangeID:    "I0123456789abcdef0123456789abcdef01234567",
+		Branch:      "public",
+		Status:      "NEW",
+		Submittable: true,
+	}, "fix\n\nChange-Id: I0123456789abcdef0123456789abcdef01234567\n")
+
+	ctx := context.Background()
+	first, _, err := fg.CreateCherryPick(ctx, "orig", "dest", "msg")
+	if err != nil {
+		t.Fatalf("first CreateCherryPick: %v", err)
+	}
+	again, _, err := fg.CreateCherryPick(ctx, "orig", "dest", "msg2")
+	if err != nil {
+		t.Fatalf("CreateCherryPick onto open change: %v", err)
+	}
+	if again.ChangeNumber != first.ChangeNumber {
+		t.Errorf("open change: got CL %d, want new patch set on CL %d", again.ChangeNumber, first.ChangeNumber)
+	}
+	if got, _ := fg.GetCommitMessage(ctx, first.ID); got != "msg2" {
+		t.Errorf("open change message = %q, want %q", got, "msg2")
+	}
+
+	if _, err := fg.SubmitChange(ctx, first.ID); err != nil {
+		t.Fatalf("SubmitChange: %v", err)
+	}
+	for _, status := range []string{gerrit.ChangeStatusMerged, gerrit.ChangeStatusAbandoned} {
+		ci, err := fg.GetChange(ctx, first.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ci.Status = status
+		_, _, err = fg.CreateCherryPick(ctx, "orig", "dest", "msg3")
+		if err == nil {
+			t.Fatalf("CreateCherryPick onto %s change: got nil error, want rejection", status)
+		}
+		var httpErr *gerrit.HTTPError
+		if !errors.As(err, &httpErr) {
+			t.Fatalf("error type = %T, want *gerrit.HTTPError", err)
+		}
+		if httpErr.Res.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want %d", status, httpErr.Res.StatusCode, http.StatusBadRequest)
+		}
+	}
+
+	other, _, err := fg.CreateCherryPick(ctx, "orig", "other-dest", "msg")
+	if err != nil {
+		t.Fatalf("CreateCherryPick onto a different branch: %v", err)
+	}
+	if other.ChangeNumber == first.ChangeNumber {
+		t.Errorf("different branch reused CL %d", first.ChangeNumber)
+	}
+}
+
+func TestMoveChangeDuplicateChangeID(t *testing.T) {
+	repo := NewFakeRepo(t, "test")
+	head := repo.History()[0]
+	repo.Branch("a", head)
+	repo.Branch("b", head)
+
+	fg := NewFakeGerrit(t, repo)
+	const key = "I0123456789abcdef0123456789abcdef01234567"
+	fg.AddChange("test", "on-a", &gerrit.ChangeInfo{ID: "on-a", ChangeID: key, Branch: "a", Status: "NEW"}, "a")
+	fg.AddChange("test", "on-b", &gerrit.ChangeInfo{ID: "on-b", ChangeID: key, Branch: "b", Status: "NEW"}, "b")
+
+	ctx := context.Background()
+	_, err := fg.MoveChange(ctx, "on-a", "b")
+	if err == nil {
+		t.Fatal("MoveChange onto a branch holding the same Change-Id: got nil error, want 409")
+	}
+	var httpErr *gerrit.HTTPError
+	if !errors.As(err, &httpErr) {
+		t.Fatalf("error type = %T, want *gerrit.HTTPError", err)
+	}
+	if httpErr.Res.StatusCode != http.StatusConflict {
+		t.Errorf("status = %d, want %d", httpErr.Res.StatusCode, http.StatusConflict)
+	}
+	if want := "Destination b has a different change with same change key " + key + "\n"; string(httpErr.Body) != want {
+		t.Errorf("body = %q, want %q", httpErr.Body, want)
+	}
+
+	if _, err := fg.MoveChange(ctx, "on-a", "c"); err != nil {
+		t.Fatalf("MoveChange onto a free branch: %v", err)
+	}
+	if _, err := fg.MoveChange(ctx, "on-b", "a"); err != nil {
+		t.Fatalf("MoveChange onto the vacated branch: %v", err)
+	}
+}
+
+func TestQueryChangesProjectFilter(t *testing.T) {
+	repoA := NewFakeRepo(t, "alpha")
+	repoB := NewFakeRepo(t, "beta")
+	fg := NewFakeGerrit(t, repoA, repoB)
+
+	fg.AddChange("alpha", "a-cl", &gerrit.ChangeInfo{
+		ID:       "a-cl",
+		ChangeID: "a-cl",
+		Branch:   "master",
+		Status:   "NEW",
+	}, "change in alpha")
+
+	fg.AddChange("beta", "b-cl", &gerrit.ChangeInfo{
+		ID:       "b-cl",
+		ChangeID: "b-cl",
+		Branch:   "master",
+		Status:   "NEW",
+	}, "change in beta")
+
+	ctx := context.Background()
+
+	alphaResults, err := fg.QueryChanges(ctx, "project:alpha branch:master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(alphaResults) != 1 {
+		t.Fatalf("project:alpha returned %d results, want 1", len(alphaResults))
+	}
+	if alphaResults[0].ID != "a-cl" {
+		t.Errorf("project:alpha returned CL %q, want %q", alphaResults[0].ID, "a-cl")
+	}
+
+	betaResults, err := fg.QueryChanges(ctx, "project:beta branch:master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(betaResults) != 1 {
+		t.Fatalf("project:beta returned %d results, want 1", len(betaResults))
+	}
+	if betaResults[0].ID != "b-cl" {
+		t.Errorf("project:beta returned CL %q, want %q", betaResults[0].ID, "b-cl")
+	}
+
+	allResults, err := fg.QueryChanges(ctx, "branch:master")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(allResults) != 2 {
+		t.Fatalf("unfiltered query returned %d results, want 2", len(allResults))
+	}
 }
 
 func TestRepoName(t *testing.T) {
