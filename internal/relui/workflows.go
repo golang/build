@@ -522,8 +522,8 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	cls = wf.Task1(wd, "Submit private changes", build.submitPrivateChanges, cls)
 
 	// internalBranches are NOT created with a timestamp
-	// trailer; instead, they are deleted lazily before
-	// creation to make workflow restarts idempotent.
+	// trailer; on workflow-abandon-and-restart, existing
+	// internal release branches are adopted.
 	internalBranches := wf.Task2(wd, "Create internal release branches", build.createInternalReleaseBranches, branchInfo, cls)
 	cherryPicks := wf.Task2(wd, "Create cherry-picks", build.createSecurityCherryPicks, internalBranches, cls)
 	coalesced := wf.Task1(wd, "Submit cherry-picks", build.submitCherryPicks, cherryPicks)
@@ -1352,13 +1352,15 @@ func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, b
 		}
 		internalReleaseBranch := "internal-" + next
 
-		// `internal-<relver>` branches are not timestamped; we must
-		// try to delete existing branches to preserve idempotency.
-		if err := b.PrivateGerritClient.DeleteBranch(ctx, b.PrivateGerritProject, internalReleaseBranch); err != nil && !errors.Is(err, gerrit.ErrResourceNotExist) {
+		switch head, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, internalReleaseBranch); {
+		case errors.Is(err, gerrit.ErrResourceNotExist):
+			if _, err := b.PrivateGerritClient.CreateBranch(ctx, b.PrivateGerritProject, internalReleaseBranch, gerrit.BranchInput{Revision: publicHead}); err != nil {
+				return nil, err
+			}
+		case err != nil:
 			return nil, err
-		}
-		if _, err := b.PrivateGerritClient.CreateBranch(ctx, b.PrivateGerritProject, internalReleaseBranch, gerrit.BranchInput{Revision: publicHead}); err != nil {
-			return nil, err
+		default:
+			ctx.Printf("Reusing existing branch %s at %s", internalReleaseBranch, head)
 		}
 		internalBranches = append(internalBranches, internalReleaseBranch)
 	}

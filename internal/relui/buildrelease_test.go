@@ -1870,6 +1870,87 @@ func TestCreateInternalReleaseBranchesIdempotent(t *testing.T) {
 	}
 }
 
+func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
+	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "id8-opencp"}}
+
+	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var cls []*gerrit.ChangeInfo
+	for _, num := range []string{"1234", "5678"} {
+		ci, err := privGerrit.GetChange(deps.ctx, num)
+		if err != nil {
+			t.Fatalf("GetChange(%s): %v", num, err)
+		}
+		cls = append(cls, ci)
+	}
+
+	branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+	if err != nil {
+		t.Fatalf("first createInternalReleaseBranches: %v", err)
+	}
+	if len(branches) == 0 {
+		t.Fatal("first run created no internal release branches")
+	}
+
+	freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls)
+	if err != nil {
+		t.Fatalf("createSecurityCherryPicks: %v", err)
+	}
+	wantCPCount := len(cls) * len(branches)
+	if got := len(freshCPs); got != wantCPCount {
+		t.Fatalf("fresh cherry-picks: got %d, want %d", got, wantCPCount)
+	}
+
+	reusedHeads := map[string]string{}
+	for _, b := range branches {
+		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+		if err != nil {
+			t.Fatalf("reading head of %s: %v", b, err)
+		}
+		reusedHeads[b] = head
+	}
+
+	branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+	if err != nil {
+		t.Fatalf("restart createInternalReleaseBranches with open CPs: %v", err)
+	}
+	if len(branches2) != len(branches) {
+		t.Fatalf("branch count mismatch: first=%d, restart=%d", len(branches), len(branches2))
+	}
+
+	for _, b := range branches2 {
+		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+		if err != nil {
+			t.Fatalf("reading head of %s after restart: %v", b, err)
+		}
+		if head != reusedHeads[b] {
+			t.Errorf("branch %s head changed after restart: got %s, want %s", b, head, reusedHeads[b])
+		}
+	}
+
+	restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls)
+	if err != nil {
+		t.Fatalf("restart createSecurityCherryPicks: %v", err)
+	}
+	if got := len(restartCPs); got != wantCPCount {
+		t.Fatalf("restart cherry-picks: got %d, want %d", got, wantCPCount)
+	}
+
+	freshNums := map[int]bool{}
+	for _, cp := range freshCPs {
+		freshNums[cp.ChangeNumber] = true
+	}
+	for _, cp := range restartCPs {
+		if !freshNums[cp.ChangeNumber] {
+			t.Errorf("restart returned unknown cherry-pick CL %d; want reuse of existing CL", cp.ChangeNumber)
+		}
+	}
+}
+
 func TestCreateSecurityCherryPicksDedup(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "id9"}}
