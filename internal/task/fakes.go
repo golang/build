@@ -117,6 +117,9 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 		clProjects:     make(map[string]string),
 		clBases:        make(map[string]string),
 	}
+	for _, r := range repos {
+		result.repos[r.name] = r
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /a/{repo}/+archive/{archive}", result.serveArchive) // Serve a revision tarball (.tar.gz) like Gerrit does.
 	mux.HandleFunc("GET /a/{repo}/+/{rev}/{path...}", result.serveGitiles)
@@ -127,9 +130,6 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 	result.serverURL = server.URL
 	t.Cleanup(server.Close)
 
-	for _, r := range repos {
-		result.repos[r.name] = r
-	}
 	return result
 }
 
@@ -761,6 +761,7 @@ func (g *FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.Ch
 		return nil, nil
 	}
 	var wantBranch, wantChangeID, wantProject string
+	var skipAbandoned, skipMerged bool
 	for _, tok := range strings.Fields(query) {
 		if rest, ok := strings.CutPrefix(tok, "branch:"); ok {
 			wantBranch = rest
@@ -771,10 +772,19 @@ func (g *FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.Ch
 		if rest, ok := strings.CutPrefix(tok, "project:"); ok {
 			wantProject = rest
 		}
+		if tok == "-is:abandoned" {
+			skipAbandoned = true
+		}
+		if tok == "status:open" || tok == "is:open" {
+			skipAbandoned, skipMerged = true, true
+		}
 	}
 	var results []*gerrit.ChangeInfo
 	for id, ci := range g.cls {
-		if ci.Status == "ABANDONED" {
+		if skipAbandoned && ci.Status == gerrit.ChangeStatusAbandoned {
+			continue
+		}
+		if skipMerged && ci.Status == gerrit.ChangeStatusMerged {
 			continue
 		}
 		if wantBranch != "" && ci.Branch != wantBranch {
