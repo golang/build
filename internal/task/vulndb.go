@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -219,6 +220,15 @@ func MailVulnReports(ctx *wf.TaskContext, gc GerritClient, reports []*report.Rep
 	if len(reports) == 0 {
 		return "", nil
 	}
+
+	mailed, err := vulnReportsCL(ctx, gc, reports)
+	if err != nil {
+		return "", fmt.Errorf("checking open CLs: %w", err)
+	}
+	if mailed != "" {
+		return mailed, nil
+	}
+
 	changeInput := gerrit.ChangeInput{
 		Project: "vulndb",
 		Branch:  "master",
@@ -235,6 +245,30 @@ func MailVulnReports(ctx *wf.TaskContext, gc GerritClient, reports []*report.Rep
 	// TODO(nealpatel): Trybots are expected to fail for this change
 	// since it does not generate the reports that the upstream CI expects.
 	return gc.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
+}
+
+func vulnReportsCL(ctx *wf.TaskContext, gc GerritClient, reports []*report.Report) (string, error) {
+	cls, err := gc.QueryChanges(ctx, "project:vulndb branch:master status:open")
+	if err != nil {
+		return "", err
+	}
+	var fixes []string
+	for _, r := range reports {
+		i := strings.LastIndex(r.ID, "-")
+		fixes = append(fixes, "Fixes golang/vulndb#"+r.ID[i+1:])
+	}
+	for _, cl := range cls {
+		msg, err := gc.GetCommitMessage(ctx, cl.ID)
+		if err != nil {
+			return "", fmt.Errorf("getting commit message for CL %s: %w", cl.ID, err)
+		}
+		for line := range strings.SplitSeq(msg, "\n") {
+			if slices.Contains(fixes, strings.TrimSpace(line)) {
+				return cl.ID, nil
+			}
+		}
+	}
+	return "", nil
 }
 
 func startsWithASCII(s string) bool {

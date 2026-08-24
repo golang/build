@@ -458,4 +458,34 @@ func TestMailVulnReports(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("open CL exists", func(t *testing.T) {
+		vulnRepo := NewFakeRepo(t, "vulndb")
+		fg := NewFakeGerrit(t, vulnRepo)
+		gc := &fakeVulnGerrit{FakeGerrit: fg}
+
+		reports := []*report.Report{
+			{ID: "GO-2026-0001"},
+			{ID: "GO-2026-0002"},
+		}
+
+		fg.AddChange("vulndb", "existing-cl", &gerrit.ChangeInfo{
+			ID:     "existing-cl",
+			Status: "NEW",
+			Branch: "master",
+		}, Subject(reports))
+
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+		changeID, err := MailVulnReports(ctx, gc, reports, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if changeID != "existing-cl" {
+			t.Errorf("got change ID %q, want %q", changeID, "existing-cl")
+		}
+		if gc.gotFiles != nil {
+			t.Error("expected no CL to be created when open CL exists")
+		}
+	})
+
 }
