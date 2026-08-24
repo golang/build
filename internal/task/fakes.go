@@ -115,6 +115,7 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 		cls:            make(map[string]*gerrit.ChangeInfo),
 		commitMessages: make(map[string]string),
 		clProjects:     make(map[string]string),
+		clBases:        make(map[string]string),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /a/{repo}/+archive/{archive}", result.serveArchive) // Serve a revision tarball (.tar.gz) like Gerrit does.
@@ -142,7 +143,8 @@ type FakeGerrit struct {
 	cls            map[string]*gerrit.ChangeInfo // CL ID → state.
 	commitMessages map[string]string             // CL ID → commit message.
 	clProjects     map[string]string             // CL ID → project name.
-	nextCL         int                           // Counter for generated cherry-pick CL IDs.
+	clBases        map[string]string
+	nextCL         int // Counter for generated cherry-pick CL IDs.
 }
 
 type FakeRepo struct {
@@ -375,12 +377,23 @@ func (g *FakeGerrit) DeleteBranch(ctx context.Context, project, branch string) e
 	if err != nil {
 		return err
 	}
-	if _, err = repo.dir.RunCommand(ctx, "branch", "-D", branch); err != nil {
-		// Real Gerrit reports a DELETE on a branch that doesn't exist as a
-		// 404 Not Found, not an underlying git error.
-		if strings.Contains(err.Error(), "not found") {
+	if _, err := repo.dir.RunCommand(ctx, "rev-parse", "--verify", "refs/heads/"+branch); err != nil {
+		if strings.Contains(err.Error(), "Needed a single revision") {
+			// Real Gerrit reports a DELETE on a branch that doesn't exist as a
+			// 404 Not Found, not an underlying git error.
 			return NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("branch %q not found\n", "refs/heads/"+branch))
 		}
+		return err
+	}
+	g.changesMu.Lock()
+	for id, ci := range g.cls {
+		if ci.Status != gerrit.ChangeStatusAbandoned && ci.Status != gerrit.ChangeStatusMerged && ci.Branch == branch && g.clProjects[id] == project {
+			g.changesMu.Unlock()
+			return NewGerritHTTPError(http.StatusConflict, fmt.Sprintf("branch %q has open changes\n", "refs/heads/"+branch))
+		}
+	}
+	g.changesMu.Unlock()
+	if _, err = repo.dir.RunCommand(ctx, "branch", "-D", branch); err != nil {
 		return err
 	}
 	return nil
@@ -517,6 +530,13 @@ func (g *FakeGerrit) AddChange(project string, id string, ci *gerrit.ChangeInfo,
 	}
 	g.commitMessages[id] = commitMsg
 	g.clProjects[id] = project
+	if ci != nil && ci.Branch != "" {
+		if repo, err := g.repo(project); err == nil {
+			if head, err := repo.dir.RunCommand(context.Background(), "rev-parse", ci.Branch); err == nil {
+				g.clBases[id] = strings.TrimSpace(string(head))
+			}
+		}
+	}
 }
 
 func (g *FakeGerrit) Submitted(ctx context.Context, changeID, baseCommit string) (string, bool, error) {
@@ -733,7 +753,7 @@ func (g *FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.Ch
 	if len(g.cls) == 0 {
 		return nil, nil
 	}
-	var wantBranch, wantChangeID string
+	var wantBranch, wantChangeID, wantProject string
 	for _, tok := range strings.Fields(query) {
 		if rest, ok := strings.CutPrefix(tok, "branch:"); ok {
 			wantBranch = rest
@@ -741,9 +761,12 @@ func (g *FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.Ch
 		if rest, ok := strings.CutPrefix(tok, "change:"); ok {
 			wantChangeID = rest
 		}
+		if rest, ok := strings.CutPrefix(tok, "project:"); ok {
+			wantProject = rest
+		}
 	}
 	var results []*gerrit.ChangeInfo
-	for _, ci := range g.cls {
+	for id, ci := range g.cls {
 		if ci.Status == "ABANDONED" {
 			continue
 		}
@@ -751,6 +774,9 @@ func (g *FakeGerrit) QueryChanges(_ context.Context, query string) ([]*gerrit.Ch
 			continue
 		}
 		if wantChangeID != "" && ci.ChangeID != wantChangeID {
+			continue
+		}
+		if wantProject != "" && g.clProjects[id] != wantProject {
 			continue
 		}
 		results = append(results, ci)
@@ -767,7 +793,7 @@ func (g *FakeGerrit) GetChange(_ context.Context, changeID string, _ ...gerrit.Q
 	defer g.changesMu.Unlock()
 	ci, ok := g.cls[changeID]
 	if !ok {
-		return nil, nil
+		return nil, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	return ci, nil
 }
@@ -777,7 +803,7 @@ func (g *FakeGerrit) SubmitChange(_ context.Context, changeID string) (gerrit.Ch
 	defer g.changesMu.Unlock()
 	ci, ok := g.cls[changeID]
 	if !ok {
-		return gerrit.ChangeInfo{}, nil
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	if ci.Status == gerrit.ChangeStatusMerged {
 		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "change is merged\n")
@@ -793,12 +819,12 @@ func (g *FakeGerrit) SubmitChange(_ context.Context, changeID string) (gerrit.Ch
 	return *ci, nil
 }
 
-func (g *FakeGerrit) CreateCherryPick(_ context.Context, changeID string, branch string, message string) (gerrit.ChangeInfo, bool, error) {
+func (g *FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, branch string, message string) (gerrit.ChangeInfo, bool, error) {
 	g.changesMu.Lock()
 	defer g.changesMu.Unlock()
 	orig, ok := g.cls[changeID]
 	if !ok {
-		return gerrit.ChangeInfo{}, false, nil
+		return gerrit.ChangeInfo{}, false, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	g.nextCL++
 	cpID := fmt.Sprintf("cp-%d", g.nextCL)
@@ -813,7 +839,17 @@ func (g *FakeGerrit) CreateCherryPick(_ context.Context, changeID string, branch
 	}
 	g.cls[cpID] = cp
 	g.commitMessages[cpID] = message
-	g.clProjects[cpID] = g.clProjects[changeID]
+	project := g.clProjects[changeID]
+	g.clProjects[cpID] = project
+	repo, err := g.repo(project)
+	if err != nil {
+		return gerrit.ChangeInfo{}, false, err
+	}
+	head, err := repo.dir.RunCommand(ctx, "rev-parse", branch)
+	if err != nil {
+		return gerrit.ChangeInfo{}, false, err
+	}
+	g.clBases[cpID] = strings.TrimSpace(string(head))
 	return *cp, false, nil
 }
 
@@ -822,7 +858,7 @@ func (g *FakeGerrit) MoveChange(_ context.Context, changeID string, branch strin
 	defer g.changesMu.Unlock()
 	ci, ok := g.cls[changeID]
 	if !ok {
-		return gerrit.ChangeInfo{}, nil
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	if ci.Status == gerrit.ChangeStatusMerged {
 		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "Change is merged\n")
@@ -834,15 +870,39 @@ func (g *FakeGerrit) MoveChange(_ context.Context, changeID string, branch strin
 	return *ci, nil
 }
 
-func (g *FakeGerrit) RebaseChange(_ context.Context, changeID string, baseRev string) (gerrit.ChangeInfo, error) {
+func (g *FakeGerrit) RebaseChange(ctx context.Context, changeID string, baseRev string) (gerrit.ChangeInfo, error) {
 	g.changesMu.Lock()
 	defer g.changesMu.Unlock()
 	ci, ok := g.cls[changeID]
 	if !ok {
-		return gerrit.ChangeInfo{}, nil
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	if ci.Status == gerrit.ChangeStatusMerged {
 		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, fmt.Sprintf("Change %s is merged\n", changeID))
+	}
+	if baseRev == "" && ci.Branch != "" {
+		if base, ok := g.clBases[changeID]; ok {
+			project := g.clProjects[changeID]
+			repo, err := g.repo(project)
+			if err != nil {
+				return gerrit.ChangeInfo{}, err
+			}
+			if head, err := repo.dir.RunCommand(ctx, "rev-parse", ci.Branch); err == nil {
+				if base == strings.TrimSpace(string(head)) {
+					return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "Change is already up to date.\n")
+				}
+			}
+		}
+	}
+	if baseRev != "" {
+		g.clBases[changeID] = baseRev
+	} else if ci.Branch != "" {
+		project := g.clProjects[changeID]
+		if repo, err := g.repo(project); err == nil {
+			if head, err := repo.dir.RunCommand(ctx, "rev-parse", ci.Branch); err == nil {
+				g.clBases[changeID] = strings.TrimSpace(string(head))
+			}
+		}
 	}
 	return *ci, nil
 }
@@ -852,7 +912,7 @@ func (g *FakeGerrit) GetRevisionActions(_ context.Context, changeID, revision st
 	defer g.changesMu.Unlock()
 	ci, ok := g.cls[changeID]
 	if !ok {
-		return map[string]*gerrit.ActionInfo{}, nil
+		return nil, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	if ci.Status == gerrit.ChangeStatusMerged {
 		return map[string]*gerrit.ActionInfo{}, nil
@@ -863,6 +923,9 @@ func (g *FakeGerrit) GetRevisionActions(_ context.Context, changeID, revision st
 func (g *FakeGerrit) GetCommitMessage(_ context.Context, changeID string) (string, error) {
 	g.changesMu.Lock()
 	defer g.changesMu.Unlock()
+	if _, ok := g.cls[changeID]; !ok {
+		return "", NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
+	}
 	return g.commitMessages[changeID], nil
 }
 
@@ -1539,6 +1602,8 @@ func (c *FakeBuildBucketClient) SearchBuilds(ctx context.Context, pred *pb.Build
 }
 
 type FakeGitHub struct {
+	mu sync.Mutex
+
 	// Milestones is a map from milestone ID to milestone name.
 	Milestones map[int]string
 	// Issues is a map from issue number to issue details.
@@ -1580,6 +1645,8 @@ func (f *FakeGitHub) nextIssueNumber() int {
 }
 
 func (f *FakeGitHub) FetchMilestone(_ context.Context, owner, repo, name string, create bool) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	for id, n := range f.Milestones {
 		if n == name {
 			return id, nil
@@ -1598,6 +1665,8 @@ func (f *FakeGitHub) FetchMilestone(_ context.Context, owner, repo, name string,
 }
 
 func (f *FakeGitHub) FetchMilestoneIssues(_ context.Context, owner, repo string, milestoneID int) (map[int]map[string]bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if _, ok := f.Milestones[milestoneID]; !ok {
 		return nil, fmt.Errorf("milestone %v not found", milestoneID)
 	}
@@ -1624,6 +1693,8 @@ func (*FakeGitHub) UploadReleaseAsset(ctx context.Context, owner, repo string, r
 }
 
 func (f *FakeGitHub) CreateRelease(ctx context.Context, owner, repo string, release *github.RepositoryRelease) (*github.RepositoryRelease, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.Releases = append(f.Releases, release)
 	return release, nil
 }
@@ -1633,10 +1704,14 @@ func (*FakeGitHub) PublishRelease(ctx context.Context, owner, repo string, relea
 }
 
 func (f *FakeGitHub) TagExists(ctx context.Context, owner, repo, tag string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.Tags[tag], nil
 }
 
 func (f *FakeGitHub) EditIssue(_ context.Context, owner, repo string, number int, issue *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.Issues == nil {
 		f.Issues = map[int]*github.Issue{}
 	}
@@ -1652,32 +1727,37 @@ func (f *FakeGitHub) EditIssue(_ context.Context, owner, repo string, number int
 }
 
 func (f *FakeGitHub) CreateIssue(ctx context.Context, owner, repo string, request *github.IssueRequest) (*github.Issue, *github.Response, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.Issues == nil {
 		f.Issues = map[int]*github.Issue{}
 	}
 
 	issueNumber := f.nextIssueNumber()
-	f.Issues[issueNumber] = &github.Issue{Number: &issueNumber, Title: request.Title, Body: request.Body}
+	issue := &github.Issue{Number: &issueNumber, Title: request.Title, Body: request.Body}
+	f.Issues[issueNumber] = issue
 	if request.Labels != nil {
 		for _, l := range *request.Labels {
-			f.Issues[issueNumber].Labels = append(f.Issues[issueNumber].Labels, &github.Label{Name: &l})
+			issue.Labels = append(issue.Labels, &github.Label{Name: &l})
 		}
 	}
 	if request.Milestone != nil {
 		if _, ok := f.Milestones[*request.Milestone]; !ok {
 			return nil, nil, fmt.Errorf("the milestone does not exist: %v", *request.Milestone)
 		}
-		f.Issues[issueNumber].Milestone = &github.Milestone{ID: new(int64(*request.Milestone))}
+		issue.Milestone = &github.Milestone{ID: new(int64(*request.Milestone))}
 	}
-	return f.GetIssue(ctx, owner, repo, issueNumber)
+	return issue, nil, nil
 }
 
 func (f *FakeGitHub) GetIssue(_ context.Context, owner, repo string, number int) (*github.Issue, *github.Response, error) {
-	if issue, ok := f.Issues[number]; !ok {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	issue, ok := f.Issues[number]
+	if !ok {
 		return nil, nil, fmt.Errorf("the issue %v does not exist", number)
-	} else {
-		return issue, nil, nil
 	}
+	return issue, nil, nil
 }
 
 func (*FakeGitHub) EditMilestone(_ context.Context, owner, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
@@ -1685,6 +1765,8 @@ func (*FakeGitHub) EditMilestone(_ context.Context, owner, repo string, number i
 }
 
 func (f *FakeGitHub) PostComment(_ context.Context, _ githubv4.ID, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.DisallowComments {
 		return fmt.Errorf("pretend that PostComment failed")
 	}

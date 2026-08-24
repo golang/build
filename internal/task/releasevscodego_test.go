@@ -95,21 +95,21 @@ func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 	testcases := []struct {
 		name          string
 		version       string
-		fakeGithub    FakeGitHub
+		fakeGithub    *FakeGitHub
 		wantIssue     int
 		wantMilestone int
 	}{
 		{
 			name:          "flow should create a milestone and create an issue under the milestone",
 			version:       "v0.45.0-rc.1",
-			fakeGithub:    FakeGitHub{}, // no issues and no milestones.
+			fakeGithub:    &FakeGitHub{}, // no issues and no milestones.
 			wantIssue:     1,
 			wantMilestone: 1,
 		},
 		{
 			name:    "flow should create an issue under the existing milestone",
 			version: "v0.48.0-rc.1",
-			fakeGithub: FakeGitHub{
+			fakeGithub: &FakeGitHub{
 				Milestones: map[int]string{999: "v0.48.0", 998: "v0.46.0"},
 			},
 			wantIssue:     1,
@@ -118,7 +118,7 @@ func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 		{
 			name:    "flow should reuse the existing release issue",
 			version: "v0.48.0-rc.1",
-			fakeGithub: FakeGitHub{
+			fakeGithub: &FakeGitHub{
 				Milestones: map[int]string{999: "v0.48.0", 998: "Release v0.46.0"},
 				Issues:     map[int]*github.Issue{1000: {Number: new(1000), Title: new("Release v0.48.0"), Milestone: &github.Milestone{ID: github.Int64(999)}}},
 			},
@@ -130,7 +130,7 @@ func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			tasks := &ReleaseVSCodeGoTasks{
-				GitHub: &tc.fakeGithub,
+				GitHub: tc.fakeGithub,
 			}
 
 			release, _, ok := parseVersion(tc.version)

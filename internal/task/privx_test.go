@@ -7,8 +7,8 @@ package task
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"net/http"
 	"net/mail"
 	"path"
 	"path/filepath"
@@ -52,14 +52,14 @@ func (g *fakePrivXGitHub) EditIssue(ctx context.Context, owner, repo string, num
 func (g *fakePrivXGerrit) GetChange(_ context.Context, changeID string, _ ...gerrit.QueryChangesOpt) (*gerrit.ChangeInfo, error) {
 	ci, ok := g.changes[changeID]
 	if !ok {
-		return nil, errors.New("GetChange: not found")
+		return nil, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	return ci, nil
 }
 
 func (g *fakePrivXGerrit) GetRevisionActions(_ context.Context, changeID string, revision string) (map[string]*gerrit.ActionInfo, error) {
 	if _, ok := g.changes[changeID]; !ok {
-		return nil, nil
+		return nil, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	return map[string]*gerrit.ActionInfo{
 		"submit": {Enabled: true},
@@ -69,7 +69,10 @@ func (g *fakePrivXGerrit) GetRevisionActions(_ context.Context, changeID string,
 func (g *fakePrivXGerrit) MoveChange(ctx context.Context, changeID string, branch string) (gerrit.ChangeInfo, error) {
 	ci, ok := g.changes[changeID]
 	if !ok {
-		return gerrit.ChangeInfo{}, errors.New("MoveChange: not found")
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
+	}
+	if ci.Branch == branch {
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "Change is already destined for the specified branch\n")
 	}
 	ci.Branch = branch
 	return *ci, nil
@@ -78,7 +81,36 @@ func (g *fakePrivXGerrit) MoveChange(ctx context.Context, changeID string, branc
 func (g *fakePrivXGerrit) RebaseChange(ctx context.Context, changeID string, baseRev string) (gerrit.ChangeInfo, error) {
 	ci, ok := g.changes[changeID]
 	if !ok {
-		return gerrit.ChangeInfo{}, errors.New("RebaseChange: not found")
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
+	}
+	if baseRev == "" && ci.Branch != "" {
+		g.changesMu.Lock()
+		base, hasBase := g.clBases[changeID]
+		g.changesMu.Unlock()
+		if hasBase {
+			project := ci.Project
+			if repo, err := g.repo(project); err == nil {
+				if head, err := repo.dir.RunCommand(ctx, "rev-parse", ci.Branch); err == nil {
+					if base == strings.TrimSpace(string(head)) {
+						return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "Change is already up to date.\n")
+					}
+				}
+			}
+		}
+	}
+	if baseRev != "" {
+		g.changesMu.Lock()
+		g.clBases[changeID] = baseRev
+		g.changesMu.Unlock()
+	} else if ci.Branch != "" {
+		project := ci.Project
+		if repo, err := g.repo(project); err == nil {
+			if head, err := repo.dir.RunCommand(ctx, "rev-parse", ci.Branch); err == nil {
+				g.changesMu.Lock()
+				g.clBases[changeID] = strings.TrimSpace(string(head))
+				g.changesMu.Unlock()
+			}
+		}
 	}
 	return *ci, nil
 }
@@ -86,7 +118,7 @@ func (g *fakePrivXGerrit) RebaseChange(ctx context.Context, changeID string, bas
 func (g *fakePrivXGerrit) SubmitChange(ctx context.Context, changeID string) (gerrit.ChangeInfo, error) {
 	ci, ok := g.changes[changeID]
 	if !ok {
-		return gerrit.ChangeInfo{}, errors.New("SubmitChange: not found")
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
 	}
 	ci.Status = gerrit.ChangeStatusMerged
 	return *ci, nil
@@ -271,6 +303,13 @@ func TestPrivXPatch(t *testing.T) {
 				},
 			},
 		},
+	}
+	publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for id := range privGerrit.changes {
+		privGerrit.clBases[id] = strings.TrimSpace(string(publicHead))
 	}
 
 	pubRepo := NewFakeRepo(t, "net")
