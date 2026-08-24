@@ -487,9 +487,17 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int) (*wf.Definition, error) {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 	coordinators := wf.Param(wd, releaseCoordinators)
-	milestoneNum := wf.Param(wd, task.SecurityMilestoneParameter)
+	milestoneNum := wf.Param(wd, task.OptionalSecurityMilestoneParameter)
 
-	rm := wf.Task1(wd, "Fetch security milestone", build.fetchSecurityMilestone, milestoneNum)
+	noMilestoneApproved := wf.Action1(wd, "Confirm no-milestone run", func(ctx *wf.TaskContext, num string) error {
+		if num != "" {
+			return nil
+		}
+		ctx.Printf("No security milestone specified. This run will proceed without security content.\nApprove this task if that is expected.")
+		return build.ApproveAction(ctx)
+	}, milestoneNum)
+
+	rm := wf.Task1(wd, "Fetch security milestone", build.fetchSecurityMilestone, milestoneNum, wf.After(noMilestoneApproved))
 
 	// cls are drafted by patch owners against `public`
 	// branch of sso://go-internal/go. Typically, no
@@ -1011,7 +1019,7 @@ func (b *BuildReleaseTasks) fetchSecurityMilestone(ctx *wf.TaskContext, mileston
 		ctx.Printf("Private Gerrit fields are unset, no security milestone to fetch.")
 		return nil, nil
 	}
-	if milestoneNum == "" || milestoneNum == "0" {
+	if milestoneNum == "" {
 		ctx.Printf("No security milestone specified, no security milestone to fetch.")
 		return nil, nil
 	}

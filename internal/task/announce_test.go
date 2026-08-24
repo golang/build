@@ -788,3 +788,43 @@ This is CVE-2025-4674 and https://go.dev/issue/74380.`,
 		}
 	})
 }
+
+func TestSecurityMilestoneParameterCheck(t *testing.T) {
+	valid := func(def workflow.ParamDef[string]) func(string) error {
+		wd := workflow.New(workflow.ACL{})
+		workflow.Param(wd, def)
+		return func(v string) error { return wd.Parameters()[0].Valid(v) }
+	}
+	t.Run("strict", func(t *testing.T) {
+		check := valid(SecurityMilestoneParameter)
+		for _, tc := range []struct {
+			in      string
+			wantErr bool
+		}{
+			{"", true},
+			{"123456", false},
+			{"12a", true},
+		} {
+			err := check(tc.in)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("Check(%q) = %v, wantErr %v", tc.in, err, tc.wantErr)
+			}
+		}
+	})
+	t.Run("optional", func(t *testing.T) {
+		check := valid(OptionalSecurityMilestoneParameter)
+		for _, tc := range []struct {
+			in      string
+			wantErr bool
+		}{
+			{"", false},
+			{"123456", false},
+			{"12a", true},
+		} {
+			err := check(tc.in)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("Check(%q) = %v, wantErr %v", tc.in, err, tc.wantErr)
+			}
+		}
+	})
+}

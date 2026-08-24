@@ -986,11 +986,29 @@ var (
 	SecurityMilestoneParameter = workflow.ParamDef[string]{
 		Name:      "Release Milestone",
 		ParamType: workflow.BasicString,
-		Doc: `Release Milestone is the security-metadata milestone for the security patch(es) being included in a Go release.
+		Doc: `Release Milestone owns the canonical source for all security patches.
 
-You can check with the security release coordinator for this release to confirm this input.`,
+You can check with the security release coordinator to confirm this input.`,
 		Example: "123456",
 		Check: func(num string) error {
+			if !numOnlyRE.MatchString(num) {
+				return errors.New("milestone number must contain only numbers")
+			}
+			return nil
+		},
+	}
+	OptionalSecurityMilestoneParameter = workflow.ParamDef[string]{
+		Name:      "Release Milestone (optional)",
+		ParamType: workflow.BasicString,
+		Doc: `Release Milestone owns the canonical source for all security patches.
+
+Empty means no security patches are intended for this release.
+You can check with the security release coordinator to confirm this input.`,
+		Example: "123456",
+		Check: func(num string) error {
+			if num == "" {
+				return nil
+			}
 			if !numOnlyRE.MatchString(num) {
 				return errors.New("milestone number must contain only numbers")
 			}

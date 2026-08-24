@@ -780,6 +780,82 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 	}
 }
 
+func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
+	deps, privGerrit := newMinorCoalesceTestDeps(t, false)
+
+	var approvedNoMilestone bool
+	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+		if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
+			approvedNoMilestone = true
+			return nil
+		}
+		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+			return nil
+		}
+		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+	}
+
+	runCtx, stop := context.WithCancel(deps.ctx)
+	t.Cleanup(stop)
+	listener := &verboseListener{t: t, onStall: stop}
+
+	comm := task.CommunicationTasks{
+		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+	}
+	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := minorReleaseParams()
+	params["Release Milestone (optional)"] = ""
+	w, err := workflow.Start(wd, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.Run(runCtx, listener); err != nil && runCtx.Err() == nil {
+		t.Fatalf("workflow failed: %v", err)
+	}
+	if !approvedNoMilestone {
+		t.Errorf("no-milestone approval gate did not fire for empty milestone")
+	}
+}
+
+func TestMinorReleaseMilestoneSkipsApproval(t *testing.T) {
+	deps, privGerrit := newMinorCoalesceTestDeps(t, false)
+
+	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+		if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
+			t.Errorf("no-milestone approval gate fired for non-empty milestone")
+			return nil
+		}
+		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+			return nil
+		}
+		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+	}
+
+	runCtx, stop := context.WithCancel(deps.ctx)
+	t.Cleanup(stop)
+	listener := &verboseListener{t: t, onStall: stop}
+
+	comm := task.CommunicationTasks{
+		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+	}
+	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := workflow.Start(wd, minorReleaseParams())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := w.Run(runCtx, listener); err != nil && runCtx.Err() == nil {
+		t.Fatalf("workflow failed: %v", err)
+	}
+}
+
 func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 
@@ -978,14 +1054,15 @@ func TestFetchSecurityMilestone(t *testing.T) {
 	})
 
 	t.Run("empty milestone", func(t *testing.T) {
-		for _, num := range []string{"", "0"} {
-			rm, err := deps.buildTasks.fetchSecurityMilestone(ctx, num)
-			if err != nil {
-				t.Fatalf("fetchSecurityMilestone(%q): %v", num, err)
-			}
-			if rm != nil {
-				t.Errorf("fetchSecurityMilestone(%q): got %+v, want nil milestone", num, rm)
-			}
+		rm, err := deps.buildTasks.fetchSecurityMilestone(ctx, "")
+		if err != nil {
+			t.Fatalf("fetchSecurityMilestone(%q): %v", "", err)
+		}
+		if rm != nil {
+			t.Errorf("fetchSecurityMilestone(%q): got %+v, want nil milestone", "", rm)
+		}
+		if rm, err := deps.buildTasks.fetchSecurityMilestone(ctx, "0"); err == nil {
+			t.Errorf("fetchSecurityMilestone(%q): got %+v, want error for nonexistent milestone", "0", rm)
 		}
 	})
 
@@ -1151,7 +1228,7 @@ func mustGetNextMinors(t *testing.T, deps *releaseTestDeps) []string {
 func minorReleaseParams() map[string]any {
 	return map[string]any{
 		"Release Coordinator Usernames (optional)":               []string(nil),
-		"Release Milestone":                                      "99915010",
+		"Release Milestone (optional)":                           "99915010",
 		"Go 1.26: Targets to skip testing (or 'all') (optional)": []string{"all"},
 		"Go 1.25: Targets to skip testing (or 'all') (optional)": []string{"all"},
 	}
