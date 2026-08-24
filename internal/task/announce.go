@@ -939,7 +939,7 @@ type SecurityCommunicationTasks struct {
 //
 // It returns an empty string when there are 0 security fixes.
 func (t SecurityCommunicationTasks) GetSecuritySummary(ctx *workflow.TaskContext, milestoneNum string) (string, error) {
-	rm, err := fetchReleaseMilestone(ctx, t.PrivateGerrit, milestoneNum)
+	rm, err := FetchReleaseMilestone(ctx, t.PrivateGerrit, milestoneNum)
 	if err != nil {
 		return "", err
 	}
@@ -971,7 +971,7 @@ func (t SecurityCommunicationTasks) GetSecuritySummary(ctx *workflow.TaskContext
 // GetSecurityReleaseNotes fetches a list of descriptions, one for each distinct security fix
 // included in the release identified by milestoneNum, in Markdown format.
 func (t SecurityCommunicationTasks) GetSecurityReleaseNotes(ctx *workflow.TaskContext, milestoneNum string) (releaseNotes []string, _ error) {
-	rm, err := fetchReleaseMilestone(ctx, t.PrivateGerrit, milestoneNum)
+	rm, err := FetchReleaseMilestone(ctx, t.PrivateGerrit, milestoneNum)
 	if err != nil {
 		return nil, err
 	}
@@ -1000,7 +1000,7 @@ You can check with the security release coordinator for this release to confirm 
 	numOnlyRE = regexp.MustCompile(`^\d+$`)
 )
 
-func fetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
+func FetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
 	const project = "security-metadata"
 	head, err := private.ReadBranchHead(ctx, project, "main")
 	if err != nil {

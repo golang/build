@@ -812,8 +812,8 @@ func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
 	}
 
 	// Second run: a restart forks a new checkpoint. The branch name embeds a
-	// minute-resolution timestamp, so a same-minute restart collides on the
-	// branch name (real Gerrit 409). When the minute has rolled over, the
+	// second-resolution timestamp, so a same-second restart collides on the
+	// branch name (real Gerrit 409). When the second has rolled over, the
 	// restart succeeds with a distinct name; either way, the first run's
 	// checkpoint branch must remain exactly as it was.
 	second, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
@@ -822,7 +822,7 @@ func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
 		if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict {
 			t.Fatalf("second createSecurityCheckpoint: %v", err)
 		}
-		t.Logf("same-minute restart collided on the timestamped checkpoint name (expected): %v", err)
+		t.Logf("same-second restart collided on the timestamped checkpoint name (expected): %v", err)
 	} else if second == first {
 		t.Errorf("restart reused checkpoint name %q; want a distinct timestamped branch", second)
 	}

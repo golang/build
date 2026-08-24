@@ -47,7 +47,6 @@ import (
 	"golang.org/x/net/context/ctxhttp"
 	"golang.org/x/vulndb/report"
 	"google.golang.org/protobuf/types/known/structpb"
-	yaml "gopkg.in/yaml.v3"
 )
 
 // DefinitionHolder holds workflow definitions.
@@ -1016,18 +1015,9 @@ func (b *BuildReleaseTasks) fetchSecurityMilestone(ctx *wf.TaskContext, mileston
 		ctx.Printf("No security milestone specified, no security milestone to fetch.")
 		return nil, nil
 	}
-	const project = "security-metadata"
-	head, err := b.PrivateGerritClient.ReadBranchHead(ctx, project, "main")
+	rm, err := task.FetchReleaseMilestone(ctx, b.PrivateGerritClient, milestoneNum)
 	if err != nil {
 		return nil, err
-	}
-	raw, err := b.PrivateGerritClient.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
-	if err != nil {
-		return nil, err
-	}
-	var rm relmeta.ReleaseMilestone
-	if err := yaml.Unmarshal(raw, &rm); err != nil {
-		return nil, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
 	}
 	return &rm, nil
 }
@@ -1233,9 +1223,9 @@ func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, b
 	return internalBranches, nil
 }
 
-func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, releaseBranches []string, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
+func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, releaseBranches []string, changes []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
 	var cherryPicks []*gerrit.ChangeInfo
-	for _, ci := range cls {
+	for _, ci := range changes {
 		for _, releaseBranch := range releaseBranches {
 			// Check whether a non-abandoned cherry-pick of this
 			// change already exists on the target branch (e.g. from
@@ -1315,12 +1305,9 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 	return submitted, nil
 }
 
-// majorFromMinor converts a release branch name from its minor version form to
-// its major version form (i.e., release-branch.go1.2.3 to release-branch.go1.2).
 func majorFromMinor(branch string) string {
 	stripped := strings.TrimPrefix(branch, "release-branch.")
-	major := goversion.Lang(stripped)
-	return "release-branch." + major
+	return "release-branch." + goversion.Lang(stripped)
 }
 
 func privateChangeURL[T int | string](clNum T) string {

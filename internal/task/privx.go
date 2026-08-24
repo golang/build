@@ -82,7 +82,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 func (x *PrivXPatch) PullMilestone(ctx *wf.TaskContext, milestone string) (*relmeta.ReleaseMilestone, error) {
 	// TODO(nealpatel): Is this ceremony?
-	rm, err := fetchReleaseMilestone(ctx, x.PrivateGerrit, milestone)
+	rm, err := FetchReleaseMilestone(ctx, x.PrivateGerrit, milestone)
 	return &rm, err
 }
 
