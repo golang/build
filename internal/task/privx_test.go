@@ -375,6 +375,7 @@ echo`)
 	w, err := wf.Start(wd, map[string]any{
 		"Release Milestone":                  "88810010",
 		reviewersParam.Name:                  []string{},
+		SecurityReviewersParameter.Name:      []string{"vulnreviewer@google.com"},
 		"Repository name":                    "net",
 		"Skip post submit result (optional)": true,
 	})
@@ -563,6 +564,10 @@ Go Security team</p>
 		if urls := refsByType[report.ReferenceTypeWeb]; len(urls) != 1 || urls[0] != announceURL {
 			t.Errorf("patch %d: WEB refs = %v, want [%s]", p.ID, urls, announceURL)
 		}
+	}
+
+	if want := []string{"vulnreviewer@google.com"}; !reflect.DeepEqual(pubGerrit.LastReviewers, want) {
+		t.Errorf("vulndb reviewers = %v, want %v", pubGerrit.LastReviewers, want)
 	}
 
 	// Verify that GitHub issues were updated with the release note + trailer.

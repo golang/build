@@ -828,3 +828,24 @@ func TestSecurityMilestoneParameterCheck(t *testing.T) {
 		}
 	})
 }
+
+func TestSecurityReviewersParameterCheck(t *testing.T) {
+	wd := workflow.New(workflow.ACL{})
+	workflow.Param(wd, SecurityReviewersParameter)
+	valid := wd.Parameters()[0].Valid
+	for _, tc := range []struct {
+		in      []string
+		wantErr bool
+	}{
+		{nil, true},
+		{[]string{"nealpatel@google.com"}, false},
+		{[]string{"nealpatel@google.com", "heschi@google.com"}, false},
+		{[]string{"nealpatel"}, true},
+		{[]string{"nealpatel@golang.org"}, true},
+	} {
+		err := valid(tc.in)
+		if (err != nil) != tc.wantErr {
+			t.Errorf("Valid(%q) = %v, wantErr %v", tc.in, err, tc.wantErr)
+		}
+	}
+}

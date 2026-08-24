@@ -1143,7 +1143,7 @@ fi
 				Gerrit:     gerrit,
 			}
 
-			cl, err := tasks.updateDependenciesIfMinor(ctx, tc.release, []string{"reviewer@example.com"})
+			cl, err := tasks.updateDependenciesIfMinor(ctx, tc.release, []string{"heschi"})
 			if err != nil {
 				t.Fatal(err)
 			}

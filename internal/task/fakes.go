@@ -145,6 +145,8 @@ type FakeGerrit struct {
 	clProjects     map[string]string             // CL ID → project name.
 	clBases        map[string]string
 	nextCL         int // Counter for generated cherry-pick CL IDs.
+
+	LastReviewers []string
 }
 
 type FakeRepo struct {
@@ -484,6 +486,10 @@ func (g *FakeGerrit) GetTag(ctx context.Context, project string, tag string) (ge
 }
 
 func (g *FakeGerrit) CreateAutoSubmitChange(_ *wf.TaskContext, input gerrit.ChangeInput, reviewers []string, contents map[string]string) (string, error) {
+	reviewerEmails, err := coordinatorEmails(reviewers)
+	if err != nil {
+		return "", err
+	}
 	repo, err := g.repo(input.Project)
 	if err != nil {
 		return "", err
@@ -492,6 +498,7 @@ func (g *FakeGerrit) CreateAutoSubmitChange(_ *wf.TaskContext, input gerrit.Chan
 	g.changesMu.Lock()
 	changeID := fmt.Sprintf("%s~%d", repo.name, len(g.changes)+1)
 	g.changes[changeID] = commit
+	g.LastReviewers = reviewerEmails
 	g.changesMu.Unlock()
 	return changeID, nil
 }

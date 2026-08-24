@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -1228,6 +1229,7 @@ func mustGetNextMinors(t *testing.T, deps *releaseTestDeps) []string {
 func minorReleaseParams() map[string]any {
 	return map[string]any{
 		"Release Coordinator Usernames (optional)":               []string(nil),
+		task.SecurityReviewersParameter.Name:                     []string{"reviewer@google.com"},
 		"Release Milestone (optional)":                           "99915010",
 		"Go 1.26: Targets to skip testing (or 'all') (optional)": []string{"all"},
 		"Go 1.25: Targets to skip testing (or 'all') (optional)": []string{"all"},
@@ -2052,12 +2054,16 @@ func TestCreateVulnReportsStdCmd(t *testing.T) {
 		},
 	}
 
-	changeID, err := deps.buildTasks.createVulnReports(taskCtx, rm, announceURL)
+	wantReviewers := []string{"vuln-reviewer-a@google.com", "vuln-reviewer-b@google.com"}
+	changeID, err := deps.buildTasks.createVulnReports(taskCtx, rm, announceURL, wantReviewers)
 	if err != nil {
 		t.Fatalf("createVulnReports: %v", err)
 	}
 	if changeID == "" {
 		t.Fatal("createVulnReports returned empty change ID")
+	}
+	if !reflect.DeepEqual(pubGerrit.LastReviewers, wantReviewers) {
+		t.Errorf("vulndb reviewers = %v, want %v", pubGerrit.LastReviewers, wantReviewers)
 	}
 
 	vulndbHead, err := pubGerrit.ReadBranchHead(deps.ctx, "vulndb", "master")
@@ -2101,7 +2107,7 @@ func TestCreateVulnReportsNilMilestone(t *testing.T) {
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "vu1-noop"}}
 
 	t.Run("nil milestone", func(t *testing.T) {
-		got, err := deps.buildTasks.createVulnReports(taskCtx, nil, "https://example.com")
+		got, err := deps.buildTasks.createVulnReports(taskCtx, nil, "https://example.com", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2111,7 +2117,7 @@ func TestCreateVulnReportsNilMilestone(t *testing.T) {
 	})
 
 	t.Run("empty patches", func(t *testing.T) {
-		got, err := deps.buildTasks.createVulnReports(taskCtx, &relmeta.ReleaseMilestone{}, "https://example.com")
+		got, err := deps.buildTasks.createVulnReports(taskCtx, &relmeta.ReleaseMilestone{}, "https://example.com", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

@@ -209,10 +209,13 @@ func VulnerableAtFromTargetReleases(targetReleases []string) (*report.Version, e
 	return report.VulnerableAt(fmt.Sprintf("%s.%d", mm[1:], patch-1)), nil
 }
 
-// MailVulnReports marshals each report to data/reports/<id>.yaml,
-// computes the commit subject via [Subject], and submits the change
-// to project vulndb/master with auto-submit and vulndbReviewers.
-func MailVulnReports(ctx *wf.TaskContext, gc GerritClient, reports []*report.Report) (string, error) {
+// MailVulnReports prepares the canonical [report.Report] for all
+// patches and mails the change for golang/vulndb:master.
+//
+// It's a precondition that reviewers contain users with @google.com
+// email domains; if this precondition is violated, the resulting CL
+// may be routed to the wrong reviewers (harmless).
+func MailVulnReports(ctx *wf.TaskContext, gc GerritClient, reports []*report.Report, reviewers []string) (string, error) {
 	if len(reports) == 0 {
 		return "", nil
 	}
@@ -231,7 +234,7 @@ func MailVulnReports(ctx *wf.TaskContext, gc GerritClient, reports []*report.Rep
 	}
 	// TODO(nealpatel): Trybots are expected to fail for this change
 	// since it does not generate the reports that the upstream CI expects.
-	return gc.CreateAutoSubmitChange(ctx, changeInput, vulndbReviewers, files)
+	return gc.CreateAutoSubmitChange(ctx, changeInput, reviewers, files)
 }
 
 func startsWithASCII(s string) bool {

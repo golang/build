@@ -404,7 +404,7 @@ func (g *fakeVulnGerrit) CreateAutoSubmitChange(ctx *wf.TaskContext, input gerri
 func TestMailVulnReports(t *testing.T) {
 	t.Run("empty reports", func(t *testing.T) {
 		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
-		changeID, err := MailVulnReports(ctx, nil, nil)
+		changeID, err := MailVulnReports(ctx, nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -424,7 +424,8 @@ func TestMailVulnReports(t *testing.T) {
 			{ID: "GO-2026-0001"},
 			{ID: "GO-2026-0002"},
 		}
-		changeID, err := MailVulnReports(ctx, gc, reports)
+		wantReviewers := []string{"reviewer-a@google.com", "reviewer-b@google.com"}
+		changeID, err := MailVulnReports(ctx, gc, reports, wantReviewers)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -437,8 +438,8 @@ func TestMailVulnReports(t *testing.T) {
 		if gc.gotInput.Branch != "master" {
 			t.Errorf("branch = %q, want master", gc.gotInput.Branch)
 		}
-		if !reflect.DeepEqual(gc.gotReviewers, []string{"neal@golang.org", "nsh@golang.org"}) {
-			t.Errorf("reviewers = %v, want [neal@golang.org nsh@golang.org]", gc.gotReviewers)
+		if !reflect.DeepEqual(gc.gotReviewers, wantReviewers) {
+			t.Errorf("reviewers = %v, want %v", gc.gotReviewers, wantReviewers)
 		}
 		for _, id := range []string{"GO-2026-0001", "GO-2026-0002"} {
 			key := path.Join("data", "reports", id+".yaml")

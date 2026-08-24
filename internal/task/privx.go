@@ -48,8 +48,9 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		milestoneNum = wf.Param(wd, SecurityMilestoneParameter)
 		targetRepo   = wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "net"})
 		// TODO: probably always want to skip, might make sense to not include this
-		skipPostSubmit = wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
-		reviewers      = wf.Param(wd, reviewersParam) // We don't fill this.
+		skipPostSubmit    = wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
+		reviewers         = wf.Param(wd, reviewersParam) // We don't fill this.
+		securityReviewers = wf.Param(wd, SecurityReviewersParameter)
 	)
 
 	availableRepos := wf.Task0(wd, "Load all repositories", tagx.SelectRepos)
@@ -72,7 +73,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	wf.Output(wd, "Announcement URL", announcementURL)
 
 	// post-announcement tasks
-	changeID := wf.Task4(wd, "Create vuln reports", x.CreateVulnReports, rm, vulnerableAt, tagged, announcementURL)
+	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, rm, vulnerableAt, tagged, announcementURL, securityReviewers)
 	wf.Output(wd, "File VulnDB Reports", changeID)
 	wf.Action1(wd, "Update GitHub issues", x.UpdateGitHubIssues, rm, wf.After(changeID))
 
@@ -409,7 +410,7 @@ func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *r
 	return SentMail{Subject: mc.Subject}, nil
 }
 
-func (x *PrivXPatch) CreateVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, vulnerableAt *report.Version, tagged TagRepo, announceURL string) (string, error) {
+func (x *PrivXPatch) CreateVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, vulnerableAt *report.Version, tagged TagRepo, announceURL string, reviewers []string) (string, error) {
 	var reports []*report.Report
 	for _, p := range rm.Patches {
 		mod, err := x.vulnModuleInfo(p, tagged, vulnerableAt)
@@ -430,7 +431,7 @@ func (x *PrivXPatch) CreateVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseM
 	// These will generate the cve5/osv files that
 	// must be included in the diff below.
 
-	return MailVulnReports(ctx, x.PublicGerrit, reports)
+	return MailVulnReports(ctx, x.PublicGerrit, reports, reviewers)
 }
 
 // vulnModuleInfo derives the [VulnModuleInfo] for a single patch. For
@@ -452,8 +453,6 @@ func (x *PrivXPatch) vulnModuleInfo(p *relmeta.SecurityPatch, tagged TagRepo, vu
 	}
 	return DeriveVulnModuleInfo(p)
 }
-
-var vulndbReviewers = []string{"neal@golang.org", "nsh@golang.org"}
 
 func (x *PrivXPatch) UpdateGitHubIssues(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) error {
 	return UpdateGitHubIssues(ctx, x.GitHub, rm)

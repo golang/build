@@ -282,9 +282,22 @@ func coordinatorEmails(users []string) ([]string, error) {
 	})
 }
 
+// mapCoordinators maps users to f(user). It's a precondition that users have
+// already been validated with [CheckCoordinators] in advance.
+//
+// [SecurityReviewersParameter] is an exception; it passes @google.com emails
+// through as-is without calling f.
 func mapCoordinators(users []string, f func(*gophers.Person) string) ([]string, error) {
 	var outs []string
 	for _, user := range users {
+		// To avoid more complexity and changing
+		// a lot of call-sites, we carve out an
+		// exception for suffixed @google.com
+		// emails used in security contexts.
+		if strings.HasSuffix(user, "@google.com") {
+			outs = append(outs, user)
+			continue
+		}
 		person, err := lookupCoordinator(user)
 		if err != nil {
 			return nil, err
@@ -1016,6 +1029,21 @@ You can check with the security release coordinator to confirm this input.`,
 		},
 	}
 	numOnlyRE = regexp.MustCompile(`^\d+$`)
+
+	SecurityReviewersParameter = workflow.ParamDef[[]string]{
+		Name:      "Security Reviewer Emails",
+		ParamType: workflow.SliceShort,
+		Doc:       `Valid @google.com email strings for privileged reviewers involved in the release.`,
+		Example:   "nealpatel@google.com",
+		Check: func(users []string) error {
+			for _, u := range users {
+				if !strings.HasSuffix(u, "@google.com") {
+					return fmt.Errorf("security reviewer %q must be an @google.com address", u)
+				}
+			}
+			return nil
+		},
+	}
 )
 
 func FetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {

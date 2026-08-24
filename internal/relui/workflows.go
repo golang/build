@@ -445,7 +445,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		}
 
 		rm := wf.Const[*relmeta.ReleaseMilestone](nil)
-		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators, rm)
+		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators, rm, wf.Const[[]string](nil))
 		if r.major >= currentMajor {
 			wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, published)
 		}
@@ -487,6 +487,7 @@ func registerBuildTestSignOnlyWorkflow(h *DefinitionHolder, version *task.Versio
 func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.MilestoneTasks, version *task.VersionTasks, comm task.CommunicationTasks, prevMajor, currentMajor int) (*wf.Definition, error) {
 	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 	coordinators := wf.Param(wd, releaseCoordinators)
+	securityReviewers := wf.Param(wd, task.SecurityReviewersParameter)
 	milestoneNum := wf.Param(wd, task.OptionalSecurityMilestoneParameter)
 
 	noMilestoneApproved := wf.Action1(wd, "Confirm no-milestone run", func(ctx *wf.TaskContext, num string) error {
@@ -538,7 +539,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 
 	securitySummary := wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum)
 	securityFixes := wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
-	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators, rm)
+	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators, rm, securityReviewers)
 	wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, currPublished)
 
 	return wd, nil
@@ -548,6 +549,7 @@ func addCommTasks(
 	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
 	kind task.ReleaseKind, published wf.Value[[]task.Published], securitySummary wf.Value[string],
 	securityFixes, coordinators wf.Value[[]string], rm wf.Value[*relmeta.ReleaseMilestone],
+	securityReviewers wf.Value[[]string],
 ) {
 	okayToAnnounce := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(published))
 
@@ -558,7 +560,7 @@ func addCommTasks(
 	mastodonURL := wf.Task4(wd, "post-mastodon", comm.TrumpetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 	blueskyURL := wf.Task4(wd, "post-bluesky", comm.SkeetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 
-	vulndbChangeID := wf.Task2(wd, "file-vulndb-reports", build.createVulnReports, rm, announcementURL)
+	vulndbChangeID := wf.Task3(wd, "file-vulndb-reports", build.createVulnReports, rm, announcementURL, securityReviewers)
 
 	wf.Action2(wd, "Update GitHub issues", task.UpdateGitHubIssues, wf.Const(build.GitHub), rm, wf.After(vulndbChangeID))
 
@@ -572,7 +574,7 @@ func addCommTasks(
 // createVulnReports builds and submits vulndb reports for std/cmd
 // security patches. It no-ops when rm is nil or has no patches
 // (non-security minor release or major-release path).
-func (b *BuildReleaseTasks) createVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, announceURL string) (string, error) {
+func (b *BuildReleaseTasks) createVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, announceURL string, reviewers []string) (string, error) {
 	if rm == nil || len(rm.Patches) == 0 {
 		return "", nil
 	}
@@ -588,7 +590,7 @@ func (b *BuildReleaseTasks) createVulnReports(ctx *wf.TaskContext, rm *relmeta.R
 		}
 		reports = append(reports, r)
 	}
-	return task.MailVulnReports(ctx, b.GerritClient, reports)
+	return task.MailVulnReports(ctx, b.GerritClient, reports, reviewers)
 }
 
 func now(_ context.Context) (time.Time, error) {
