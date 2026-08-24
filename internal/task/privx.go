@@ -448,28 +448,26 @@ func (x *PrivXPatch) CreateVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseM
 	//
 	// These will generate the cve5/osv files that
 	// must be included in the diff below.
-
 	return MailVulnReports(ctx, x.PublicGerrit, reports, reviewers)
 }
 
-// vulnModuleInfo derives the [VulnModuleInfo] for a single patch. For
-// golang.org/x patches it validates that the package belongs to the
-// tagged repo and uses the network-resolved vulnerableAt (the
-// historical x-repo behavior). std/cmd patches do not flow through a
-// TagRepo, so for them the module value and vulnerable_at are derived
-// locally from the patch via [DeriveVulnModuleInfo].
+// vulnModuleInfo derives the [VulnModuleInfo] for a single patch.
 func (x *PrivXPatch) vulnModuleInfo(p *relmeta.SecurityPatch, tagged TagRepo, vulnerableAt *report.Version) (VulnModuleInfo, error) {
-	if strings.HasPrefix(p.Package, "golang.org/x/") {
-		repo, err := repoName(p.Package)
-		if err != nil {
-			return VulnModuleInfo{}, err
-		}
-		if got, want := repo, tagged.Name; got != want {
-			return VulnModuleInfo{}, fmt.Errorf("package mismatch: %q vs %q", got, want)
-		}
-		return VulnModuleInfo{Module: tagged.ModPath, VulnerableAt: vulnerableAt}, nil
+	repo, err := repoName(p.Package)
+	if err != nil {
+		return VulnModuleInfo{}, err
 	}
-	return DeriveVulnModuleInfo(p)
+	if got, want := repo, tagged.Name; got != want {
+		return VulnModuleInfo{}, fmt.Errorf("package mismatch: %q vs %q", got, want)
+	}
+	if tagged.NewerVersion == "" {
+		return VulnModuleInfo{}, fmt.Errorf("repo %q was not tagged", tagged.Name)
+	}
+	return VulnModuleInfo{
+		Module:       tagged.ModPath,
+		Versions:     report.Versions{report.Fixed(strings.TrimPrefix(tagged.NewerVersion, "v"))},
+		VulnerableAt: vulnerableAt,
+	}, nil
 }
 
 func (x *PrivXPatch) UpdateGitHubIssues(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) error {

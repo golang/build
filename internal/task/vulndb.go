@@ -51,9 +51,8 @@ func VulnReport(p *relmeta.SecurityPatch, mod VulnModuleInfo, announceURL string
 		URL:  announceURL,
 	})
 
-	versions, err := VulnReportVersions(p.TargetReleases)
-	if err != nil {
-		return nil, err
+	if len(mod.Versions) == 0 {
+		return nil, errors.New("missing versions")
 	}
 
 	// Derive the vuln report's summary and description
@@ -90,7 +89,7 @@ func VulnReport(p *relmeta.SecurityPatch, mod VulnModuleInfo, announceURL string
 		Modules: []*report.Module{
 			{
 				Module:       mod.Module,
-				Versions:     versions,
+				Versions:     mod.Versions,
 				VulnerableAt: mod.VulnerableAt,
 				// TODO(nealpatel): for completeness, we should
 				// support the edge case of vendored x/ repo fix
@@ -114,26 +113,24 @@ func VulnReport(p *relmeta.SecurityPatch, mod VulnModuleInfo, announceURL string
 
 type VulnModuleInfo struct {
 	Module       string
+	Versions     report.Versions
 	VulnerableAt *report.Version
 }
 
-// VulnReportVersions constructs the expected
-// list of [report.Versions] that flags which
-// major.minor.patch semvers are affected.
-//
-// targetReleases are expected to conform to
-// the [report.Version] semantics which notably
-// do not include the prefixed 'v'.
-func VulnReportVersions(targetReleases []string) (report.Versions, error) {
+// stdVulnReportVersions converts the go1.m.n version string into a format
+// that [report.Version] expects and returns a sorted [report.Versions]
+// from oldest to newest, adding the necessary introduced versions.
+func stdVulnReportVersions(targetReleases []string) (report.Versions, error) {
 	if len(targetReleases) == 0 {
 		return nil, errors.New("missing target releases")
 	}
 	semVers := make([]string, len(targetReleases))
 	for i := range targetReleases {
-		semVers[i] = "v" + targetReleases[i]
-		if !semver.IsValid(semVers[i]) {
-			return nil, fmt.Errorf("invalid semver %q (target: %q)", semVers[i], targetReleases[i])
+		bare, err := goTagToBareSemver(targetReleases[i])
+		if err != nil {
+			return nil, err
 		}
+		semVers[i] = "v" + bare
 	}
 	semver.Sort(semVers)
 	var versions report.Versions
@@ -146,27 +143,41 @@ func VulnReportVersions(targetReleases []string) (report.Versions, error) {
 		// standard convention in golang/vulndb.
 		if i > 0 {
 			mm := semver.MajorMinor(v) + ".0-0"
-			versions = append(versions, report.Introduced(mm))
+			versions = append(versions, report.Introduced(mm[1:]))
 		}
-		versions = append(versions, report.Fixed(v))
+		versions = append(versions, report.Fixed(v[1:]))
 	}
 	return versions, nil
 }
 
-// DeriveVulnModuleInfo derives the [VulnModuleInfo] for a std/cmd
-// security patch without a network call. The module value is taken
-// from [VulnModule] and the VulnerableAt version is derived from
-// its [VulnerableAtFromTargetReleases].
-//
-// The x-repo path uses [ResolveVulnerableVersion] instead, which
-// resolves over the network; see [PrivXPatch.CreateVulnReports].
-func DeriveVulnModuleInfo(p *relmeta.SecurityPatch) (VulnModuleInfo, error) {
-	vulnerableAt, err := VulnerableAtFromTargetReleases(p.TargetReleases)
+func goTagToBareSemver(goTag string) (string, error) {
+	bare, ok := strings.CutPrefix(goTag, "go")
+	if !ok || bare == "" {
+		return "", fmt.Errorf("target release %q is not a go1.X.Y tag", goTag)
+	}
+	if strings.Count(bare, ".") != 2 {
+		return "", fmt.Errorf("target release %q must have three components (go1.X.Y)", goTag)
+	}
+	v := "v" + bare
+	if !semver.IsValid(v) {
+		return "", fmt.Errorf("invalid semver %q (target: %q)", v, goTag)
+	}
+	return bare, nil
+}
+
+// StdVulnModuleInfo derives the [VulnModuleInfo] for a std/cmd security patch.
+func StdVulnModuleInfo(p *relmeta.SecurityPatch) (VulnModuleInfo, error) {
+	versions, err := stdVulnReportVersions(p.TargetReleases)
+	if err != nil {
+		return VulnModuleInfo{}, err
+	}
+	vulnerableAt, err := stdVulnerableAt(p.TargetReleases)
 	if err != nil {
 		return VulnModuleInfo{}, err
 	}
 	return VulnModuleInfo{
 		Module:       VulnModule(p.Package),
+		Versions:     versions,
 		VulnerableAt: vulnerableAt,
 	}, nil
 }
@@ -183,16 +194,17 @@ func VulnModule(pkg string) string {
 	return "std"
 }
 
-func VulnerableAtFromTargetReleases(targetReleases []string) (*report.Version, error) {
+func stdVulnerableAt(targetReleases []string) (*report.Version, error) {
 	if len(targetReleases) == 0 {
 		return nil, errors.New("missing target releases")
 	}
 	semVers := make([]string, len(targetReleases))
 	for i := range targetReleases {
-		semVers[i] = "v" + targetReleases[i]
-		if !semver.IsValid(semVers[i]) {
-			return nil, fmt.Errorf("invalid semver %q (target: %q)", semVers[i], targetReleases[i])
+		bare, err := goTagToBareSemver(targetReleases[i])
+		if err != nil {
+			return nil, err
 		}
+		semVers[i] = "v" + bare
 	}
 	semver.Sort(semVers)
 	highest := semVers[len(semVers)-1] // e.g. "v1.26.3"

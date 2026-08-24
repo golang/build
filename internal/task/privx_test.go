@@ -142,8 +142,6 @@ security_patches:
         Thanks to a very levitated gopher for reporting this issue.
 
         This is CVE-1970-0001 and Go issue https://go.dev/issue/4294967296.
-      target_releases:
-        - 1.1.0
       cve: CVE-1970-0001
       github_issue_id: 4294967296
       vuln_report_id: GO-1970-0001
@@ -164,8 +162,6 @@ security_patches:
         Thanks to a confused poet for reporting this issue.
 
         This is CVE-1970-0002 and Go issue https://go.dev/issue/4294967297.
-      target_releases:
-        - 1.1.0
       cve: CVE-1970-0002
       github_issue_id: 4294967297
       vuln_report_id: GO-1970-0002
@@ -187,8 +183,6 @@ security_patches:
         Thanks to a very levitated gopher for reporting this issue.
 
         This is CVE-1970-0003 and Go issue https://go.dev/issue/4294967298.
-      target_releases:
-        - 1.1.0
       cve: CVE-1970-0003
       github_issue_id: 4294967298
       vuln_report_id: GO-1970-0003
@@ -510,6 +504,12 @@ Go Security team</p>
 		}
 		if mod.Packages[0].Package != p.Package {
 			t.Errorf("patch %d: package = %q, want %q", p.ID, mod.Packages[0].Package, p.Package)
+		}
+		if want := (report.Versions{report.Fixed("1.1.0")}); !reflect.DeepEqual(mod.Versions, want) {
+			t.Errorf("patch %d: versions = %v, want %v", p.ID, mod.Versions, want)
+		}
+		if mod.VulnerableAt == nil || mod.VulnerableAt.Version != "1.0.0" {
+			t.Errorf("patch %d: vulnerable_at = %v, want 1.0.0", p.ID, mod.VulnerableAt)
 		}
 
 		// CVE metadata.

@@ -61,7 +61,7 @@ func TestSubject(t *testing.T) {
 	}
 }
 
-func TestVulnReportVersions(t *testing.T) {
+func TestStdVulnReportVersions(t *testing.T) {
 	tests := []struct {
 		name    string
 		targets []string
@@ -70,16 +70,16 @@ func TestVulnReportVersions(t *testing.T) {
 	}{
 		{
 			name:    "single",
-			targets: []string{"1.1.0"},
-			want:    report.Versions{report.Fixed("v1.1.0")},
+			targets: []string{"go1.1.0"},
+			want:    report.Versions{report.Fixed("1.1.0")},
 		},
 		{
 			name:    "two versions",
-			targets: []string{"1.24.1", "1.23.5"},
+			targets: []string{"go1.24.1", "go1.23.5"},
 			want: report.Versions{
-				report.Fixed("v1.23.5"),
-				report.Introduced("v1.24.0-0"),
-				report.Fixed("v1.24.1"),
+				report.Fixed("1.23.5"),
+				report.Introduced("1.24.0-0"),
+				report.Fixed("1.24.1"),
 			},
 		},
 		{
@@ -92,38 +92,52 @@ func TestVulnReportVersions(t *testing.T) {
 			targets: []string{"not-a-version"},
 			wantErr: true,
 		},
+		{
+			name:    "bare semver rejected",
+			targets: []string{"1.24.1"},
+			wantErr: true,
+		},
+		{
+			name:    "two component rejected",
+			targets: []string{"go1.26"},
+			wantErr: true,
+		},
+		{
+			name:    "one component rejected",
+			targets: []string{"go1"},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := VulnReportVersions(tt.targets)
+			got, err := stdVulnReportVersions(tt.targets)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("VulnReportVersions(%v): err = %v, wantErr = %v", tt.targets, err, tt.wantErr)
+				t.Fatalf("stdVulnReportVersions(%v): err = %v, wantErr = %v", tt.targets, err, tt.wantErr)
 			}
 			if err != nil {
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("VulnReportVersions(%v):\ngot  %v\nwant %v", tt.targets, got, tt.want)
+				t.Errorf("stdVulnReportVersions(%v):\ngot  %v\nwant %v", tt.targets, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestVulnReport(t *testing.T) {
-	mod := VulnModuleInfo{Module: "golang.org/x/net", VulnerableAt: report.VulnerableAt("1.0.0")}
+	mod := VulnModuleInfo{Module: "golang.org/x/net", Versions: report.Versions{report.Fixed("1.1.0")}, VulnerableAt: report.VulnerableAt("1.0.0")}
 	const announceURL = "https://groups.google.com/g/golang-announce/c/test"
 
 	t.Run("valid", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
-			Package:        "golang.org/x/net/http2",
-			GitHubIssueID:  12345,
-			Changelists:    []string{"https://go.dev/cl/111"},
-			TargetReleases: []string{"1.1.0"},
-			ReleaseNote:    "net/http2: bad things happen.\n\nDetails about the bad things.",
-			CVE:            "CVE-2026-0001",
-			CWE:            "CWE-400",
-			Credits:        []string{"Alice"},
-			VulnReportID:   "GO-2026-0001",
+			Package:       "golang.org/x/net/http2",
+			GitHubIssueID: 12345,
+			Changelists:   []string{"https://go.dev/cl/111"},
+			ReleaseNote:   "net/http2: bad things happen.\n\nDetails about the bad things.",
+			CVE:           "CVE-2026-0001",
+			CWE:           "CWE-400",
+			Credits:       []string{"Alice"},
+			VulnReportID:  "GO-2026-0001",
 		}
 		r, err := VulnReport(p, mod, announceURL)
 		if err != nil {
@@ -157,17 +171,16 @@ func TestVulnReport(t *testing.T) {
 
 	t.Run("dotted identifier preserves interior periods", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
-			Package:        "net/http",
-			GitHubIssueID:  12345,
-			Changelists:    []string{"https://go.dev/cl/111"},
-			TargetReleases: []string{"1.1.0"},
-			ReleaseNote:    "net/http: TLS 1.3 handshake panics.\n\nDetails about the panic.",
-			CVE:            "CVE-2026-0002",
-			CWE:            "CWE-400",
-			Credits:        []string{"Bob"},
-			VulnReportID:   "GO-2026-0002",
+			Package:       "net/http",
+			GitHubIssueID: 12345,
+			Changelists:   []string{"https://go.dev/cl/111"},
+			ReleaseNote:   "net/http: TLS 1.3 handshake panics.\n\nDetails about the panic.",
+			CVE:           "CVE-2026-0002",
+			CWE:           "CWE-400",
+			Credits:       []string{"Bob"},
+			VulnReportID:  "GO-2026-0002",
 		}
-		stdMod := VulnModuleInfo{Module: "std", VulnerableAt: report.VulnerableAt("1.0.0")}
+		stdMod := VulnModuleInfo{Module: "std", Versions: report.Versions{report.Fixed("1.1.0")}, VulnerableAt: report.VulnerableAt("1.0.0")}
 		r, err := VulnReport(p, stdMod, announceURL)
 		if err != nil {
 			t.Fatal(err)
@@ -182,7 +195,6 @@ func TestVulnReport(t *testing.T) {
 			Package:        "golang.org/x/net/http2",
 			GitHubIssueID:  12345,
 			Changelists:    []string{"https://go.dev/cl/111"},
-			TargetReleases: []string{"1.1.0"},
 			ReleaseNote:    "net/http2: bad things happen.\n\nOriginal description.",
 			VulnReportDesc: "Overridden description.",
 			VulnReportID:   "GO-2026-0001",
@@ -197,12 +209,23 @@ func TestVulnReport(t *testing.T) {
 		}
 	})
 
+	t.Run("missing versions", func(t *testing.T) {
+		p := &relmeta.SecurityPatch{
+			Package:       "golang.org/x/net/http2",
+			GitHubIssueID: 12345,
+			Changelists:   []string{"https://go.dev/cl/111"},
+			ReleaseNote:   "net/http2: bad.\n\nDetails.",
+		}
+		if _, err := VulnReport(p, VulnModuleInfo{Module: "golang.org/x/net"}, announceURL); err == nil {
+			t.Fatal("expected error for missing versions")
+		}
+	})
+
 	t.Run("missing github issue", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
-			Package:        "golang.org/x/net/http2",
-			Changelists:    []string{"https://go.dev/cl/111"},
-			TargetReleases: []string{"1.1.0"},
-			ReleaseNote:    "net/http2: bad.\n\nDetails.",
+			Package:     "golang.org/x/net/http2",
+			Changelists: []string{"https://go.dev/cl/111"},
+			ReleaseNote: "net/http2: bad.\n\nDetails.",
 		}
 		if _, err := VulnReport(p, mod, announceURL); err == nil {
 			t.Fatal("expected error for missing github issue")
@@ -211,10 +234,9 @@ func TestVulnReport(t *testing.T) {
 
 	t.Run("missing changelists", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
-			Package:        "golang.org/x/net/http2",
-			GitHubIssueID:  12345,
-			TargetReleases: []string{"1.1.0"},
-			ReleaseNote:    "net/http2: bad.\n\nDetails.",
+			Package:       "golang.org/x/net/http2",
+			GitHubIssueID: 12345,
+			ReleaseNote:   "net/http2: bad.\n\nDetails.",
 		}
 		if _, err := VulnReport(p, mod, announceURL); err == nil {
 			t.Fatal("expected error for missing changelists")
@@ -223,11 +245,10 @@ func TestVulnReport(t *testing.T) {
 
 	t.Run("missing announce URL", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
-			Package:        "golang.org/x/net/http2",
-			GitHubIssueID:  12345,
-			Changelists:    []string{"https://go.dev/cl/111"},
-			TargetReleases: []string{"1.1.0"},
-			ReleaseNote:    "net/http2: bad.\n\nDetails.",
+			Package:       "golang.org/x/net/http2",
+			GitHubIssueID: 12345,
+			Changelists:   []string{"https://go.dev/cl/111"},
+			ReleaseNote:   "net/http2: bad.\n\nDetails.",
 		}
 		if _, err := VulnReport(p, mod, ""); err == nil {
 			t.Fatal("expected error for missing announce URL")
@@ -236,11 +257,10 @@ func TestVulnReport(t *testing.T) {
 
 	t.Run("malformed release note no newline", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
-			Package:        "golang.org/x/net/http2",
-			GitHubIssueID:  12345,
-			Changelists:    []string{"https://go.dev/cl/111"},
-			TargetReleases: []string{"1.1.0"},
-			ReleaseNote:    "no newline here",
+			Package:       "golang.org/x/net/http2",
+			GitHubIssueID: 12345,
+			Changelists:   []string{"https://go.dev/cl/111"},
+			ReleaseNote:   "no newline here",
 		}
 		if _, err := VulnReport(p, mod, announceURL); err == nil {
 			t.Fatal("expected error for malformed release note")
@@ -249,11 +269,10 @@ func TestVulnReport(t *testing.T) {
 
 	t.Run("malformed release note no colon", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
-			Package:        "golang.org/x/net/http2",
-			GitHubIssueID:  12345,
-			Changelists:    []string{"https://go.dev/cl/111"},
-			TargetReleases: []string{"1.1.0"},
-			ReleaseNote:    "no colon in subject\n\nDetails.",
+			Package:       "golang.org/x/net/http2",
+			GitHubIssueID: 12345,
+			Changelists:   []string{"https://go.dev/cl/111"},
+			ReleaseNote:   "no colon in subject\n\nDetails.",
 		}
 		if _, err := VulnReport(p, mod, announceURL); err == nil {
 			t.Fatal("expected error for malformed subject")
@@ -262,11 +281,10 @@ func TestVulnReport(t *testing.T) {
 
 	t.Run("non-ascii summary", func(t *testing.T) {
 		p := &relmeta.SecurityPatch{
-			Package:        "golang.org/x/net/http2",
-			GitHubIssueID:  12345,
-			Changelists:    []string{"https://go.dev/cl/111"},
-			TargetReleases: []string{"1.1.0"},
-			ReleaseNote:    "net/http2: 日本語\n\nDetails.",
+			Package:       "golang.org/x/net/http2",
+			GitHubIssueID: 12345,
+			Changelists:   []string{"https://go.dev/cl/111"},
+			ReleaseNote:   "net/http2: 日本語\n\nDetails.",
 		}
 		if _, err := VulnReport(p, mod, announceURL); err == nil {
 			t.Fatal("expected error for non-ascii summary")
@@ -298,7 +316,7 @@ func TestVulnModule(t *testing.T) {
 	}
 }
 
-func TestVulnerableAtFromTargetReleases(t *testing.T) {
+func TestStdVulnerableAt(t *testing.T) {
 	tests := []struct {
 		name    string
 		targets []string
@@ -307,17 +325,17 @@ func TestVulnerableAtFromTargetReleases(t *testing.T) {
 	}{
 		{
 			name:    "two release lines",
-			targets: []string{"1.25.10", "1.26.3"},
+			targets: []string{"go1.25.10", "go1.26.3"},
 			wantVer: "1.26.2",
 		},
 		{
 			name:    "single release",
-			targets: []string{"1.26.3"},
+			targets: []string{"go1.26.3"},
 			wantVer: "1.26.2",
 		},
 		{
 			name:    "result patch zero",
-			targets: []string{"1.24.1", "1.25.1"},
+			targets: []string{"go1.24.1", "go1.25.1"},
 			wantVer: "1.25.0",
 		},
 		{
@@ -327,7 +345,7 @@ func TestVulnerableAtFromTargetReleases(t *testing.T) {
 		},
 		{
 			name:    "patch zero",
-			targets: []string{"1.26.0"},
+			targets: []string{"go1.26.0"},
 			wantErr: true,
 		},
 		{
@@ -337,13 +355,23 @@ func TestVulnerableAtFromTargetReleases(t *testing.T) {
 		},
 		{
 			name:    "two component version",
-			targets: []string{"1.26"},
+			targets: []string{"go1.26"},
+			wantErr: true,
+		},
+		{
+			name:    "bare semver rejected",
+			targets: []string{"1.26.3"},
+			wantErr: true,
+		},
+		{
+			name:    "one component rejected",
+			targets: []string{"go1"},
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := VulnerableAtFromTargetReleases(tt.targets)
+			got, err := stdVulnerableAt(tt.targets)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("got %v, want %v", err, tt.wantErr)
 			}
@@ -357,10 +385,10 @@ func TestVulnerableAtFromTargetReleases(t *testing.T) {
 	}
 }
 
-func TestVulnerableAtFromTargetReleasesPrerelease(t *testing.T) {
+func TestStdVulnerableAtPrerelease(t *testing.T) {
 	// A pre-release suffix like "1.26.3-rc1" passes semver.IsValid
 	// but makes the patch extraction fail (strconv.Atoi on "3-rc1").
-	_, err := VulnerableAtFromTargetReleases([]string{"1.26.3-rc1"})
+	_, err := stdVulnerableAt([]string{"go1.26.3-rc1"})
 	if err == nil {
 		t.Fatal("expected error for pre-release target, got nil")
 	}
@@ -369,12 +397,12 @@ func TestVulnerableAtFromTargetReleasesPrerelease(t *testing.T) {
 	}
 }
 
-func TestDeriveVulnModuleInfo(t *testing.T) {
+func TestStdVulnModuleInfo(t *testing.T) {
 	p := &relmeta.SecurityPatch{
 		Package:        "net/http",
-		TargetReleases: []string{"1.25.10", "1.26.3"},
+		TargetReleases: []string{"go1.25.10", "go1.26.3"},
 	}
-	mod, err := DeriveVulnModuleInfo(p)
+	mod, err := StdVulnModuleInfo(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,6 +411,10 @@ func TestDeriveVulnModuleInfo(t *testing.T) {
 	}
 	if mod.VulnerableAt == nil || mod.VulnerableAt.Version != "1.26.2" {
 		t.Errorf("got %v, want 1.26.2", mod.VulnerableAt)
+	}
+	want := report.Versions{report.Fixed("1.25.10"), report.Introduced("1.26.0-0"), report.Fixed("1.26.3")}
+	if !reflect.DeepEqual(mod.Versions, want) {
+		t.Errorf("got %v, want %v", mod.Versions, want)
 	}
 }
 

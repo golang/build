@@ -31,7 +31,9 @@ type SecurityPatch struct {
 	Package     string          `yaml:"package"`
 	Changelists []string        `yaml:"changelists"`
 	ReleaseNote string          `yaml:"release_note"`
-	// TODO(nealpatel): do not omitempty; this is required.
+	// TODO(nealpatel): do not omitempty; this is required
+	// only for std/cmd (not golang.org/x/) which means it
+	// needs to re-scoped for clarity.
 	TargetReleases []string `yaml:"target_releases,omitempty"`
 	GitHubIssueID  int64    `yaml:"github_issue_id"`
 	VulnReportID   string   `yaml:"vuln_report_id"`   // for example, GO-20YY-NNNN

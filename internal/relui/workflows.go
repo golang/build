@@ -629,7 +629,7 @@ func (b *BuildReleaseTasks) createVulnReports(ctx *wf.TaskContext, rm *relmeta.R
 	}
 	var reports []*report.Report
 	for _, p := range rm.Patches {
-		mod, err := task.DeriveVulnModuleInfo(p)
+		mod, err := task.StdVulnModuleInfo(p)
 		if err != nil {
 			return "", err
 		}
