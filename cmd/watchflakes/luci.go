@@ -263,6 +263,35 @@ nextPage:
 	return builders, nil
 }
 
+// ListAllBuilders returns the names of every builder in the golang ci bucket,
+// including the ones ListBuilders drops for having a known issue. Those are
+// still running; they are only kept off the dashboards.
+func (c *LUCIClient) ListAllBuilders(ctx context.Context) (map[string]bool, error) {
+	if c.TraceSteps {
+		log.Println("ListAllBuilders")
+	}
+	names := make(map[string]bool)
+	var pageToken string
+nextPage:
+	resp, err := c.BuildersClient.ListBuilders(ctx, &bbpb.ListBuildersRequest{
+		Project:   "golang",
+		Bucket:    "ci",
+		PageSize:  1000,
+		PageToken: pageToken,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("BuildersClient.ListBuilders: %w", err)
+	}
+	for _, b := range resp.GetBuilders() {
+		names[b.GetId().GetBuilder()] = true
+	}
+	if resp.GetNextPageToken() != "" {
+		pageToken = resp.GetNextPageToken()
+		goto nextPage
+	}
+	return names, nil
+}
+
 func (c *LUCIClient) ListBoards(ctx context.Context) ([]*Dashboard, error) {
 	builders, err := c.ListBuilders(ctx, "", "")
 	if err != nil {

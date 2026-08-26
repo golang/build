@@ -19,8 +19,9 @@ import (
 // a plain github.Issue plus our associated data.
 type Issue struct {
 	*github.Issue
-	ScriptText string         // extracted watchflakes script
-	Script     *script.Script // compiled script
+	Item       *github.ProjectItem // project entry the issue was read from
+	ScriptText string              // extracted watchflakes script
+	Script     *script.Script      // compiled script
 
 	// initialized by readComments
 	Stale    bool                   // issue comments may be stale
@@ -91,7 +92,7 @@ func readIssues(old []*Issue) ([]*Issue, error) {
 	}
 	for _, item := range items {
 		if item.Issue != nil {
-			issue := &Issue{Issue: item.Issue, NewBody: true, Stale: true}
+			issue := &Issue{Issue: item.Issue, Item: item, NewBody: true, Stale: true}
 			if c := cache[item.Issue.Number]; c != nil {
 				// Carry conservative NewBody, Mentions data forward
 				// to avoid round trips about things we already know.
@@ -325,7 +326,7 @@ func prepareNew(fp *FailurePost) (*Issue, error) {
 
 	var msg strings.Builder
 	fmt.Fprintf(&msg, "```\n#!watchflakes\ndefault <- %s\n```\n\n", pattern)
-	fmt.Fprintf(&msg, "Issue created automatically to collect these failures.\n\n")
+	fmt.Fprintf(&msg, "%s\n\n", autoIssueMarker)
 	fmt.Fprintf(&msg, "Example ([log](%s)):\n\n%s", fp.URL, indent(spaces[:4], fp.Snippet))
 
 	// TODO: for a single test failure, add a link to LUCI history page.
@@ -376,7 +377,7 @@ func readComments(issue *Issue) {
 	issue.NewBody = true // until proven otherwise
 	for _, com := range comments {
 		// Only consider comments we signed.
-		if !strings.Contains(com.Body, "\n— watchflakes") && !strings.Contains(com.Body, "\n— [watchflakes](") {
+		if !isWatchflakesComment(com.Body) {
 			continue
 		}
 		if com.CreatedAt.After(issue.LastEditedAt) {
@@ -391,6 +392,12 @@ func readComments(issue *Issue) {
 		}
 	}
 	issue.Stale = false
+}
+
+// isWatchflakesComment reports whether body is a comment watchflakes posted.
+// Both forms of the signature appear on old issues.
+func isWatchflakesComment(body string) bool {
+	return strings.Contains(body, "\n— watchflakes") || strings.Contains(body, "\n— [watchflakes](")
 }
 
 // postNew creates a new issue with the given title and body,

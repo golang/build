@@ -47,11 +47,13 @@ const tooManyToBeFlakes = 4
 const consistentFailureTitleSuffix = " [consistent failure]"
 
 var (
-	build   = flag.String("build", "", "a particular build ID or URL to analyze (mainly for debugging)")
-	md      = flag.Bool("md", false, "print Markdown output suitable for GitHub issues")
-	post    = flag.Bool("post", false, "post updates to GitHub issues")
-	repeat  = flag.Duration("repeat", 0, "keep running with specified `period`; zero means to run once and exit")
-	verbose = flag.Bool("v", false, "print verbose posting decisions")
+	build     = flag.String("build", "", "a particular build ID or URL to analyze (mainly for debugging)")
+	md        = flag.Bool("md", false, "print Markdown output suitable for GitHub issues")
+	post      = flag.Bool("post", false, "post updates to GitHub issues")
+	doClose   = flag.Bool("close", false, "close issues whose flakes appear to have stopped (needs -post to take effect)")
+	onlyClose = flag.Bool("onlyclose", false, "only decide what to close; skip looking for new flakes")
+	repeat    = flag.Duration("repeat", 0, "keep running with specified `period`; zero means to run once and exit")
+	verbose   = flag.Bool("v", false, "print verbose posting decisions")
 
 	useLUCIAuthn     = flag.Bool("use-luci-authn", false, "use LUCI authentication")
 	useSecretManager = flag.Bool("use-secret-manager", false, "fetch GitHub token from Secret Manager instead of $HOME/.netrc")
@@ -70,6 +72,11 @@ func main() {
 	flag.Parse()
 	if flag.NArg() > 1 {
 		usage()
+	}
+	if *onlyClose && (*build != "" || flag.NArg() == 1) {
+		// Both replace the dashboards with something the closing pass cannot
+		// use, and neither has anything to do with closing.
+		log.Fatal("-onlyclose cannot be used with -build or a script argument")
 	}
 
 	var query *Issue
@@ -128,7 +135,9 @@ func main() {
 Repeat:
 	startTime := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	reportBrokenBots(ctx, c)
+	if !*onlyClose {
+		reportBrokenBots(ctx, c)
+	}
 	var boards []*Dashboard
 	if *build == "" {
 		// fetch the dashboard
@@ -146,8 +155,10 @@ Repeat:
 		if err != nil {
 			log.Fatalln("ReadBoards:", err)
 		}
-		skipBrokenCommits(boards)
-		skipBrokenBuilders(boards)
+		if !*onlyClose {
+			skipBrokenCommits(boards)
+			skipBrokenBuilders(boards)
+		}
 	} else {
 		id, err := strconv.ParseInt(strings.TrimPrefix(*build, "https://ci.chromium.org/b/"), 10, 64)
 		if err != nil {
@@ -166,8 +177,15 @@ Repeat:
 		boards = []*Dashboard{board}
 	}
 
-	failRes := c.FindFailures(ctx, boards)
-	c.FetchLogs(failRes)
+	// With -onlyclose there are no failures to process, which leaves the
+	// matching and posting below with nothing to do. The dashboards are still
+	// read above: the closing pass needs them to tell an issue that has gone
+	// quiet from a builder that has stopped running.
+	var failRes []*BuildResult
+	if !*onlyClose {
+		failRes = c.FindFailures(ctx, boards)
+		c.FetchLogs(failRes)
+	}
 
 	if *verbose {
 		for _, r := range failRes {
@@ -185,7 +203,9 @@ Repeat:
 			log.Fatalln("readIssues:", err)
 		}
 		findScripts(issues)
-		postIssueErrors(issues)
+		if !*onlyClose {
+			postIssueErrors(issues)
+		}
 	}
 
 	for _, r := range failRes {
@@ -337,6 +357,22 @@ Repeat:
 				}
 			}
 			posts++
+		}
+	}
+
+	// Close issues whose flakes appear to have stopped. This needs the
+	// dashboards for build counts, so skip it when -build has replaced them
+	// with a single synthetic result.
+	if *build == "" {
+		// The closing pass needs every builder LUCI has configured, not just
+		// the ones on the dashboards. Without that list it cannot tell a
+		// retired builder from one held off the dashboards, so skip the pass
+		// rather than guess.
+		known, err := c.ListAllBuilders(ctx)
+		if err != nil {
+			log.Println("skipping close pass, ListAllBuilders:", err)
+		} else {
+			closeIssues(issues, boards, known)
 		}
 	}
 
