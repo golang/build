@@ -1055,9 +1055,6 @@ RUN_MODS = {
                 # Enable longtest builders on go against tip if files in the crypto/tls tree are modified,
                 # so that the BoGo test suite is run.
                 "src/crypto/tls/.+",
-                # Enable longtest builders on go against tip if files in the cmd/go tree are modified,
-                # so the many cmd/go script tests that are skipped on short are run.
-                "src/cmd/go/.+",
             ],
             "protobuf": [],
             "vuln": [],
