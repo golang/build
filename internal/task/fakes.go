@@ -535,6 +535,7 @@ func (g *FakeGerrit) AddChange(project string, id string, ci *gerrit.ChangeInfo,
 	g.changesMu.Lock()
 	defer g.changesMu.Unlock()
 	if ci != nil {
+		ci.Project = project
 		g.cls[id] = ci
 	}
 	g.commitMessages[id] = commitMsg

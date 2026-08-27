@@ -3460,3 +3460,38 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 		t.Errorf("CL branch = %q, want %q", moved[0].Branch, "checkpoint-rebase-test")
 	}
 }
+
+func TestCheckPrivateChangesLintXRepo(t *testing.T) {
+	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	ctx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "lint-xrepo"}}
+
+	privGerrit.AddChange("net", "9999", &gerrit.ChangeInfo{
+		ID:           "9999",
+		ChangeID:     "9999",
+		ChangeNumber: 9999,
+		Project:      "net",
+		Branch:       "public",
+		Submittable:  true,
+		Mergeable:    true,
+	}, "html: fix something\n\nFixes CVE-1985-0703\nFixes #1")
+
+	rm := &relmeta.ReleaseMilestone{
+		Patches: []*relmeta.SecurityPatch{{
+			Track:       relmeta.Private,
+			Package:     "golang.org/x/net/html",
+			Changelists: []string{"https://go-internal-review.git.corp.google.com/c/net/+/9999"},
+		}},
+	}
+	_, err := deps.buildTasks.checkPrivateChanges(ctx, rm)
+	if err == nil {
+		t.Fatal("checkPrivateChanges with a bare #issue reference on an x repo: got nil error")
+	}
+	if got, want := err.Error(), "missing GitHub issue reference"; !strings.Contains(got, want) {
+		t.Errorf("checkPrivateChanges error = %q, want it to contain %q", got, want)
+	}
+
+	privGerrit.AddChange("net", "9999", nil, "html: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1")
+	if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm); err != nil {
+		t.Errorf("checkPrivateChanges with a golang/go#issue reference on an x repo = %v, want nil", err)
+	}
+}

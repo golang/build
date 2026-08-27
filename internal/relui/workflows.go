@@ -1198,8 +1198,9 @@ func computeSecurityBranchInfo(ctx *wf.TaskContext, version *task.VersionTasks, 
 }
 
 var (
-	commitCVERE         = regexp.MustCompile(`(?m)^Fixes CVE-\d{4}-\d+`)
-	commitGitHubIssueRE = regexp.MustCompile(`(?m)^Fixes (?:golang/go)?#(\d+)`)
+	commitCVERE        = regexp.MustCompile(`(?m)^Fixes CVE-\d{4}-\d+`)
+	commitStdIssueRE   = regexp.MustCompile(`(?m)^\w+ (?:golang/go)?#(\d+)`)
+	commitXRepoIssueRE = regexp.MustCompile(`(?m)^\w+ golang/go#(\d+)`)
 )
 
 func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) ([]*gerrit.ChangeInfo, error) {
@@ -1241,7 +1242,11 @@ func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta
 			if !commitCVERE.MatchString(cm) {
 				lintErrs = append(lintErrs, fmt.Errorf("change %s is missing CVE reference", privateChangeURL(num)))
 			}
-			if !commitGitHubIssueRE.MatchString(cm) {
+			issueRE := commitStdIssueRE
+			if ci.Project != "go" {
+				issueRE = commitXRepoIssueRE
+			}
+			if !issueRE.MatchString(cm) {
 				lintErrs = append(lintErrs, fmt.Errorf("change %s is missing GitHub issue reference", privateChangeURL(num)))
 			}
 			cls = append(cls, ci)
