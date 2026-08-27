@@ -845,34 +845,6 @@ func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
 	}
 }
 
-func TestDeleteBranch409Refusal(t *testing.T) {
-	repo := NewFakeRepo(t, "test")
-	head := repo.History()[0]
-	repo.Branch("my-branch", head)
-
-	fg := NewFakeGerrit(t, repo)
-	fg.AddChange("test", "open-cl", &gerrit.ChangeInfo{
-		ID:          "open-cl",
-		ChangeID:    "open-cl",
-		Branch:      "my-branch",
-		Status:      "NEW",
-		Submittable: true,
-	}, "open change")
-
-	ctx := context.Background()
-	err := fg.DeleteBranch(ctx, "test", "my-branch")
-	if err == nil {
-		t.Fatal("expected 409 error for branch with open CLs")
-	}
-	var httpErr *gerrit.HTTPError
-	if !errors.As(err, &httpErr) {
-		t.Fatalf("error type = %T, want *gerrit.HTTPError", err)
-	}
-	if httpErr.Res.StatusCode != http.StatusConflict {
-		t.Errorf("status = %d, want %d", httpErr.Res.StatusCode, http.StatusConflict)
-	}
-}
-
 func TestCreateCherryPickChangeIDUniqueness(t *testing.T) {
 	repo := NewFakeRepo(t, "test")
 	head := repo.History()[0]

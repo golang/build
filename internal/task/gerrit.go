@@ -73,11 +73,6 @@ type GerritClient interface {
 	ListBranches(ctx context.Context, project string) ([]gerrit.BranchInfo, error)
 	// CreateBranch creates the given branch and returns the created branch's revision.
 	CreateBranch(ctx context.Context, project, branch string, input gerrit.BranchInput) (string, error)
-	// DeleteBranch deletes the given branch.
-	// Deleting a branch that doesn't exist returns an error satisfying
-	// [errors.Is](err, [gerrit.ErrResourceNotExist]); callers that delete
-	// unconditionally (e.g. delete-then-recreate) must tolerate that error.
-	DeleteBranch(ctx context.Context, project, branch string) error
 
 	// ListCommits lists commits in project between head and base (including head, not including base).
 	// Both head and base must be non-empty strings, otherwise an error is returned.
@@ -339,10 +334,6 @@ func (c *RealGerritClient) CreateBranch(ctx context.Context, project, branch str
 		return "", err
 	}
 	return branchInfo.Revision, nil
-}
-
-func (c *RealGerritClient) DeleteBranch(ctx context.Context, project, branch string) error {
-	return c.Client.DeleteBranch(ctx, project, branch)
 }
 
 func (c *RealGerritClient) ListProjects(ctx context.Context) ([]string, error) {

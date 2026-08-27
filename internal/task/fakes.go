@@ -376,33 +376,6 @@ func (g *FakeGerrit) CreateBranch(ctx context.Context, project, branch string, i
 	return g.ReadBranchHead(ctx, project, branch)
 }
 
-func (g *FakeGerrit) DeleteBranch(ctx context.Context, project, branch string) error {
-	repo, err := g.repo(project)
-	if err != nil {
-		return err
-	}
-	if _, err := repo.dir.RunCommand(ctx, "rev-parse", "--verify", "refs/heads/"+branch); err != nil {
-		if strings.Contains(err.Error(), "Needed a single revision") {
-			// Real Gerrit reports a DELETE on a branch that doesn't exist as a
-			// 404 Not Found, not an underlying git error.
-			return NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("branch %q not found\n", "refs/heads/"+branch))
-		}
-		return err
-	}
-	g.changesMu.Lock()
-	for id, ci := range g.cls {
-		if ci.Status != gerrit.ChangeStatusAbandoned && ci.Status != gerrit.ChangeStatusMerged && ci.Branch == branch && g.clProjects[id] == project {
-			g.changesMu.Unlock()
-			return NewGerritHTTPError(http.StatusConflict, fmt.Sprintf("branch %q has open changes\n", "refs/heads/"+branch))
-		}
-	}
-	g.changesMu.Unlock()
-	if _, err = repo.dir.RunCommand(ctx, "branch", "-D", branch); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (g *FakeGerrit) ReadFile(ctx context.Context, project, commit, file string) ([]byte, error) {
 	repo, err := g.repo(project)
 	if err != nil {
