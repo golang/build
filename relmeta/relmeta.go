@@ -12,8 +12,6 @@
 // promise and may change at any time.
 package relmeta
 
-import "golang.org/x/vulndb/report"
-
 // ReleaseMilestone describes all of the
 // self-contained patches which are part
 // of a given Go Security Release.
@@ -25,25 +23,19 @@ type ReleaseMilestone struct {
 // SecurityPatch is a self-contained body
 // of work that addresses a vulnerability.
 type SecurityPatch struct {
-	ID          int64           `yaml:"id"`
-	Track       GoSecurityTrack `yaml:"track"`
-	Toolchain   bool            `yaml:"is_toolchain"`
-	Package     string          `yaml:"package"`
-	Changelists []string        `yaml:"changelists"`
-	ReleaseNote string          `yaml:"release_note"`
-	// TODO(nealpatel): do not omitempty; this is required
-	// only for std/cmd (not golang.org/x/) which means it
-	// needs to re-scoped for clarity.
-	TargetReleases []string `yaml:"target_releases,omitempty"`
-	GitHubIssueID  int64    `yaml:"github_issue_id"`
-	VulnReportID   string   `yaml:"vuln_report_id"`   // for example, GO-20YY-NNNN
-	VulnReportDesc string   `yaml:"vuln_report_desc"` // optional
-	Credits        []string `yaml:"credits"`
-	CVE            string   `yaml:"cve"`
-	CWE            string   `yaml:"cwe"`
-
-	// TODO(nealpatel): Remove VulnReport field.
-	VulnReport report.Report `yaml:"vuln_report"`
+	ID             int64           `yaml:"id"`
+	Track          GoSecurityTrack `yaml:"track"`
+	Toolchain      bool            `yaml:"is_toolchain"`
+	Package        string          `yaml:"package"`
+	Changelists    []string        `yaml:"changelists"`
+	ReleaseNote    string          `yaml:"release_note"`
+	TargetReleases []string        `yaml:"target_releases,omitempty"` // required for std/cmd; omit for x-repo
+	GitHubIssueID  int64           `yaml:"github_issue_id"`
+	VulnReportID   string          `yaml:"vuln_report_id"`   // for example, GO-20YY-NNNN
+	VulnReportDesc string          `yaml:"vuln_report_desc"` // optional
+	Credits        []string        `yaml:"credits"`
+	CVE            string          `yaml:"cve"`
+	CWE            string          `yaml:"cwe"`
 }
 
 type GoSecurityTrack string
