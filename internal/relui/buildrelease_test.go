@@ -649,13 +649,9 @@ func TestMinorReleaseSecurityCoalesce(t *testing.T) {
 		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 	}
 
-	// Stop the workflow once both minors' confirm tasks have finished, so we
-	// don't have to drive the full build. Canceling on finish (not on approval)
-	// keeps the test robust: if the bug makes a confirm task error instead of
-	// reaching the approval, the test still unblocks rather than stalling.
-	runCtx, stop := context.WithCancel(deps.ctx)
-	t.Cleanup(stop)
-	listener := &verboseListener{t: t, onStall: stop}
+	// Run until the release coordinator approval is rejected, so we don't
+	// have to drive the full build. By then both minors' confirm tasks have
+	// finished.
 
 	comm := task.CommunicationTasks{
 		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
@@ -675,9 +671,7 @@ func TestMinorReleaseSecurityCoalesce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := w.Run(runCtx, listener); err != nil && runCtx.Err() == nil {
-		t.Fatalf("workflow failed before confirming security CLs: %v", err)
-	}
+	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &verboseListener{t: t})
 
 	branches, err := privGerrit.ListBranches(deps.ctx, "go")
 	if err != nil {
@@ -815,10 +809,6 @@ func TestMinorReleaseSecurityCoalesceWithRC(t *testing.T) {
 		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 	}
 
-	runCtx, stop := context.WithCancel(deps.ctx)
-	t.Cleanup(stop)
-	listener := &verboseListener{t: t, onStall: stop}
-
 	publicHeadBefore, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
 	if err != nil {
 		t.Fatalf("reading public head: %v", err)
@@ -836,9 +826,7 @@ func TestMinorReleaseSecurityCoalesceWithRC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := w.Run(runCtx, listener); err != nil && runCtx.Err() == nil {
-		t.Fatalf("workflow failed: %v", err)
-	}
+	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &verboseListener{t: t})
 
 	wantBranches := []string{
 		"internal-release-branch.go1.27rc1",
@@ -875,13 +863,10 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 	}
 
-	// Stop the workflow once the coalesce reaches its terminal step, so we can
-	// check its side effects without driving the full build. By the time "Create
-	// cherry-picks" finishes, the checkpoint and internal release branches would
-	// have been created (if the coalesce didn't short-circuit).
-	runCtx, stop := context.WithCancel(deps.ctx)
-	t.Cleanup(stop)
-	listener := &verboseListener{t: t, onStall: stop}
+	// Run until the release coordinator approval is rejected, so we can check
+	// the coalesce's side effects without driving the full build. By then the
+	// checkpoint and internal release branches would have been created (if the
+	// coalesce didn't short-circuit).
 
 	comm := task.CommunicationTasks{
 		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
@@ -895,9 +880,7 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := w.Run(runCtx, listener); err != nil && runCtx.Err() == nil {
-		t.Fatalf("workflow failed: %v", err)
-	}
+	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &verboseListener{t: t})
 
 	// The coalesce must not have created any security branches.
 	branches, err := privGerrit.ListBranches(deps.ctx, "go")
@@ -927,10 +910,6 @@ func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
 		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 	}
 
-	runCtx, stop := context.WithCancel(deps.ctx)
-	t.Cleanup(stop)
-	listener := &verboseListener{t: t, onStall: stop}
-
 	comm := task.CommunicationTasks{
 		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
 	}
@@ -945,9 +924,7 @@ func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := w.Run(runCtx, listener); err != nil && runCtx.Err() == nil {
-		t.Fatalf("workflow failed: %v", err)
-	}
+	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &verboseListener{t: t})
 	if !approvedNoMilestone {
 		t.Errorf("no-milestone approval gate did not fire for empty milestone")
 	}
@@ -967,10 +944,6 @@ func TestMinorReleaseMilestoneSkipsApproval(t *testing.T) {
 		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 	}
 
-	runCtx, stop := context.WithCancel(deps.ctx)
-	t.Cleanup(stop)
-	listener := &verboseListener{t: t, onStall: stop}
-
 	comm := task.CommunicationTasks{
 		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
 	}
@@ -983,9 +956,7 @@ func TestMinorReleaseMilestoneSkipsApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := w.Run(runCtx, listener); err != nil && runCtx.Err() == nil {
-		t.Fatalf("workflow failed: %v", err)
-	}
+	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &verboseListener{t: t})
 }
 
 func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
@@ -1019,9 +990,6 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 	}
 
-	runCtx, stop := context.WithCancel(deps.ctx)
-	t.Cleanup(stop)
-
 	comm := task.CommunicationTasks{
 		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
 	}
@@ -1034,8 +1002,8 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tracker := &taskStartTracker{Listener: &verboseListener{t: t, onStall: stop}}
-	errMsg := runToFailure(t, runCtx, w, "Create cherry-picks", tracker)
+	tracker := &taskStartTracker{Listener: &verboseListener{t: t}}
+	errMsg := runToFailure(t, deps.ctx, w, "Create cherry-picks", tracker)
 
 	var (
 		changes    []*gerrit.ChangeInfo
@@ -1863,10 +1831,6 @@ func TestMinorReleaseSecurityCoalesceMetadata(t *testing.T) {
 		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 	}
 
-	runCtx, stop := context.WithCancel(deps.ctx)
-	t.Cleanup(stop)
-	listener := &verboseListener{t: t, onStall: stop}
-
 	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
 	if err != nil {
 		t.Fatal(err)
@@ -1875,9 +1839,7 @@ func TestMinorReleaseSecurityCoalesceMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Run(runCtx, listener); err != nil && runCtx.Err() == nil {
-		t.Fatalf("workflow failed before the metadata tasks finished: %v", err)
-	}
+	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &verboseListener{t: t})
 }
 
 // mustGetNextMinors returns the next minor versions for the 26 and 25 series.
@@ -2977,7 +2939,6 @@ func TestConvertInternalChangelists(t *testing.T) {
 	if bytes.Contains(b, []byte("go-internal-review")) {
 		t.Errorf("milestone at head still has private links:\n%s", b)
 	}
-
 }
 
 func TestConvertInternalChangelistsEmptyMilestone(t *testing.T) {
