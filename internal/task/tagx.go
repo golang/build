@@ -531,6 +531,9 @@ func buildToOutputs(ctx *wf.TaskContext, buildClient CloudBuildClient, build Clo
 	}
 	outMap := map[string]string{}
 	return outMap, fs.WalkDir(outfs, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if d.IsDir() {
 			return nil
 		}
