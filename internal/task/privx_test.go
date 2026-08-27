@@ -368,7 +368,7 @@ echo`)
 	tagxGerrit := NewFakeGerrit(t, pubRepo)
 	wd := p.NewDefinition(&TagXReposTasks{Gerrit: tagxGerrit})
 	w, err := wf.Start(wd, map[string]any{
-		"Release Milestone":                  "88810010",
+		SecurityMilestoneParameter.Name:      "88810010",
 		reviewersParam.Name:                  []string{},
 		SecurityReviewersParameter.Name:      []string{"vulnreviewer@google.com"},
 		"Repository name":                    "net",

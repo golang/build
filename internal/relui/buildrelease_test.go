@@ -918,7 +918,7 @@ func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	params := minorReleaseParams()
-	params["Release Milestone (optional)"] = ""
+	params[task.OptionalSecurityMilestoneParameter.Name] = ""
 	w, err := workflow.Start(wd, params)
 	if err != nil {
 		t.Fatal(err)
@@ -1859,7 +1859,7 @@ func minorReleaseParams() map[string]any {
 	return map[string]any{
 		"Release Coordinator Usernames (optional)":               []string(nil),
 		task.SecurityReviewersParameter.Name:                     []string{"reviewer@google.com"},
-		"Release Milestone (optional)":                           "99915010",
+		task.OptionalSecurityMilestoneParameter.Name:             "99915010",
 		"Go 1.26: Targets to skip testing (or 'all') (optional)": []string{"all"},
 		"Go 1.25: Targets to skip testing (or 'all') (optional)": []string{"all"},
 	}

@@ -1005,9 +1005,9 @@ func (t SecurityCommunicationTasks) GetSecurityReleaseNotes(ctx *workflow.TaskCo
 
 var (
 	SecurityMilestoneParameter = workflow.ParamDef[string]{
-		Name:      "Release Milestone",
+		Name:      "Security Milestone",
 		ParamType: workflow.BasicString,
-		Doc: `Release Milestone owns the canonical source for all security patches.
+		Doc: `Security Milestone owns the canonical source for all security patches.
 
 You can check with the security release coordinator to confirm this input.`,
 		Example: "123456",
@@ -1019,9 +1019,9 @@ You can check with the security release coordinator to confirm this input.`,
 		},
 	}
 	OptionalSecurityMilestoneParameter = workflow.ParamDef[string]{
-		Name:      "Release Milestone (optional)",
+		Name:      "Security Milestone (optional)",
 		ParamType: workflow.BasicString,
-		Doc: `Release Milestone owns the canonical source for all security patches.
+		Doc: `Security Milestone owns the canonical source for all security patches.
 
 Empty means no security patches are intended for this release.
 You can check with the security release coordinator to confirm this input.`,
