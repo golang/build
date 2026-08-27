@@ -397,35 +397,35 @@ echo`)
 
 We have tagged version v1.1.0 of golang.org/x/net in order to address the following security issues:
 
-net/http2: turbulence in the frame buffers causes gophers to levitate.
+-	net/http2: turbulence in the frame buffers causes gophers to levitate.
 
-Sending a specially crafted SETTINGS frame with the
-ENABLE_LEVITATION=1 causes all subsequent gophers to
-float indefinitely.
+	Sending a specially crafted SETTINGS frame with the
+	ENABLE_LEVITATION=1 causes all subsequent gophers to
+	float indefinitely.
 
-Thanks to a very levitated gopher for reporting this issue.
+	Thanks to a very levitated gopher for reporting this issue.
 
-This is CVE-1970-0001 and Go issue https://go.dev/issue/4294967296.
+	This is CVE-1970-0001 and Go issue https://go.dev/issue/4294967296.
 
-net/html: tokenizer emits poetry instead of tokens under a full moon.
+-	net/html: tokenizer emits poetry instead of tokens under a full moon.
 
-When the system clock aligns with a lunar cycle, the HTML
-tokenizer replaces all div elements with haikus about the
-Go garbage collector.
+	When the system clock aligns with a lunar cycle, the HTML
+	tokenizer replaces all div elements with haikus about the
+	Go garbage collector.
 
-Thanks to a confused poet for reporting this issue.
+	Thanks to a confused poet for reporting this issue.
 
-This is CVE-1970-0002 and Go issue https://go.dev/issue/4294967297.
+	This is CVE-1970-0002 and Go issue https://go.dev/issue/4294967297.
 
-net/http2: turbulence in the frame buffers causes gophers to levitate.
+-	net/http2: turbulence in the frame buffers causes gophers to levitate.
 
-Sending a specially crafted SETTINGS frame with the
-ENABLE_LEVITATION=1 causes all subsequent gophers to
-float indefinitely.
+	Sending a specially crafted SETTINGS frame with the
+	ENABLE_LEVITATION=1 causes all subsequent gophers to
+	float indefinitely.
 
-Thanks to a very levitated gopher for reporting this issue.
+	Thanks to a very levitated gopher for reporting this issue.
 
-This is CVE-1970-0003 and Go issue https://go.dev/issue/4294967298.
+	This is CVE-1970-0003 and Go issue https://go.dev/issue/4294967298.
 
 Cheers,
 Go Security team
@@ -436,24 +436,32 @@ Go Security team
 
 	wantHTML := `<p>Hello gophers,</p>
 <p>We have tagged version v1.1.0 of golang.org/x/net in order to address the following security issues:</p>
+<ul>
+<li>
 <p>net/http2: turbulence in the frame buffers causes gophers to levitate.</p>
 <p>Sending a specially crafted SETTINGS frame with the<br>
 ENABLE_LEVITATION=1 causes all subsequent gophers to<br>
 float indefinitely.</p>
 <p>Thanks to a very levitated gopher for reporting this issue.</p>
 <p>This is CVE-1970-0001 and Go issue <a href="https://go.dev/issue/4294967296">https://go.dev/issue/4294967296</a>.</p>
+</li>
+<li>
 <p>net/html: tokenizer emits poetry instead of tokens under a full moon.</p>
 <p>When the system clock aligns with a lunar cycle, the HTML<br>
 tokenizer replaces all div elements with haikus about the<br>
 Go garbage collector.</p>
 <p>Thanks to a confused poet for reporting this issue.</p>
 <p>This is CVE-1970-0002 and Go issue <a href="https://go.dev/issue/4294967297">https://go.dev/issue/4294967297</a>.</p>
+</li>
+<li>
 <p>net/http2: turbulence in the frame buffers causes gophers to levitate.</p>
 <p>Sending a specially crafted SETTINGS frame with the<br>
 ENABLE_LEVITATION=1 causes all subsequent gophers to<br>
 float indefinitely.</p>
 <p>Thanks to a very levitated gopher for reporting this issue.</p>
 <p>This is CVE-1970-0003 and Go issue <a href="https://go.dev/issue/4294967298">https://go.dev/issue/4294967298</a>.</p>
+</li>
+</ul>
 <p>Cheers,<br>
 Go Security team</p>
 `

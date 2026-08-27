@@ -5,15 +5,12 @@
 package task
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/mail"
 	"regexp"
 	"slices"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/google/go-github/v74/github"
@@ -365,42 +362,21 @@ func (x *PrivXPatch) publishChange(ctx *wf.TaskContext, repoName, clLink string,
 }
 
 func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *relmeta.ReleaseMilestone) (SentMail, error) {
-	var (
-		relNotes    []string
-		subjectNoun = "Vulnerability"
-		bodyPhrase  = "address a security issue:"
-	)
+	r := golangOrgXAnnouncement{
+		Module:  tagged.ModPath,
+		Version: tagged.NewerVersion,
+	}
 	for _, p := range rm.Patches {
 		if !strings.Contains(p.Package, tagged.ModPath) {
 			continue
 		}
-		relNotes = append(relNotes, p.ReleaseNote)
-	}
-	if len(relNotes) > 1 {
-		subjectNoun = "Vulnerabilities"
-		bodyPhrase = "address the following security issues:"
+		r.Security = append(r.Security, p.ReleaseNote)
 	}
 
-	var buf bytes.Buffer
-	if err := privXPatchAnnouncementTmpl.Execute(&buf, map[string]any{
-		"Module":                tagged.ModPath,
-		"Version":               tagged.NewerVersion,
-		"MaybePluralizeSubject": subjectNoun,
-		"MaybePluralizeBody":    bodyPhrase,
-		"RelNotes":              relNotes,
-	}); err != nil {
-		return SentMail{}, err
-	}
-	m, err := mail.ReadMessage(&buf)
+	mc, _, err := announcementMail(r)
 	if err != nil {
 		return SentMail{}, err
 	}
-	html, text, err := renderMarkdown(m.Body)
-	if err != nil {
-		return SentMail{}, err
-	}
-
-	mc := MailContent{m.Header.Get("Subject"), html, text}
 
 	ctx.Printf("announcement subject: %s\n\n", mc.Subject)
 	ctx.Printf("announcement body HTML:\n%s\n", mc.BodyHTML)
@@ -496,14 +472,3 @@ const disclosureBody = `%s
 ---
 
 This was a %s issue originally tracked in http://b/%d.`
-
-var privXPatchAnnouncementTmpl = template.Must(template.New("").Parse(`Subject: [security] {{.MaybePluralizeSubject}} in {{.Module}}
-
-Hello gophers,
-
-We have tagged version {{.Version}} of {{.Module}} in order to {{.MaybePluralizeBody}}
-{{range .RelNotes}}
-{{.}}
-{{end}}
-Cheers,
-Go Security team`))

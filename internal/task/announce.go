@@ -96,6 +96,12 @@ type releasePreAnnouncement struct {
 	Names []string
 }
 
+type golangOrgXAnnouncement struct {
+	Module   string
+	Version  string
+	Security []string
+}
+
 type golangOrgXPreAnnouncement struct {
 	// Target is the planned date for the release.
 	Target Date
@@ -394,6 +400,8 @@ func announcementMail(data any) (_ MailContent, sentMailKeywords []string, _ err
 		}
 	case releasePreAnnouncement:
 		name = "pre-announce-minor.md"
+	case golangOrgXAnnouncement:
+		name = "announce-x.md"
 	case golangOrgXPreAnnouncement:
 		name = "pre-announce-x.md"
 		sentMailKeywords = r.CVEs // Rely on CVEs in body to differentiate "[security] {{.Module}} fix pre-announcement" emails.
