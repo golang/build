@@ -131,11 +131,11 @@ func doPush(ctx context.Context, name, goroot string, dryRun, detailedProgress b
 	}
 	absToRel := make(map[string]string)
 	if err := filepath.Walk(walkRoot, func(path string, fi os.FileInfo, err error) error {
-		if isEditorBackup(path) {
-			return nil
-		}
 		if err != nil {
 			return err
+		}
+		if isEditorBackup(path) {
+			return nil
 		}
 		rel, err := filepath.Rel(goroot, path)
 		if err != nil {

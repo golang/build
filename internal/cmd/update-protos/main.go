@@ -18,16 +18,22 @@ import (
 func main() {
 	bindir, err := os.MkdirTemp("", "update-protos")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("MkdirTemp:", err)
 	}
 
 	var protos []string
-	filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		if strings.HasSuffix(path, ".proto") {
 			protos = append(protos, path)
 		}
-		return err
+		return nil
 	})
+	if err != nil {
+		log.Fatalln("WalkDir:", err)
+	}
 
 	// Install the code generator plugins into a temp dir,
 	// to ensure we always use the versions from our go.mod.
@@ -55,5 +61,4 @@ func run(name string, args ...string) {
 	if err := cmd.Run(); err != nil {
 		log.Fatalf("failed to run: %v %v", name, strings.Join(args, " "))
 	}
-
 }

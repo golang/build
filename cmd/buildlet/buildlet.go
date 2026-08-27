@@ -1930,8 +1930,11 @@ func removeAllIncludingReadonly(dir string) error {
 	// files and directories writable before we try to delete them
 	// all again.
 	filepath.Walk(dir, func(path string, fi os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Ignore error since this is best effort.
+		}
 		const ownerWritable = 0200
-		if err != nil || fi.Mode().Perm()&ownerWritable != 0 {
+		if fi.Mode().Perm()&ownerWritable != 0 {
 			return nil
 		}
 		os.Chmod(path, fi.Mode().Perm()|ownerWritable)
