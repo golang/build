@@ -64,6 +64,7 @@ var (
 	mpvl          = gh("mpvl")
 	mvdan         = gh("mvdan")
 	mwhudson      = gh("mwhudson")
+	nealpatel     = gh("thatnealpatel")
 	neelance      = gh("neelance")
 	neild         = gh("neild")
 	nigeltao      = gh("nigeltao")
@@ -301,11 +302,12 @@ var entries = map[string]*Entry{
 		Primary: []Owner{neild, sameer},
 	},
 	"go/src/crypto": {
-		Primary: []Owner{filippo, roland, cpu, securityTeam},
+		Primary:   []Owner{filippo, roland, cpu, securityTeam},
+		Secondary: []Owner{nealpatel},
 	},
 	"go/src/crypto/tls": {
 		Primary:   []Owner{filippo, roland, cpu, securityTeam},
-		Secondary: []Owner{kevinburke},
+		Secondary: []Owner{kevinburke, nealpatel},
 	},
 	"go/src/database/sql": {
 		Primary:   []Owner{bradfitz, kardianos},
@@ -694,18 +696,18 @@ var entries = map[string]*Entry{
 		Primary: []Owner{iant},
 	},
 	"go/src/math": {
-		Primary: []Owner{gri, rsc},
+		Primary: []Owner{gri, rsc, nealpatel},
 	},
 	"go/src/math/big": {
-		Primary:   []Owner{gri, securityTeam},
+		Primary:   []Owner{gri, nealpatel, securityTeam},
 		Secondary: []Owner{filippo, roland},
 	},
 	"go/src/math/bits": {
-		Primary:   []Owner{gri},
+		Primary:   []Owner{gri, nealpatel},
 		Secondary: []Owner{khr, filippo, securityTeam},
 	},
 	"go/src/math/rand": {
-		Primary:   []Owner{gri, rsc},
+		Primary:   []Owner{gri, rsc, nealpatel},
 		Secondary: []Owner{filippo, securityTeam},
 	},
 	"go/src/mime": {
@@ -921,6 +923,9 @@ var entries = map[string]*Entry{
 	"debug": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{khr},
+	},
+	"exp/stats": {
+		Primary: []Owner{nealpatel},
 	},
 	"exp/vulncheck": {
 		Primary: []Owner{vulndbTeam},
