@@ -44,8 +44,8 @@ func (g *fakePrivXGitHub) EditIssue(ctx context.Context, owner, repo string, num
 	head, err := g.gerrit.ReadBranchHead(ctx, "vulndb", "master")
 	if err != nil {
 		g.t.Errorf("EditIssue(%d): reading vulndb head: %v", number, err)
-	} else if head == g.vulndbBase {
-		g.t.Errorf("EditIssue(%d) called before vuln reports were submitted", number)
+	} else if head != g.vulndbBase {
+		g.t.Errorf("EditIssue(%d) called after vuln reports were submitted", number)
 	}
 	return g.FakeGitHub.EditIssue(ctx, owner, repo, number, issue)
 }
@@ -609,7 +609,7 @@ Go Security team</p>
 		if !strings.Contains(body, p.ReleaseNote) {
 			t.Errorf("patch %d: issue body missing release note", p.ID)
 		}
-		wantTrailer := fmt.Sprintf("This was a %s issue originally tracked in http://b/%d.", p.Track, p.ID)
+		wantTrailer := fmt.Sprintf("This was a [%s track](https://go.dev/doc/security/policy#%s) issue originally tracked in http://b/%d.", p.Track, strings.ToLower(string(p.Track)), p.ID)
 		if !strings.Contains(body, wantTrailer) {
 			t.Errorf("patch %d: issue body missing trailer, got:\n%s", p.ID, body)
 		}
@@ -750,7 +750,7 @@ func TestUpdateGitHubIssues(t *testing.T) {
 			if !strings.Contains(body, p.ReleaseNote) {
 				t.Errorf("patch %d: issue body missing release note", p.ID)
 			}
-			wantTrailer := fmt.Sprintf("This was a %s issue originally tracked in http://b/%d.", p.Track, p.ID)
+			wantTrailer := fmt.Sprintf("This was a [%s track](https://go.dev/doc/security/policy#%s) issue originally tracked in http://b/%d.", p.Track, strings.ToLower(string(p.Track)), p.ID)
 			if !strings.Contains(body, wantTrailer) {
 				t.Errorf("patch %d: issue body missing trailer, got:\n%s", p.ID, body)
 			}

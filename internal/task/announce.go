@@ -466,6 +466,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 		}
 	},
 	"indent": func(s string) string { return "\t" + strings.ReplaceAll(s, "\n", "\n\t") },
+	"lower":  strings.ToLower,
 
 	// subjectPrefix returns the email subject prefix for release r, if any.
 	"subjectPrefix": func(r releaseAnnouncement) string {
@@ -520,6 +521,7 @@ var announceTmpl = template.Must(template.New("").Funcs(template.FuncMap{
 	"template/announce-*.md",
 	"template/pre-announce-minor.md",
 	"template/pre-announce-x.md",
+	"template/disclosure.md",
 	// Gopls release announcements.
 	"template/gopls-announce.md",
 	"template/gopls-pre-announce.md",

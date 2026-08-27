@@ -5,6 +5,7 @@
 package task
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
@@ -70,10 +71,10 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	wf.Output(wd, "Announcement URL", announcementURL)
 
 	// post-announcement tasks
+	updated := wf.Action1(wd, "Update GitHub issues", x.UpdateGitHubIssues, rm, wf.After(announcementURL))
 	converted := wf.Task3(wd, "Convert internal changelists", x.ConvertInternalChangelists, milestoneNum, patches, securityReviewers, wf.After(announcementURL))
-	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, converted, vulnerableAt, tagged, announcementURL, securityReviewers)
+	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, converted, vulnerableAt, tagged, announcementURL, securityReviewers, wf.After(updated))
 	wf.Output(wd, "File VulnDB Reports", changeID)
-	wf.Action1(wd, "Update GitHub issues", x.UpdateGitHubIssues, rm, wf.After(changeID))
 
 	wf.Output(wd, "done", tagged)
 	return wd
@@ -457,7 +458,11 @@ func UpdateGitHubIssues(ctx *wf.TaskContext, gh GitHubClientInterface, rm *relme
 		return nil
 	}
 	for _, p := range rm.Patches {
-		body := fmt.Sprintf(disclosureBody, p.ReleaseNote, p.Track, p.ID)
+		var buf bytes.Buffer
+		if err := announceTmpl.ExecuteTemplate(&buf, "disclosure.md", p); err != nil {
+			return err
+		}
+		body := buf.String()
 		req := &github.IssueRequest{Body: &body}
 		if _, _, err := gh.EditIssue(ctx, "golang", "go", int(p.GitHubIssueID), req); err != nil {
 			return err
@@ -466,9 +471,3 @@ func UpdateGitHubIssues(ctx *wf.TaskContext, gh GitHubClientInterface, rm *relme
 	}
 	return nil
 }
-
-const disclosureBody = `%s
-
----
-
-This was a %s issue originally tracked in http://b/%d.`

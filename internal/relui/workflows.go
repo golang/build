@@ -562,10 +562,9 @@ func addCommTasks(
 	mastodonURL := wf.Task4(wd, "post-mastodon", comm.TrumpetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 	blueskyURL := wf.Task4(wd, "post-bluesky", comm.SkeetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 
+	updated := wf.Action2(wd, "Update GitHub issues", task.UpdateGitHubIssues, wf.Const(build.GitHub), rm, wf.After(announcementURL))
 	converted := wf.Task2(wd, "convert-internal-changelists", build.convertInternalChangelists, rm, securityReviewers, wf.After(announcementURL))
-	vulndbChangeID := wf.Task3(wd, "file-vulndb-reports", build.createVulnReports, converted, announcementURL, securityReviewers)
-
-	wf.Action2(wd, "Update GitHub issues", task.UpdateGitHubIssues, wf.Const(build.GitHub), rm, wf.After(vulndbChangeID))
+	vulndbChangeID := wf.Task3(wd, "file-vulndb-reports", build.createVulnReports, converted, announcementURL, securityReviewers, wf.After(updated))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)
