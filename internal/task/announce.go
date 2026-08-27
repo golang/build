@@ -952,6 +952,10 @@ type SecurityCommunicationTasks struct {
 //
 // It returns an empty string when there are 0 security fixes.
 func (t SecurityCommunicationTasks) GetSecuritySummary(ctx *workflow.TaskContext, milestoneNum string) (string, error) {
+	if milestoneNum == "" {
+		ctx.Printf("No security milestone specified, no security summary to produce.")
+		return "", nil
+	}
 	rm, err := FetchReleaseMilestone(ctx, t.PrivateGerrit, milestoneNum)
 	if err != nil {
 		return "", err
@@ -984,6 +988,10 @@ func (t SecurityCommunicationTasks) GetSecuritySummary(ctx *workflow.TaskContext
 // GetSecurityReleaseNotes fetches a list of descriptions, one for each distinct security fix
 // included in the release identified by milestoneNum, in Markdown format.
 func (t SecurityCommunicationTasks) GetSecurityReleaseNotes(ctx *workflow.TaskContext, milestoneNum string) (releaseNotes []string, _ error) {
+	if milestoneNum == "" {
+		ctx.Printf("No security milestone specified, no security release notes to produce.")
+		return nil, nil
+	}
 	rm, err := FetchReleaseMilestone(ctx, t.PrivateGerrit, milestoneNum)
 	if err != nil {
 		return nil, err

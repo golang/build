@@ -538,8 +538,8 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators, coalesced)
 	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindMinor, coordinators, coalesced)
 
-	securitySummary := wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum)
-	securityFixes := wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
+	securitySummary := wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum, wf.After(noMilestoneApproved))
+	securityFixes := wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum, wf.After(noMilestoneApproved))
 	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators, rm, securityReviewers)
 	wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, currPublished)
 

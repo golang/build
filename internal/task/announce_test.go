@@ -754,6 +754,23 @@ security_patches:
 	tasks := SecurityCommunicationTasks{
 		PrivateGerrit: NewFakeGerrit(t, smRepo),
 	}
+	t.Run("NoMilestone", func(t *testing.T) {
+		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &testLogger{t: t}}
+		summary, err := tasks.GetSecuritySummary(ctx, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if summary != "" {
+			t.Errorf("summary = %q, want empty", summary)
+		}
+		notes, err := tasks.GetSecurityReleaseNotes(ctx, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(notes) != 0 {
+			t.Errorf("release notes = %q, want none", notes)
+		}
+	})
 	t.Run("Summary", func(t *testing.T) {
 		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &testLogger{t: t}}
 		got, err := tasks.GetSecuritySummary(ctx, "100001")
