@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-github/v74/github"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/relmeta"
 	"golang.org/x/oauth2"
 )
 
@@ -240,4 +241,83 @@ func resetRepo(ctx context.Context, client *github.Client) (normal, blocker *git
 		Labels:    &[]string{"release-blocker", "okay-after-beta1"},
 	})
 	return normal, blocker, err
+}
+
+func TestCheckSecurityIssues(t *testing.T) {
+	secIssue := func(labels ...string) *github.Issue {
+		issue := &github.Issue{Milestone: &github.Milestone{ID: github.Int64(1)}}
+		for _, l := range labels {
+			issue.Labels = append(issue.Labels, &github.Label{Name: new(l)})
+		}
+		return issue
+	}
+	patches := func(issueIDs ...int64) *relmeta.ReleaseMilestone {
+		rm := &relmeta.ReleaseMilestone{}
+		for i, id := range issueIDs {
+			rm.Patches = append(rm.Patches, &relmeta.SecurityPatch{ID: int64(i + 1), GitHubIssueID: id})
+		}
+		return rm
+	}
+	for _, tc := range [...]struct {
+		name    string
+		rm      *relmeta.ReleaseMilestone
+		issues  map[int]*github.Issue
+		wantErr bool
+	}{
+		{
+			name:   "nil milestone is a no-op",
+			rm:     nil,
+			issues: map[int]*github.Issue{123: secIssue("release-blocker", "Security")},
+		},
+		{
+			name:   "patches and issues are 1:1",
+			rm:     patches(123, 456),
+			issues: map[int]*github.Issue{123: secIssue("release-blocker", "Security"), 456: secIssue("Security", "release-blocker"), 789: secIssue("release-blocker")},
+		},
+		{
+			name:    "patch without issue",
+			rm:      patches(123, 456),
+			issues:  map[int]*github.Issue{123: secIssue("release-blocker", "Security")},
+			wantErr: true,
+		},
+		{
+			name:    "issue without patch",
+			rm:      patches(123),
+			issues:  map[int]*github.Issue{123: secIssue("release-blocker", "Security"), 456: secIssue("release-blocker", "Security")},
+			wantErr: true,
+		},
+		{
+			name:    "issue missing Security label",
+			rm:      patches(123),
+			issues:  map[int]*github.Issue{123: secIssue("release-blocker")},
+			wantErr: true,
+		},
+		{
+			name:    "issue in another milestone",
+			rm:      patches(123),
+			issues:  map[int]*github.Issue{123: {Labels: []*github.Label{{Name: new("release-blocker")}, {Name: new("Security")}}, Milestone: &github.Milestone{ID: github.Int64(2)}}},
+			wantErr: true,
+		},
+		{
+			name:    "two patches for one issue",
+			rm:      patches(123, 123),
+			issues:  map[int]*github.Issue{123: secIssue("release-blocker", "Security")},
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tasks := &MilestoneTasks{
+				Client: &FakeGitHub{
+					Milestones:       map[int]string{1: "Go1.27", 2: "Go1.26.1"},
+					Issues:           tc.issues,
+					DisallowComments: true,
+				},
+			}
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+			err := tasks.CheckSecurityIssues(ctx, tc.rm, 27)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("got error %v, want error: %v", err, tc.wantErr)
+			}
+		})
+	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/shurcooL/githubv4"
 	wf "golang.org/x/build/internal/workflow"
 	goversion "golang.org/x/build/maintner/maintnerd/maintapi/version"
+	"golang.org/x/build/relmeta"
 )
 
 // MilestoneTasks contains the tasks used to check and modify GitHub issues' milestones.
@@ -599,4 +600,49 @@ func (c *GitHubClient) PostComment(ctx context.Context, id githubv4.ID, body str
 		SubjectID: id,
 		Body:      githubv4.String(body),
 	}, nil)
+}
+
+// CheckSecurityIssues ensures that point releases remain blocked if the known release-blocker,
+// Security issues set does not match the declared set of issues.
+//
+// When rm is nil, the coordinator has already approved a non-security point release.
+func (m *MilestoneTasks) CheckSecurityIssues(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, develVersion int) error {
+	if rm == nil {
+		return nil
+	}
+	milestoneName := fmt.Sprintf("Go1.%d", develVersion)
+	milestoneNumber, err := m.Client.FetchMilestone(ctx, m.RepoOwner, m.RepoName, milestoneName, false)
+	if err != nil {
+		return err
+	}
+	issues, err := m.Client.FetchMilestoneIssues(ctx, m.RepoOwner, m.RepoName, milestoneNumber)
+	if err != nil {
+		return err
+	}
+	// Assume that issues are untracked in rm by default.
+	untracked := make(map[int]bool, len(issues))
+	for number, labels := range issues {
+		if labels["release-blocker"] && labels["Security"] {
+			untracked[number] = true
+		}
+	}
+	var problems []string
+	for _, p := range rm.Patches {
+		number := int(p.GitHubIssueID)
+		if untracked[number] {
+			// Prune issues found to be tracked.
+			delete(untracked, number)
+			continue
+		}
+		const problemFmt = "security patch %d: https://go.dev/issue/%d is not an open release-blocker in %s"
+		problems = append(problems, fmt.Sprintf(problemFmt, p.ID, number, milestoneName))
+	}
+	for number := range untracked {
+		problems = append(problems, fmt.Sprintf("https://go.dev/issue/%d has no security patch", number))
+	}
+	if len(problems) == 0 {
+		return nil
+	}
+	sort.Strings(problems)
+	return fmt.Errorf("mismatched security patches and release blockers:\n%s", strings.Join(problems, "\n"))
 }

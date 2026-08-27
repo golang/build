@@ -32,6 +32,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/google/go-github/v74/github"
 	"github.com/google/uuid"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal"
@@ -570,6 +571,12 @@ func newMinorCoalesceTestDeps(t *testing.T, withPrivatePatches bool) (*releaseTe
 		t.Fatalf("milestone client is %T, want *task.FakeGitHub", deps.milestoneTasks.Client)
 	}
 	fakeGitHub.Milestones[2] = "Go1.25.1"
+	fakeGitHub.Issues = map[int]*github.Issue{
+		70001: {
+			Labels:    []*github.Label{{Name: github.Ptr("release-blocker")}, {Name: github.Ptr("Security")}},
+			Milestone: &github.Milestone{ID: github.Int64(0)},
+		},
+	}
 
 	// Private side: clone the public repo and create the branches the coalesce
 	// steps read: "public" and the major release branches.
@@ -589,6 +596,7 @@ security_patches:
     - id: 40027190
       package: crypto/tls
       track: PRIVATE
+      github_issue_id: 70001
       changelists:
         - https://go-internal-review.git.corp.google.com/c/go/+/1234
         - https://go-internal-review.git.corp.google.com/c/go/+/5678
@@ -602,6 +610,7 @@ security_patches:
     - id: 20024001
       package: runtime
       track: PUBLIC
+      github_issue_id: 70001
       changelists:
         - https://go.dev/cl/123456
       target_releases:
