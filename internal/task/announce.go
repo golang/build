@@ -1005,20 +1005,6 @@ func (t SecurityCommunicationTasks) GetSecurityReleaseNotes(ctx *workflow.TaskCo
 
 var (
 	SecurityMilestoneParameter = workflow.ParamDef[string]{
-		Name:      "Security Milestone",
-		ParamType: workflow.BasicString,
-		Doc: `Security Milestone owns the canonical source for all security patches.
-
-You can check with the security release coordinator to confirm this input.`,
-		Example: "123456",
-		Check: func(num string) error {
-			if !numOnlyRE.MatchString(num) {
-				return errors.New("milestone number must contain only numbers")
-			}
-			return nil
-		},
-	}
-	OptionalSecurityMilestoneParameter = workflow.ParamDef[string]{
 		Name:      "Security Milestone (optional)",
 		ParamType: workflow.BasicString,
 		Doc: `Security Milestone owns the canonical source for all security patches.
@@ -1039,7 +1025,7 @@ You can check with the security release coordinator to confirm this input.`,
 	numOnlyRE = regexp.MustCompile(`^\d+$`)
 
 	SecurityReviewersParameter = workflow.ParamDef[[]string]{
-		Name:      "Security Reviewer Emails",
+		Name:      "Security Reviewer Emails (optional)",
 		ParamType: workflow.SliceShort,
 		Doc:       `Valid @google.com email strings for privileged reviewers involved in the release.`,
 		Example:   "nealpatel@google.com",

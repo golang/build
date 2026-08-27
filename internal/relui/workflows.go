@@ -489,7 +489,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	wd := wf.New(wf.ACL{Groups: []string{groups.ReleaseTeam}})
 	coordinators := wf.Param(wd, releaseCoordinators)
 	securityReviewers := wf.Param(wd, task.SecurityReviewersParameter)
-	milestoneNum := wf.Param(wd, task.OptionalSecurityMilestoneParameter)
+	milestoneNum := wf.Param(wd, task.SecurityMilestoneParameter)
 
 	noMilestoneApproved := wf.Action1(wd, "Confirm no-milestone run", func(ctx *wf.TaskContext, num string) error {
 		if num != "" {
