@@ -339,16 +339,22 @@ HOST_NOTIFIERS = {
     for host, emails in HOST_CONTACT_EMAILS.items()
 }
 
-# SLOW_HOSTS lists "hosts" who are known to run slower than our typical fast
+# SLOW_HOSTS lists hosts which are known to run slower than our typical fast
 # high-capacity machines. It is a mapping of the host to a base test timeout
 # scaling factor; run_mods may multiply this scaling factor further. It also
 # affects the decision of whether to include a builder in presubmit testing
 # by default (slow high-capacity hosts aren't included).
 #
+# The host string includes GOOS, GOARCH, and OS version or other suffix.
+# See split_builder_type and host_of.
+#
 # Optionally, a slow host may also limit its repo@go_branch_short scope if there's
 # no better alternative. This has the downside of reducing coverage for the port.
 SLOW_HOSTS = {
-    "darwin-amd64": struct(scale = 2),  # see go.dev/issue/65040
+    # see go.dev/issue/65040
+    "darwin-amd64%s" % suffix: struct(scale = 2)
+    for suffix in ("", "_12", "_13", "_14", "_15")
+} | {
     "freebsd-riscv64": struct(scale = 4),
     "linux-ppc64_power10": struct(scale = 2),
     "linux-ppc64_power8": struct(scale = 2),
