@@ -16,6 +16,8 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	wf "golang.org/x/build/internal/workflow"
 )
@@ -150,6 +152,46 @@ func (l *ErrorListener) TaskStateChanged(id uuid.UUID, taskID string, st *wf.Tas
 		l.Callback(st.Error)
 	}
 	return l.Listener.TaskStateChanged(id, taskID, st)
+}
+
+type CapturingLogger struct {
+	Lines []string
+}
+
+func (l *CapturingLogger) Printf(format string, v ...any) {
+	l.Lines = append(l.Lines, fmt.Sprintf(format, v...))
+}
+
+type LoggerListener struct {
+	wf.Listener
+	Log wf.Logger
+}
+
+func (l *LoggerListener) Logger(_ uuid.UUID, _ string) wf.Logger {
+	return l.Log
+}
+
+type MapListener struct {
+	wf.Listener
+	States map[uuid.UUID]map[string]*wf.TaskState
+}
+
+func (l *MapListener) TaskStateChanged(workflowID uuid.UUID, taskID string, state *wf.TaskState) error {
+	if l.States == nil {
+		l.States = map[uuid.UUID]map[string]*wf.TaskState{}
+	}
+	if l.States[workflowID] == nil {
+		l.States[workflowID] = map[string]*wf.TaskState{}
+	}
+	l.States[workflowID][taskID] = state
+	return l.Listener.TaskStateChanged(workflowID, taskID, state)
+}
+
+func (l *MapListener) AssertState(t *testing.T, w *wf.Workflow, want map[string]*wf.TaskState) {
+	t.Helper()
+	if diff := cmp.Diff(l.States[w.ID], want, cmpopts.IgnoreFields(wf.TaskState{}, "SerializedResult")); diff != "" {
+		t.Errorf("task state didn't match expectations: %v", diff)
+	}
 }
 
 // Subtest shadows [synctest.Subtest] behavior in go1.27+.

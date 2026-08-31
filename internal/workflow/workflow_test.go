@@ -17,9 +17,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/google/uuid"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/build/internal/workflowtest"
 )
@@ -118,15 +115,15 @@ func TestSub(t *testing.T) {
 	g2 := wf.Task0(sub2, "Greeting", hi)
 	wf.Output(wd, "result", wf.Task2(wd, "Concatenate", concat, g1, g2))
 
-	storage := &mapListener{Listener: &workflowtest.VerboseListener{T: t}}
+	storage := &workflowtest.MapListener{Listener: &workflowtest.VerboseListener{T: t}}
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, storage)
 	if got, want := outputs["result"], "hi hi"; got != want {
 		t.Errorf("result = %q, want %q", got, want)
 	}
 	const wantTaskID = "top-sub: sub1: Greeting"
-	if _, ok := storage.states[w.ID][wantTaskID]; !ok {
-		t.Errorf("task ID %q doesn't exist, have: %q", wantTaskID, slices.Sorted(maps.Keys(storage.states[w.ID])))
+	if _, ok := storage.States[w.ID][wantTaskID]; !ok {
+		t.Errorf("task ID %q doesn't exist, have: %q", wantTaskID, slices.Sorted(maps.Keys(storage.States[w.ID])))
 	}
 }
 
@@ -290,10 +287,10 @@ func TestResumeExpansion(t *testing.T) {
 	})
 	wf.Output(wd, "result", result)
 
-	storage := &mapListener{Listener: &workflowtest.VerboseListener{T: t}}
+	storage := &workflowtest.MapListener{Listener: &workflowtest.VerboseListener{T: t}}
 	w := startWorkflow(t, wd, nil)
 	runWorkflow(t, w, storage)
-	resumed, err := wf.Resume(wd, &wf.WorkflowState{ID: w.ID}, storage.states[w.ID])
+	resumed, err := wf.Resume(wd, &wf.WorkflowState{ID: w.ID}, storage.States[w.ID])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,33 +535,16 @@ func TestLogging(t *testing.T) {
 	out := wf.Task1(wd, "log", log, wf.Const("hey there"))
 	wf.Output(wd, "out", out)
 
-	logger := &capturingLogger{}
-	listener := &logTestListener{
+	logger := &workflowtest.CapturingLogger{}
+	listener := &workflowtest.LoggerListener{
 		Listener: &workflowtest.VerboseListener{T: t},
-		logger:   logger,
+		Log:      logger,
 	}
 	w := startWorkflow(t, wd, nil)
 	runWorkflow(t, w, listener)
-	if want := []string{"logging argument: hey there"}; !reflect.DeepEqual(logger.lines, want) {
-		t.Errorf("unexpected logging result: got %v, want %v", logger.lines, want)
+	if want := []string{"logging argument: hey there"}; !reflect.DeepEqual(logger.Lines, want) {
+		t.Errorf("unexpected logging result: got %v, want %v", logger.Lines, want)
 	}
-}
-
-type logTestListener struct { // TODO(nealpatel): Fold into internal/workflowtest
-	wf.Listener
-	logger wf.Logger
-}
-
-func (l *logTestListener) Logger(_ uuid.UUID, _ string) wf.Logger {
-	return l.logger
-}
-
-type capturingLogger struct { // TODO(nealpatel): Fold into internal/workflowtest
-	lines []string
-}
-
-func (l *capturingLogger) Printf(format string, v ...any) {
-	l.lines = append(l.lines, fmt.Sprintf(format, v...))
 }
 
 func TestResume(t *testing.T) {
@@ -602,19 +582,19 @@ func TestResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storage := &mapListener{Listener: &workflowtest.VerboseListener{T: t}}
+	storage := &workflowtest.MapListener{Listener: &workflowtest.VerboseListener{T: t}}
 	_, err = w.Run(ctx, storage)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled workflow returned error %v, wanted Canceled", err)
 	}
-	storage.assertState(t, w, map[string]*wf.TaskState{
+	storage.AssertState(t, w, map[string]*wf.TaskState{
 		"run once": {Name: "run once", Started: true, Finished: true, Result: "ran"},
 		"block":    {Name: "block", Started: true, Finished: true, Error: "context canceled"}, // We cancelled the workflow before it could save its state.
 	})
 
 	block = false
 	wfState := &wf.WorkflowState{ID: w.ID, Params: nil}
-	taskStates := storage.states[w.ID]
+	taskStates := storage.States[w.ID]
 	taskStates["block"] = &wf.TaskState{Name: "block"}
 	w2, err := wf.Resume(wd, wfState, taskStates)
 	if err != nil {
@@ -627,7 +607,7 @@ func TestResume(t *testing.T) {
 	if runs != 1 {
 		t.Errorf("runOnlyOnce ran %v times, wanted 1", runs)
 	}
-	storage.assertState(t, w, map[string]*wf.TaskState{
+	storage.AssertState(t, w, map[string]*wf.TaskState{
 		"run once": {Name: "run once", Started: true, Finished: true, Result: "ran"},
 		"block":    {Name: "block", Started: true, Finished: true, Result: "not blocked"},
 	})
@@ -647,29 +627,6 @@ func TestBadMarshaling(t *testing.T) {
 	w := startWorkflow(t, wd, nil)
 	if got, want := workflowtest.RunToFailure(t, context.Background(), w, "greet", &workflowtest.VerboseListener{T: t}), "JSON marshaling"; !strings.Contains(got, want) {
 		t.Errorf("got error %q, want %q", got, want)
-	}
-}
-
-type mapListener struct { // TODO(nealpatel): Fold into internal/workflowtest
-	wf.Listener
-	states map[uuid.UUID]map[string]*wf.TaskState
-}
-
-func (l *mapListener) TaskStateChanged(workflowID uuid.UUID, taskID string, state *wf.TaskState) error {
-	if l.states == nil {
-		l.states = map[uuid.UUID]map[string]*wf.TaskState{}
-	}
-	if l.states[workflowID] == nil {
-		l.states[workflowID] = map[string]*wf.TaskState{}
-	}
-	l.states[workflowID][taskID] = state
-	return l.Listener.TaskStateChanged(workflowID, taskID, state)
-}
-
-func (l *mapListener) assertState(t *testing.T, w *wf.Workflow, want map[string]*wf.TaskState) {
-	t.Helper()
-	if diff := cmp.Diff(l.states[w.ID], want, cmpopts.IgnoreFields(wf.TaskState{}, "SerializedResult")); diff != "" {
-		t.Errorf("task state didn't match expectations: %v", diff)
 	}
 }
 
