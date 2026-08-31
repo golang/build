@@ -44,7 +44,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/gliderlabs/ssh"
+	"github.com/tailscale/gliderssh"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/internal/cloud"
 	"golang.org/x/build/internal/envutil"

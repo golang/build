@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	gssh "github.com/gliderlabs/ssh"
 	"github.com/pkg/sftp"
+	gssh "github.com/tailscale/gliderssh"
 	"golang.org/x/crypto/ssh"
 )
 

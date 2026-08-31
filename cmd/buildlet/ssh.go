@@ -8,13 +8,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os/exec"
 
 	"github.com/creack/pty"
-	"github.com/gliderlabs/ssh"
+	"github.com/tailscale/gliderssh"
 	"golang.org/x/build/internal/envutil"
 )
 
@@ -23,13 +24,16 @@ func startSSHServerSwarming() {
 		Addr:              "localhost:" + sshPort(),
 		Handler:           sshHandler,
 		SubsystemHandlers: sshSubsystems,
-		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) bool {
+		PublicKeyHandler: func(ctx ssh.Context, key ssh.PublicKey) error {
 			allowed, _, _, _, err := ssh.ParseAuthorizedKey(buldletAuthKeys)
 			if err != nil {
 				log.Printf("error parsing authorized key: %s", err)
-				return false
+				return err
 			}
-			return ssh.KeysEqual(key, allowed)
+			if !ssh.KeysEqual(key, allowed) {
+				return errors.New("permission denied")
+			}
+			return nil
 		},
 	}
 	go func() {

@@ -13,8 +13,8 @@ import (
 	"log"
 	"os/exec"
 
-	"github.com/gliderlabs/ssh"
 	"github.com/pkg/sftp"
+	"github.com/tailscale/gliderssh"
 )
 
 // sshSubsystems are the subsystem handlers for the buildlet's SSH server.

@@ -26,7 +26,6 @@ require (
 	github.com/dghubble/oauth1 v0.7.0
 	github.com/esimov/stackblur-go v1.1.0
 	github.com/fflewddur/ltbsky v0.4.2
-	github.com/gliderlabs/ssh v0.3.9-0.20241212082318-d137aad99cd6
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang-migrate/migrate/v4 v4.15.0-beta.3
 	github.com/google/go-cmp v0.7.0
@@ -49,6 +48,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.2-0.20210106135023-bc59245fe10e
 	github.com/sendgrid/sendgrid-go v3.11.1+incompatible
 	github.com/shurcooL/githubv4 v0.0.0-20231126234147-1cffa1f02456
+	github.com/tailscale/gliderssh v0.3.4-0.20260716005906-1a0f895faf28
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
 	github.com/yuin/goldmark v1.6.0
 	go.chromium.org/luci v0.0.0-20240207061751-3ff7b3e74e1c
@@ -110,6 +110,7 @@ require (
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/gliderlabs/ssh v0.3.9-0.20241212082318-d137aad99cd6 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.9.1 // indirect
 	github.com/go-git/go-git/v5 v5.19.2 // indirect

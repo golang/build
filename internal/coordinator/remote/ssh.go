@@ -30,7 +30,7 @@ import (
 	"unsafe"
 
 	"github.com/creack/pty"
-	gssh "github.com/gliderlabs/ssh"
+	gssh "github.com/tailscale/gliderssh"
 	"golang.org/x/build/buildlet"
 	"golang.org/x/build/dashboard"
 	"golang.org/x/build/internal/envutil"
@@ -584,38 +584,38 @@ func WriteSSHPrivateKeyToTempFile(key []byte) (path string, err error) {
 // authentication. The passed in certificate is tested to ensure it is valid, signed by the CA and
 // corresponds to an existing session.
 func handleCertificateAuthFunc(sp *SessionPool, caKeySigner ssh.Signer) gssh.PublicKeyHandler {
-	return func(ctx gssh.Context, key gssh.PublicKey) bool {
+	return func(ctx gssh.Context, key gssh.PublicKey) error {
 		sessionID := ctx.User()
 		cert, ok := key.(*ssh.Certificate)
 		if !ok {
 			log.Printf("public key is not a certificate session=%s", sessionID)
-			return false
+			return errors.New("public key is not a certificate")
 		}
 		if cert.CertType != ssh.UserCert {
 			log.Printf("certificate not user cert session=%s", sessionID)
-			return false
+			return errors.New("certificate is not a user certificate")
 		}
 		if !bytes.Equal(cert.SignatureKey.Marshal(), caKeySigner.PublicKey().Marshal()) {
 			log.Printf("certificate is not signed by recognized Certificate Authority session=%s", sessionID)
-			return false
+			return errors.New("certificate is not signed by recognized Certificate Authority")
 		}
 
 		ses, err := sp.Session(sessionID)
 		if err != nil {
 			log.Printf("HandleCertificateAuth: unable to retrieve session=%s: %s", sessionID, err)
-			return false
+			return fmt.Errorf("unable to retrieve session: %w", err)
 		}
 		certChecker := &ssh.CertChecker{}
 		wantPrincipal := fmt.Sprintf("%s@farmer.golang.org", sessionID)
 		if err := certChecker.CheckCert(wantPrincipal, cert); err != nil {
 			log.Printf("certChecker.CheckCert(%s, user_certificate) = %s", wantPrincipal, err)
-			return false
+			return fmt.Errorf("certChecker.CheckCert failed: %w", err)
 		}
 		if slices.Contains(cert.ValidPrincipals, ses.OwnerID) {
-			return true
+			return nil
 		}
 		log.Printf("HandleCertificateAuth: unable to verify ownerID in certificate principals")
-		return false
+		return errors.New("unable to verify ownerID in certificate principals")
 	}
 }
 
