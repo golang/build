@@ -169,6 +169,10 @@ func main() {
 	default:
 		mailFunc = task.ReleaseCoordinatorAsTheMailSender{ApproveAction: relui.ApproveActionDep(dbPool)}.SendMail
 	}
+	var twitterClient task.Poster = disabledTwitterClient{}
+	if false && twitterAPI != (secret.TwitterCredentials{}) { // TODO(go.dev/issue/81255): Restore when posting to X is functioning again.
+		twitterClient = task.NewTwitterClient(twitterAPI)
+	}
 	var mastodonClient task.Poster
 	if mastodonAPI != (secret.MastodonCredentials{}) {
 		var err error
@@ -194,7 +198,7 @@ func main() {
 			AnnounceMailHeader: annMail,
 		},
 		SocialMediaTasks: task.SocialMediaTasks{
-			TwitterClient:  task.NewTwitterClient(twitterAPI),
+			TwitterClient:  twitterClient,
 			MastodonClient: mastodonClient,
 			BlueskyClient:  blueskyClient,
 		},
@@ -538,4 +542,18 @@ func addressListVarFlag(p *[]mail.Address, name, usage string) {
 		}
 		return nil
 	})
+}
+
+// disabledTwitterClient is a task.Poster that logs and skips posting while posting to X is disabled.
+// TODO(go.dev/issue/81255): Delete this once posting to X is functioning again.
+type disabledTwitterClient struct{}
+
+func (disabledTwitterClient) Post(text string) (string, error) {
+	log.Println("posting to X is temporarily disabled; see https://go.dev/issue/81255")
+	return "(disabled: https://go.dev/issue/81255)", nil
+}
+
+func (disabledTwitterClient) PostTweet(text string, imagePNG []byte, altText string) (string, error) {
+	log.Println("posting to X is temporarily disabled; see https://go.dev/issue/81255")
+	return "(disabled: https://go.dev/issue/81255)", nil
 }
