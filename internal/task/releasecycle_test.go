@@ -2,38 +2,35 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package task_test
+package task
 
 import (
 	"context"
-	"fmt"
 	"testing"
-	"time"
 
-	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
 )
 
 func TestPromoteNextAPIAndOpenAPIAuditIssue(t *testing.T) {
-	goRepo := task.NewFakeRepo(t, "go")
+	goRepo := NewFakeRepo(t, "go")
 	goRepo.Commit(map[string]string{
 		"api/next/54386.txt": "pkg bytes, func ContainsFunc([]uint8, func(int32) bool) bool #54386\n",
 		"api/next/53685.txt": "pkg bytes, method (*Buffer) AvailableBuffer() []uint8 #53685\npkg bytes, method (*Buffer) Available() int #53685\n",
 		"api/next/59488.txt": "pkg cmp, func Compare[$0 Ordered]($0, $0) int #59488\npkg cmp, func Less[$0 Ordered]($0, $0) bool #59488\npkg cmp, type Ordered interface {} #59488\n",
 		"api/next/50489.txt": "pkg math/big, method (*Rat) FloatPrec() (int, bool) #50489\n",
 	})
-	fakeGerrit := task.NewFakeGerrit(t, goRepo)
-	fakeGitHub := &task.FakeGitHub{
+	fakeGerrit := NewFakeGerrit(t, goRepo)
+	fakeGitHub := &FakeGitHub{
 		Milestones: map[int]string{322: "Go1.24"}, // https://github.com/golang/go/milestone/322
 	}
 
 	const version = 24
-	cycleTasks := task.ReleaseCycleTasks{
+	cycleTasks := ReleaseCycleTasks{
 		Gerrit: fakeGerrit,
 		GitHub: fakeGitHub,
 	}
 	promotedAPI, err := cycleTasks.PromoteNextAPI(
-		&workflow.TaskContext{Context: context.Background(), Logger: testLogger{t: t}},
+		&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}},
 		version,
 		nil,
 	)
@@ -41,9 +38,9 @@ func TestPromoteNextAPIAndOpenAPIAuditIssue(t *testing.T) {
 		t.Fatal(err)
 	}
 	apiAuditIssue, err := cycleTasks.OpenAPIAuditIssue(
-		&workflow.TaskContext{Context: context.Background(), Logger: testLogger{t: t}},
+		&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}},
 		version,
-		task.RelnoteTracking{Milestone: 322},
+		RelnoteTracking{Milestone: 322},
 		promotedAPI,
 	)
 	if err != nil {
@@ -85,15 +82,15 @@ CC @aclements, @ianlancetaylor, @golang/release.`
 
 func TestPromoteNextAPIAlreadyExists(t *testing.T) {
 	newAPILine := "pkg bytes, func ContainsFunc([]uint8, func(int32) bool) bool #54386"
-	goRepo := task.NewFakeRepo(t, "go")
+	goRepo := NewFakeRepo(t, "go")
 	goRepo.Commit(map[string]string{
 		"api/go1.24.txt": newAPILine + "\n",
 	})
-	fakeGerrit := task.NewFakeGerrit(t, goRepo)
+	fakeGerrit := NewFakeGerrit(t, goRepo)
 
 	const version = 24
 	approved := false
-	cycleTasks := task.ReleaseCycleTasks{
+	cycleTasks := ReleaseCycleTasks{
 		Gerrit: fakeGerrit,
 		ApproveAction: func(tc *workflow.TaskContext) error {
 			approved = true
@@ -101,7 +98,7 @@ func TestPromoteNextAPIAlreadyExists(t *testing.T) {
 		},
 	}
 	promotedAPI, err := cycleTasks.PromoteNextAPI(
-		&workflow.TaskContext{Context: context.Background(), Logger: testLogger{t: t}},
+		&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}},
 		version,
 		nil,
 	)
@@ -114,13 +111,4 @@ func TestPromoteNextAPIAlreadyExists(t *testing.T) {
 	if len(promotedAPI.APIs) != 1 || promotedAPI.APIs[0] != newAPILine {
 		t.Fatalf("unexpected promoted APIs: want []string{%s}, got %+v", newAPILine, promotedAPI.APIs)
 	}
-}
-
-type testLogger struct {
-	t    testing.TB
-	task string // Optional.
-}
-
-func (l testLogger) Printf(format string, v ...any) {
-	l.t.Logf("%v\ttask %-10v: LOG: %s", time.Now(), l.task, fmt.Sprintf(format, v...))
 }

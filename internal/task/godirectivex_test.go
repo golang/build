@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package task_test
+package task
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"slices"
 	"testing"
 
-	"golang.org/x/build/internal/task"
 	wf "golang.org/x/build/internal/workflow"
 	repospkg "golang.org/x/build/repos"
 )
@@ -20,7 +19,7 @@ func TestSelectGoDirectiveReposLive(t *testing.T) {
 		t.Skip("not running a live test requiring manual verification if not explicitly requested with go test -v -run=^TestSelectGoDirectiveReposLive$")
 	}
 
-	tasks := task.GoDirectiveXReposTasks{}
+	tasks := GoDirectiveXReposTasks{}
 	ctx := &wf.TaskContext{
 		Context: context.Background(),
 		Logger:  &testLogger{t, ""},

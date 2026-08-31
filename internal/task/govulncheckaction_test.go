@@ -6,10 +6,8 @@ package task
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
-	"github.com/google/uuid"
 	"golang.org/x/build/internal/workflow"
 )
 
@@ -43,7 +41,7 @@ func TestReleaseGovulncheckActionTasks_NewDefinition(t *testing.T) {
 		t.Fatalf("workflow.Start failed: %v", err)
 	}
 
-	if _, err := w.Run(ctx, &govulncheckActionVerboseListener{t: t}); err != nil {
+	if _, err := w.Run(ctx, &verboseListener{t: t}); err != nil {
 		t.Fatalf("workflow.Run failed: %v", err)
 	}
 
@@ -180,45 +178,10 @@ func TestReleaseGovulncheckActionTasks_Validation(t *testing.T) {
 				t.Fatalf("workflow.Start failed: %v", err)
 			}
 
-			_, err = w.Run(ctx, &govulncheckActionVerboseListener{t: t, cancel: cancel})
+			_, err = w.Run(ctx, &verboseListener{t: t, onStall: cancel})
 			if (err != nil) != tc.wantErr {
 				t.Errorf("workflow.Run error = %v, wantErr %v", err, tc.wantErr)
 			}
 		})
 	}
-}
-
-type govulncheckActionVerboseListener struct {
-	t      *testing.T
-	cancel context.CancelFunc
-}
-
-func (l *govulncheckActionVerboseListener) WorkflowStalled(workflowID uuid.UUID) error {
-	l.t.Logf("workflow %q: stalled", workflowID.String())
-	if l.cancel != nil {
-		l.cancel()
-	}
-	return nil
-}
-
-func (l *govulncheckActionVerboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *workflow.TaskState) error {
-	if st.Finished && st.Error != "" {
-		l.t.Logf("task %-10v: error: %v", st.Name, st.Error)
-	} else if st.Finished {
-		l.t.Logf("task %-10v: done: %v", st.Name, st.Result)
-	}
-	return nil
-}
-
-func (l *govulncheckActionVerboseListener) Logger(_ uuid.UUID, task string) workflow.Logger {
-	return &govulncheckActionTestLogger{t: l.t, task: task}
-}
-
-type govulncheckActionTestLogger struct {
-	t    *testing.T
-	task string
-}
-
-func (l *govulncheckActionTestLogger) Printf(format string, v ...any) {
-	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
 }

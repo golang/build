@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package task_test
+package task
 
 import (
 	"flag"
@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"golang.org/x/build/internal/task"
 )
 
 var readPKGFlag = flag.String("read-pkg", "", "Path to a Go macOS .pkg installer to run TestReadBinariesFromPKG with.")
@@ -38,7 +37,7 @@ func TestReadBinariesFromPKG(t *testing.T) {
 	}
 	defer f.Close()
 
-	got, err := task.ReadBinariesFromPKG(f)
+	got, err := ReadBinariesFromPKG(f)
 	if err != nil {
 		t.Fatal(err)
 	}

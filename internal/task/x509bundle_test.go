@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package task_test
+package task
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 
 	cloudbuild "cloud.google.com/go/cloudbuild/apiv1/v2"
 	"golang.org/x/build/gerrit"
-	"golang.org/x/build/internal/task"
 	wf "golang.org/x/build/internal/workflow"
 )
 
@@ -30,7 +29,7 @@ func testUpdateX509Bundle(t *testing.T, newContent bool) {
 	} else {
 		command = "echo no-op change"
 	}
-	crypto := task.NewFakeRepo(t, "crypto")
+	crypto := NewFakeRepo(t, "crypto")
 	crypto.Commit(map[string]string{
 		"go.mod": "module golang.org/x/crypto\n",
 		"x509roots/gen.go": `//go:build generate
@@ -38,10 +37,10 @@ func testUpdateX509Bundle(t *testing.T, newContent bool) {
 package p`,
 	})
 
-	fakeGerrit := task.NewFakeGerrit(t, crypto)
-	tasks := task.BundleNSSRootsTask{
+	fakeGerrit := NewFakeGerrit(t, crypto)
+	tasks := BundleNSSRootsTask{
 		Gerrit:     fakeGerrit,
-		CloudBuild: task.NewFakeCloudBuild(t, fakeGerrit, "", nil),
+		CloudBuild: NewFakeCloudBuild(t, fakeGerrit, "", nil),
 	}
 	ctx := &wf.TaskContext{
 		Context: context.Background(),
@@ -76,12 +75,12 @@ func TestUpdateX509BundleLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not connect to Cloud Build: %v", err)
 	}
-	tasks := task.BundleNSSRootsTask{
-		Gerrit: &task.RealGerritClient{
+	tasks := BundleNSSRootsTask{
+		Gerrit: &RealGerritClient{
 			Gitiles: "https://go.googlesource.com",
 			Client:  gerrit.NewClient("https://go-review.googlesource.com", gerrit.NoAuth),
 		},
-		CloudBuild: &task.RealCloudBuildClient{
+		CloudBuild: &RealCloudBuildClient{
 			BuildClient:   cbClient,
 			ScriptProject: *flagUpdateX509BundleProject,
 		},
