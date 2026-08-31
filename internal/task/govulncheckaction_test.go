@@ -179,7 +179,7 @@ func TestReleaseGovulncheckActionTasks_Validation(t *testing.T) {
 				t.Fatalf("workflow.Start failed: %v", err)
 			}
 
-			_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t, OnStall: cancel})
+			_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t, OnStall: func() error { cancel(); return nil }})
 			if (err != nil) != tc.wantErr {
 				t.Errorf("workflow.Run error = %v, wantErr %v", err, tc.wantErr)
 			}

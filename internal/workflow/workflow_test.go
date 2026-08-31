@@ -325,7 +325,7 @@ func TestRetryExpansion(t *testing.T) {
 	listener := &workflowtest.ErrorListener{
 		TaskName: "expand",
 		Callback: retry,
-		Listener: &workflowtest.VerboseListener{T: t},
+		Listener: &workflowtest.VerboseListener{T: t, OnStall: func() error { return nil }},
 	}
 	runWorkflow(t, w, listener)
 	if counter != 2 {
@@ -357,7 +357,7 @@ func TestManualRetry(t *testing.T) {
 	listener := &workflowtest.ErrorListener{
 		TaskName: "needs retry",
 		Callback: retry,
-		Listener: &workflowtest.VerboseListener{T: t},
+		Listener: &workflowtest.VerboseListener{T: t, OnStall: func() error { return nil }},
 	}
 	runWorkflow(t, w, listener)
 	if counter != 2 {
@@ -415,7 +415,7 @@ func TestManualRetryMultipleExpansions(t *testing.T) {
 					}
 				}()
 			},
-			Listener: &workflowtest.VerboseListener{T: t},
+			Listener: &workflowtest.VerboseListener{T: t, OnStall: func() error { return nil }},
 		},
 	}
 	runWorkflow(t, w, listener)

@@ -271,7 +271,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 	if err != nil {
 		t.Fatal(err)
 	}
-	outputs, err := w.Run(deps.ctx, &workflowtest.VerboseListener{T: t, OnStall: deps.cancel})
+	outputs, err := w.Run(deps.ctx, &workflowtest.VerboseListener{T: t, OnStall: func() error { deps.cancel(); return nil }})
 	if err != nil {
 		t.Fatal(err)
 	}

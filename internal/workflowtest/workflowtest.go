@@ -26,15 +26,15 @@ func (l *Logger) Printf(format string, v ...any) {
 type VerboseListener struct {
 	T              testing.TB
 	OutputListener func(string, any)
-	OnStall        func()
+	OnStall        func() error
 }
 
 func (l *VerboseListener) WorkflowStalled(workflowID uuid.UUID) error {
 	l.T.Logf("workflow %q: stalled", workflowID.String())
 	if l.OnStall != nil {
-		l.OnStall()
+		return l.OnStall()
 	}
-	return nil
+	return fmt.Errorf("workflow %s stalled with no handler", workflowID)
 }
 
 func (l *VerboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *wf.TaskState) error {

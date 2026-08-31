@@ -876,7 +876,9 @@ func (w *Workflow) Run(ctx context.Context, listener Listener) (map[string]any, 
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:
-				listener.WorkflowStalled(w.ID)
+				if err := listener.WorkflowStalled(w.ID); err != nil {
+					return nil, err
+				}
 			}
 		}
 

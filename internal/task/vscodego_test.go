@@ -113,7 +113,7 @@ esac
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			outputs, err := w.Run(ctx, &workflowtest.VerboseListener{T: t, OnStall: cancel})
+			outputs, err := w.Run(ctx, &workflowtest.VerboseListener{T: t, OnStall: func() error { cancel(); return nil }})
 			if err != nil {
 				if test.wantBuildError {
 					return // expected build error.
