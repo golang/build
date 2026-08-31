@@ -118,6 +118,7 @@ type GerritClient interface {
 	GetRevisionActions(ctx context.Context, changeID, revision string) (map[string]*gerrit.ActionInfo, error)
 	// GetCommitMessage retrieves the commit message for a change.
 	GetCommitMessage(ctx context.Context, changeID string) (string, error)
+	SetCommitMessage(ctx context.Context, changeID, message string) error
 	// GetCommitsInRefs gets refs in which the specified commits were merged into.
 	GetCommitsInRefs(ctx context.Context, project string, commits, refs []string) (map[string][]string, error)
 }
@@ -501,4 +502,8 @@ func (c *RealGerritClient) GetCommitMessage(ctx context.Context, changeID string
 		return "", err
 	}
 	return cmi.FullMessage, nil
+}
+
+func (c *RealGerritClient) SetCommitMessage(ctx context.Context, changeID, message string) error {
+	return c.Client.SetCommitMessage(ctx, changeID, gerrit.CommitMessageInput{Message: message})
 }

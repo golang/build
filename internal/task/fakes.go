@@ -956,6 +956,20 @@ func (g *FakeGerrit) GetRevisionActions(_ context.Context, changeID, revision st
 	return map[string]*gerrit.ActionInfo{"submit": {Enabled: true}}, nil
 }
 
+func (g *FakeGerrit) SetCommitMessage(_ context.Context, changeID, message string) error {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	ci, ok := g.cls[changeID]
+	if !ok {
+		return NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
+	}
+	if ci.Status == gerrit.ChangeStatusMerged {
+		return NewGerritHTTPError(http.StatusConflict, "change is merged\n")
+	}
+	g.commitMessages[changeID] = message
+	return nil
+}
+
 func (g *FakeGerrit) GetCommitMessage(_ context.Context, changeID string) (string, error) {
 	g.changesMu.Lock()
 	defer g.changesMu.Unlock()

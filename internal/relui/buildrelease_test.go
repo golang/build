@@ -603,6 +603,7 @@ security_patches:
       package: crypto/tls
       track: PRIVATE
       github_issue_id: 70001
+      cve: CVE-1985-0703
       changelists:
         - https://go-internal-review.git.corp.google.com/c/go/+/1234
         - https://go-internal-review.git.corp.google.com/c/go/+/5678
@@ -636,7 +637,7 @@ security_patches:
 			Branch:       "public",
 			Submittable:  true,
 			Mergeable:    true,
-		}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1")
+		}, "crypto/tls: fix something")
 		privGerrit.AddChange("go", "5678", &gerrit.ChangeInfo{
 			ID:           "5678",
 			ChangeID:     "5678",
@@ -644,13 +645,36 @@ security_patches:
 			Branch:       "public",
 			Submittable:  true,
 			Mergeable:    true,
-		}, "cmd/compile: fix something else\n\nFixes CVE-1970-0001\nFixes #2")
+		}, "cmd/compile: fix something else")
 	}
 
 	deps.buildTasks.PrivateGerritClient = privGerrit
 	deps.buildTasks.PrivateGerritProject = "go"
 
 	return deps, privGerrit
+}
+
+func coalesceRM() *relmeta.ReleaseMilestone {
+	return &relmeta.ReleaseMilestone{ID: 99915010, Patches: []*relmeta.SecurityPatch{{
+		ID:            40027190,
+		Track:         relmeta.Private,
+		Package:       "crypto/tls",
+		GitHubIssueID: 70001,
+		CVE:           "CVE-1985-0703",
+		Changelists: []string{
+			"https://go-internal-review.git.corp.google.com/c/go/+/1234",
+			"https://go-internal-review.git.corp.google.com/c/go/+/5678",
+		},
+	}}}
+}
+
+func coalesceBackports() task.BackportManifest {
+	return task.BackportManifest{40027190: {"1.25": 70025, "1.26": 70026}}
+}
+
+func seedRiders(g *task.FakeGerrit) {
+	g.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor #70001")
+	g.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1985-0703\nFor #70001")
 }
 
 func TestMinorReleaseSecurityCoalesce(t *testing.T) {
@@ -767,10 +791,11 @@ func TestMinorReleaseSecurityCoalesce(t *testing.T) {
 	}
 
 	branchCPSets := map[string]map[string]bool{}
-	for _, ib := range []string{
-		"internal-release-branch.go1.26.1",
-		"internal-release-branch.go1.25.1",
-	} {
+	branchRiders := map[string]string{
+		"internal-release-branch.go1.26.1": "\nFixes #70026",
+		"internal-release-branch.go1.25.1": "\nFixes #70025",
+	}
+	for ib, rider := range branchRiders {
 		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
 		if err != nil {
 			t.Fatalf("reading head of %s: %v", ib, err)
@@ -783,7 +808,10 @@ func TestMinorReleaseSecurityCoalesce(t *testing.T) {
 		for _, ci := range commits {
 			bare := strings.SplitN(ci.Message, "] ", 2)
 			if len(bare) == 2 {
-				msgs[bare[1]] = true
+				if !strings.Contains(bare[1], rider) {
+					t.Errorf("branch %s cherry-pick %q is missing backport rider %q", ib, bare[1], strings.TrimPrefix(rider, "\n"))
+				}
+				msgs[strings.ReplaceAll(bare[1], rider, "")] = true
 			}
 		}
 		branchCPSets[ib] = msgs
@@ -987,7 +1015,7 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 		Submittable:          true,
 		Mergeable:            true,
 		ContainsGitConflicts: true,
-	}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1")
+	}, "crypto/tls: fix something")
 	privGerrit.AddChange("go", "5678", &gerrit.ChangeInfo{
 		ID:                   "5678",
 		ChangeID:             "5678",
@@ -996,7 +1024,7 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 		Submittable:          true,
 		Mergeable:            true,
 		ContainsGitConflicts: true,
-	}, "cmd/compile: fix something else\n\nFixes CVE-1970-0001\nFixes #2")
+	}, "cmd/compile: fix something else")
 
 	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
 		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
@@ -1063,7 +1091,7 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 	}
 
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "cherry-picks"}}
-	retried, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, changes)
+	retried, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, changes, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("createSecurityCherryPicks after resolving conflicts: %v", err)
 	}
@@ -1158,6 +1186,7 @@ func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
 
 func TestRestartInternalBranchesOpenCherryPicks(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "restart-opencp"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -1179,7 +1208,7 @@ func TestRestartInternalBranchesOpenCherryPicks(t *testing.T) {
 		t.Fatalf("first createInternalReleaseBranches: %v", err)
 	}
 
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls)
+	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("createSecurityCherryPicks: %v", err)
 	}
@@ -1213,7 +1242,7 @@ func TestRestartInternalBranchesOpenCherryPicks(t *testing.T) {
 		}
 	}
 
-	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls)
+	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("restart createSecurityCherryPicks: %v", err)
 	}
@@ -1233,6 +1262,7 @@ func TestRestartInternalBranchesOpenCherryPicks(t *testing.T) {
 
 func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "restart-mergedcp"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -1253,7 +1283,7 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first createInternalReleaseBranches: %v", err)
 	}
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls)
+	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("first createSecurityCherryPicks: %v", err)
 	}
@@ -1277,7 +1307,7 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 	if len(branches2) != len(branches) {
 		t.Fatalf("branch count mismatch: first=%d, restart=%d", len(branches), len(branches2))
 	}
-	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls)
+	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("restart createSecurityCherryPicks with merged CPs: %v", err)
 	}
@@ -1317,6 +1347,7 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 
 func TestRestartNoCherryPickOrphan(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "restart-no-orphan"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -1338,7 +1369,7 @@ func TestRestartNoCherryPickOrphan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls)
+	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1368,6 +1399,7 @@ func TestRestartNoCherryPickOrphan(t *testing.T) {
 
 func TestRestartCherryPickDedupFixedNames(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "restart-dedup"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -1389,7 +1421,7 @@ func TestRestartCherryPickDedupFixedNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cps1, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls)
+	cps1, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1399,12 +1431,12 @@ func TestRestartCherryPickDedupFixedNames(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls)
+	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cps3, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls)
+	cps3, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1803,10 +1835,7 @@ func TestCheckPrivateChangesLint(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 	ctx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "lint"}}
 
-	// Replace the well-formed commit messages with ones missing both a CVE
-	// reference and a GitHub issue reference.
-	privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nNo references here.")
-	privGerrit.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nStill nothing.")
+	privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix\n\nFixes CVE-1985-0703\nFixes golang/go#1")
 
 	rm := &relmeta.ReleaseMilestone{
 		Patches: []*relmeta.SecurityPatch{{
@@ -1817,18 +1846,17 @@ func TestCheckPrivateChangesLint(t *testing.T) {
 	}
 	_, err := deps.buildTasks.checkPrivateChanges(ctx, rm)
 	if err == nil {
-		t.Fatal("checkPrivateChanges with bad commit messages: got nil error")
+		t.Fatal("checkPrivateChanges with metadata in the commit message: got nil error")
 	}
-	for _, want := range []string{"missing CVE reference", "missing GitHub issue reference"} {
+	for _, want := range []string{"must not contain a CVE reference", "must not contain a GitHub issue reference"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
 	}
 
-	// A well-formed commit message produces no lint errors.
-	privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix\n\nFixes CVE-1985-0703\nFixes golang/go#1")
+	privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nNo references here.")
 	if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm); err != nil {
-		t.Errorf("checkPrivateChanges with a well-formed message: %v", err)
+		t.Errorf("checkPrivateChanges with a clean message: %v", err)
 	}
 }
 
@@ -2325,6 +2353,7 @@ func TestCreateInternalReleaseBranchesIdempotent(t *testing.T) {
 
 func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "id8-opencp"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -2349,7 +2378,7 @@ func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 		t.Fatal("first run created no internal release branches")
 	}
 
-	freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls)
+	freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("createSecurityCherryPicks: %v", err)
 	}
@@ -2385,7 +2414,7 @@ func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 		}
 	}
 
-	restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls)
+	restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("restart createSecurityCherryPicks: %v", err)
 	}
@@ -2406,6 +2435,7 @@ func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 
 func TestCreateSecurityCherryPicksDedup(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "id9"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -2429,7 +2459,7 @@ func TestCreateSecurityCherryPicksDedup(t *testing.T) {
 	}
 
 	// (a) Fresh run: cherry-picks ALL CLs onto each internal branch.
-	freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls)
+	freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("fresh createSecurityCherryPicks: %v", err)
 	}
@@ -2441,7 +2471,7 @@ func TestCreateSecurityCherryPicksDedup(t *testing.T) {
 	// (b) Restart: all cherry-picks already exist. The function must skip
 	// duplicates and still return the same number of cherry-picks (the
 	// existing ones).
-	restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls)
+	restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("restart createSecurityCherryPicks: %v", err)
 	}
@@ -2463,6 +2493,7 @@ func TestCreateSecurityCherryPicksDedup(t *testing.T) {
 
 func TestCreateSecurityCherryPicksPartialDedup(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "id9-partial"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -2498,7 +2529,7 @@ func TestCreateSecurityCherryPicksPartialDedup(t *testing.T) {
 	}
 	privGerrit.AddChange("go", "pre-cp-1", preseeded, "preseeded cherry-pick")
 
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls)
+	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("partial createSecurityCherryPicks: %v", err)
 	}
@@ -2544,7 +2575,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2588,7 +2619,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 			ci.Branch = checkpoint
 		}
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges on already-moved CLs: %v", err)
 		}
@@ -2625,7 +2656,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 		cls[0].Status = gerrit.ChangeStatusMerged
 		cls[0].Submittable = false
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges with merged CL: %v", err)
 		}
@@ -2664,7 +2695,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2706,7 +2737,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2854,6 +2885,7 @@ func TestCreateVulnReportsNilMilestone(t *testing.T) {
 
 func TestMergedCLCherryPickedOntoInternalBranch(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "cp1"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -2895,7 +2927,7 @@ func TestMergedCLCherryPickedOntoInternalBranch(t *testing.T) {
 		t.Fatalf("createInternalReleaseBranches: %v", err)
 	}
 
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, allCLs)
+	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, allCLs, coalesceRM(), coalesceBackports())
 	if err != nil {
 		t.Fatalf("createSecurityCherryPicks: %v", err)
 	}
@@ -3011,7 +3043,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -3026,7 +3058,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createInternalReleaseBranches: %v", err)
 		}
 
-		cherryPicks, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, submitted)
+		cherryPicks, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, submitted, coalesceRM(), coalesceBackports())
 		if err != nil {
 			t.Fatalf("createSecurityCherryPicks: %v", err)
 		}
@@ -3083,7 +3115,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -3098,7 +3130,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createInternalReleaseBranches: %v", err)
 		}
 
-		cherryPicks, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, submitted)
+		cherryPicks, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, submitted, coalesceRM(), coalesceBackports())
 		if err != nil {
 			t.Fatalf("createSecurityCherryPicks: %v", err)
 		}
@@ -3181,7 +3213,7 @@ func TestMoveAndRebasePrivateChangesErrors(t *testing.T) {
 			Submittable: true,
 		}
 
-		_, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, "whatever", []*gerrit.ChangeInfo{fakeCL})
+		_, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, "whatever", []*gerrit.ChangeInfo{fakeCL}, coalesceRM())
 		if err == nil {
 			t.Fatal("expected error for nonexistent CL")
 		}
@@ -3211,7 +3243,7 @@ func TestSubmitPrivateChangesError(t *testing.T) {
 		t.Fatalf("createSecurityCheckpoint: %v", err)
 	}
 
-	cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+	cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
 	if err != nil {
 		t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 	}
@@ -3263,6 +3295,7 @@ func TestCreateInternalReleaseBranchesError(t *testing.T) {
 
 func TestCreateSecurityCherryPicksConflictError(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	seedRiders(privGerrit)
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "cp-conflict"}}
 
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -3292,9 +3325,9 @@ func TestCreateSecurityCherryPicksConflictError(t *testing.T) {
 		Submittable:          true,
 		Mergeable:            true,
 		ContainsGitConflicts: true,
-	}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1")
+	}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor #70001")
 
-	_, err = deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls)
+	_, err = deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
 	if err == nil {
 		t.Fatal("expected error from cherry-pick conflict")
 	}
@@ -3437,11 +3470,12 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 	privGerrit := task.NewFakeGerrit(t, pubRepo)
 
 	privGerrit.AddChange("go", "rebase-cl", &gerrit.ChangeInfo{
-		ID:          "rebase-cl",
-		ChangeID:    "rebase-cl",
-		Branch:      "public",
-		Submittable: true,
-		Mergeable:   true,
+		ID:           "rebase-cl",
+		ChangeID:     "rebase-cl",
+		ChangeNumber: 4242,
+		Branch:       "public",
+		Submittable:  true,
+		Mergeable:    true,
 	}, "test: rebase target")
 
 	pubRepo.CommitOnBranch("public", map[string]string{"advance.txt": "advance"})
@@ -3464,7 +3498,15 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	moved, err := build.moveAndRebasePrivateChanges(taskCtx, "checkpoint-rebase-test", []*gerrit.ChangeInfo{ci})
+	moved, err := build.moveAndRebasePrivateChanges(taskCtx, "checkpoint-rebase-test", []*gerrit.ChangeInfo{ci}, &relmeta.ReleaseMilestone{
+		Patches: []*relmeta.SecurityPatch{{
+			ID:            1,
+			Track:         relmeta.Private,
+			GitHubIssueID: 70001,
+			CVE:           "CVE-1985-0703",
+			Changelists:   []string{"https://go-internal-review.git.corp.google.com/c/go/+/4242"},
+		}},
+	})
 	if err != nil {
 		t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 	}
@@ -3499,14 +3541,14 @@ func TestCheckPrivateChangesLintXRepo(t *testing.T) {
 	}
 	_, err := deps.buildTasks.checkPrivateChanges(ctx, rm)
 	if err == nil {
-		t.Fatal("checkPrivateChanges with a bare #issue reference on an x repo: got nil error")
+		t.Fatal("checkPrivateChanges with an issue reference on an x repo: got nil error")
 	}
-	if got, want := err.Error(), "missing GitHub issue reference"; !strings.Contains(got, want) {
+	if got, want := err.Error(), "must not contain a GitHub issue reference"; !strings.Contains(got, want) {
 		t.Errorf("checkPrivateChanges error = %q, want it to contain %q", got, want)
 	}
 
-	privGerrit.AddChange("net", "9999", nil, "html: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1")
+	privGerrit.AddChange("net", "9999", nil, "html: fix something\n\nNo references here.")
 	if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm); err != nil {
-		t.Errorf("checkPrivateChanges with a golang/go#issue reference on an x repo = %v, want nil", err)
+		t.Errorf("checkPrivateChanges with a clean message on an x repo = %v, want nil", err)
 	}
 }
