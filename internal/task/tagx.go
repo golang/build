@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"net/url"
 	pathpkg "path"
 	"reflect"
@@ -32,6 +33,7 @@ import (
 type TagXReposTasks struct {
 	IgnoreProjects map[string]bool // project name -> ignore
 	Gerrit         GerritClient
+	HTTPClient     *http.Client
 	CloudBuild     CloudBuildClient
 	BuildBucket    BuildBucketClient
 }
@@ -411,7 +413,7 @@ func (x *TagXReposTasks) UpdateGoMod(ctx *wf.TaskContext, repo TagRepo, updatedD
 	var modules []module // The root and nested modules in repo.
 
 	// Look for the nested modules dynamically. See go.dev/issue/68873.
-	gitRepo, err := gitfs.NewRepo(x.Gerrit.GitilesURL() + "/" + repo.Name)
+	gitRepo, err := gitfs.NewRepo(x.HTTPClient, x.Gerrit.GitilesURL()+"/"+repo.Name)
 	if err != nil {
 		return nil, err
 	}

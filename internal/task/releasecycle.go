@@ -288,7 +288,7 @@ type NextRelnote struct {
 // to _content/doc of the x/website repository.
 func (t ReleaseCycleTasks) MergeNextRelnoteAndAddToWebsite(ctx *wf.TaskContext, version int, tracking RelnoteTracking, reviewers []string) (NextRelnote, error) {
 	// Read branch head.
-	goRepo, err := gitfs.NewRepo(t.Gerrit.GitilesURL() + "/" + "go")
+	goRepo, err := gitfs.NewRepo(nil, t.Gerrit.GitilesURL()+"/"+"go")
 	if err != nil {
 		return NextRelnote{}, err
 	}
@@ -369,7 +369,7 @@ For golang/go#%d.`, version, time.Now().Format(time.DateOnly), commit, tracking.
 // from doc/next in the main Go repository.
 func (t ReleaseCycleTasks) RemoveNextRelnoteFromMainRepo(ctx *wf.TaskContext, version int, tracking RelnoteTracking, nr NextRelnote, reviewers []string) error {
 	// Read branch head.
-	goRepo, err := gitfs.NewRepo(t.Gerrit.GitilesURL() + "/" + "go")
+	goRepo, err := gitfs.NewRepo(nil, t.Gerrit.GitilesURL()+"/"+"go")
 	if err != nil {
 		return err
 	}

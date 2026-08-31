@@ -172,7 +172,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		"internal/stdlib/stdlib.go": "//go:generate cp gen.out manifest.go\n\npackage stdlib\n",
 		"internal/stdlib/gen.out":   "package stdlib\n\n// manifest.go was generated!\n",
 	})
-	fakeGerrit := task.NewFakeGerritTCP(t, goRepo, dlRepo, buildRepo, toolsRepo)
+	fakeGerrit := task.NewFakeGerrit(t, goRepo, dlRepo, buildRepo, toolsRepo)
 
 	gerrit := &reviewerCheckGerrit{FakeGerrit: fakeGerrit}
 	versionTasks := &task.VersionTasks{
@@ -182,6 +182,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		GoDirectiveXReposTasks: task.GoDirectiveXReposTasks{
 			ForceRepos: []string{"build", "tools"},
 			Gerrit:     fakeGerrit,
+			HTTPClient: task.GerritHTTPClient(fakeGerrit),
 			CloudBuild: task.NewFakeCloudBuild(t, fakeGerrit, "", nil),
 		},
 	}
@@ -205,7 +206,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	buildTasks := &BuildReleaseTasks{
 		GerritClient:             gerrit,
 		GerritProject:            "go",
-		GerritHTTPClient:         http.DefaultClient,
+		GerritHTTPClient:         task.GerritHTTPClient(fakeGerrit),
 		Git:                      new(task.Git),
 		GCSClient:                nil,
 		ScratchFS:                &task.ScratchFS{BaseURL: "file://" + scratchDir},
@@ -466,11 +467,12 @@ func testSecurity(t *testing.T, mergeFixes bool) {
 	privateRepo.Branch("internal-release-branch.go1.26.1", privateRepo.Commit(securityFix1))
 	privateRepo.CommitOnBranch("internal-release-branch.go1.26.1", securityFix2)
 	privateRepo.CommitOnBranch("internal-release-branch.go1.26.1", securityFix3)
-	privateGerrit := task.NewFakeGerritTCP(t, privateRepo)
+	privateGerrit := task.NewFakeGerrit(t, privateRepo)
 	deps.buildBucket.GerritURL = privateGerrit.GerritURL()
 	deps.buildBucket.Projects = []string{"go-private"}
 	deps.buildTasks.PrivateGerritClient = privateGerrit
 	deps.buildTasks.PrivateGerritProject = "go-private"
+	deps.buildTasks.GerritHTTPClient = task.GerritHTTPClient(deps.gerrit.FakeGerrit, privateGerrit)
 
 	// Set up the fake CL receival and submission process.
 	deps.goRepo.SetHook("pre-receive", `#!/bin/bash -eu
@@ -627,7 +629,7 @@ security_patches:
 		filepath.Join("data", "milestones", "99915010.yaml"): milestoneYAML,
 	})
 
-	privGerrit := task.NewFakeGerritTCP(t, privGoRepo, smRepo)
+	privGerrit := task.NewFakeGerrit(t, privGoRepo, smRepo)
 	if withPrivatePatches {
 		privGerrit.AddChange("go", "1234", &gerrit.ChangeInfo{
 			ID:           "1234",
@@ -649,6 +651,7 @@ security_patches:
 
 	deps.buildTasks.PrivateGerritClient = privGerrit
 	deps.buildTasks.PrivateGerritProject = "go"
+	deps.buildTasks.GerritHTTPClient = task.GerritHTTPClient(deps.gerrit.FakeGerrit, privGerrit)
 
 	return deps, privGerrit
 }
@@ -1332,8 +1335,8 @@ func TestPublicizeIdempotent(t *testing.T) {
 		"cmd/compile: fix another vuln\n\nFixes CVE-2026-5678\n\nChange-Id: I0000000000000000000000000000000000000002",
 		map[string]string{"security2.txt": "fix2"})
 
-	pubGerrit := task.NewFakeGerritTCP(t, pubRepo)
-	privGerrit := task.NewFakeGerritTCP(t, privRepo)
+	pubGerrit := task.NewFakeGerrit(t, pubRepo)
+	privGerrit := task.NewFakeGerrit(t, privRepo)
 
 	securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
 	if err != nil {
@@ -1397,8 +1400,8 @@ func TestCheckAlreadyPublicizedIgnoresAbandoned(t *testing.T) {
 		"crypto/tls: fix vuln\n\nFixes CVE-2026-1234\n\nChange-Id: I0000000000000000000000000000000000000001",
 		map[string]string{"security1.txt": "fix1"})
 
-	pubGerrit := task.NewFakeGerritTCP(t, pubRepo)
-	privGerrit := task.NewFakeGerritTCP(t, privRepo)
+	pubGerrit := task.NewFakeGerrit(t, pubRepo)
+	privGerrit := task.NewFakeGerrit(t, privRepo)
 
 	securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
 	if err != nil {
@@ -1464,8 +1467,8 @@ func TestPublicizePartialFailsOpen(t *testing.T) {
 		"cmd/compile: fix another\n\nChange-Id: I0000000000000000000000000000000000000002",
 		map[string]string{"security2.txt": "fix2"})
 
-	pubGerrit := task.NewFakeGerritTCP(t, pubRepo)
-	privGerrit := task.NewFakeGerritTCP(t, privRepo)
+	pubGerrit := task.NewFakeGerrit(t, pubRepo)
+	privGerrit := task.NewFakeGerrit(t, privRepo)
 
 	securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
 	if err != nil {
@@ -1547,7 +1550,7 @@ func TestFetchSecurityMilestone(t *testing.T) {
 	t.Run("read branch head error", func(t *testing.T) {
 		// A private Gerrit with no security-metadata repo makes ReadBranchHead fail.
 		b := *deps.buildTasks
-		b.PrivateGerritClient = task.NewFakeGerritTCP(t, deps.goRepo)
+		b.PrivateGerritClient = task.NewFakeGerrit(t, deps.goRepo)
 		_, err := b.fetchSecurityMilestone(ctx, "99915010")
 		if err == nil {
 			t.Fatal("fetchSecurityMilestone with no security-metadata repo: got nil error")
@@ -2350,7 +2353,7 @@ func TestCreateVulnReportsStdCmd(t *testing.T) {
 
 	vulndbRepo := task.NewFakeRepo(t, "vulndb")
 	vulndbRepo.CommitOnBranch("master", map[string]string{"README": "vulndb"})
-	pubGerrit := task.NewFakeGerritTCP(t, vulndbRepo)
+	pubGerrit := task.NewFakeGerrit(t, vulndbRepo)
 	deps.buildTasks.GerritClient = pubGerrit
 
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "vu1"}}
@@ -2682,7 +2685,7 @@ func TestCheckPrivateChangesErrors(t *testing.T) {
 		deps, _ := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "check-err"}}
 
-		deps.buildTasks.PrivateGerritClient = task.NewFakeGerritTCP(t, task.NewFakeRepo(t, "empty"))
+		deps.buildTasks.PrivateGerritClient = task.NewFakeGerrit(t, task.NewFakeRepo(t, "empty"))
 
 		rm := &relmeta.ReleaseMilestone{
 			Patches: []*relmeta.SecurityPatch{{
@@ -2876,8 +2879,8 @@ func TestPublicizeErrors(t *testing.T) {
 			"crypto/tls: fix vuln\n\nChange-Id: I0000000000000000000000000000000000000001",
 			map[string]string{"security1.txt": "fix1"})
 
-		pubGerrit := task.NewFakeGerritTCP(t, pubRepo)
-		privGerrit := task.NewFakeGerritTCP(t, privRepo)
+		pubGerrit := task.NewFakeGerrit(t, pubRepo)
+		privGerrit := task.NewFakeGerrit(t, privRepo)
 
 		securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
 		if err != nil {
@@ -2928,7 +2931,7 @@ func TestPublicizeErrors(t *testing.T) {
 		build, _, _, _, securityCommit := setup(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "pub-read-err"}}
 
-		build.GerritClient = task.NewFakeGerritTCP(t, task.NewFakeRepo(t, "empty"))
+		build.GerritClient = task.NewFakeGerrit(t, task.NewFakeRepo(t, "empty"))
 
 		_, err := build.publicizePrivateSecurityCLs(taskCtx,
 			"go1.26.1", "release-branch.go1.26", "anything", securityCommit, nil)
@@ -2944,7 +2947,7 @@ func TestPublicizeErrors(t *testing.T) {
 		build, _, _, base, _ := setup(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "priv-read-err"}}
 
-		build.PrivateGerritClient = task.NewFakeGerritTCP(t, task.NewFakeRepo(t, "empty"))
+		build.PrivateGerritClient = task.NewFakeGerrit(t, task.NewFakeRepo(t, "empty"))
 
 		_, err := build.publicizePrivateSecurityCLs(taskCtx,
 			"go1.26.1", "release-branch.go1.26", base, "anything", nil)
@@ -2980,7 +2983,7 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 	base := pubRepo.Commit(map[string]string{"README": "hello"})
 	pubRepo.Branch("public", base)
 
-	privGerrit := task.NewFakeGerritTCP(t, pubRepo)
+	privGerrit := task.NewFakeGerrit(t, pubRepo)
 
 	privGerrit.AddChange("go", "rebase-cl", &gerrit.ChangeInfo{
 		ID:           "rebase-cl",

@@ -275,7 +275,7 @@ esac
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	fakeGerrit := NewFakeGerritTCP(t, repos...)
+	fakeGerrit := NewFakeGerrit(t, repos...)
 	var projects []string
 	for _, r := range repos {
 		projects = append(projects, r.name)
@@ -283,6 +283,7 @@ esac
 	fakeBuildBucket := NewFakeBuildBucketClient(0, fakeGerrit.GerritURL(), "ci", projects)
 	tasks := &TagXReposTasks{
 		Gerrit:      fakeGerrit,
+		HTTPClient:  GerritHTTPClient(fakeGerrit),
 		CloudBuild:  NewFakeCloudBuild(t, fakeGerrit, "project", nil, FakeBinary{Name: "go", Implementation: fakeGo}),
 		BuildBucket: fakeBuildBucket,
 	}

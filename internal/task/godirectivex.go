@@ -8,6 +8,7 @@ import (
 	"fmt"
 	goversion "go/version"
 	"io/fs"
+	"net/http"
 	pathpkg "path"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ type GoDirectiveXReposTasks struct {
 	ForceRepos []string // Optional slice to override SelectRepos behavior, if non-nil, intended for tests.
 
 	Gerrit     GerritClient
+	HTTPClient *http.Client
 	CloudBuild CloudBuildClient
 }
 
@@ -61,7 +63,7 @@ func (x GoDirectiveXReposTasks) MaintainGoDirectiveAndMailCL(ctx *wf.TaskContext
 
 	// Maintain the go directive in the root module and nested modules.
 	// Dynamically find the modules and create the git-generate script.
-	gitRepo, err := gitfs.NewRepo(x.Gerrit.GitilesURL() + "/" + repo)
+	gitRepo, err := gitfs.NewRepo(x.HTTPClient, x.Gerrit.GitilesURL()+"/"+repo)
 	if err != nil {
 		return "", err
 	}

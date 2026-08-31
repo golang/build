@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -18,20 +20,24 @@ import (
 	wf "golang.org/x/build/internal/workflow"
 )
 
-type PipeListener struct {
+type Listener struct {
+	addr net.Addr
 	ch   chan net.Conn
 	done chan struct{}
 	once sync.Once
 }
 
-func NewPipeListener() *PipeListener {
-	return &PipeListener{
+var nextPort atomic.Int64
+
+func NewListener() *Listener {
+	return &Listener{
+		addr: net.TCPAddrFromAddrPort(netip.AddrPortFrom(netip.MustParseAddr("192.0.2.1"), uint16(10000+nextPort.Add(1)))),
 		ch:   make(chan net.Conn),
 		done: make(chan struct{}),
 	}
 }
 
-func (l *PipeListener) Accept() (net.Conn, error) {
+func (l *Listener) Accept() (net.Conn, error) {
 	select {
 	case c := <-l.ch:
 		return c, nil
@@ -40,14 +46,14 @@ func (l *PipeListener) Accept() (net.Conn, error) {
 	}
 }
 
-func (l *PipeListener) Close() error {
+func (l *Listener) Close() error {
 	l.once.Do(func() { close(l.done) })
 	return nil
 }
 
-func (l *PipeListener) Addr() net.Addr { return pipeAddr{} }
+func (l *Listener) Addr() net.Addr { return l.addr }
 
-func (l *PipeListener) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+func (l *Listener) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
 	server, client := net.Pipe()
 	select {
 	case l.ch <- server:
@@ -63,10 +69,20 @@ func (l *PipeListener) DialContext(ctx context.Context, network, addr string) (n
 	}
 }
 
-type pipeAddr struct{}
-
-func (pipeAddr) Network() string { return "pipe" }
-func (pipeAddr) String() string  { return "pipe" }
+func NewClient(listeners ...*Listener) *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				for _, l := range listeners {
+					if l.Addr().String() == addr {
+						return l.DialContext(ctx, network, addr)
+					}
+				}
+				return nil, fmt.Errorf("no listener for address %q", addr)
+			},
+		},
+	}
+}
 
 // NewInMemoryServer provides the necessary abstraction to
 // cleanly use synctest and httptest.
@@ -74,19 +90,11 @@ func (pipeAddr) String() string  { return "pipe" }
 // TODO(nealpatel): Remove these abstractions once x/build
 // uses go1.27.
 func NewInMemoryServer(handler http.Handler) (url string, client *http.Client, cleanup func()) {
-	pl := NewPipeListener()
+	li := NewListener()
 	srv := &http.Server{Handler: handler}
-	go srv.Serve(pl)
+	go srv.Serve(li)
 
-	client = &http.Client{
-		Transport: &http.Transport{
-			DialContext: pl.DialContext,
-		},
-	}
-	cleanup = func() {
-		srv.Close()
-	}
-	return "http://pipe", client, cleanup
+	return "http://" + li.Addr().String(), NewClient(li), func() { srv.Close() }
 }
 
 type Logger struct {

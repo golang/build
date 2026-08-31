@@ -17,7 +17,6 @@ import (
 	"io"
 	"io/fs"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -113,17 +112,8 @@ func NewGerritHTTPError(statusCode int, body string) *gerrit.HTTPError {
 // NewFakeGerrit provides a [FakeGerrit] that uses a synctest
 // compatible [workflowtest.PipeListener] under the hood.
 func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
-	return newFakeGerrit(t, workflowtest.NewPipeListener(), repos...)
-}
-
-// NewFakeGerritTCP provides a [FakeGerrit] that uses a real network
-// stack under the hood.
-func NewFakeGerritTCP(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
-	return newFakeGerrit(t, nil, repos...)
-}
-
-func newFakeGerrit(t *testing.T, ln net.Listener, repos ...*FakeRepo) *FakeGerrit {
 	result := &FakeGerrit{
+		ln:             workflowtest.NewListener(),
 		repos:          make(map[string]*FakeRepo),
 		changes:        make(map[string]string),
 		cls:            make(map[string]*gerrit.ChangeInfo),
@@ -141,12 +131,9 @@ func newFakeGerrit(t *testing.T, ln net.Listener, repos ...*FakeRepo) *FakeGerri
 	mux.HandleFunc("GET /a/{repo}/+/{rev}/{path...}", result.serveGitiles)
 	mux.HandleFunc("GET /{repo}/info/refs", result.serveGitInfoRefs) // Serve a git repository over HTTP like Gerrit does.
 	mux.HandleFunc("POST /{repo}/git-upload-pack", result.serveGitUploadPack)
-	mux.HandleFunc("POST /{repo}/git-receive-pack", result.serveGitReceivePack) // Receive pushes to "refs/for/" over HTTP like Gerrit does.
 	server := httptest.NewUnstartedServer(mux)
-	if ln != nil {
-		server.Listener.Close()
-		server.Listener = ln
-	}
+	server.Listener.Close()
+	server.Listener = result.ln
 	server.Start()
 	result.serverURL = server.URL
 	t.Cleanup(server.Close)
@@ -154,6 +141,7 @@ func newFakeGerrit(t *testing.T, ln net.Listener, repos ...*FakeRepo) *FakeGerri
 }
 
 type FakeGerrit struct {
+	ln        *workflowtest.Listener
 	serverURL string
 	repos     map[string]*FakeRepo // Repo name → repo.
 	changesMu sync.Mutex
@@ -322,7 +310,15 @@ func (g *FakeGerrit) GitilesURL() string {
 }
 
 func (g *FakeGerrit) GitRepoURL(project string) string {
-	return g.serverURL + "/" + project
+	return g.repos[project].dir.dir
+}
+
+func GerritHTTPClient(gerrits ...*FakeGerrit) *http.Client {
+	var lns []*workflowtest.Listener
+	for _, g := range gerrits {
+		lns = append(lns, g.ln)
+	}
+	return workflowtest.NewClient(lns...)
 }
 
 func (g *FakeGerrit) ListProjects(ctx context.Context) ([]string, error) {
@@ -643,20 +639,6 @@ func (g *FakeGerrit) serveGitInfoRefs(w http.ResponseWriter, req *http.Request) 
 		w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
 		io.WriteString(w, "001e# service=git-upload-pack\n0000")
 		io.Copy(w, &buf)
-	case "service=git-receive-pack":
-		cmd := exec.CommandContext(req.Context(), "git", "receive-pack", "--advertise-refs", ".")
-		cmd.Dir = filepath.Join(repo.dir.dir, ".git")
-		cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
-		var buf bytes.Buffer
-		cmd.Stdout = &buf
-		err = cmd.Run()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/x-git-receive-pack-advertisement")
-		io.WriteString(w, "001f# service=git-receive-pack\n0000")
-		io.Copy(w, &buf)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
@@ -684,31 +666,6 @@ func (g *FakeGerrit) serveGitUploadPack(w http.ResponseWriter, req *http.Request
 		return
 	}
 	w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
-	io.Copy(w, &buf)
-}
-
-func (g *FakeGerrit) serveGitReceivePack(w http.ResponseWriter, req *http.Request) {
-	repo, err := g.repo(req.PathValue("repo"))
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	if req.Header.Get("Content-Type") != "application/x-git-receive-pack-request" {
-		http.Error(w, "unexpected Content-Type", http.StatusBadRequest)
-		return
-	}
-	cmd := exec.CommandContext(req.Context(), "git", "receive-pack", "--stateless-rpc", ".")
-	cmd.Dir = filepath.Join(repo.dir.dir, ".git")
-	cmd.Env = append(os.Environ(), "GIT_PROTOCOL="+req.Header.Get("Git-Protocol"))
-	cmd.Stdin = req.Body
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	err = cmd.Run()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/x-git-receive-pack-result")
 	io.Copy(w, &buf)
 }
 
