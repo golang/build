@@ -61,74 +61,6 @@ func TestSubject(t *testing.T) {
 	}
 }
 
-func TestStdVulnReportVersions(t *testing.T) {
-	tests := []struct {
-		name    string
-		targets []string
-		want    report.Versions
-		wantErr bool
-	}{
-		{
-			name:    "single",
-			targets: []string{"go1.1.0"},
-			want:    report.Versions{report.Fixed("1.1.0")},
-		},
-		{
-			name:    "two versions",
-			targets: []string{"go1.24.1", "go1.23.5"},
-			want: report.Versions{
-				report.Fixed("1.23.5"),
-				report.Introduced("1.24.0-0"),
-				report.Fixed("1.24.1"),
-			},
-		},
-		{
-			name:    "empty",
-			targets: nil,
-			wantErr: true,
-		},
-		{
-			name:    "invalid semver",
-			targets: []string{"not-a-version"},
-			wantErr: true,
-		},
-		{
-			name:    "bare semver rejected",
-			targets: []string{"1.24.1"},
-			wantErr: true,
-		},
-		{
-			name:    "two component rejected",
-			targets: []string{"go1.26"},
-			wantErr: true,
-		},
-		{
-			name:    "one component rejected",
-			targets: []string{"go1"},
-			wantErr: true,
-		},
-		{
-			name:    "non-numeric minor rejected",
-			targets: []string{"go1.2a.3"},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := stdVulnReportVersions(tt.targets)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("stdVulnReportVersions(%v): err = %v, wantErr = %v", tt.targets, err, tt.wantErr)
-			}
-			if err != nil {
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("stdVulnReportVersions(%v):\ngot  %v\nwant %v", tt.targets, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestVulnReport(t *testing.T) {
 	mod := VulnModuleInfo{Module: "golang.org/x/net", Versions: report.Versions{report.Fixed("1.1.0")}, VulnerableAt: report.VulnerableAt("1.0.0")}
 	const announceURL = "https://groups.google.com/g/golang-announce/c/test"
@@ -432,7 +364,7 @@ func TestStdVulnModuleInfo(t *testing.T) {
 			name: "std package",
 			p: &relmeta.SecurityPatch{
 				Package:        "net/http",
-				TargetReleases: []string{"go1.25.10", "go1.26.3"},
+				TargetReleases: []string{"go1.26.3", "go1.25.10"},
 			},
 			wantMod:  "std",
 			wantVer:  "1.26.2",

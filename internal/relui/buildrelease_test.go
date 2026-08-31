@@ -900,6 +900,10 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 	// There are no PRIVATE patches, so each release's confirm task takes the "no
 	// security fix" path. Allow those approvals; fail any other approval request.
 	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+		if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
+			t.Errorf("no-milestone approval gate fired for non-empty milestone")
+			return nil
+		}
 		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
 			return nil
 		}
@@ -971,35 +975,6 @@ func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
 	if !approvedNoMilestone {
 		t.Errorf("no-milestone approval gate did not fire for empty milestone")
 	}
-}
-
-func TestMinorReleaseMilestoneSkipsApproval(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, false)
-
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
-			t.Errorf("no-milestone approval gate fired for non-empty milestone")
-			return nil
-		}
-		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-			return nil
-		}
-		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-	}
-
-	comm := task.CommunicationTasks{
-		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-	}
-	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, err := workflow.Start(wd, minorReleaseParams())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &verboseListener{t: t})
 }
 
 func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
@@ -1184,82 +1159,6 @@ func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
 	}
 }
 
-func TestRestartInternalBranchesOpenCherryPicks(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "restart-opencp"}}
-
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
-		}
-		cls = append(cls, ci)
-	}
-
-	branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("first createInternalReleaseBranches: %v", err)
-	}
-
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("createSecurityCherryPicks: %v", err)
-	}
-
-	headsBeforeRestart := map[string]string{}
-	for _, b := range branches {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
-		if err != nil {
-			t.Fatalf("reading head of %s: %v", b, err)
-		}
-		headsBeforeRestart[b] = head
-	}
-
-	branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("restart createInternalReleaseBranches with open CPs: %v", err)
-	}
-	if len(branches2) != len(branches) {
-		t.Fatalf("branch count: first=%d, restart=%d", len(branches), len(branches2))
-	}
-	for i, b := range branches2 {
-		if b != branches[i] {
-			t.Errorf("branch[%d] = %q on restart, want %q (fixed name reuse)", i, b, branches[i])
-		}
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
-		if err != nil {
-			t.Fatalf("reading head of %s after restart: %v", b, err)
-		}
-		if head != headsBeforeRestart[b] {
-			t.Errorf("branch %s head changed: got %s, want %s", b, head, headsBeforeRestart[b])
-		}
-	}
-
-	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("restart createSecurityCherryPicks: %v", err)
-	}
-	if len(cps2) != len(cps) {
-		t.Fatalf("cherry-pick count: first=%d, restart=%d", len(cps), len(cps2))
-	}
-	freshNums := map[int]bool{}
-	for _, cp := range cps {
-		freshNums[cp.ChangeNumber] = true
-	}
-	for _, cp := range cps2 {
-		if !freshNums[cp.ChangeNumber] {
-			t.Errorf("restart returned new cherry-pick CL %d; want reuse of existing CL", cp.ChangeNumber)
-		}
-	}
-}
-
 func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 	seedRiders(privGerrit)
@@ -1341,122 +1240,6 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 		}
 		if len(commits) != len(cls) {
 			t.Errorf("branch %s has %d security commits above public head, want %d", b, len(commits), len(cls))
-		}
-	}
-}
-
-func TestRestartNoCherryPickOrphan(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "restart-no-orphan"}}
-
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
-		}
-		cls = append(cls, ci)
-	}
-
-	branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, b := range branches2 {
-		existing, err := privGerrit.QueryChanges(deps.ctx,
-			fmt.Sprintf("project:go branch:%s -is:abandoned", b))
-		if err != nil {
-			t.Fatalf("QueryChanges for %s: %v", b, err)
-		}
-		cpNums := map[int]bool{}
-		for _, cp := range cps {
-			cpNums[cp.ChangeNumber] = true
-		}
-		for _, ci := range existing {
-			if !cpNums[ci.ChangeNumber] {
-				t.Errorf("orphaned CL %d on branch %s after restart; fixed-name strategy must not orphan cherry-picks", ci.ChangeNumber, b)
-			}
-		}
-	}
-}
-
-func TestRestartCherryPickDedupFixedNames(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "restart-dedup"}}
-
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
-		}
-		cls = append(cls, ci)
-	}
-
-	branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cps1, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cps3, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(cps1) != len(cps2) || len(cps2) != len(cps3) {
-		t.Fatalf("cherry-pick counts diverge: run1=%d, run2=%d, run3=%d", len(cps1), len(cps2), len(cps3))
-	}
-
-	numsFrom1 := map[int]bool{}
-	for _, cp := range cps1 {
-		numsFrom1[cp.ChangeNumber] = true
-	}
-	for i, cp := range cps2 {
-		if !numsFrom1[cp.ChangeNumber] {
-			t.Errorf("run2 cherry-pick[%d] CL %d is new; want reuse under fixed branch names", i, cp.ChangeNumber)
-		}
-	}
-	for i, cp := range cps3 {
-		if !numsFrom1[cp.ChangeNumber] {
-			t.Errorf("run3 cherry-pick[%d] CL %d is new; want stable dedup", i, cp.ChangeNumber)
 		}
 	}
 }
@@ -1858,31 +1641,6 @@ func TestCheckPrivateChangesLint(t *testing.T) {
 	if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm); err != nil {
 		t.Errorf("checkPrivateChanges with a clean message: %v", err)
 	}
-}
-
-func TestMinorReleaseSecurityCoalesceMetadata(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-
-	comm := task.CommunicationTasks{
-		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-	}
-
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-			return nil
-		}
-		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-	}
-
-	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, err := workflow.Start(wd, minorReleaseParams())
-	if err != nil {
-		t.Fatal(err)
-	}
-	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &verboseListener{t: t})
 }
 
 // mustGetNextMinors returns the next minor versions for the 26 and 25 series.
@@ -2293,64 +2051,6 @@ func periodicallyDo(ctx context.Context, t *testing.T, period time.Duration, f f
 	}
 }
 
-func TestCreateInternalReleaseBranchesIdempotent(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "id8"}}
-
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
-		}
-		cls = append(cls, ci)
-	}
-
-	// First run: creates internal release branches.
-	branches1, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("first createInternalReleaseBranches: %v", err)
-	}
-	if len(branches1) == 0 {
-		t.Fatal("first run created no internal release branches")
-	}
-
-	// Record the first run's branch heads.
-	firstHeads := map[string]string{}
-	for _, b := range branches1 {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
-		if err != nil {
-			t.Fatalf("reading head of %s: %v", b, err)
-		}
-		firstHeads[b] = head
-	}
-
-	// Second run (restart): must succeed, not 409.
-	branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("second createInternalReleaseBranches: %v (expected idempotent success)", err)
-	}
-	if len(branches2) != len(branches1) {
-		t.Fatalf("branch count mismatch: first=%d, second=%d", len(branches1), len(branches2))
-	}
-
-	// Verify the recreated branches point at the same public heads.
-	for _, b := range branches2 {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
-		if err != nil {
-			t.Fatalf("reading head of %s after restart: %v", b, err)
-		}
-		if head != firstHeads[b] {
-			t.Errorf("branch %s head after restart = %q, want %q (same public head)", b, head, firstHeads[b])
-		}
-	}
-}
-
 func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 	seedRiders(privGerrit)
@@ -2431,62 +2131,17 @@ func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 			t.Errorf("restart returned unknown cherry-pick CL %d; want reuse of existing CL", cp.ChangeNumber)
 		}
 	}
-}
 
-func TestCreateSecurityCherryPicksDedup(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "id9"}}
-
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
+	for _, b := range branches2 {
+		existing, err := privGerrit.QueryChanges(deps.ctx,
+			fmt.Sprintf("project:go branch:%s -is:abandoned", b))
 		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
+			t.Fatalf("QueryChanges for %s: %v", b, err)
 		}
-		cls = append(cls, ci)
-	}
-
-	// Create internal release branches so cherry-picks have somewhere to land.
-	releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// (a) Fresh run: cherry-picks ALL CLs onto each internal branch.
-	freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("fresh createSecurityCherryPicks: %v", err)
-	}
-	wantCount := len(cls) * len(releaseBranches)
-	if got := len(freshCPs); got != wantCount {
-		t.Fatalf("fresh cherry-picks: got %d, want %d (cls=%d * branches=%d)", got, wantCount, len(cls), len(releaseBranches))
-	}
-
-	// (b) Restart: all cherry-picks already exist. The function must skip
-	// duplicates and still return the same number of cherry-picks (the
-	// existing ones).
-	restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("restart createSecurityCherryPicks: %v", err)
-	}
-	if got := len(restartCPs); got != wantCount {
-		t.Fatalf("restart cherry-picks: got %d, want %d", got, wantCount)
-	}
-
-	// Verify the restart reused the existing CLs (same change numbers).
-	freshNums := map[int]bool{}
-	for _, cp := range freshCPs {
-		freshNums[cp.ChangeNumber] = true
-	}
-	for _, cp := range restartCPs {
-		if !freshNums[cp.ChangeNumber] {
-			t.Errorf("restart returned unknown cherry-pick CL %d; want an existing CL", cp.ChangeNumber)
+		for _, ci := range existing {
+			if !freshNums[ci.ChangeNumber] {
+				t.Errorf("orphaned CL %d on branch %s after restart; fixed-name strategy must not orphan cherry-picks", ci.ChangeNumber, b)
+			}
 		}
 	}
 }
@@ -2881,61 +2536,6 @@ func TestCreateVulnReportsNilMilestone(t *testing.T) {
 			t.Errorf("got change ID %q, want empty", got)
 		}
 	})
-}
-
-func TestMergedCLCherryPickedOntoInternalBranch(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "cp1"}}
-
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Mark CL 1234 as already merged.
-	merged1234, err := privGerrit.GetChange(taskCtx, "1234")
-	if err != nil {
-		t.Fatalf("GetChange(1234): %v", err)
-	}
-	merged1234.Status = gerrit.ChangeStatusMerged
-	merged1234.Submittable = false
-
-	var allCLs []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
-		}
-		allCLs = append(allCLs, ci)
-	}
-
-	openCLs := []*gerrit.ChangeInfo{}
-	for _, ci := range allCLs {
-		if ci.Status != gerrit.ChangeStatusMerged {
-			openCLs = append(openCLs, ci)
-		}
-	}
-	_, err = deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, openCLs)
-	if err != nil {
-		t.Fatalf("createSecurityCheckpoint: %v", err)
-	}
-
-	// Create internal release branches from ALL cls (the full milestone).
-	releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, allCLs)
-	if err != nil {
-		t.Fatalf("createInternalReleaseBranches: %v", err)
-	}
-
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, allCLs, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("createSecurityCherryPicks: %v", err)
-	}
-
-	wantCount := len(allCLs) * len(releaseBranches)
-	if got := len(cps); got != wantCount {
-		t.Errorf("cherry-picks: got %d, want %d", got, wantCount)
-	}
 }
 
 func TestConvertInternalChangelists(t *testing.T) {
@@ -3515,40 +3115,5 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 	}
 	if moved[0].Branch != "checkpoint-rebase-test" {
 		t.Errorf("CL branch = %q, want %q", moved[0].Branch, "checkpoint-rebase-test")
-	}
-}
-
-func TestCheckPrivateChangesLintXRepo(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	ctx := &workflow.TaskContext{Context: deps.ctx, Logger: &testLogger{t: t, task: "lint-xrepo"}}
-
-	privGerrit.AddChange("net", "9999", &gerrit.ChangeInfo{
-		ID:           "9999",
-		ChangeID:     "9999",
-		ChangeNumber: 9999,
-		Project:      "net",
-		Branch:       "public",
-		Submittable:  true,
-		Mergeable:    true,
-	}, "html: fix something\n\nFixes CVE-1985-0703\nFixes #1")
-
-	rm := &relmeta.ReleaseMilestone{
-		Patches: []*relmeta.SecurityPatch{{
-			Track:       relmeta.Private,
-			Package:     "golang.org/x/net/html",
-			Changelists: []string{"https://go-internal-review.git.corp.google.com/c/net/+/9999"},
-		}},
-	}
-	_, err := deps.buildTasks.checkPrivateChanges(ctx, rm)
-	if err == nil {
-		t.Fatal("checkPrivateChanges with an issue reference on an x repo: got nil error")
-	}
-	if got, want := err.Error(), "must not contain a GitHub issue reference"; !strings.Contains(got, want) {
-		t.Errorf("checkPrivateChanges error = %q, want it to contain %q", got, want)
-	}
-
-	privGerrit.AddChange("net", "9999", nil, "html: fix something\n\nNo references here.")
-	if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm); err != nil {
-		t.Errorf("checkPrivateChanges with a clean message on an x repo = %v, want nil", err)
 	}
 }

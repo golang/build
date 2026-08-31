@@ -97,9 +97,6 @@ func (m *MilestoneTasks) FetchMilestones(ctx *wf.TaskContext, currentVersion str
 	if kind == KindMajor {
 		// Create the first minor release milestone too.
 		firstMinor := majorVersion + ".1"
-		if err != nil {
-			return ReleaseMilestones{}, err
-		}
 		_, err = m.Client.FetchMilestone(ctx, m.RepoOwner, m.RepoName, uppercaseVersion(firstMinor), true)
 		if err != nil {
 			return ReleaseMilestones{}, err
