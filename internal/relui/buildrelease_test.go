@@ -2890,7 +2890,6 @@ func TestCreateInternalReleaseBranchesError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonexistent release branch")
 	}
-	_ = privGerrit
 }
 
 func TestCreateSecurityCherryPicksConflictError(t *testing.T) {
@@ -2975,17 +2974,11 @@ func TestPublicizeErrors(t *testing.T) {
 	}
 
 	t.Run("public_head_mismatch", func(t *testing.T) {
-		build, pubGerrit, _, base, securityCommit := setup(t)
+		build, _, _, _, securityCommit := setup(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t, task: "pub-mismatch"}}
 
-		repo, err := pubGerrit.ReadBranchHead(context.Background(), "go", "release-branch.go1.26")
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = repo
-
 		fakeOldHead := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-		_, err = build.publicizePrivateSecurityCLs(taskCtx,
+		_, err := build.publicizePrivateSecurityCLs(taskCtx,
 			"go1.26.1", "release-branch.go1.26", fakeOldHead, securityCommit, nil)
 		if err == nil {
 			t.Fatal("expected error for public head mismatch")
@@ -2993,7 +2986,6 @@ func TestPublicizeErrors(t *testing.T) {
 		if !strings.Contains(err.Error(), "restart the release workflow") {
 			t.Errorf("error = %v, want mention of restarting workflow", err)
 		}
-		_ = base
 	})
 
 	t.Run("private_head_mismatch", func(t *testing.T) {

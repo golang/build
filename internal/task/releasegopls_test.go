@@ -956,7 +956,7 @@ func TestTagRelease(t *testing.T) {
 					t.Errorf("release tag %q should be added after tagRelease(%q): %v", releaseTag, tc.release, err)
 				}
 
-				prereleaseTag := fmt.Sprintf("gopls/%s", tc.release)
+				prereleaseTag := fmt.Sprintf("gopls/%s-%s", tc.release, tc.prerelease)
 				prerelease, err := tasks.Gerrit.GetTag(ctx, "tools", prereleaseTag)
 				if err != nil {
 					t.Fatalf("failed to get tag %q: %v", prereleaseTag, err)
