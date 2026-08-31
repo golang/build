@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -51,69 +52,71 @@ func TestAwaitFunc(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.desc, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
 
-			didWork := make(chan struct{}, 2)
-			success := make(chan any)
-			done := make(chan any)
-			wd := workflow.New(workflow.ACL{})
+				didWork := make(chan struct{}, 2)
+				success := make(chan any)
+				done := make(chan any)
+				wd := workflow.New(workflow.ACL{})
 
-			awaitFunc := func(ctx *workflow.TaskContext) error {
-				_, err := task.AwaitCondition(ctx, 10*time.Millisecond, func() (int, bool, error) {
-					select {
-					case <-success:
-						if c.wantCancel {
-							cancel()
+				awaitFunc := func(ctx *workflow.TaskContext) error {
+					_, err := task.AwaitCondition(ctx, 10*time.Millisecond, func() (int, bool, error) {
+						select {
+						case <-success:
+							if c.wantCancel {
+								cancel()
+								return 0, false, ctx.Err()
+							} else if c.wantErr {
+								return 0, false, errors.New("someError")
+							}
+							return 0, true, nil
+						case <-ctx.Done():
 							return 0, false, ctx.Err()
-						} else if c.wantErr {
-							return 0, false, errors.New("someError")
+						case didWork <- struct{}{}:
+							return 0, false, nil
 						}
-						return 0, true, nil
-					case <-ctx.Done():
-						return 0, false, ctx.Err()
-					case didWork <- struct{}{}:
-						return 0, false, nil
-					}
-				})
-				return err
-			}
-			await := workflow.Action0(wd, "AwaitFunc", awaitFunc)
-			truth := workflow.Task0(wd, "truth", func(_ context.Context) (bool, error) { return true, nil }, workflow.After(await))
-			workflow.Output(wd, "await", truth)
-
-			w, err := workflow.Start(wd, nil)
-			if err != nil {
-				t.Fatalf("workflow.Start(%v, %v) = %v, %v, wanted no error", wd, nil, w, err)
-			}
-			go func() {
-				if c.wantErr {
-					workflowtest.RunToFailure(t, ctx, w, "AwaitFunc", &workflowtest.VerboseListener{T: t})
-				} else {
-					outputs, err := runWorkflow(t, ctx, w, nil)
-					if err != nil {
-						t.Errorf("runworkflow() = _, %v", err)
-					}
-					if diff := cmp.Diff(c.want, outputs); diff != "" {
-						t.Errorf("runWorkflow() mismatch (-want +got):\n%s", diff)
-					}
+					})
+					return err
 				}
-				close(done)
-			}()
+				await := workflow.Action0(wd, "AwaitFunc", awaitFunc)
+				truth := workflow.Task0(wd, "truth", func(_ context.Context) (bool, error) { return true, nil }, workflow.After(await))
+				workflow.Output(wd, "await", truth)
 
-			select {
-			case <-time.After(5 * time.Second):
-				t.Error("AwaitFunc() never called f, wanted at least one call")
-			case <-didWork:
-				// AwaitFunc() called f successfully.
-			}
-			select {
-			case <-done:
-				t.Errorf("AwaitFunc() finished early, wanted it to still be looping")
-			case <-didWork:
-				close(success)
-			}
-			<-done
+				w, err := workflow.Start(wd, nil)
+				if err != nil {
+					t.Fatalf("workflow.Start(%v, %v) = %v, %v, wanted no error", wd, nil, w, err)
+				}
+				go func() {
+					if c.wantErr {
+						workflowtest.RunToFailure(t, ctx, w, "AwaitFunc", &workflowtest.VerboseListener{T: t})
+					} else {
+						outputs, err := runWorkflow(t, ctx, w, nil)
+						if err != nil {
+							t.Errorf("runworkflow() = _, %v", err)
+						}
+						if diff := cmp.Diff(c.want, outputs); diff != "" {
+							t.Errorf("runWorkflow() mismatch (-want +got):\n%s", diff)
+						}
+					}
+					close(done)
+				}()
+
+				select {
+				case <-time.After(5 * time.Second):
+					t.Error("AwaitFunc() never called f, wanted at least one call")
+				case <-didWork:
+					// AwaitFunc() called f successfully.
+				}
+				select {
+				case <-done:
+					t.Errorf("AwaitFunc() finished early, wanted it to still be looping")
+				case <-didWork:
+					close(success)
+				}
+				<-done
+			})
 		})
 	}
 }
