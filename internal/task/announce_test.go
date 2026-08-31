@@ -755,7 +755,7 @@ security_patches:
 	tasks := SecurityCommunicationTasks{
 		PrivateGerrit: NewFakeGerrit(t, smRepo),
 	}
-	t.Run("NoMilestone", func(t *testing.T) {
+	workflowtest.Subtest(t, "NoMilestone", func(t *testing.T) {
 		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &workflowtest.Logger{T: t}}
 		summary, err := tasks.GetSecuritySummary(ctx, "")
 		if err != nil {
@@ -772,7 +772,7 @@ security_patches:
 			t.Errorf("release notes = %q, want none", notes)
 		}
 	})
-	t.Run("Summary", func(t *testing.T) {
+	workflowtest.Subtest(t, "Summary", func(t *testing.T) {
 		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &workflowtest.Logger{T: t}}
 		got, err := tasks.GetSecuritySummary(ctx, "100001")
 		if err != nil {
@@ -783,7 +783,7 @@ security_patches:
 			t.Errorf("summary mismatch (-want +got):\n%s", diff)
 		}
 	})
-	t.Run("ReleaseNotes", func(t *testing.T) {
+	workflowtest.Subtest(t, "ReleaseNotes", func(t *testing.T) {
 		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &workflowtest.Logger{T: t}}
 		got, err := tasks.GetSecurityReleaseNotes(ctx, "100001")
 		if err != nil {

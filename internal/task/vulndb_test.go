@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
@@ -448,78 +449,82 @@ func TestMailVulnReports(t *testing.T) {
 	})
 
 	t.Run("happy path", func(t *testing.T) {
-		vulnRepo := NewFakeRepo(t, "vulndb")
-		gc := &fakeVulnGerrit{
-			FakeGerrit: NewFakeGerrit(t, vulnRepo),
-		}
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
+		synctest.Test(t, func(t *testing.T) {
+			vulnRepo := NewFakeRepo(t, "vulndb")
+			gc := &fakeVulnGerrit{
+				FakeGerrit: NewFakeGerrit(t, vulnRepo),
+			}
+			ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 
-		reports := []*report.Report{
-			{ID: "GO-2026-0001"},
-			{ID: "GO-2026-0002"},
-		}
-		wantReviewers := []string{"reviewer-a@google.com", "reviewer-b@google.com"}
-		changeID, err := MailVulnReports(ctx, gc, reports, wantReviewers)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if changeID == "" {
-			t.Fatal("expected non-empty change ID")
-		}
-		if gc.gotInput.Project != "vulndb" {
-			t.Errorf("project = %q, want vulndb", gc.gotInput.Project)
-		}
-		if gc.gotInput.Branch != "master" {
-			t.Errorf("branch = %q, want master", gc.gotInput.Branch)
-		}
-		if !reflect.DeepEqual(gc.gotReviewers, wantReviewers) {
-			t.Errorf("reviewers = %v, want %v", gc.gotReviewers, wantReviewers)
-		}
-		for _, id := range []string{"GO-2026-0001", "GO-2026-0002"} {
-			key := path.Join("data", "reports", id+".yaml")
-			content, ok := gc.gotFiles[key]
-			if !ok {
-				t.Errorf("missing file %q in submitted files", key)
-				continue
+			reports := []*report.Report{
+				{ID: "GO-2026-0001"},
+				{ID: "GO-2026-0002"},
 			}
-			var got report.Report
-			if err := yaml.Unmarshal([]byte(content), &got); err != nil {
-				t.Errorf("unmarshal %q: %v", key, err)
-				continue
+			wantReviewers := []string{"reviewer-a@google.com", "reviewer-b@google.com"}
+			changeID, err := MailVulnReports(ctx, gc, reports, wantReviewers)
+			if err != nil {
+				t.Fatal(err)
 			}
-			if got.ID != id {
-				t.Errorf("file %q: ID = %q, want %q", key, got.ID, id)
+			if changeID == "" {
+				t.Fatal("expected non-empty change ID")
 			}
-		}
+			if gc.gotInput.Project != "vulndb" {
+				t.Errorf("project = %q, want vulndb", gc.gotInput.Project)
+			}
+			if gc.gotInput.Branch != "master" {
+				t.Errorf("branch = %q, want master", gc.gotInput.Branch)
+			}
+			if !reflect.DeepEqual(gc.gotReviewers, wantReviewers) {
+				t.Errorf("reviewers = %v, want %v", gc.gotReviewers, wantReviewers)
+			}
+			for _, id := range []string{"GO-2026-0001", "GO-2026-0002"} {
+				key := path.Join("data", "reports", id+".yaml")
+				content, ok := gc.gotFiles[key]
+				if !ok {
+					t.Errorf("missing file %q in submitted files", key)
+					continue
+				}
+				var got report.Report
+				if err := yaml.Unmarshal([]byte(content), &got); err != nil {
+					t.Errorf("unmarshal %q: %v", key, err)
+					continue
+				}
+				if got.ID != id {
+					t.Errorf("file %q: ID = %q, want %q", key, got.ID, id)
+				}
+			}
+		})
 	})
 
 	t.Run("open CL exists", func(t *testing.T) {
-		vulnRepo := NewFakeRepo(t, "vulndb")
-		fg := NewFakeGerrit(t, vulnRepo)
-		gc := &fakeVulnGerrit{FakeGerrit: fg}
+		synctest.Test(t, func(t *testing.T) {
+			vulnRepo := NewFakeRepo(t, "vulndb")
+			fg := NewFakeGerrit(t, vulnRepo)
+			gc := &fakeVulnGerrit{FakeGerrit: fg}
 
-		reports := []*report.Report{
-			{ID: "GO-2026-0001"},
-			{ID: "GO-2026-0002"},
-		}
+			reports := []*report.Report{
+				{ID: "GO-2026-0001"},
+				{ID: "GO-2026-0002"},
+			}
 
-		fg.AddChange("vulndb", "existing-cl", &gerrit.ChangeInfo{
-			ID:     "existing-cl",
-			Status: "NEW",
-			Branch: "master",
-		}, Subject(reports))
+			fg.AddChange("vulndb", "existing-cl", &gerrit.ChangeInfo{
+				ID:     "existing-cl",
+				Status: "NEW",
+				Branch: "master",
+			}, Subject(reports))
 
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
-		changeID, err := MailVulnReports(ctx, gc, reports, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if changeID != "existing-cl" {
-			t.Errorf("got change ID %q, want %q", changeID, "existing-cl")
-		}
-		if gc.gotFiles != nil {
-			t.Error("expected no CL to be created when open CL exists")
-		}
+			ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
+			changeID, err := MailVulnReports(ctx, gc, reports, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if changeID != "existing-cl" {
+				t.Errorf("got change ID %q, want %q", changeID, "existing-cl")
+			}
+			if gc.gotFiles != nil {
+				t.Error("expected no CL to be created when open CL exists")
+			}
+		})
 	})
 }
 
@@ -563,50 +568,54 @@ security_patches:
 	wantReviewers := []string{"reviewer-a@google.com"}
 
 	t.Run("rewrites in place and refetches", func(t *testing.T) {
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
-		gc := newGerrit(t)
-		rm, err := ConvertInternalChangelists(ctx, gc, "77770001", external, wantReviewers)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got, want := rm.Patches[0].Changelists, []string{"https://go.dev/cl/558675", "https://go.dev/cl/558676"}; !reflect.DeepEqual(got, want) {
-			t.Errorf("private patch changelists = %v, want %v", got, want)
-		}
-		if got, want := rm.Patches[1].Changelists, []string{"https://go.dev/cl/3333"}; !reflect.DeepEqual(got, want) {
-			t.Errorf("public patch changelists = %v, want %v", got, want)
-		}
-		if !reflect.DeepEqual(gc.LastReviewers, wantReviewers) {
-			t.Errorf("reviewers = %v, want %v", gc.LastReviewers, wantReviewers)
-		}
-		if got := readMilestone(t, ctx, gc); strings.Contains(got, "go-internal-review") {
-			t.Errorf("milestone at head still has private links:\n%s", got)
-		}
+		synctest.Test(t, func(t *testing.T) {
+			ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
+			gc := newGerrit(t)
+			rm, err := ConvertInternalChangelists(ctx, gc, "77770001", external, wantReviewers)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := rm.Patches[0].Changelists, []string{"https://go.dev/cl/558675", "https://go.dev/cl/558676"}; !reflect.DeepEqual(got, want) {
+				t.Errorf("private patch changelists = %v, want %v", got, want)
+			}
+			if got, want := rm.Patches[1].Changelists, []string{"https://go.dev/cl/3333"}; !reflect.DeepEqual(got, want) {
+				t.Errorf("public patch changelists = %v, want %v", got, want)
+			}
+			if !reflect.DeepEqual(gc.LastReviewers, wantReviewers) {
+				t.Errorf("reviewers = %v, want %v", gc.LastReviewers, wantReviewers)
+			}
+			if got := readMilestone(t, ctx, gc); strings.Contains(got, "go-internal-review") {
+				t.Errorf("milestone at head still has private links:\n%s", got)
+			}
 
-		gc.LastReviewers = nil
-		again, err := ConvertInternalChangelists(ctx, gc, "77770001", external, wantReviewers)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if gc.LastReviewers != nil {
-			t.Errorf("second call mailed a change with reviewers %v", gc.LastReviewers)
-		}
-		if !reflect.DeepEqual(again, rm) {
-			t.Errorf("second call milestone = %+v, want %+v", again, rm)
-		}
+			gc.LastReviewers = nil
+			again, err := ConvertInternalChangelists(ctx, gc, "77770001", external, wantReviewers)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if gc.LastReviewers != nil {
+				t.Errorf("second call mailed a change with reviewers %v", gc.LastReviewers)
+			}
+			if !reflect.DeepEqual(again, rm) {
+				t.Errorf("second call milestone = %+v, want %+v", again, rm)
+			}
+		})
 	})
 
 	t.Run("nothing to convert", func(t *testing.T) {
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
-		gc := newGerrit(t)
-		before := readMilestone(t, ctx, gc)
-		if _, err := ConvertInternalChangelists(ctx, gc, "77770001", nil, wantReviewers); err != nil {
-			t.Fatal(err)
-		}
-		if gc.LastReviewers != nil {
-			t.Errorf("mailed a change with reviewers %v", gc.LastReviewers)
-		}
-		if after := readMilestone(t, ctx, gc); after != before {
-			t.Errorf("milestone changed without external changelists:\ngot  %s\nwant %s", after, before)
-		}
+		synctest.Test(t, func(t *testing.T) {
+			ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
+			gc := newGerrit(t)
+			before := readMilestone(t, ctx, gc)
+			if _, err := ConvertInternalChangelists(ctx, gc, "77770001", nil, wantReviewers); err != nil {
+				t.Fatal(err)
+			}
+			if gc.LastReviewers != nil {
+				t.Errorf("mailed a change with reviewers %v", gc.LastReviewers)
+			}
+			if after := readMilestone(t, ctx, gc); after != before {
+				t.Errorf("milestone changed without external changelists:\ngot  %s\nwant %s", after, before)
+			}
+		})
 	})
 }

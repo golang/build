@@ -17,6 +17,7 @@ import (
 	"io"
 	"io/fs"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -43,6 +44,7 @@ import (
 	"golang.org/x/build/internal/installer/windowsmsi"
 	"golang.org/x/build/internal/relui/sign"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -108,7 +110,19 @@ func NewGerritHTTPError(statusCode int, body string) *gerrit.HTTPError {
 	}
 }
 
+// NewFakeGerrit provides a [FakeGerrit] that uses a synctest
+// compatible [workflowtest.PipeListener] under the hood.
 func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
+	return newFakeGerrit(t, workflowtest.NewPipeListener(), repos...)
+}
+
+// NewFakeGerritTCP provides a [FakeGerrit] that uses a real network
+// stack under the hood.
+func NewFakeGerritTCP(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
+	return newFakeGerrit(t, nil, repos...)
+}
+
+func newFakeGerrit(t *testing.T, ln net.Listener, repos ...*FakeRepo) *FakeGerrit {
 	result := &FakeGerrit{
 		repos:          make(map[string]*FakeRepo),
 		changes:        make(map[string]string),
@@ -128,7 +142,12 @@ func NewFakeGerrit(t *testing.T, repos ...*FakeRepo) *FakeGerrit {
 	mux.HandleFunc("GET /{repo}/info/refs", result.serveGitInfoRefs) // Serve a git repository over HTTP like Gerrit does.
 	mux.HandleFunc("POST /{repo}/git-upload-pack", result.serveGitUploadPack)
 	mux.HandleFunc("POST /{repo}/git-receive-pack", result.serveGitReceivePack) // Receive pushes to "refs/for/" over HTTP like Gerrit does.
-	server := httptest.NewServer(mux)
+	server := httptest.NewUnstartedServer(mux)
+	if ln != nil {
+		server.Listener.Close()
+		server.Listener = ln
+	}
+	server.Start()
 	result.serverURL = server.URL
 	t.Cleanup(server.Close)
 	return result

@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/v74/github"
@@ -192,126 +193,127 @@ security_patches:
         - a very levitated gopher`
 
 func TestPrivXPatch(t *testing.T) {
-	netRepo := NewFakeRepo(t, "net")
-	smRepo := NewFakeRepo(t, "security-metadata")
+	synctest.Test(t, func(t *testing.T) {
+		netRepo := NewFakeRepo(t, "net")
+		smRepo := NewFakeRepo(t, "security-metadata")
 
-	head := smRepo.History()[0]
-	smRepo.Branch("main", head)
-	smRepo.CommitOnBranch("main", map[string]string{
-		path.Join("data", "milestones", "88810010.yaml"): privXMilestoneYAML,
-	})
+		head := smRepo.History()[0]
+		smRepo.Branch("main", head)
+		smRepo.CommitOnBranch("main", map[string]string{
+			path.Join("data", "milestones", "88810010.yaml"): privXMilestoneYAML,
+		})
 
-	netHead := netRepo.History()[0]
-	netRepo.Branch("public", netHead)
+		netHead := netRepo.History()[0]
+		netRepo.Branch("public", netHead)
 
-	privCommit := netRepo.CommitOnBranch("master", map[string]string{"fix.go": "package fix"})
-	netRepo.runGit("update-ref", "refs/changes/1111/1", privCommit)
-	privCommit2 := netRepo.CommitOnBranch("master", map[string]string{"fix2.go": "package fix"})
-	netRepo.runGit("update-ref", "refs/changes/2222/1", privCommit2)
-	// privCommit3 := netRepo.CommitOnBranch("master", map[string]string{"fix3.go": "package fix"})
-	// netRepo.runGit("update-ref", "refs/changes/3333/1", privCommit3)
-	privCommit4 := netRepo.CommitOnBranch("master", map[string]string{"fix4.go": "package fix"})
-	netRepo.runGit("update-ref", "refs/changes/4444/1", privCommit4)
-	privCommit5 := netRepo.CommitOnBranch("master", map[string]string{"fix5.go": "package fix"})
-	netRepo.runGit("update-ref", "refs/changes/5555/1", privCommit5)
+		privCommit := netRepo.CommitOnBranch("master", map[string]string{"fix.go": "package fix"})
+		netRepo.runGit("update-ref", "refs/changes/1111/1", privCommit)
+		privCommit2 := netRepo.CommitOnBranch("master", map[string]string{"fix2.go": "package fix"})
+		netRepo.runGit("update-ref", "refs/changes/2222/1", privCommit2)
+		// privCommit3 := netRepo.CommitOnBranch("master", map[string]string{"fix3.go": "package fix"})
+		// netRepo.runGit("update-ref", "refs/changes/3333/1", privCommit3)
+		privCommit4 := netRepo.CommitOnBranch("master", map[string]string{"fix4.go": "package fix"})
+		netRepo.runGit("update-ref", "refs/changes/4444/1", privCommit4)
+		privCommit5 := netRepo.CommitOnBranch("master", map[string]string{"fix5.go": "package fix"})
+		netRepo.runGit("update-ref", "refs/changes/5555/1", privCommit5)
 
-	privGerrit := &fakePrivXGerrit{
-		FakeGerrit: NewFakeGerrit(t, netRepo, smRepo),
-		changes: map[string]*gerrit.ChangeInfo{
-			"1111": {
-				ID:              "1111",
-				ChangeID:        "1111",
-				ChangeNumber:    1111,
-				Project:         "net",
-				Branch:          "public",
-				Submittable:     true,
-				CurrentRevision: "rev1111",
-				Status:          gerrit.ChangeStatusMerged,
-				Revisions: map[string]gerrit.RevisionInfo{
-					"rev1111": {
-						Fetch: map[string]*gerrit.FetchInfo{
-							"http": {
-								URL: netRepo.dir.dir,
-								Ref: "refs/changes/1111/1",
+		privGerrit := &fakePrivXGerrit{
+			FakeGerrit: NewFakeGerrit(t, netRepo, smRepo),
+			changes: map[string]*gerrit.ChangeInfo{
+				"1111": {
+					ID:              "1111",
+					ChangeID:        "1111",
+					ChangeNumber:    1111,
+					Project:         "net",
+					Branch:          "public",
+					Submittable:     true,
+					CurrentRevision: "rev1111",
+					Status:          gerrit.ChangeStatusMerged,
+					Revisions: map[string]gerrit.RevisionInfo{
+						"rev1111": {
+							Fetch: map[string]*gerrit.FetchInfo{
+								"http": {
+									URL: netRepo.dir.dir,
+									Ref: "refs/changes/1111/1",
+								},
+							},
+						},
+					},
+				},
+				"2222": {
+					ID:              "2222",
+					ChangeID:        "2222",
+					ChangeNumber:    2222,
+					Project:         "net",
+					Branch:          "public",
+					Submittable:     true,
+					CurrentRevision: "rev2222",
+					Status:          gerrit.ChangeStatusMerged,
+					Revisions: map[string]gerrit.RevisionInfo{
+						"rev2222": {
+							Fetch: map[string]*gerrit.FetchInfo{
+								"http": {
+									URL: netRepo.dir.dir,
+									Ref: "refs/changes/2222/1",
+								},
+							},
+						},
+					},
+				},
+				"4444": {
+					ID:              "4444",
+					ChangeID:        "4444",
+					ChangeNumber:    4444,
+					Project:         "net",
+					Branch:          "public",
+					Submittable:     true,
+					CurrentRevision: "rev4444",
+					Status:          gerrit.ChangeStatusMerged,
+					Revisions: map[string]gerrit.RevisionInfo{
+						"rev4444": {
+							Fetch: map[string]*gerrit.FetchInfo{
+								"http": {
+									URL: netRepo.dir.dir,
+									Ref: "refs/changes/4444/1",
+								},
+							},
+						},
+					},
+				},
+				"5555": {
+					ID:              "5555",
+					ChangeID:        "5555",
+					ChangeNumber:    5555,
+					Project:         "net",
+					Branch:          "public",
+					Submittable:     true,
+					CurrentRevision: "rev5555",
+					Status:          gerrit.ChangeStatusMerged,
+					Revisions: map[string]gerrit.RevisionInfo{
+						"rev5555": {
+							Fetch: map[string]*gerrit.FetchInfo{
+								"http": {
+									URL: netRepo.dir.dir,
+									Ref: "refs/changes/5555/1",
+								},
 							},
 						},
 					},
 				},
 			},
-			"2222": {
-				ID:              "2222",
-				ChangeID:        "2222",
-				ChangeNumber:    2222,
-				Project:         "net",
-				Branch:          "public",
-				Submittable:     true,
-				CurrentRevision: "rev2222",
-				Status:          gerrit.ChangeStatusMerged,
-				Revisions: map[string]gerrit.RevisionInfo{
-					"rev2222": {
-						Fetch: map[string]*gerrit.FetchInfo{
-							"http": {
-								URL: netRepo.dir.dir,
-								Ref: "refs/changes/2222/1",
-							},
-						},
-					},
-				},
-			},
-			"4444": {
-				ID:              "4444",
-				ChangeID:        "4444",
-				ChangeNumber:    4444,
-				Project:         "net",
-				Branch:          "public",
-				Submittable:     true,
-				CurrentRevision: "rev4444",
-				Status:          gerrit.ChangeStatusMerged,
-				Revisions: map[string]gerrit.RevisionInfo{
-					"rev4444": {
-						Fetch: map[string]*gerrit.FetchInfo{
-							"http": {
-								URL: netRepo.dir.dir,
-								Ref: "refs/changes/4444/1",
-							},
-						},
-					},
-				},
-			},
-			"5555": {
-				ID:              "5555",
-				ChangeID:        "5555",
-				ChangeNumber:    5555,
-				Project:         "net",
-				Branch:          "public",
-				Submittable:     true,
-				CurrentRevision: "rev5555",
-				Status:          gerrit.ChangeStatusMerged,
-				Revisions: map[string]gerrit.RevisionInfo{
-					"rev5555": {
-						Fetch: map[string]*gerrit.FetchInfo{
-							"http": {
-								URL: netRepo.dir.dir,
-								Ref: "refs/changes/5555/1",
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for id := range privGerrit.changes {
-		privGerrit.clBases[id] = strings.TrimSpace(string(publicHead))
-	}
+		}
+		publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for id := range privGerrit.changes {
+			privGerrit.clBases[id] = strings.TrimSpace(string(publicHead))
+		}
 
-	pubRepo := NewFakeRepo(t, "net")
-	pubRepo.CommitOnBranch("master", map[string]string{"go.mod": "module golang.org/x/net\n\ngo 1.24"})
-	pubRepo.runGit("tag", "v1.0.0")
-	pubRepo.SetHook("post-receive", `#!/bin/bash -eu
+		pubRepo := NewFakeRepo(t, "net")
+		pubRepo.CommitOnBranch("master", map[string]string{"go.mod": "module golang.org/x/net\n\ngo 1.24"})
+		pubRepo.runGit("tag", "v1.0.0")
+		pubRepo.SetHook("post-receive", `#!/bin/bash -eu
 read old new refname
 git update-ref refs/heads/master "$new"
 echo "Resolving deltas: 100% (5/5)"
@@ -323,78 +325,78 @@ echo
 echo "  https://go-review.googlesource.com/c/net/+/558675 some change [NEW]"
 echo`)
 
-	vulndbRepo := NewFakeRepo(t, "vulndb")
-	vulndbBase := vulndbRepo.CommitOnBranch("master", map[string]string{"README": "vulndb"})
+		vulndbRepo := NewFakeRepo(t, "vulndb")
+		vulndbBase := vulndbRepo.CommitOnBranch("master", map[string]string{"README": "vulndb"})
 
-	pubBase, _ := strings.CutSuffix(pubRepo.dir.dir, filepath.Base(pubRepo.dir.dir))
-	pubGerrit := NewFakeGerrit(t, pubRepo, vulndbRepo)
-	pubGerrit.ConsiderChangeSubmitted(pubRepo, "558675")
+		pubBase, _ := strings.CutSuffix(pubRepo.dir.dir, filepath.Base(pubRepo.dir.dir))
+		pubGerrit := NewFakeGerrit(t, pubRepo, vulndbRepo)
+		pubGerrit.ConsiderChangeSubmitted(pubRepo, "558675")
 
-	fakeGH := &FakeGitHub{Issues: map[int]*github.Issue{
-		4294967296: {Number: github.Ptr(4294967296)},
-		4294967297: {Number: github.Ptr(4294967297)},
-		4294967298: {Number: github.Ptr(4294967298)},
-	}}
-	orderedGH := &fakePrivXGitHub{
-		FakeGitHub: fakeGH,
-		t:          t,
-		gerrit:     pubGerrit,
-		vulndbBase: vulndbBase,
-	}
+		fakeGH := &FakeGitHub{Issues: map[int]*github.Issue{
+			4294967296: {Number: github.Ptr(4294967296)},
+			4294967297: {Number: github.Ptr(4294967297)},
+			4294967298: {Number: github.Ptr(4294967298)},
+		}}
+		orderedGH := &fakePrivXGitHub{
+			FakeGitHub: fakeGH,
+			t:          t,
+			gerrit:     pubGerrit,
+			vulndbBase: vulndbBase,
+		}
 
-	var announcementHeader MailHeader
-	var announcementMessage MailContent
-	p := &PrivXPatch{
-		Git:           &Git{},
-		PrivateGerrit: privGerrit,
-		PublicGerrit:  pubGerrit,
-		PublicRepoURL: func(repo string) string {
-			return pubBase + "/" + repo
-		},
-		GitHub:        orderedGH,
-		ApproveAction: func(*wf.TaskContext) error { return nil },
-		SendMail: func(_ *wf.TaskContext, mh MailHeader, mc MailContent) error {
-			announcementHeader, announcementMessage = mh, mc
-			return nil
-		},
-		AnnounceMailHeader: MailHeader{
-			From: mail.Address{Address: "security@golang.org"},
-			To:   mail.Address{Address: "golang-announce@googlegroups.com"},
-		},
-		AwaitAnnounceMail: func(_ *wf.TaskContext, m SentMail) (string, error) {
-			return "https://groups.google.com/g/golang-announce/c/test", nil
-		},
-	}
+		var announcementHeader MailHeader
+		var announcementMessage MailContent
+		p := &PrivXPatch{
+			Git:           &Git{},
+			PrivateGerrit: privGerrit,
+			PublicGerrit:  pubGerrit,
+			PublicRepoURL: func(repo string) string {
+				return pubBase + "/" + repo
+			},
+			GitHub:        orderedGH,
+			ApproveAction: func(*wf.TaskContext) error { return nil },
+			SendMail: func(_ *wf.TaskContext, mh MailHeader, mc MailContent) error {
+				announcementHeader, announcementMessage = mh, mc
+				return nil
+			},
+			AnnounceMailHeader: MailHeader{
+				From: mail.Address{Address: "security@golang.org"},
+				To:   mail.Address{Address: "golang-announce@googlegroups.com"},
+			},
+			AwaitAnnounceMail: func(_ *wf.TaskContext, m SentMail) (string, error) {
+				return "https://groups.google.com/g/golang-announce/c/test", nil
+			},
+		}
 
-	tagxGerrit := NewFakeGerrit(t, pubRepo)
-	wd := p.NewDefinition(&TagXReposTasks{Gerrit: tagxGerrit})
-	w, err := wf.Start(wd, map[string]any{
-		SecurityMilestoneParameter.Name:      "88810010",
-		reviewersParam.Name:                  []string{},
-		SecurityReviewersParameter.Name:      []string{"vulnreviewer@google.com"},
-		"Repository name":                    "net",
-		"Skip post submit result (optional)": true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+		tagxGerrit := NewFakeGerrit(t, pubRepo)
+		wd := p.NewDefinition(&TagXReposTasks{Gerrit: tagxGerrit})
+		w, err := wf.Start(wd, map[string]any{
+			SecurityMilestoneParameter.Name:      "88810010",
+			reviewersParam.Name:                  []string{},
+			SecurityReviewersParameter.Name:      []string{"vulnreviewer@google.com"},
+			"Repository name":                    "net",
+			"Skip post submit result (optional)": true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	_, err = w.Run(&wf.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, &workflowtest.VerboseListener{T: t})
-	if err != nil {
-		t.Fatal(err)
-	}
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		_, err = w.Run(&wf.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, &workflowtest.VerboseListener{T: t})
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	if diff := cmp.Diff(p.AnnounceMailHeader, announcementHeader); diff != "" {
-		t.Errorf("announcement header mismatch (-want +got):\n%s", diff)
-	}
-	wantSubject := `[security] Vulnerabilities in golang.org/x/net`
-	if announcementMessage.Subject != wantSubject {
-		t.Errorf("announcement subject:\ngot  %q\nwant %q", announcementMessage.Subject, wantSubject)
-	}
+		if diff := cmp.Diff(p.AnnounceMailHeader, announcementHeader); diff != "" {
+			t.Errorf("announcement header mismatch (-want +got):\n%s", diff)
+		}
+		wantSubject := `[security] Vulnerabilities in golang.org/x/net`
+		if announcementMessage.Subject != wantSubject {
+			t.Errorf("announcement subject:\ngot  %q\nwant %q", announcementMessage.Subject, wantSubject)
+		}
 
-	wantText := `Hello gophers,
+		wantText := `Hello gophers,
 
 We have tagged version v1.1.0 of golang.org/x/net in order to address the following security issues:
 
@@ -431,11 +433,11 @@ We have tagged version v1.1.0 of golang.org/x/net in order to address the follow
 Cheers,
 Go Security team
 `
-	if diff := cmp.Diff(wantText, announcementMessage.BodyText); diff != "" {
-		t.Errorf("announcement text mismatch (-want +got):\n%s", diff)
-	}
+		if diff := cmp.Diff(wantText, announcementMessage.BodyText); diff != "" {
+			t.Errorf("announcement text mismatch (-want +got):\n%s", diff)
+		}
 
-	wantHTML := `<p>Hello gophers,</p>
+		wantHTML := `<p>Hello gophers,</p>
 <p>We have tagged version v1.1.0 of golang.org/x/net in order to address the following security issues:</p>
 <ul>
 <li>
@@ -466,155 +468,156 @@ float indefinitely.</p>
 <p>Cheers,<br>
 Go Security team</p>
 `
-	if diff := cmp.Diff(wantHTML, announcementMessage.BodyHTML); diff != "" {
-		t.Errorf("announcement HTML mismatch (-want +got):\n%s", diff)
-	}
+		if diff := cmp.Diff(wantHTML, announcementMessage.BodyHTML); diff != "" {
+			t.Errorf("announcement HTML mismatch (-want +got):\n%s", diff)
+		}
 
-	// Verify that vuln reports were submitted to vulndb.
-	vulndbHead, err := pubGerrit.ReadBranchHead(ctx, "vulndb", "master")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var rm relmeta.ReleaseMilestone
-	if err := yaml.Unmarshal([]byte(privXMilestoneYAML), &rm); err != nil {
-		t.Fatal(err)
-	}
-
-	const announceURL = "https://groups.google.com/g/golang-announce/c/test"
-	for _, p := range rm.Patches {
-		reportPath := path.Join("data", "reports", p.VulnReportID+".yaml")
-		b, err := pubGerrit.ReadFile(ctx, "vulndb", vulndbHead, reportPath)
+		// Verify that vuln reports were submitted to vulndb.
+		vulndbHead, err := pubGerrit.ReadBranchHead(ctx, "vulndb", "master")
 		if err != nil {
-			t.Fatalf("patch %d: reading %s: %v", p.ID, reportPath, err)
+			t.Fatal(err)
 		}
-		if !bytes.Contains(b, []byte(announceURL)) {
-			t.Errorf("patch %d: report %s does not contain %s", p.ID, reportPath, announceURL)
-		}
-		var vr report.Report
-		if err := yaml.Unmarshal(b, &vr); err != nil {
-			t.Fatalf("patch %d: unmarshal %s: %v", p.ID, reportPath, err)
+		var rm relmeta.ReleaseMilestone
+		if err := yaml.Unmarshal([]byte(privXMilestoneYAML), &rm); err != nil {
+			t.Fatal(err)
 		}
 
-		if vr.ID != p.VulnReportID {
-			t.Errorf("patch %d: ID = %q, want %q", p.ID, vr.ID, p.VulnReportID)
-		}
+		const announceURL = "https://groups.google.com/g/golang-announce/c/test"
+		for _, p := range rm.Patches {
+			reportPath := path.Join("data", "reports", p.VulnReportID+".yaml")
+			b, err := pubGerrit.ReadFile(ctx, "vulndb", vulndbHead, reportPath)
+			if err != nil {
+				t.Fatalf("patch %d: reading %s: %v", p.ID, reportPath, err)
+			}
+			if !bytes.Contains(b, []byte(announceURL)) {
+				t.Errorf("patch %d: report %s does not contain %s", p.ID, reportPath, announceURL)
+			}
+			var vr report.Report
+			if err := yaml.Unmarshal(b, &vr); err != nil {
+				t.Fatalf("patch %d: unmarshal %s: %v", p.ID, reportPath, err)
+			}
 
-		// Module and package.
-		if len(vr.Modules) != 1 {
-			t.Errorf("patch %d: got %d modules, want 1", p.ID, len(vr.Modules))
-			continue
-		}
-		mod := vr.Modules[0]
-		if mod.Module != "golang.org/x/net" {
-			t.Errorf("patch %d: module = %q, want %q", p.ID, mod.Module, "golang.org/x/net")
-		}
-		if len(mod.Packages) != 1 {
-			t.Errorf("patch %d: got %d packages, want 1", p.ID, len(mod.Packages))
-			continue
-		}
-		if mod.Packages[0].Package != p.Package {
-			t.Errorf("patch %d: package = %q, want %q", p.ID, mod.Packages[0].Package, p.Package)
-		}
-		if want := (report.Versions{report.Fixed("1.1.0")}); !reflect.DeepEqual(mod.Versions, want) {
-			t.Errorf("patch %d: versions = %v, want %v", p.ID, mod.Versions, want)
-		}
-		if mod.VulnerableAt == nil || mod.VulnerableAt.Version != "1.0.0" {
-			t.Errorf("patch %d: vulnerable_at = %v, want 1.0.0", p.ID, mod.VulnerableAt)
-		}
+			if vr.ID != p.VulnReportID {
+				t.Errorf("patch %d: ID = %q, want %q", p.ID, vr.ID, p.VulnReportID)
+			}
 
-		// CVE metadata.
-		if vr.CVEMetadata == nil {
-			t.Errorf("patch %d: CVEMetadata is nil", p.ID)
-			continue
-		}
-		if vr.CVEMetadata.ID != p.CVE {
-			t.Errorf("patch %d: CVEMetadata.ID = %q, want %q", p.ID, vr.CVEMetadata.ID, p.CVE)
-		}
+			// Module and package.
+			if len(vr.Modules) != 1 {
+				t.Errorf("patch %d: got %d modules, want 1", p.ID, len(vr.Modules))
+				continue
+			}
+			mod := vr.Modules[0]
+			if mod.Module != "golang.org/x/net" {
+				t.Errorf("patch %d: module = %q, want %q", p.ID, mod.Module, "golang.org/x/net")
+			}
+			if len(mod.Packages) != 1 {
+				t.Errorf("patch %d: got %d packages, want 1", p.ID, len(mod.Packages))
+				continue
+			}
+			if mod.Packages[0].Package != p.Package {
+				t.Errorf("patch %d: package = %q, want %q", p.ID, mod.Packages[0].Package, p.Package)
+			}
+			if want := (report.Versions{report.Fixed("1.1.0")}); !reflect.DeepEqual(mod.Versions, want) {
+				t.Errorf("patch %d: versions = %v, want %v", p.ID, mod.Versions, want)
+			}
+			if mod.VulnerableAt == nil || mod.VulnerableAt.Version != "1.0.0" {
+				t.Errorf("patch %d: vulnerable_at = %v, want 1.0.0", p.ID, mod.VulnerableAt)
+			}
 
-		// Credits.
-		if diff := cmp.Diff(p.Credits, vr.Credits); diff != "" {
-			t.Errorf("patch %d: credits mismatch (-want +got):\n%s", p.ID, diff)
-		}
+			// CVE metadata.
+			if vr.CVEMetadata == nil {
+				t.Errorf("patch %d: CVEMetadata is nil", p.ID)
+				continue
+			}
+			if vr.CVEMetadata.ID != p.CVE {
+				t.Errorf("patch %d: CVEMetadata.ID = %q, want %q", p.ID, vr.CVEMetadata.ID, p.CVE)
+			}
 
-		// Description must be non-empty.
-		if vr.Description == "" {
-			t.Errorf("patch %d: description is empty", p.ID)
-		}
+			// Credits.
+			if diff := cmp.Diff(p.Credits, vr.Credits); diff != "" {
+				t.Errorf("patch %d: credits mismatch (-want +got):\n%s", p.ID, diff)
+			}
 
-		// Summary must be non-empty.
-		if vr.Summary == "" {
-			t.Errorf("patch %d: summary is empty", p.ID)
-		}
+			// Description must be non-empty.
+			if vr.Description == "" {
+				t.Errorf("patch %d: description is empty", p.ID)
+			}
 
-		// ReviewStatus must be Reviewed.
-		if vr.ReviewStatus != report.Reviewed {
-			t.Errorf("patch %d: review_status = %v, want Reviewed", p.ID, vr.ReviewStatus)
-		}
+			// Summary must be non-empty.
+			if vr.Summary == "" {
+				t.Errorf("patch %d: summary is empty", p.ID)
+			}
 
-		// Source metadata.
-		if vr.SourceMeta == nil || vr.SourceMeta.ID != "go-security-team" {
-			t.Errorf("patch %d: source meta = %v, want id=go-security-team", p.ID, vr.SourceMeta)
-		}
+			// ReviewStatus must be Reviewed.
+			if vr.ReviewStatus != report.Reviewed {
+				t.Errorf("patch %d: review_status = %v, want Reviewed", p.ID, vr.ReviewStatus)
+			}
 
-		// References: must contain a REPORT ref for the GitHub issue, FIX refs
-		// for each changelist, and a WEB ref for the announcement URL.
-		refsByType := map[report.ReferenceType][]string{}
-		for _, ref := range vr.References {
-			refsByType[ref.Type] = append(refsByType[ref.Type], ref.URL)
-		}
-		if p.GitHubIssueID != 0 {
-			wantIssueURL := fmt.Sprintf("https://go.dev/issue/%d", p.GitHubIssueID)
-			if urls := refsByType[report.ReferenceTypeReport]; len(urls) != 1 || urls[0] != wantIssueURL {
-				t.Errorf("patch %d: REPORT refs = %v, want [%s]", p.ID, urls, wantIssueURL)
+			// Source metadata.
+			if vr.SourceMeta == nil || vr.SourceMeta.ID != "go-security-team" {
+				t.Errorf("patch %d: source meta = %v, want id=go-security-team", p.ID, vr.SourceMeta)
+			}
+
+			// References: must contain a REPORT ref for the GitHub issue, FIX refs
+			// for each changelist, and a WEB ref for the announcement URL.
+			refsByType := map[report.ReferenceType][]string{}
+			for _, ref := range vr.References {
+				refsByType[ref.Type] = append(refsByType[ref.Type], ref.URL)
+			}
+			if p.GitHubIssueID != 0 {
+				wantIssueURL := fmt.Sprintf("https://go.dev/issue/%d", p.GitHubIssueID)
+				if urls := refsByType[report.ReferenceTypeReport]; len(urls) != 1 || urls[0] != wantIssueURL {
+					t.Errorf("patch %d: REPORT refs = %v, want [%s]", p.ID, urls, wantIssueURL)
+				}
+			}
+			if got, want := len(refsByType[report.ReferenceTypeFix]), len(p.Changelists); got != want {
+				t.Errorf("patch %d: got %d FIX refs, want %d", p.ID, got, want)
+			}
+			for _, u := range refsByType[report.ReferenceTypeFix] {
+				if p.Track == relmeta.Private && u != "https://go.dev/cl/558675" {
+					t.Errorf("patch %d: FIX ref %q is not the disclosed public CL", p.ID, u)
+				}
+			}
+			if urls := refsByType[report.ReferenceTypeWeb]; len(urls) != 1 || urls[0] != announceURL {
+				t.Errorf("patch %d: WEB refs = %v, want [%s]", p.ID, urls, announceURL)
 			}
 		}
-		if got, want := len(refsByType[report.ReferenceTypeFix]), len(p.Changelists); got != want {
-			t.Errorf("patch %d: got %d FIX refs, want %d", p.ID, got, want)
+
+		if want := []string{"vulnreviewer@google.com"}; !reflect.DeepEqual(pubGerrit.LastReviewers, want) {
+			t.Errorf("vulndb reviewers = %v, want %v", pubGerrit.LastReviewers, want)
 		}
-		for _, u := range refsByType[report.ReferenceTypeFix] {
-			if p.Track == relmeta.Private && u != "https://go.dev/cl/558675" {
-				t.Errorf("patch %d: FIX ref %q is not the disclosed public CL", p.ID, u)
+		if want := []string{"vulnreviewer@google.com"}; !reflect.DeepEqual(privGerrit.LastReviewers, want) {
+			t.Errorf("metadata reviewers = %v, want %v", privGerrit.LastReviewers, want)
+		}
+		smHead, err := privGerrit.ReadBranchHead(ctx, "security-metadata", "main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		smBytes, err := privGerrit.ReadFile(ctx, "security-metadata", smHead, path.Join("data", "milestones", "88810010.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(smBytes, []byte("go-internal-review")) {
+			t.Errorf("milestone at head still has private links:\n%s", smBytes)
+		}
+
+		// Verify that GitHub issues were updated with the release note + trailer.
+		for _, p := range rm.Patches {
+			issue, ok := fakeGH.Issues[int(p.GitHubIssueID)]
+			if !ok {
+				t.Errorf("patch %d: GitHub issue %d not found", p.ID, p.GitHubIssueID)
+				continue
+			}
+			body := issue.GetBody()
+			if !strings.Contains(body, p.ReleaseNote) {
+				t.Errorf("patch %d: issue body missing release note", p.ID)
+			}
+			wantTrailer := fmt.Sprintf("This was a [%s track](https://go.dev/doc/security/policy#%s) issue originally tracked in http://b/%d.", p.Track, strings.ToLower(string(p.Track)), p.ID)
+			if !strings.Contains(body, wantTrailer) {
+				t.Errorf("patch %d: issue body missing trailer, got:\n%s", p.ID, body)
 			}
 		}
-		if urls := refsByType[report.ReferenceTypeWeb]; len(urls) != 1 || urls[0] != announceURL {
-			t.Errorf("patch %d: WEB refs = %v, want [%s]", p.ID, urls, announceURL)
-		}
-	}
-
-	if want := []string{"vulnreviewer@google.com"}; !reflect.DeepEqual(pubGerrit.LastReviewers, want) {
-		t.Errorf("vulndb reviewers = %v, want %v", pubGerrit.LastReviewers, want)
-	}
-	if want := []string{"vulnreviewer@google.com"}; !reflect.DeepEqual(privGerrit.LastReviewers, want) {
-		t.Errorf("metadata reviewers = %v, want %v", privGerrit.LastReviewers, want)
-	}
-	smHead, err := privGerrit.ReadBranchHead(ctx, "security-metadata", "main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	smBytes, err := privGerrit.ReadFile(ctx, "security-metadata", smHead, path.Join("data", "milestones", "88810010.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(smBytes, []byte("go-internal-review")) {
-		t.Errorf("milestone at head still has private links:\n%s", smBytes)
-	}
-
-	// Verify that GitHub issues were updated with the release note + trailer.
-	for _, p := range rm.Patches {
-		issue, ok := fakeGH.Issues[int(p.GitHubIssueID)]
-		if !ok {
-			t.Errorf("patch %d: GitHub issue %d not found", p.ID, p.GitHubIssueID)
-			continue
-		}
-		body := issue.GetBody()
-		if !strings.Contains(body, p.ReleaseNote) {
-			t.Errorf("patch %d: issue body missing release note", p.ID)
-		}
-		wantTrailer := fmt.Sprintf("This was a [%s track](https://go.dev/doc/security/policy#%s) issue originally tracked in http://b/%d.", p.Track, strings.ToLower(string(p.Track)), p.ID)
-		if !strings.Contains(body, wantTrailer) {
-			t.Errorf("patch %d: issue body missing trailer, got:\n%s", p.ID, body)
-		}
-	}
+	})
 }
 
 func TestResolveVulnerableVersion(t *testing.T) {
@@ -677,31 +680,33 @@ func TestResolveVulnerableVersion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := NewFakeRepo(t, "net")
-			head := repo.Commit(map[string]string{"go.mod": "module golang.org/x/net\n"})
-			for _, tag := range tt.tags {
-				repo.Tag(tag, head)
-			}
+			synctest.Test(t, func(t *testing.T) {
+				repo := NewFakeRepo(t, "net")
+				head := repo.Commit(map[string]string{"go.mod": "module golang.org/x/net\n"})
+				for _, tag := range tt.tags {
+					repo.Tag(tag, head)
+				}
 
-			fg := NewFakeGerrit(t, repo)
-			x := &PrivXPatch{PublicGerrit: fg}
-			ctx := &wf.TaskContext{
-				Context: context.Background(),
-				Logger:  &workflowtest.Logger{T: t},
-			}
+				fg := NewFakeGerrit(t, repo)
+				x := &PrivXPatch{PublicGerrit: fg}
+				ctx := &wf.TaskContext{
+					Context: context.Background(),
+					Logger:  &workflowtest.Logger{T: t},
+				}
 
-			tagged := TagRepo{Name: "net", NewerVersion: tt.cutVersion}
-			got, err := x.ResolveVulnerableVersion(ctx, tagged)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("ResolveVulnerableVersion: err = %v, wantErr = %v", err, tt.wantErr)
-			}
-			if tt.wantErr {
-				return
-			}
-			want := report.VulnerableAt(tt.want)
-			if !reflect.DeepEqual(got, want) {
-				t.Errorf("ResolveVulnerableVersion = %v, want %v", got, want)
-			}
+				tagged := TagRepo{Name: "net", NewerVersion: tt.cutVersion}
+				got, err := x.ResolveVulnerableVersion(ctx, tagged)
+				if (err != nil) != tt.wantErr {
+					t.Fatalf("ResolveVulnerableVersion: err = %v, wantErr = %v", err, tt.wantErr)
+				}
+				if tt.wantErr {
+					return
+				}
+				want := report.VulnerableAt(tt.want)
+				if !reflect.DeepEqual(got, want) {
+					t.Errorf("ResolveVulnerableVersion = %v, want %v", got, want)
+				}
+			})
 		})
 	}
 }
@@ -760,247 +765,257 @@ func TestUpdateGitHubIssues(t *testing.T) {
 }
 
 func TestMoveAndRebaseAllRebaseSuccess(t *testing.T) {
-	netRepo := NewFakeRepo(t, "net")
-	netHead := netRepo.History()[0]
-	netRepo.Branch("public", netHead)
+	synctest.Test(t, func(t *testing.T) {
+		netRepo := NewFakeRepo(t, "net")
+		netHead := netRepo.History()[0]
+		netRepo.Branch("public", netHead)
 
-	privGerrit := &fakePrivXGerrit{
-		FakeGerrit: NewFakeGerrit(t, netRepo),
-		changes:    map[string]*gerrit.ChangeInfo{},
-	}
-	publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	privGerrit.changes["1111"] = &gerrit.ChangeInfo{
-		ID:          "1111",
-		ChangeID:    "1111",
-		Project:     "net",
-		Branch:      "public",
-		Submittable: true,
-	}
-	privGerrit.changesMu.Lock()
-	privGerrit.clBases["1111"] = strings.TrimSpace(string(publicHead))
-	privGerrit.changesMu.Unlock()
-
-	netRepo.CommitOnBranch("public", map[string]string{"advance.txt": "advance"})
-
-	newHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
-	if err != nil {
-		t.Fatal(err)
-	}
-	newHeadStr := strings.TrimSpace(string(newHead))
-
-	netRepo.Branch("checkpoint-test", newHeadStr)
-
-	privGerrit.changes["1111"].Branch = "checkpoint-test"
-
-	ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
-	p := &PrivXPatch{PrivateGerrit: privGerrit}
-
-	patches := []*ref{{
-		Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
-	}}
-
-	result, err := p.MoveAndRebaseAll(ctx, "checkpoint-test", patches)
-	if err != nil {
-		t.Fatalf("MoveAndRebaseAll: %v", err)
-	}
-	if len(result) != 1 || len(result[0].Changes) != 1 {
-		t.Fatalf("unexpected result shape: %v", result)
-	}
-}
-
-func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
-	netRepo := NewFakeRepo(t, "net")
-	netHead := netRepo.History()[0]
-	netRepo.Branch("public", netHead)
-	netRepo.Branch("checkpoint-test", netHead)
-
-	privGerrit := &fakePrivXGerrit{
-		FakeGerrit: NewFakeGerrit(t, netRepo),
-		changes:    map[string]*gerrit.ChangeInfo{},
-	}
-
-	privGerrit.changes["1111"] = &gerrit.ChangeInfo{
-		ID:          "1111",
-		ChangeID:    "1111",
-		Project:     "net",
-		Branch:      "checkpoint-test",
-		Submittable: true,
-	}
-	publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
-	if err != nil {
-		t.Fatal(err)
-	}
-	privGerrit.changesMu.Lock()
-	privGerrit.clBases["1111"] = strings.TrimSpace(string(publicHead))
-	privGerrit.changesMu.Unlock()
-
-	ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
-	p := &PrivXPatch{PrivateGerrit: privGerrit}
-
-	patches := []*ref{{
-		Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
-	}}
-
-	result, err := p.MoveAndRebaseAll(ctx, "checkpoint-test", patches)
-	if err != nil {
-		t.Fatalf("MoveAndRebaseAll with already-destined CL: %v", err)
-	}
-	if len(result) != 1 || len(result[0].Changes) != 1 {
-		t.Fatalf("unexpected result shape: %v", result)
-	}
-}
-
-func TestCreateCherryPickChangeIDUniqueness(t *testing.T) {
-	repo := NewFakeRepo(t, "test")
-	head := repo.History()[0]
-	repo.Branch("dest", head)
-	repo.Branch("other-dest", head)
-
-	fg := NewFakeGerrit(t, repo)
-	fg.AddChange("test", "orig", &gerrit.ChangeInfo{
-		ID:          "orig",
-		ChangeID:    "I0123456789abcdef0123456789abcdef01234567",
-		Branch:      "public",
-		Status:      "NEW",
-		Submittable: true,
-	}, "fix\n\nChange-Id: I0123456789abcdef0123456789abcdef01234567\n")
-
-	ctx := context.Background()
-	first, _, err := fg.CreateCherryPick(ctx, "orig", "dest", "msg")
-	if err != nil {
-		t.Fatalf("first CreateCherryPick: %v", err)
-	}
-	again, _, err := fg.CreateCherryPick(ctx, "orig", "dest", "msg2")
-	if err != nil {
-		t.Fatalf("CreateCherryPick onto open change: %v", err)
-	}
-	if again.ChangeNumber != first.ChangeNumber {
-		t.Errorf("open change: got CL %d, want new patch set on CL %d", again.ChangeNumber, first.ChangeNumber)
-	}
-	if got, _ := fg.GetCommitMessage(ctx, first.ID); got != "msg2" {
-		t.Errorf("open change message = %q, want %q", got, "msg2")
-	}
-
-	if _, err := fg.SubmitChange(ctx, first.ID); err != nil {
-		t.Fatalf("SubmitChange: %v", err)
-	}
-	for _, status := range []string{gerrit.ChangeStatusMerged, gerrit.ChangeStatusAbandoned} {
-		ci, err := fg.GetChange(ctx, first.ID)
+		privGerrit := &fakePrivXGerrit{
+			FakeGerrit: NewFakeGerrit(t, netRepo),
+			changes:    map[string]*gerrit.ChangeInfo{},
+		}
+		publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
 		if err != nil {
 			t.Fatal(err)
 		}
-		ci.Status = status
-		_, _, err = fg.CreateCherryPick(ctx, "orig", "dest", "msg3")
+
+		privGerrit.changes["1111"] = &gerrit.ChangeInfo{
+			ID:          "1111",
+			ChangeID:    "1111",
+			Project:     "net",
+			Branch:      "public",
+			Submittable: true,
+		}
+		privGerrit.changesMu.Lock()
+		privGerrit.clBases["1111"] = strings.TrimSpace(string(publicHead))
+		privGerrit.changesMu.Unlock()
+
+		netRepo.CommitOnBranch("public", map[string]string{"advance.txt": "advance"})
+
+		newHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+		newHeadStr := strings.TrimSpace(string(newHead))
+
+		netRepo.Branch("checkpoint-test", newHeadStr)
+
+		privGerrit.changes["1111"].Branch = "checkpoint-test"
+
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
+		p := &PrivXPatch{PrivateGerrit: privGerrit}
+
+		patches := []*ref{{
+			Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
+		}}
+
+		result, err := p.MoveAndRebaseAll(ctx, "checkpoint-test", patches)
+		if err != nil {
+			t.Fatalf("MoveAndRebaseAll: %v", err)
+		}
+		if len(result) != 1 || len(result[0].Changes) != 1 {
+			t.Fatalf("unexpected result shape: %v", result)
+		}
+	})
+}
+
+func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		netRepo := NewFakeRepo(t, "net")
+		netHead := netRepo.History()[0]
+		netRepo.Branch("public", netHead)
+		netRepo.Branch("checkpoint-test", netHead)
+
+		privGerrit := &fakePrivXGerrit{
+			FakeGerrit: NewFakeGerrit(t, netRepo),
+			changes:    map[string]*gerrit.ChangeInfo{},
+		}
+
+		privGerrit.changes["1111"] = &gerrit.ChangeInfo{
+			ID:          "1111",
+			ChangeID:    "1111",
+			Project:     "net",
+			Branch:      "checkpoint-test",
+			Submittable: true,
+		}
+		publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+		privGerrit.changesMu.Lock()
+		privGerrit.clBases["1111"] = strings.TrimSpace(string(publicHead))
+		privGerrit.changesMu.Unlock()
+
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
+		p := &PrivXPatch{PrivateGerrit: privGerrit}
+
+		patches := []*ref{{
+			Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
+		}}
+
+		result, err := p.MoveAndRebaseAll(ctx, "checkpoint-test", patches)
+		if err != nil {
+			t.Fatalf("MoveAndRebaseAll with already-destined CL: %v", err)
+		}
+		if len(result) != 1 || len(result[0].Changes) != 1 {
+			t.Fatalf("unexpected result shape: %v", result)
+		}
+	})
+}
+
+func TestCreateCherryPickChangeIDUniqueness(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		repo := NewFakeRepo(t, "test")
+		head := repo.History()[0]
+		repo.Branch("dest", head)
+		repo.Branch("other-dest", head)
+
+		fg := NewFakeGerrit(t, repo)
+		fg.AddChange("test", "orig", &gerrit.ChangeInfo{
+			ID:          "orig",
+			ChangeID:    "I0123456789abcdef0123456789abcdef01234567",
+			Branch:      "public",
+			Status:      "NEW",
+			Submittable: true,
+		}, "fix\n\nChange-Id: I0123456789abcdef0123456789abcdef01234567\n")
+
+		ctx := context.Background()
+		first, _, err := fg.CreateCherryPick(ctx, "orig", "dest", "msg")
+		if err != nil {
+			t.Fatalf("first CreateCherryPick: %v", err)
+		}
+		again, _, err := fg.CreateCherryPick(ctx, "orig", "dest", "msg2")
+		if err != nil {
+			t.Fatalf("CreateCherryPick onto open change: %v", err)
+		}
+		if again.ChangeNumber != first.ChangeNumber {
+			t.Errorf("open change: got CL %d, want new patch set on CL %d", again.ChangeNumber, first.ChangeNumber)
+		}
+		if got, _ := fg.GetCommitMessage(ctx, first.ID); got != "msg2" {
+			t.Errorf("open change message = %q, want %q", got, "msg2")
+		}
+
+		if _, err := fg.SubmitChange(ctx, first.ID); err != nil {
+			t.Fatalf("SubmitChange: %v", err)
+		}
+		for _, status := range []string{gerrit.ChangeStatusMerged, gerrit.ChangeStatusAbandoned} {
+			ci, err := fg.GetChange(ctx, first.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ci.Status = status
+			_, _, err = fg.CreateCherryPick(ctx, "orig", "dest", "msg3")
+			if err == nil {
+				t.Fatalf("CreateCherryPick onto %s change: got nil error, want rejection", status)
+			}
+			var httpErr *gerrit.HTTPError
+			if !errors.As(err, &httpErr) {
+				t.Fatalf("error type = %T, want *gerrit.HTTPError", err)
+			}
+			if httpErr.Res.StatusCode != http.StatusBadRequest {
+				t.Errorf("%s: status = %d, want %d", status, httpErr.Res.StatusCode, http.StatusBadRequest)
+			}
+		}
+
+		other, _, err := fg.CreateCherryPick(ctx, "orig", "other-dest", "msg")
+		if err != nil {
+			t.Fatalf("CreateCherryPick onto a different branch: %v", err)
+		}
+		if other.ChangeNumber == first.ChangeNumber {
+			t.Errorf("different branch reused CL %d", first.ChangeNumber)
+		}
+	})
+}
+
+func TestMoveChangeDuplicateChangeID(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		repo := NewFakeRepo(t, "test")
+		head := repo.History()[0]
+		repo.Branch("a", head)
+		repo.Branch("b", head)
+
+		fg := NewFakeGerrit(t, repo)
+		const key = "I0123456789abcdef0123456789abcdef01234567"
+		fg.AddChange("test", "on-a", &gerrit.ChangeInfo{ID: "on-a", ChangeID: key, Branch: "a", Status: "NEW"}, "a")
+		fg.AddChange("test", "on-b", &gerrit.ChangeInfo{ID: "on-b", ChangeID: key, Branch: "b", Status: "NEW"}, "b")
+
+		ctx := context.Background()
+		_, err := fg.MoveChange(ctx, "on-a", "b")
 		if err == nil {
-			t.Fatalf("CreateCherryPick onto %s change: got nil error, want rejection", status)
+			t.Fatal("MoveChange onto a branch holding the same Change-Id: got nil error, want 409")
 		}
 		var httpErr *gerrit.HTTPError
 		if !errors.As(err, &httpErr) {
 			t.Fatalf("error type = %T, want *gerrit.HTTPError", err)
 		}
-		if httpErr.Res.StatusCode != http.StatusBadRequest {
-			t.Errorf("%s: status = %d, want %d", status, httpErr.Res.StatusCode, http.StatusBadRequest)
+		if httpErr.Res.StatusCode != http.StatusConflict {
+			t.Errorf("status = %d, want %d", httpErr.Res.StatusCode, http.StatusConflict)
 		}
-	}
+		if want := "Destination b has a different change with same change key " + key + "\n"; string(httpErr.Body) != want {
+			t.Errorf("body = %q, want %q", httpErr.Body, want)
+		}
 
-	other, _, err := fg.CreateCherryPick(ctx, "orig", "other-dest", "msg")
-	if err != nil {
-		t.Fatalf("CreateCherryPick onto a different branch: %v", err)
-	}
-	if other.ChangeNumber == first.ChangeNumber {
-		t.Errorf("different branch reused CL %d", first.ChangeNumber)
-	}
-}
-
-func TestMoveChangeDuplicateChangeID(t *testing.T) {
-	repo := NewFakeRepo(t, "test")
-	head := repo.History()[0]
-	repo.Branch("a", head)
-	repo.Branch("b", head)
-
-	fg := NewFakeGerrit(t, repo)
-	const key = "I0123456789abcdef0123456789abcdef01234567"
-	fg.AddChange("test", "on-a", &gerrit.ChangeInfo{ID: "on-a", ChangeID: key, Branch: "a", Status: "NEW"}, "a")
-	fg.AddChange("test", "on-b", &gerrit.ChangeInfo{ID: "on-b", ChangeID: key, Branch: "b", Status: "NEW"}, "b")
-
-	ctx := context.Background()
-	_, err := fg.MoveChange(ctx, "on-a", "b")
-	if err == nil {
-		t.Fatal("MoveChange onto a branch holding the same Change-Id: got nil error, want 409")
-	}
-	var httpErr *gerrit.HTTPError
-	if !errors.As(err, &httpErr) {
-		t.Fatalf("error type = %T, want *gerrit.HTTPError", err)
-	}
-	if httpErr.Res.StatusCode != http.StatusConflict {
-		t.Errorf("status = %d, want %d", httpErr.Res.StatusCode, http.StatusConflict)
-	}
-	if want := "Destination b has a different change with same change key " + key + "\n"; string(httpErr.Body) != want {
-		t.Errorf("body = %q, want %q", httpErr.Body, want)
-	}
-
-	if _, err := fg.MoveChange(ctx, "on-a", "c"); err != nil {
-		t.Fatalf("MoveChange onto a free branch: %v", err)
-	}
-	if _, err := fg.MoveChange(ctx, "on-b", "a"); err != nil {
-		t.Fatalf("MoveChange onto the vacated branch: %v", err)
-	}
+		if _, err := fg.MoveChange(ctx, "on-a", "c"); err != nil {
+			t.Fatalf("MoveChange onto a free branch: %v", err)
+		}
+		if _, err := fg.MoveChange(ctx, "on-b", "a"); err != nil {
+			t.Fatalf("MoveChange onto the vacated branch: %v", err)
+		}
+	})
 }
 
 func TestQueryChangesProjectFilter(t *testing.T) {
-	repoA := NewFakeRepo(t, "alpha")
-	repoB := NewFakeRepo(t, "beta")
-	fg := NewFakeGerrit(t, repoA, repoB)
+	synctest.Test(t, func(t *testing.T) {
+		repoA := NewFakeRepo(t, "alpha")
+		repoB := NewFakeRepo(t, "beta")
+		fg := NewFakeGerrit(t, repoA, repoB)
 
-	fg.AddChange("alpha", "a-cl", &gerrit.ChangeInfo{
-		ID:       "a-cl",
-		ChangeID: "a-cl",
-		Branch:   "master",
-		Status:   "NEW",
-	}, "change in alpha")
+		fg.AddChange("alpha", "a-cl", &gerrit.ChangeInfo{
+			ID:       "a-cl",
+			ChangeID: "a-cl",
+			Branch:   "master",
+			Status:   "NEW",
+		}, "change in alpha")
 
-	fg.AddChange("beta", "b-cl", &gerrit.ChangeInfo{
-		ID:       "b-cl",
-		ChangeID: "b-cl",
-		Branch:   "master",
-		Status:   "NEW",
-	}, "change in beta")
+		fg.AddChange("beta", "b-cl", &gerrit.ChangeInfo{
+			ID:       "b-cl",
+			ChangeID: "b-cl",
+			Branch:   "master",
+			Status:   "NEW",
+		}, "change in beta")
 
-	ctx := context.Background()
+		ctx := context.Background()
 
-	alphaResults, err := fg.QueryChanges(ctx, "project:alpha branch:master")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(alphaResults) != 1 {
-		t.Fatalf("project:alpha returned %d results, want 1", len(alphaResults))
-	}
-	if alphaResults[0].ID != "a-cl" {
-		t.Errorf("project:alpha returned CL %q, want %q", alphaResults[0].ID, "a-cl")
-	}
+		alphaResults, err := fg.QueryChanges(ctx, "project:alpha branch:master")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(alphaResults) != 1 {
+			t.Fatalf("project:alpha returned %d results, want 1", len(alphaResults))
+		}
+		if alphaResults[0].ID != "a-cl" {
+			t.Errorf("project:alpha returned CL %q, want %q", alphaResults[0].ID, "a-cl")
+		}
 
-	betaResults, err := fg.QueryChanges(ctx, "project:beta branch:master")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(betaResults) != 1 {
-		t.Fatalf("project:beta returned %d results, want 1", len(betaResults))
-	}
-	if betaResults[0].ID != "b-cl" {
-		t.Errorf("project:beta returned CL %q, want %q", betaResults[0].ID, "b-cl")
-	}
+		betaResults, err := fg.QueryChanges(ctx, "project:beta branch:master")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(betaResults) != 1 {
+			t.Fatalf("project:beta returned %d results, want 1", len(betaResults))
+		}
+		if betaResults[0].ID != "b-cl" {
+			t.Errorf("project:beta returned CL %q, want %q", betaResults[0].ID, "b-cl")
+		}
 
-	allResults, err := fg.QueryChanges(ctx, "branch:master")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(allResults) != 2 {
-		t.Fatalf("unfiltered query returned %d results, want 2", len(allResults))
-	}
+		allResults, err := fg.QueryChanges(ctx, "branch:master")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(allResults) != 2 {
+			t.Fatalf("unfiltered query returned %d results, want 2", len(allResults))
+		}
+	})
 }
 
 func TestRepoName(t *testing.T) {

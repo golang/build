@@ -7,12 +7,87 @@ package workflowtest
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/http"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
 	wf "golang.org/x/build/internal/workflow"
 )
+
+type PipeListener struct {
+	ch   chan net.Conn
+	done chan struct{}
+	once sync.Once
+}
+
+func NewPipeListener() *PipeListener {
+	return &PipeListener{
+		ch:   make(chan net.Conn),
+		done: make(chan struct{}),
+	}
+}
+
+func (l *PipeListener) Accept() (net.Conn, error) {
+	select {
+	case c := <-l.ch:
+		return c, nil
+	case <-l.done:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *PipeListener) Close() error {
+	l.once.Do(func() { close(l.done) })
+	return nil
+}
+
+func (l *PipeListener) Addr() net.Addr { return pipeAddr{} }
+
+func (l *PipeListener) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	server, client := net.Pipe()
+	select {
+	case l.ch <- server:
+		return client, nil
+	case <-l.done:
+		server.Close()
+		client.Close()
+		return nil, net.ErrClosed
+	case <-ctx.Done():
+		server.Close()
+		client.Close()
+		return nil, ctx.Err()
+	}
+}
+
+type pipeAddr struct{}
+
+func (pipeAddr) Network() string { return "pipe" }
+func (pipeAddr) String() string  { return "pipe" }
+
+// NewInMemoryServer provides the necessary abstraction to
+// cleanly use synctest and httptest.
+//
+// TODO(nealpatel): Remove these abstractions once x/build
+// uses go1.27.
+func NewInMemoryServer(handler http.Handler) (url string, client *http.Client, cleanup func()) {
+	pl := NewPipeListener()
+	srv := &http.Server{Handler: handler}
+	go srv.Serve(pl)
+
+	client = &http.Client{
+		Transport: &http.Transport{
+			DialContext: pl.DialContext,
+		},
+	}
+	cleanup = func() {
+		srv.Close()
+	}
+	return "http://pipe", client, cleanup
+}
 
 type Logger struct {
 	T    testing.TB
@@ -67,6 +142,15 @@ func (l *ErrorListener) TaskStateChanged(id uuid.UUID, taskID string, st *wf.Tas
 		l.Callback(st.Error)
 	}
 	return l.Listener.TaskStateChanged(id, taskID, st)
+}
+
+// Subtest shadows [synctest.Subtest] behavior in go1.27+.
+func Subtest(t *testing.T, name string, f func(*testing.T)) {
+	t.Helper()
+	t.Run(name, func(t *testing.T) {
+		t.Helper()
+		synctest.Test(t, f)
+	})
 }
 
 func RunToFailure(t testing.TB, ctx context.Context, w *wf.Workflow, task string, listener wf.Listener) string {

@@ -275,7 +275,7 @@ esac
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	fakeGerrit := NewFakeGerrit(t, repos...)
+	fakeGerrit := NewFakeGerritTCP(t, repos...)
 	var projects []string
 	for _, r := range repos {
 		projects = append(projects, r.name)

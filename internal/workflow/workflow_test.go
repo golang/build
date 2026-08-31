@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -478,10 +479,14 @@ func TestAutomaticRetryDisabled(t *testing.T) {
 
 func TestWatchdog(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		testWatchdog(t, true)
+		synctest.Test(t, func(t *testing.T) {
+			testWatchdog(t, true)
+		})
 	})
 	t.Run("failure", func(t *testing.T) {
-		testWatchdog(t, false)
+		synctest.Test(t, func(t *testing.T) {
+			testWatchdog(t, false)
+		})
 	})
 }
 
