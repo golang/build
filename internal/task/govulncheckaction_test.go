@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestReleaseGovulncheckActionTasks_NewDefinition(t *testing.T) {
@@ -41,7 +42,7 @@ func TestReleaseGovulncheckActionTasks_NewDefinition(t *testing.T) {
 		t.Fatalf("workflow.Start failed: %v", err)
 	}
 
-	if _, err := w.Run(ctx, &verboseListener{t: t}); err != nil {
+	if _, err := w.Run(ctx, &workflowtest.VerboseListener{T: t}); err != nil {
 		t.Fatalf("workflow.Run failed: %v", err)
 	}
 
@@ -178,7 +179,7 @@ func TestReleaseGovulncheckActionTasks_Validation(t *testing.T) {
 				t.Fatalf("workflow.Start failed: %v", err)
 			}
 
-			_, err = w.Run(ctx, &verboseListener{t: t, onStall: cancel})
+			_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t, OnStall: cancel})
 			if (err != nil) != tc.wantErr {
 				t.Errorf("workflow.Run error = %v, wantErr %v", err, tc.wantErr)
 			}

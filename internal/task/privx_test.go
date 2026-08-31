@@ -21,6 +21,7 @@ import (
 	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 	"golang.org/x/build/relmeta"
 	"golang.org/x/vulndb/report"
 	yaml "gopkg.in/yaml.v3"
@@ -380,7 +381,7 @@ echo`)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	_, err = w.Run(&wf.TaskContext{Context: ctx, Logger: &testLogger{t: t}}, &verboseListener{t: t})
+	_, err = w.Run(&wf.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, &workflowtest.VerboseListener{T: t})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -686,7 +687,7 @@ func TestResolveVulnerableVersion(t *testing.T) {
 			x := &PrivXPatch{PublicGerrit: fg}
 			ctx := &wf.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t: t},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			tagged := TagRepo{Name: "net", NewerVersion: tt.cutVersion}
@@ -708,7 +709,7 @@ func TestResolveVulnerableVersion(t *testing.T) {
 func TestUpdateGitHubIssues(t *testing.T) {
 	ctx := &wf.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t: t},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 
 	t.Run("nil milestone", func(t *testing.T) {
@@ -795,7 +796,7 @@ func TestMoveAndRebaseAllRebaseSuccess(t *testing.T) {
 
 	privGerrit.changes["1111"].Branch = "checkpoint-test"
 
-	ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+	ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 	p := &PrivXPatch{PrivateGerrit: privGerrit}
 
 	patches := []*ref{{
@@ -837,7 +838,7 @@ func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
 	privGerrit.clBases["1111"] = strings.TrimSpace(string(publicHead))
 	privGerrit.changesMu.Unlock()
 
-	ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+	ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 	p := &PrivXPatch{PrivateGerrit: privGerrit}
 
 	patches := []*ref{{

@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 var flagRunVersionTest = flag.Bool("run-version-test", false, "run version test, which will submit CLs to go.googlesource.com/scratch. Must have a Gerrit cookie in gitcookies.")
@@ -29,7 +30,7 @@ func TestGetNextVersionLive(t *testing.T) {
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 
 	var out strings.Builder
@@ -70,7 +71,7 @@ func TestGetNextVersion(t *testing.T) {
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 	for _, tc := range [...]struct {
 		name  string
@@ -108,7 +109,7 @@ func TestGetDevelVersion(t *testing.T) {
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 	got, err := tasks.GetDevelVersion(ctx)
 	if err != nil {
@@ -139,7 +140,7 @@ func TestVersion(t *testing.T) {
 	}
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 
 	changeID, err := tasks.CreateAutoSubmitVersionCL(ctx, "master", "go1.2.3", nil, "VERSION file content")

@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestLatestVersion(t *testing.T) {
@@ -137,7 +138,7 @@ func TestCreateReleaseMilestoneAndIssue(t *testing.T) {
 			if !ok {
 				t.Fatalf("parseVersion(%q) failed", tc.version)
 			}
-			issueNumber, err := tasks.createReleaseMilestoneAndIssue(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, release, []string{"gobot"})
+			issueNumber, err := tasks.createReleaseMilestoneAndIssue(&workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}, release, []string{"gobot"})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -223,7 +224,7 @@ func TestCreateReleaseBranch(t *testing.T) {
 				Gerrit: gerrit,
 			}
 
-			got, err := tasks.createReleaseBranch(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, prerelease)
+			got, err := tasks.createReleaseBranch(&workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, release, prerelease)
 			if tc.wantErr && err == nil {
 				t.Errorf("createReleaseBranch(%q) should return error but return nil", tc.version)
 			} else if !tc.wantErr && err != nil {
@@ -244,7 +245,7 @@ func TestCreateReleaseBranch(t *testing.T) {
 }
 
 func TestDetermineReleaseAndNextPrereleaseVersion(t *testing.T) {
-	ctx := workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
+	ctx := workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 	tests := []struct {
 		name           string
 		existingTags   []string
@@ -355,7 +356,7 @@ func TestVSCodeGoActiveReleaseBranch(t *testing.T) {
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 			got, err := vscodeGoActiveReleaseBranch(ctx, gerrit)
 			if err != nil {
@@ -418,7 +419,7 @@ esac
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			tasks := &ReleaseVSCodeGoTasks{
@@ -473,7 +474,7 @@ func TestGeneratePackageExtension(t *testing.T) {
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			version := tc.release.String()[1:]
@@ -574,7 +575,7 @@ func TestDetermineInsiderVersion(t *testing.T) {
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			tasks := &ReleaseVSCodeGoTasks{
@@ -682,7 +683,7 @@ CHANGE FOR v0.42.0 LINE 2
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			tasks := &ReleaseVSCodeGoTasks{
@@ -744,7 +745,7 @@ func TestUpdatePackageJSONVersionInMasterBranch(t *testing.T) {
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			// fakeNPX successfully executes only when called with the command
@@ -834,7 +835,7 @@ func TestUpdatePackageJSONVersionInReleaseBranch(t *testing.T) {
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			// fakeNPX successfully executes only when called with the command
@@ -1040,7 +1041,7 @@ CHANGE FOR v0.42.1
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			tasks := &ReleaseVSCodeGoTasks{
@@ -1125,7 +1126,7 @@ func TestUpdateDependenciesIfMinor(t *testing.T) {
 			gerrit := NewFakeGerrit(t, vscodego)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 
 			var fakeBinaries []FakeBinary

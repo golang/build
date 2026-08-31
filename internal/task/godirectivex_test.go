@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 	repospkg "golang.org/x/build/repos"
 )
 
@@ -22,7 +23,7 @@ func TestSelectGoDirectiveReposLive(t *testing.T) {
 	tasks := GoDirectiveXReposTasks{}
 	ctx := &wf.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 	repos, err := tasks.SelectRepos(ctx)
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestVSCodeGoReleaseTask_buildVSCGO(t *testing.T) {
@@ -112,7 +113,7 @@ esac
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			outputs, err := w.Run(ctx, &verboseListener{t: t, onStall: cancel})
+			outputs, err := w.Run(ctx, &workflowtest.VerboseListener{T: t, OnStall: cancel})
 			if err != nil {
 				if test.wantBuildError {
 					return // expected build error.

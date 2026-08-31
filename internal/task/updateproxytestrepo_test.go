@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestUpdateProxyTestRepo(t *testing.T) {
@@ -43,7 +44,7 @@ func TestUpdateProxyTestRepo(t *testing.T) {
 
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 			if err := upgradeGoVersion.UpdateProxyTestRepo(ctx, Published{Version: "go" + tt.new}); err != nil {
 				t.Fatal(err)

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestPromoteNextAPIAndOpenAPIAuditIssue(t *testing.T) {
@@ -30,7 +31,7 @@ func TestPromoteNextAPIAndOpenAPIAuditIssue(t *testing.T) {
 		GitHub: fakeGitHub,
 	}
 	promotedAPI, err := cycleTasks.PromoteNextAPI(
-		&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}},
+		&workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}},
 		version,
 		nil,
 	)
@@ -38,7 +39,7 @@ func TestPromoteNextAPIAndOpenAPIAuditIssue(t *testing.T) {
 		t.Fatal(err)
 	}
 	apiAuditIssue, err := cycleTasks.OpenAPIAuditIssue(
-		&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}},
+		&workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}},
 		version,
 		RelnoteTracking{Milestone: 322},
 		promotedAPI,
@@ -98,7 +99,7 @@ func TestPromoteNextAPIAlreadyExists(t *testing.T) {
 		},
 	}
 	promotedAPI, err := cycleTasks.PromoteNextAPI(
-		&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}},
+		&workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}},
 		version,
 		nil,
 	)

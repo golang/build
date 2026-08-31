@@ -12,6 +12,7 @@ import (
 	cloudbuild "cloud.google.com/go/cloudbuild/apiv1/v2"
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestUpdateX509Bundle(t *testing.T) {
@@ -44,7 +45,7 @@ package p`,
 	}
 	ctx := &wf.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 	got, err := tasks.UpdateBundle(ctx, nil)
 	if err != nil {
@@ -87,7 +88,7 @@ func TestUpdateX509BundleLive(t *testing.T) {
 	}
 	ctx := &wf.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 	result, err := tasks.UpdateBundle(ctx, nil)
 	if err != nil {

@@ -12,16 +12,15 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/uuid"
 	"go.chromium.org/luci/auth"
 	buildbucketpb "go.chromium.org/luci/buildbucket/proto"
 	"go.chromium.org/luci/grpc/prpc"
 	"go.chromium.org/luci/hardcoded/chromeinfra"
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 var flagRunTagXTest = flag.Bool("run-tagx-test", false, "run tag x/ repo test, which is read-only and safe. Must have a Gerrit cookie in gitcookies.")
@@ -38,7 +37,7 @@ func TestSelectReposLive(t *testing.T) {
 	}
 	ctx := &wf.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 	repos, err := tasks.SelectRepos(ctx)
 	if err != nil {
@@ -149,7 +148,7 @@ func TestFindMissingBuildersLive(t *testing.T) {
 		t.Fatalf("-run-find-missing-builders-test flag must be module@rev: %q", *flagRunFindMissingBuildersLiveTest)
 	}
 
-	ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
+	ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, chromeinfra.DefaultAuthOptions()).Client()
 	if err != nil {
 		t.Fatal("auth.NewAuthenticator:", err)
@@ -288,7 +287,7 @@ esac
 		BuildBucket: fakeBuildBucket,
 	}
 	return &tagXTestDeps{
-		ctx:         &wf.TaskContext{Context: ctx, Logger: &testLogger{t: t}},
+		ctx:         &wf.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}},
 		gerrit:      fakeGerrit,
 		buildbucket: fakeBuildBucket,
 		tagXTasks:   tasks,
@@ -357,7 +356,7 @@ require (
 		t.Fatal(err)
 	}
 	ctx := deps.ctx
-	_, err = w.Run(ctx, &verboseListener{t: t})
+	_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,7 +480,7 @@ func testTagSingleRepo(t *testing.T, skipPostSubmit bool) {
 		t.Fatal(err)
 	}
 	ctx := deps.ctx
-	_, err = w.Run(ctx, &verboseListener{t: t})
+	_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -503,46 +502,4 @@ func TestTagSingleRepo(t *testing.T) {
 	t.Run("with post-submit check", func(t *testing.T) { testTagSingleRepo(t, false) })
 	// If skipPostSubmit is false, AwaitGreen should sit an spin for a minute before failing
 	t.Run("without post-submit check", func(t *testing.T) { testTagSingleRepo(t, true) })
-}
-
-type verboseListener struct {
-	t              *testing.T
-	outputListener func(string, any)
-	onStall        func()
-}
-
-func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
-	l.t.Logf("workflow %q: stalled", workflowID.String())
-	if l.onStall != nil {
-		l.onStall()
-	}
-	return nil
-}
-
-func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *wf.TaskState) error {
-	switch {
-	case !st.Finished:
-		l.t.Logf("task %-10v: started", st.Name)
-	case st.Error != "":
-		l.t.Logf("task %-10v: error: %v", st.Name, st.Error)
-	default:
-		l.t.Logf("task %-10v: done: %v", st.Name, st.Result)
-		if l.outputListener != nil {
-			l.outputListener(st.Name, st.Result)
-		}
-	}
-	return nil
-}
-
-func (l *verboseListener) Logger(_ uuid.UUID, task string) wf.Logger {
-	return &testLogger{t: l.t, task: task}
-}
-
-type testLogger struct {
-	t    *testing.T
-	task string // Optional.
-}
-
-func (l *testLogger) Printf(format string, v ...any) {
-	l.t.Logf("%v\ttask %-10v: LOG: %s", time.Now(), l.task, fmt.Sprintf(format, v...))
 }

@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 	"golang.org/x/build/relmeta"
 	"golang.org/x/vulndb/report"
 	yaml "gopkg.in/yaml.v3"
@@ -436,7 +437,7 @@ func (g *fakeVulnGerrit) CreateAutoSubmitChange(ctx *wf.TaskContext, input gerri
 
 func TestMailVulnReports(t *testing.T) {
 	t.Run("empty reports", func(t *testing.T) {
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 		changeID, err := MailVulnReports(ctx, nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -451,7 +452,7 @@ func TestMailVulnReports(t *testing.T) {
 		gc := &fakeVulnGerrit{
 			FakeGerrit: NewFakeGerrit(t, vulnRepo),
 		}
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 
 		reports := []*report.Report{
 			{ID: "GO-2026-0001"},
@@ -508,7 +509,7 @@ func TestMailVulnReports(t *testing.T) {
 			Branch: "master",
 		}, Subject(reports))
 
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 		changeID, err := MailVulnReports(ctx, gc, reports, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -562,7 +563,7 @@ security_patches:
 	wantReviewers := []string{"reviewer-a@google.com"}
 
 	t.Run("rewrites in place and refetches", func(t *testing.T) {
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 		gc := newGerrit(t)
 		rm, err := ConvertInternalChangelists(ctx, gc, "77770001", external, wantReviewers)
 		if err != nil {
@@ -595,7 +596,7 @@ security_patches:
 	})
 
 	t.Run("nothing to convert", func(t *testing.T) {
-		ctx := &wf.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 		gc := newGerrit(t)
 		before := readMilestone(t, ctx, gc)
 		if _, err := ConvertInternalChangelists(ctx, gc, "77770001", nil, wantReviewers); err != nil {

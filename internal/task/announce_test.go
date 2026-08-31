@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 // Test that the task doesn't start running if the provided
@@ -755,7 +756,7 @@ security_patches:
 		PrivateGerrit: NewFakeGerrit(t, smRepo),
 	}
 	t.Run("NoMilestone", func(t *testing.T) {
-		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &testLogger{t: t}}
+		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &workflowtest.Logger{T: t}}
 		summary, err := tasks.GetSecuritySummary(ctx, "")
 		if err != nil {
 			t.Fatal(err)
@@ -772,7 +773,7 @@ security_patches:
 		}
 	})
 	t.Run("Summary", func(t *testing.T) {
-		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &testLogger{t: t}}
+		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &workflowtest.Logger{T: t}}
 		got, err := tasks.GetSecuritySummary(ctx, "100001")
 		if err != nil {
 			t.Fatal(err)
@@ -783,7 +784,7 @@ security_patches:
 		}
 	})
 	t.Run("ReleaseNotes", func(t *testing.T) {
-		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &testLogger{t: t}}
+		ctx := &workflow.TaskContext{Context: t.Context(), Logger: &workflowtest.Logger{T: t}}
 		got, err := tasks.GetSecurityReleaseNotes(ctx, "100001")
 		if err != nil {
 			t.Fatal(err)

@@ -25,6 +25,7 @@ import (
 	"golang.org/x/build/internal/relui/db"
 	"golang.org/x/build/internal/task"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestAwaitFunc(t *testing.T) {
@@ -87,7 +88,7 @@ func TestAwaitFunc(t *testing.T) {
 			}
 			go func() {
 				if c.wantErr {
-					runToFailure(t, ctx, w, "AwaitFunc", &verboseListener{t: t})
+					runToFailure(t, ctx, w, "AwaitFunc", &workflowtest.VerboseListener{T: t})
 				} else {
 					outputs, err := runWorkflow(t, ctx, w, nil)
 					if err != nil {
@@ -236,7 +237,7 @@ func TestAnnounceBlogPostWorkflow(t *testing.T) {
 				t.Fatalf("workflow.Start() = _, %v; want no error", err)
 			}
 			if tc.wantErr {
-				runToFailure(t, context.Background(), w, "retrieve-blog-post", &verboseListener{t: t})
+				runToFailure(t, context.Background(), w, "retrieve-blog-post", &workflowtest.VerboseListener{T: t})
 				return
 			}
 			outputs, err := runWorkflow(t, context.Background(), w, nil)
@@ -282,7 +283,7 @@ func runWorkflow(t *testing.T, ctx context.Context, w *workflow.Workflow, listen
 	defer cancel()
 	t.Helper()
 	if listener == nil {
-		listener = &verboseListener{t: t}
+		listener = &workflowtest.VerboseListener{T: t}
 	}
 	return w.Run(ctx, listener)
 }
@@ -296,7 +297,7 @@ func TestReadRelevantBuildersLive(t *testing.T) {
 		t.Fatal("-relevant-builders-major flag must specify a non-zero major version")
 	}
 
-	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}
+	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 	luciHTTPClient, err := auth.NewAuthenticator(ctx, auth.SilentLogin, chromeinfra.DefaultAuthOptions()).Client()
 	if err != nil {
 		t.Fatal("auth.NewAuthenticator:", err)

@@ -16,6 +16,7 @@ import (
 	"github.com/google/go-github/v74/github"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 	"golang.org/x/build/relmeta"
 	"golang.org/x/oauth2"
 )
@@ -87,7 +88,7 @@ func TestCheckBlockers(t *testing.T) {
 				},
 				ApproveAction: func(*workflow.TaskContext) error { return errManualApproval },
 			}
-			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 			got := tasks.CheckBlockers(ctx, ReleaseMilestones{1, 2}, tc.version, tc.kind)
 			if got != tc.want {
 				t.Errorf("got %v, want %v", got, tc.want)
@@ -113,7 +114,7 @@ func TestFetchRelnoteMilestoneAndIssue(t *testing.T) {
 		RepoOwner: "golang", RepoName: "go",
 	}
 
-	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+	ctx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 	got, err := tasks.FetchRelnoteMilestoneAndIssue(ctx, *flagMilestonesVersion)
 	if err != nil {
 		t.Fatal("FetchRelnoteMilestoneAndIssue:", err)
@@ -130,7 +131,7 @@ var (
 func TestMilestones(t *testing.T) {
 	ctx := &workflow.TaskContext{
 		Context: context.Background(),
-		Logger:  &testLogger{t, ""},
+		Logger:  &workflowtest.Logger{T: t},
 	}
 
 	if !*flagRunDestructiveMilestonesTest {
@@ -315,7 +316,7 @@ func TestFetchBackportManifest(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 			got, err := FetchBackportManifest(ctx, &FakeGitHub{Comments: tc.comments}, "golang", "go", tc.rm)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("got error %v, want error: %v", err, tc.wantErr)
@@ -400,7 +401,7 @@ func TestCheckSecurityIssues(t *testing.T) {
 					DisallowComments: true,
 				},
 			}
-			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 			_, err := tasks.CheckSecurityIssues(ctx, tc.rm, 27)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("got error %v, want error: %v", err, tc.wantErr)

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestSyncPrivate(t *testing.T) {
@@ -29,7 +30,7 @@ func TestSyncPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = w.Run(context.Background(), &verboseListener{t: t})
+	_, err = w.Run(context.Background(), &workflowtest.VerboseListener{T: t})
 	if err != nil {
 		t.Fatal(err)
 	}

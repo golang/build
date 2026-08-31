@@ -20,6 +20,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/uuid"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestTrivial(t *testing.T) {
@@ -116,7 +117,7 @@ func TestSub(t *testing.T) {
 	g2 := wf.Task0(sub2, "Greeting", hi)
 	wf.Output(wd, "result", wf.Task2(wd, "Concatenate", concat, g1, g2))
 
-	storage := &mapListener{Listener: &verboseListener{t}}
+	storage := &mapListener{Listener: &workflowtest.VerboseListener{T: t}}
 	w := startWorkflow(t, wd, nil)
 	outputs := runWorkflow(t, w, storage)
 	if got, want := outputs["result"], "hi hi"; got != want {
@@ -288,7 +289,7 @@ func TestResumeExpansion(t *testing.T) {
 	})
 	wf.Output(wd, "result", result)
 
-	storage := &mapListener{Listener: &verboseListener{t}}
+	storage := &mapListener{Listener: &workflowtest.VerboseListener{T: t}}
 	w := startWorkflow(t, wd, nil)
 	runWorkflow(t, w, storage)
 	resumed, err := wf.Resume(wd, &wf.WorkflowState{ID: w.ID}, storage.states[w.ID])
@@ -324,7 +325,7 @@ func TestRetryExpansion(t *testing.T) {
 	listener := &errorListener{
 		taskName: "expand",
 		callback: retry,
-		Listener: &verboseListener{t},
+		Listener: &workflowtest.VerboseListener{T: t},
 	}
 	runWorkflow(t, w, listener)
 	if counter != 2 {
@@ -356,7 +357,7 @@ func TestManualRetry(t *testing.T) {
 	listener := &errorListener{
 		taskName: "needs retry",
 		callback: retry,
-		Listener: &verboseListener{t},
+		Listener: &workflowtest.VerboseListener{T: t},
 	}
 	runWorkflow(t, w, listener)
 	if counter != 2 {
@@ -414,7 +415,7 @@ func TestManualRetryMultipleExpansions(t *testing.T) {
 					}
 				}()
 			},
-			Listener: &verboseListener{t},
+			Listener: &workflowtest.VerboseListener{T: t},
 		},
 	}
 	runWorkflow(t, w, listener)
@@ -534,7 +535,7 @@ func TestLogging(t *testing.T) {
 
 	logger := &capturingLogger{}
 	listener := &logTestListener{
-		Listener: &verboseListener{t},
+		Listener: &workflowtest.VerboseListener{T: t},
 		logger:   logger,
 	}
 	w := startWorkflow(t, wd, nil)
@@ -596,7 +597,7 @@ func TestResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	storage := &mapListener{Listener: &verboseListener{t}}
+	storage := &mapListener{Listener: &workflowtest.VerboseListener{T: t}}
 	_, err = w.Run(ctx, storage)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled workflow returned error %v, wanted Canceled", err)
@@ -681,7 +682,7 @@ func runWorkflow(t *testing.T, w *wf.Workflow, listener wf.Listener) map[string]
 	defer cancel()
 	t.Helper()
 	if listener == nil {
-		listener = &verboseListener{t}
+		listener = &workflowtest.VerboseListener{T: t}
 	}
 	outputs, err := w.Run(ctx, listener)
 	if err != nil {
@@ -690,46 +691,12 @@ func runWorkflow(t *testing.T, w *wf.Workflow, listener wf.Listener) map[string]
 	return outputs
 }
 
-type verboseListener struct{ t *testing.T }
-
-func (l *verboseListener) WorkflowStalled(workflowID uuid.UUID) error {
-	l.t.Logf("workflow %q: stalled", workflowID.String())
-	return nil
-}
-
-func (l *verboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *wf.TaskState) error {
-	switch {
-	case !st.Started:
-		// Task creation is uninteresting.
-	case !st.Finished:
-		l.t.Logf("task %-10v: started", st.Name)
-	case st.Error != "":
-		l.t.Logf("task %-10v: error: %v", st.Name, st.Error)
-	default:
-		l.t.Logf("task %-10v: done: %v", st.Name, st.Result)
-	}
-	return nil
-}
-
-func (l *verboseListener) Logger(_ uuid.UUID, task string) wf.Logger {
-	return &testLogger{t: l.t, task: task}
-}
-
-type testLogger struct {
-	t    *testing.T
-	task string
-}
-
-func (l *testLogger) Printf(format string, v ...any) {
-	l.t.Logf("task %-10v: LOG: %s", l.task, fmt.Sprintf(format, v...))
-}
-
 func runToFailure(t *testing.T, w *wf.Workflow, listener wf.Listener, task string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	t.Helper()
 	if listener == nil {
-		listener = &verboseListener{t}
+		listener = &workflowtest.VerboseListener{T: t}
 	}
 	var message string
 	listener = &errorListener{

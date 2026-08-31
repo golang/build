@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-github/v74/github"
 	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestInterpretNextRelease(t *testing.T) {
@@ -62,7 +63,7 @@ func TestInterpretNextRelease(t *testing.T) {
 				Gerrit: gerrit,
 			}
 
-			got, err := tasks.interpretNextRelease(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, tc.bump)
+			got, err := tasks.interpretNextRelease(&workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}, tc.bump)
 			if err != nil {
 				t.Fatalf("interpretNextRelease(%q) should not return error, but return %v", tc.bump, err)
 			}
@@ -134,7 +135,7 @@ func TestPossibleGoplsVersions(t *testing.T) {
 				Gerrit: gerrit,
 			}
 
-			got, err := tasks.possibleGoplsVersions(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}})
+			got, err := tasks.possibleGoplsVersions(&workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}})
 			if err != nil {
 				t.Fatalf("possibleGoplsVersions() should not return error, but return %v", err)
 			}
@@ -210,7 +211,7 @@ func TestCreateBranchIfMinor(t *testing.T) {
 			}
 
 			release, _, _ := parseVersion(tc.version)
-			err = tasks.createBranchIfMinor(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release)
+			err = tasks.createBranchIfMinor(&workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, release)
 
 			if tc.wantErr && err == nil {
 				t.Errorf("createBranchIfMinor() should return error but return nil")
@@ -327,7 +328,7 @@ parent-branch: master
 				CloudBuild: NewFakeCloudBuild(t, gerritClient, "", nil),
 			}
 
-			_, err = tasks.updateCodeReviewConfig(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, nil, 0)
+			_, err = tasks.updateCodeReviewConfig(&workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, release, nil, 0)
 			if err != nil {
 				t.Fatalf("updateCodeReviewConfig() returns error: %v", err)
 			}
@@ -423,7 +424,7 @@ func TestNextPrerelease(t *testing.T) {
 			if !ok {
 				t.Fatalf("parseVersion(%q) failed", tc.version)
 			}
-			got, err := tasks.nextPrereleaseVersion(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release)
+			got, err := tasks.nextPrereleaseVersion(&workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, release)
 			if err != nil || tc.want != got {
 				t.Errorf("nextPrereleaseVersion(%q) = (%v, %v) but want (%v, nil)", tc.version, got, err, tc.want)
 			}
@@ -513,7 +514,7 @@ func TestFindOrCreateReleaseIssue(t *testing.T) {
 			if !ok {
 				t.Fatalf("parseVersion(%q) failed", tc.version)
 			}
-			gotIssue, err := tasks.findOrCreateGitHubIssue(&workflow.TaskContext{Context: ctx, Logger: &testLogger{t, ""}}, release, []string{"gobot"}, tc.create)
+			gotIssue, err := tasks.findOrCreateGitHubIssue(&workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, release, []string{"gobot"}, tc.create)
 
 			if tc.wantErr && err == nil {
 				t.Errorf("createReleaseIssue(%s) should return error but return nil", tc.version)
@@ -737,7 +738,7 @@ esac`, tc.wantVersion)
 				t.Fatal(err)
 			}
 
-			outputs, err := w.Run(ctx, &verboseListener{t: t})
+			outputs, err := w.Run(ctx, &workflowtest.VerboseListener{T: t})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -941,7 +942,7 @@ func TestTagRelease(t *testing.T) {
 				Gerrit: NewFakeGerrit(t, tools),
 			}
 
-			err := tasks.tagRelease(&workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t, ""}}, tc.release, tc.prerelease)
+			err := tasks.tagRelease(&workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}, tc.release, tc.prerelease)
 
 			if tc.wantErr && err == nil {
 				t.Errorf("tagRelease(%q) should return error but return nil", tc.release)
@@ -1044,7 +1045,7 @@ echo -n "foo" > file_b
 			cloudBuild := NewFakeCloudBuild(t, NewFakeGerrit(t, tools), "", nil)
 			ctx := &workflow.TaskContext{
 				Context: context.Background(),
-				Logger:  &testLogger{t, ""},
+				Logger:  &workflowtest.Logger{T: t},
 			}
 			got, err := executeAndMonitorChange(ctx, cloudBuild, "tools", tc.branch, tc.script, tc.watch)
 			if err != nil {
@@ -1274,7 +1275,7 @@ esac
 				t.Fatal(err)
 			}
 
-			_, err = w.Run(ctx, &verboseListener{t: t})
+			_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t})
 			if err != nil {
 				t.Fatal(err)
 			}

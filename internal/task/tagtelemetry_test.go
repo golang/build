@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"golang.org/x/build/internal/workflow"
+	"golang.org/x/build/internal/workflowtest"
 )
 
 func TestTagTelemetry(t *testing.T) {
@@ -93,7 +94,7 @@ func TestTagTelemetry(t *testing.T) {
 
 			ctx := t.Context()
 
-			outputs, err := w.Run(ctx, &verboseListener{t: t})
+			outputs, err := w.Run(ctx, &workflowtest.VerboseListener{T: t})
 			if err != nil {
 				t.Fatal(err)
 			}
