@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/v74/github"
 	"github.com/shurcooL/githubv4"
 	"golang.org/x/build/internal/workflow"
@@ -243,6 +244,92 @@ func resetRepo(ctx context.Context, client *github.Client) (normal, blocker *git
 	return normal, blocker, err
 }
 
+func TestFetchBackportManifest(t *testing.T) {
+	comment := func(login, body string) *github.IssueComment {
+		return &github.IssueComment{User: &github.User{Login: new(login)}, Body: new(body)}
+	}
+	for _, tc := range [...]struct {
+		name     string
+		rm       *relmeta.ReleaseMilestone
+		comments map[int][]*github.IssueComment
+		want     BackportManifest
+		wantErr  bool
+	}{
+		{
+			name: "nil milestone is a no-op",
+		},
+		{
+			name: "backports found",
+			rm: &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{
+				{ID: 1, GitHubIssueID: 123, TargetReleases: []string{"go1.26.1", "go1.25.7"}},
+			}},
+			comments: map[int][]*github.IssueComment{123: {
+				comment("gopherbot", "Backport issue(s) opened: #200 (for 1.25), #201 (for 1.26).\n\nRemember to create the cherry-pick CL(s) as soon as the patch is submitted to master, according to https://go.dev/wiki/MinorReleases."),
+			}},
+			want: BackportManifest{1: {"1.25": 200, "1.26": 201}},
+		},
+		{
+			name: "backports merged across comments",
+			rm: &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{
+				{ID: 1, GitHubIssueID: 123, TargetReleases: []string{"go1.26.1", "go1.25.7"}},
+			}},
+			comments: map[int][]*github.IssueComment{123: {
+				comment("gopherbot", "Backport issue(s) opened: #200 (for 1.25)."),
+				comment("gopherbot", "Backport issue(s) opened: #201 (for 1.26)."),
+			}},
+			want: BackportManifest{1: {"1.25": 200, "1.26": 201}},
+		},
+		{
+			name: "non-gopherbot comments are ignored",
+			rm: &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{
+				{ID: 1, GitHubIssueID: 123, TargetReleases: []string{"go1.25.7"}},
+			}},
+			comments: map[int][]*github.IssueComment{123: {
+				comment("gophertot", "Backport issue(s) opened: #200 (for 1.25)."),
+			}},
+			wantErr: true,
+		},
+		{
+			name: "missing backport issue",
+			rm: &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{
+				{ID: 1, GitHubIssueID: 123, TargetReleases: []string{"go1.26.1", "go1.25.7"}},
+			}},
+			comments: map[int][]*github.IssueComment{123: {
+				comment("gopherbot", "Backport issue(s) opened: #201 (for 1.26)."),
+			}},
+			wantErr: true,
+		},
+		{
+			name: "malformed target release",
+			rm: &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{
+				{ID: 1, GitHubIssueID: 123, TargetReleases: []string{"1.25.7"}},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "no target releases requires nothing",
+			rm: &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{
+				{ID: 1, GitHubIssueID: 123},
+			}},
+			want: BackportManifest{1: {}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
+			got, err := FetchBackportManifest(ctx, &FakeGitHub{Comments: tc.comments}, "golang", "go", tc.rm)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("got error %v, want error: %v", err, tc.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("manifest mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestCheckSecurityIssues(t *testing.T) {
 	secIssue := func(labels ...string) *github.Issue {
 		issue := &github.Issue{Milestone: &github.Milestone{ID: github.Int64(1)}}
@@ -314,7 +401,7 @@ func TestCheckSecurityIssues(t *testing.T) {
 				},
 			}
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &testLogger{t: t}}
-			err := tasks.CheckSecurityIssues(ctx, tc.rm, 27)
+			_, err := tasks.CheckSecurityIssues(ctx, tc.rm, 27)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("got error %v, want error: %v", err, tc.wantErr)
 			}

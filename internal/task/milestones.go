@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -393,6 +395,8 @@ type GitHubClientInterface interface {
 
 	// TagExists reports whether the specified tag exists in the repository.
 	TagExists(ctx context.Context, owner, repo, tag string) (bool, error)
+
+	ListIssueComments(ctx context.Context, owner, repo string, number int) ([]*github.IssueComment, error)
 }
 
 type GitHubClient struct {
@@ -587,6 +591,21 @@ func (c *GitHubClient) GetIssue(ctx context.Context, owner, repo string, number 
 	return c.V3.Issues.Get(ctx, owner, repo, number)
 }
 
+func (c *GitHubClient) ListIssueComments(ctx context.Context, owner, repo string, number int) (comments []*github.IssueComment, _ error) {
+	opt := &github.IssueListCommentsOptions{ListOptions: github.ListOptions{PerPage: 100}}
+	for {
+		page, resp, err := c.V3.Issues.ListComments(ctx, owner, repo, number, opt)
+		if err != nil {
+			return nil, err
+		}
+		comments = append(comments, page...)
+		if resp.NextPage == 0 {
+			return comments, nil
+		}
+		opt.Page = resp.NextPage
+	}
+}
+
 func (c *GitHubClient) EditMilestone(ctx context.Context, owner, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
 	return c.V3.Issues.EditMilestone(ctx, owner, repo, number, milestone)
 }
@@ -606,18 +625,18 @@ func (c *GitHubClient) PostComment(ctx context.Context, id githubv4.ID, body str
 // Security issues set does not match the declared set of issues.
 //
 // When rm is nil, the coordinator has already approved a non-security point release.
-func (m *MilestoneTasks) CheckSecurityIssues(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, develVersion int) error {
+func (m *MilestoneTasks) CheckSecurityIssues(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, develVersion int) (BackportManifest, error) {
 	if rm == nil {
-		return nil
+		return nil, nil
 	}
 	milestoneName := fmt.Sprintf("Go1.%d", develVersion)
 	milestoneNumber, err := m.Client.FetchMilestone(ctx, m.RepoOwner, m.RepoName, milestoneName, false)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	issues, err := m.Client.FetchMilestoneIssues(ctx, m.RepoOwner, m.RepoName, milestoneNumber)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// Assume that issues are untracked in rm by default.
 	untracked := make(map[int]bool, len(issues))
@@ -640,9 +659,57 @@ func (m *MilestoneTasks) CheckSecurityIssues(ctx *wf.TaskContext, rm *relmeta.Re
 	for number := range untracked {
 		problems = append(problems, fmt.Sprintf("https://go.dev/issue/%d has no security patch", number))
 	}
-	if len(problems) == 0 {
-		return nil
+	if len(problems) != 0 {
+		sort.Strings(problems)
+		return nil, fmt.Errorf("mismatched security patches and release blockers:\n%s", strings.Join(problems, "\n"))
 	}
-	sort.Strings(problems)
-	return fmt.Errorf("mismatched security patches and release blockers:\n%s", strings.Join(problems, "\n"))
+	return FetchBackportManifest(ctx, m.Client, m.RepoOwner, m.RepoName, rm)
+}
+
+type BackportManifest map[int64]map[string]int64
+
+var backportIssuesOpenedRE = regexp.MustCompile(`#(\d+) \(for (1\.\d+)\)`)
+
+func FetchBackportManifest(ctx *wf.TaskContext, gh GitHubClientInterface, owner, repo string, rm *relmeta.ReleaseMilestone) (BackportManifest, error) {
+	if rm == nil {
+		return nil, nil
+	}
+	bm := BackportManifest{}
+	var problems []string
+	for _, p := range rm.Patches {
+		comments, err := gh.ListIssueComments(ctx, owner, repo, int(p.GitHubIssueID))
+		if err != nil {
+			return nil, fmt.Errorf("security patch %d: listing comments on https://go.dev/issue/%d: %w", p.ID, p.GitHubIssueID, err)
+		}
+		backports := map[string]int64{}
+		for _, c := range comments {
+			if c.GetUser().GetLogin() != "gopherbot" || !strings.HasPrefix(c.GetBody(), "Backport issue(s) opened:") {
+				continue
+			}
+			for _, match := range backportIssuesOpenedRE.FindAllStringSubmatch(c.GetBody(), -1) {
+				number, err := strconv.ParseInt(match[1], 10, 64)
+				if err != nil {
+					return nil, fmt.Errorf("security patch %d: parsing backport issue number %q: %w", p.ID, match[1], err)
+				}
+				backports[match[2]] = number
+			}
+		}
+		for _, target := range p.TargetReleases {
+			x, ok := goversion.Go1PointX(target)
+			if !ok {
+				problems = append(problems, fmt.Sprintf("security patch %d: malformed target release %q", p.ID, target))
+				continue
+			}
+			line := fmt.Sprintf("1.%d", x)
+			if _, ok := backports[line]; !ok {
+				problems = append(problems, fmt.Sprintf("security patch %d: https://go.dev/issue/%d has no backport issue for %s", p.ID, p.GitHubIssueID, line))
+			}
+		}
+		bm[p.ID] = backports
+	}
+	if len(problems) != 0 {
+		sort.Strings(problems)
+		return nil, fmt.Errorf("missing backport issues:\n%s", strings.Join(problems, "\n"))
+	}
+	return bm, nil
 }

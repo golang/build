@@ -500,14 +500,14 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	}, milestoneNum)
 
 	rm := wf.Task1(wd, "Fetch security milestone", build.fetchSecurityMilestone, milestoneNum, wf.After(noMilestoneApproved))
-	checkedSecurityIssues := wf.Action2(wd, "Check security issues", milestone.CheckSecurityIssues, rm, wf.Const(currentMajor+1))
+	backports := wf.Task2(wd, "Check security issues", milestone.CheckSecurityIssues, rm, wf.Const(currentMajor+1))
 
 	// cls are drafted by patch owners against `public`
 	// branch of sso://go-internal/go. Typically, no
 	// human should submit these patches; however, the
 	// workflow is hardened against accidental submission
 	// in order to provide idempotent checkpoint branches.
-	cls := wf.Task1(wd, "Check private changes", build.checkPrivateChanges, rm, wf.After(checkedSecurityIssues))
+	cls := wf.Task1(wd, "Check private changes", build.checkPrivateChanges, rm, wf.After(backports))
 
 	var (
 		nextMinors = wf.Task1(wd, "Get next minor versions", version.GetNextMinorVersions, wf.Const([]int{currentMajor, prevMajor}))

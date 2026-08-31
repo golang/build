@@ -577,6 +577,12 @@ func newMinorCoalesceTestDeps(t *testing.T, withPrivatePatches bool) (*releaseTe
 			Milestone: &github.Milestone{ID: github.Int64(0)},
 		},
 	}
+	fakeGitHub.Comments = map[int][]*github.IssueComment{
+		70001: {{
+			User: &github.User{Login: github.Ptr("gopherbot")},
+			Body: github.Ptr("Backport issue(s) opened: #70025 (for 1.25), #70026 (for 1.26)."),
+		}},
+	}
 
 	// Private side: clone the public repo and create the branches the coalesce
 	// steps read: "public" and the major release branches.

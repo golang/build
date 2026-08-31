@@ -1660,6 +1660,9 @@ type FakeGitHub struct {
 
 	// Tags is a set of tags that exist on GitHub for testing.
 	Tags map[string]bool
+
+	// Comments is a map from issue number to that issue's comments.
+	Comments map[int][]*github.IssueComment
 }
 
 func (f *FakeGitHub) nextMilestoneID() int {
@@ -1798,6 +1801,12 @@ func (f *FakeGitHub) GetIssue(_ context.Context, owner, repo string, number int)
 
 func (*FakeGitHub) EditMilestone(_ context.Context, owner, repo string, number int, milestone *github.Milestone) (*github.Milestone, *github.Response, error) {
 	return nil, nil, nil
+}
+
+func (f *FakeGitHub) ListIssueComments(_ context.Context, owner, repo string, number int) ([]*github.IssueComment, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Comments[number], nil
 }
 
 func (f *FakeGitHub) PostComment(_ context.Context, _ githubv4.ID, _ string) error {
