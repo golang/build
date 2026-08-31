@@ -27,6 +27,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -58,16 +59,16 @@ func TestRelease(t *testing.T) {
 		t.Skip("skipping large test in short mode")
 	}
 
-	t.Run("minor", func(t *testing.T) {
+	workflowtest.Subtest(t, "minor", func(t *testing.T) {
 		testRelease(t, "go1.26", 26, "go1.26.1", task.KindMinor)
 	})
-	t.Run("beta", func(t *testing.T) {
+	workflowtest.Subtest(t, "beta", func(t *testing.T) {
 		testRelease(t, "go1.26", 27, "go1.27beta1", task.KindBeta)
 	})
-	t.Run("rc", func(t *testing.T) {
+	workflowtest.Subtest(t, "rc", func(t *testing.T) {
 		testRelease(t, "go1.26", 27, "go1.27rc1", task.KindRC)
 	})
-	t.Run("major", func(t *testing.T) {
+	workflowtest.Subtest(t, "major", func(t *testing.T) {
 		if len(build.Default.ReleaseTags) < 26 {
 			// The 'Maintain x/repo go directive' task will run
 			// 'go get go@1.26.0', which can't be done on older
@@ -79,10 +80,10 @@ func TestRelease(t *testing.T) {
 }
 
 func TestSecurity(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
+	workflowtest.Subtest(t, "success", func(t *testing.T) {
 		testSecurity(t, true)
 	})
-	t.Run("failure", func(t *testing.T) {
+	workflowtest.Subtest(t, "failure", func(t *testing.T) {
 		testSecurity(t, false)
 	})
 }
@@ -131,8 +132,8 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		t.Skip("Requires python3 to be available in PATH.")
 	}
 
-	task.AwaitDivisor, workflow.MaxRetries = 100, 1
-	t.Cleanup(func() { task.AwaitDivisor, workflow.MaxRetries = 1, 3 })
+	workflow.MaxRetries = 1
+	t.Cleanup(func() { workflow.MaxRetries = 3 })
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Set up the fake CDN publishing process.
@@ -680,828 +681,850 @@ func seedRiders(g *task.FakeGerrit) {
 }
 
 func TestMinorReleaseSecurityCoalesce(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 
-	// Approve the confirm step; fail any other approval request.
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-			return nil
-		}
-		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-	}
-
-	// Run until the release coordinator approval is rejected, so we don't
-	// have to drive the full build. By then both minors' confirm tasks have
-	// finished.
-
-	comm := task.CommunicationTasks{
-		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-	}
-
-	publicHeadBefore, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
-	if err != nil {
-		t.Fatalf("reading public head before workflow: %v", err)
-	}
-
-	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, err := workflow.Start(wd, minorReleaseParams())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
-
-	branches, err := privGerrit.ListBranches(deps.ctx, "go")
-	if err != nil {
-		t.Fatalf("listing branches: %v", err)
-	}
-	branchNames := make(map[string]bool)
-	for _, b := range branches {
-		name := strings.TrimPrefix(b.Ref, "refs/heads/")
-		branchNames[name] = true
-	}
-	for _, want := range []string{
-		"internal-release-branch.go1.26.1",
-		"internal-release-branch.go1.25.1",
-	} {
-		if !branchNames[want] {
-			t.Errorf("internal release branch %q not found; branches: %v", want, branchNames)
-		}
-	}
-
-	for _, ib := range []string{
-		"internal-release-branch.go1.26.1",
-		"internal-release-branch.go1.25.1",
-	} {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
-		if err != nil {
-			t.Fatalf("reading head of %s: %v", ib, err)
-		}
-		if head == publicHeadBefore {
-			t.Errorf("internal branch %s head (%s) equals original public head; cherry-picks did not land", ib, head)
-		}
-	}
-
-	var foundCheckpoint bool
-	for name := range branchNames {
-		if strings.HasPrefix(name, "go1.26.1-go1.25.1-checkpoint-") {
-			foundCheckpoint = true
-			break
-		}
-	}
-	if !foundCheckpoint {
-		t.Errorf("checkpoint branch matching go1.26.1-go1.25.1-checkpoint-* not found; branches: %v", branchNames)
-	}
-
-	for _, clID := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, clID)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", clID, err)
-		}
-		if ci.Status != gerrit.ChangeStatusMerged {
-			t.Errorf("CL %s status = %q, want %q", clID, ci.Status, gerrit.ChangeStatusMerged)
-		}
-	}
-
-	wantCLCount := 2
-	for _, ib := range []string{
-		"internal-release-branch.go1.26.1",
-		"internal-release-branch.go1.25.1",
-	} {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
-		if err != nil {
-			t.Fatalf("reading head of %s: %v", ib, err)
-		}
-		commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHeadBefore)
-		if err != nil {
-			t.Fatalf("ListCommits on %s: %v", ib, err)
-		}
-		if got := len(commits); got != wantCLCount {
-			t.Errorf("branch %s has %d commits above public head, want %d", ib, got, wantCLCount)
-		}
-		wantPrefix := "[" + majorFromMinor(strings.TrimPrefix(ib, "internal-")) + "]"
-		var gotMessages []string
-		for _, ci := range commits {
-			gotMessages = append(gotMessages, ci.Message)
-			if !strings.HasPrefix(ci.Message, wantPrefix) {
-				t.Errorf("branch %s commit %s message %q does not start with %q", ib, ci.Commit[:8], ci.Message, wantPrefix)
+		// Approve the confirm step; fail any other approval request.
+		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+				return nil
 			}
+			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
 		}
-	}
 
-	branchCPSets := map[string]map[string]bool{}
-	branchRiders := map[string]string{
-		"internal-release-branch.go1.26.1": "\nFixes #70026",
-		"internal-release-branch.go1.25.1": "\nFixes #70025",
-	}
-	for ib, rider := range branchRiders {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
+		// Run until the release coordinator approval is rejected, so we don't
+		// have to drive the full build. By then both minors' confirm tasks have
+		// finished.
+
+		comm := task.CommunicationTasks{
+			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+		}
+
+		publicHeadBefore, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
 		if err != nil {
-			t.Fatalf("reading head of %s: %v", ib, err)
+			t.Fatalf("reading public head before workflow: %v", err)
 		}
-		commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHeadBefore)
-		if err != nil {
-			t.Fatalf("ListCommits on %s: %v", ib, err)
-		}
-		msgs := map[string]bool{}
-		for _, ci := range commits {
-			bare := strings.SplitN(ci.Message, "] ", 2)
-			if len(bare) == 2 {
-				if !strings.Contains(bare[1], rider) {
-					t.Errorf("branch %s cherry-pick %q is missing backport rider %q", ib, bare[1], strings.TrimPrefix(rider, "\n"))
-				}
-				msgs[strings.ReplaceAll(bare[1], rider, "")] = true
-			}
-		}
-		branchCPSets[ib] = msgs
-	}
-	set26 := branchCPSets["internal-release-branch.go1.26.1"]
-	set25 := branchCPSets["internal-release-branch.go1.25.1"]
-	if len(set26) != len(set25) {
-		t.Errorf("cherry-pick set sizes differ: go1.26.1 has %d, go1.25.1 has %d", len(set26), len(set25))
-	}
-	for msg := range set26 {
-		if !set25[msg] {
-			t.Errorf("cherry-pick %q on go1.26.1 but not go1.25.1", msg)
-		}
-	}
-}
 
-func TestMinorReleaseSecurityCoalesceWithRC(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-
-	base, err := deps.gerrit.ReadBranchHead(deps.ctx, "go", "release-branch.go1.26")
-	if err != nil {
-		t.Fatal(err)
-	}
-	deps.goRepo.Branch("release-branch.go1.27", base)
-
-	privGoRepo, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := privGerrit.CreateBranch(deps.ctx, "go", "release-branch.go1.27", gerrit.BranchInput{Revision: privGoRepo}); err != nil {
-		t.Fatal(err)
-	}
-
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-			return nil
-		}
-		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-	}
-
-	publicHeadBefore, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
-	if err != nil {
-		t.Fatalf("reading public head: %v", err)
-	}
-
-	comm := task.CommunicationTasks{
-		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-	}
-	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, err := workflow.Start(wd, minorReleaseParams())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
-
-	wantBranches := []string{
-		"internal-release-branch.go1.27rc1",
-		"internal-release-branch.go1.26.1",
-		"internal-release-branch.go1.25.1",
-	}
-	for _, ib := range wantBranches {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
-		if err != nil {
-			t.Fatalf("reading head of %s: %v", ib, err)
-		}
-		if head == publicHeadBefore {
-			t.Errorf("internal branch %s head equals public head; cherry-picks did not land", ib)
-		}
-		commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHeadBefore)
-		if err != nil {
-			t.Fatalf("ListCommits on %s: %v", ib, err)
-		}
-		if got := len(commits); got != 2 {
-			t.Errorf("branch %s has %d commits above public head, want 2", ib, got)
-		}
-	}
-}
-
-func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, false)
-
-	// There are no PRIVATE patches, so each release's confirm task takes the "no
-	// security fix" path. Allow those approvals; fail any other approval request.
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
-			t.Errorf("no-milestone approval gate fired for non-empty milestone")
-			return nil
-		}
-		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-			return nil
-		}
-		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-	}
-
-	// Run until the release coordinator approval is rejected, so we can check
-	// the coalesce's side effects without driving the full build. By then the
-	// checkpoint and internal release branches would have been created (if the
-	// coalesce didn't short-circuit).
-
-	comm := task.CommunicationTasks{
-		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-	}
-	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, err := workflow.Start(wd, minorReleaseParams())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
-
-	// The coalesce must not have created any security branches.
-	branches, err := privGerrit.ListBranches(deps.ctx, "go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, b := range branches {
-		name := strings.TrimPrefix(b.Ref, "refs/heads/")
-		if strings.Contains(name, "checkpoint") || strings.HasPrefix(name, "internal-") {
-			t.Errorf("coalesce created branch %q despite there being no PRIVATE-track patches", name)
-		}
-	}
-}
-
-func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, false)
-
-	var approvedNoMilestone bool
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
-			approvedNoMilestone = true
-			return nil
-		}
-		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-			return nil
-		}
-		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-	}
-
-	comm := task.CommunicationTasks{
-		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-	}
-	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-	if err != nil {
-		t.Fatal(err)
-	}
-	params := minorReleaseParams()
-	params[task.SecurityMilestoneParameter.Name] = ""
-	w, err := workflow.Start(wd, params)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
-	if !approvedNoMilestone {
-		t.Errorf("no-milestone approval gate did not fire for empty milestone")
-	}
-}
-
-func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-
-	workflow.MaxRetries = 3
-
-	privGerrit.AddChange("go", "1234", &gerrit.ChangeInfo{
-		ID:                   "1234",
-		ChangeID:             "1234",
-		ChangeNumber:         1234,
-		Branch:               "public",
-		Submittable:          true,
-		Mergeable:            true,
-		ContainsGitConflicts: true,
-	}, "crypto/tls: fix something")
-	privGerrit.AddChange("go", "5678", &gerrit.ChangeInfo{
-		ID:                   "5678",
-		ChangeID:             "5678",
-		ChangeNumber:         5678,
-		Branch:               "public",
-		Submittable:          true,
-		Mergeable:            true,
-		ContainsGitConflicts: true,
-	}, "cmd/compile: fix something else")
-
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-			return nil
-		}
-		return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-	}
-
-	comm := task.CommunicationTasks{
-		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-	}
-	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w, err := workflow.Start(wd, minorReleaseParams())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tracker := &taskStartTracker{Listener: &workflowtest.VerboseListener{T: t}}
-	errMsg := workflowtest.RunToFailure(t, deps.ctx, w, "Create cherry-picks", tracker)
-
-	var (
-		changes    []*gerrit.ChangeInfo
-		conflicted = map[string]*gerrit.ChangeInfo{}
-		branches   = map[string]bool{}
-	)
-	for _, num := range []string{"1234", "5678"} {
-		if !strings.Contains(errMsg, "go-internal-review.git.corp.google.com/c/go/+/"+num) {
-			t.Errorf("error does not mention source CL %s: %s", num, errMsg)
-		}
-		ci, err := privGerrit.GetChange(deps.ctx, num)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
-		}
-		changes = append(changes, ci)
-		existing, err := privGerrit.QueryChanges(deps.ctx, "change:"+num)
-		if err != nil {
-			t.Fatalf("QueryChanges(%s): %v", num, err)
-		}
-		var created int
-		for _, ci := range existing {
-			if strings.HasPrefix(ci.Branch, "internal-release-branch.go1.") {
-				created++
-				conflicted[ci.ID] = ci
-				branches[ci.Branch] = true
-			}
-		}
-		if created != 2 {
-			t.Errorf("change %s: got %d conflicted cherry-picks left on internal branches, want 2", num, created)
-		}
-	}
-
-	var internalBranches []string
-	for b := range branches {
-		internalBranches = append(internalBranches, b)
-	}
-	for id, ci := range conflicted {
-		resolved := *ci
-		resolved.ContainsGitConflicts = false
-		resolved.Submittable = true
-		privGerrit.AddChange("go", id, &resolved, "")
-	}
-
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "cherry-picks"}}
-	retried, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, changes, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("createSecurityCherryPicks after resolving conflicts: %v", err)
-	}
-	if len(retried) != len(conflicted) {
-		t.Fatalf("retry returned %d cherry-picks, want %d", len(retried), len(conflicted))
-	}
-	for _, cp := range retried {
-		if _, ok := conflicted[cp.ID]; !ok {
-			t.Errorf("retry created new cherry-pick %s instead of reusing the resolved CL", cp.ID)
-		}
-	}
-	submitted, err := deps.buildTasks.submitCherryPicks(taskCtx, retried)
-	if err != nil {
-		t.Fatalf("submitCherryPicks after resolving conflicts: %v", err)
-	}
-	for _, cp := range retried {
-		ci, err := privGerrit.GetChange(deps.ctx, cp.ID)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", cp.ID, err)
-		}
-		if ci.Status != gerrit.ChangeStatusMerged {
-			t.Errorf("cherry-pick %s status = %q, want %q; submitted = %v", cp.ID, ci.Status, gerrit.ChangeStatusMerged, submitted)
-		}
-	}
-	if !strings.Contains(errMsg, "internal-release-branch.go1.") {
-		t.Errorf("error does not mention target branch: %s", errMsg)
-	}
-	if !strings.Contains(errMsg, "merge conflicts") {
-		t.Errorf("error does not mention merge conflicts: %s", errMsg)
-	}
-	if _, started := tracker.started.Load("Submit cherry-picks"); started {
-		t.Error("Submit cherry-picks ran despite cherry-pick conflict")
-	}
-}
-
-func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "coalesce"}}
-
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
-		}
-		cls = append(cls, ci)
-	}
-
-	// First run: establish a prior-iteration checkpoint branch.
-	first, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("first createSecurityCheckpoint: %v", err)
-	}
-	if !strings.HasPrefix(first, bi.CheckpointName+"-") {
-		t.Errorf("checkpoint name %q is not prefixed with %q", first, bi.CheckpointName+"-")
-	}
-	firstHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", first)
-	if err != nil {
-		t.Fatalf("reading first checkpoint head: %v", err)
-	}
-
-	// Second run: a restart forks a new checkpoint. The branch name embeds a
-	// second-resolution timestamp, so a same-second restart collides on the
-	// branch name (real Gerrit 409). When the second has rolled over, the
-	// restart succeeds with a distinct name; either way, the first run's
-	// checkpoint branch must remain exactly as it was.
-	second, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
-	if err != nil {
-		var httpErr *gerrit.HTTPError
-		if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict {
-			t.Fatalf("second createSecurityCheckpoint: %v", err)
-		}
-		t.Logf("same-second restart collided on the timestamped checkpoint name (expected): %v", err)
-	} else if second == first {
-		t.Errorf("restart reused checkpoint name %q; want a distinct timestamped branch", second)
-	}
-
-	// The first run's checkpoint branch is left untouched.
-	gotHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", first)
-	if err != nil {
-		t.Fatalf("re-reading first checkpoint head: %v", err)
-	}
-	if gotHead != firstHead {
-		t.Errorf("first checkpoint head moved: was %q, now %q", firstHead, gotHead)
-	}
-}
-
-func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "restart-mergedcp"}}
-
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
-		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
-		}
-		cls = append(cls, ci)
-	}
-
-	branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("first createInternalReleaseBranches: %v", err)
-	}
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("first createSecurityCherryPicks: %v", err)
-	}
-	if _, err := deps.buildTasks.submitCherryPicks(taskCtx, cps); err != nil {
-		t.Fatalf("submitCherryPicks: %v", err)
-	}
-
-	coalescedHeads := map[string]string{}
-	for _, b := range branches {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
-		if err != nil {
-			t.Fatalf("reading head of %s: %v", b, err)
-		}
-		coalescedHeads[b] = head
-	}
-
-	branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("restart createInternalReleaseBranches with merged CPs: %v", err)
-	}
-	if len(branches2) != len(branches) {
-		t.Fatalf("branch count mismatch: first=%d, restart=%d", len(branches), len(branches2))
-	}
-	cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("restart createSecurityCherryPicks with merged CPs: %v", err)
-	}
-	if got, want := len(cps2), len(cls)*len(branches); got != want {
-		t.Fatalf("restart cherry-picks: got %d, want %d", got, want)
-	}
-	for _, cp := range cps2 {
-		if cp.Status != gerrit.ChangeStatusMerged {
-			t.Errorf("restart cherry-pick CL %d status = %q, want %q", cp.ChangeNumber, cp.Status, gerrit.ChangeStatusMerged)
-		}
-	}
-	if _, err := deps.buildTasks.submitCherryPicks(taskCtx, cps2); err != nil {
-		t.Fatalf("restart submitCherryPicks: %v", err)
-	}
-
-	for _, b := range branches2 {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
-		if err != nil {
-			t.Fatalf("reading head of %s after restart: %v", b, err)
-		}
-		if head != coalescedHeads[b] {
-			t.Errorf("branch %s head changed after restart: got %s, want %s", b, head, coalescedHeads[b])
-		}
-		publicHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", majorFromMinor(strings.TrimPrefix(b, "internal-")))
+		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
 		if err != nil {
 			t.Fatal(err)
 		}
-		commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHead)
+		w, err := workflow.Start(wd, minorReleaseParams())
 		if err != nil {
-			t.Fatalf("ListCommits(%s): %v", b, err)
+			t.Fatal(err)
 		}
-		if len(commits) != len(cls) {
-			t.Errorf("branch %s has %d security commits above public head, want %d", b, len(commits), len(cls))
+
+		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+
+		branches, err := privGerrit.ListBranches(deps.ctx, "go")
+		if err != nil {
+			t.Fatalf("listing branches: %v", err)
 		}
-	}
+		branchNames := make(map[string]bool)
+		for _, b := range branches {
+			name := strings.TrimPrefix(b.Ref, "refs/heads/")
+			branchNames[name] = true
+		}
+		for _, want := range []string{
+			"internal-release-branch.go1.26.1",
+			"internal-release-branch.go1.25.1",
+		} {
+			if !branchNames[want] {
+				t.Errorf("internal release branch %q not found; branches: %v", want, branchNames)
+			}
+		}
+
+		for _, ib := range []string{
+			"internal-release-branch.go1.26.1",
+			"internal-release-branch.go1.25.1",
+		} {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
+			if err != nil {
+				t.Fatalf("reading head of %s: %v", ib, err)
+			}
+			if head == publicHeadBefore {
+				t.Errorf("internal branch %s head (%s) equals original public head; cherry-picks did not land", ib, head)
+			}
+		}
+
+		var foundCheckpoint bool
+		for name := range branchNames {
+			if strings.HasPrefix(name, "go1.26.1-go1.25.1-checkpoint-") {
+				foundCheckpoint = true
+				break
+			}
+		}
+		if !foundCheckpoint {
+			t.Errorf("checkpoint branch matching go1.26.1-go1.25.1-checkpoint-* not found; branches: %v", branchNames)
+		}
+
+		for _, clID := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, clID)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", clID, err)
+			}
+			if ci.Status != gerrit.ChangeStatusMerged {
+				t.Errorf("CL %s status = %q, want %q", clID, ci.Status, gerrit.ChangeStatusMerged)
+			}
+		}
+
+		wantCLCount := 2
+		for _, ib := range []string{
+			"internal-release-branch.go1.26.1",
+			"internal-release-branch.go1.25.1",
+		} {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
+			if err != nil {
+				t.Fatalf("reading head of %s: %v", ib, err)
+			}
+			commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHeadBefore)
+			if err != nil {
+				t.Fatalf("ListCommits on %s: %v", ib, err)
+			}
+			if got := len(commits); got != wantCLCount {
+				t.Errorf("branch %s has %d commits above public head, want %d", ib, got, wantCLCount)
+			}
+			wantPrefix := "[" + majorFromMinor(strings.TrimPrefix(ib, "internal-")) + "]"
+			var gotMessages []string
+			for _, ci := range commits {
+				gotMessages = append(gotMessages, ci.Message)
+				if !strings.HasPrefix(ci.Message, wantPrefix) {
+					t.Errorf("branch %s commit %s message %q does not start with %q", ib, ci.Commit[:8], ci.Message, wantPrefix)
+				}
+			}
+		}
+
+		branchCPSets := map[string]map[string]bool{}
+		branchRiders := map[string]string{
+			"internal-release-branch.go1.26.1": "\nFixes #70026",
+			"internal-release-branch.go1.25.1": "\nFixes #70025",
+		}
+		for ib, rider := range branchRiders {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
+			if err != nil {
+				t.Fatalf("reading head of %s: %v", ib, err)
+			}
+			commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHeadBefore)
+			if err != nil {
+				t.Fatalf("ListCommits on %s: %v", ib, err)
+			}
+			msgs := map[string]bool{}
+			for _, ci := range commits {
+				bare := strings.SplitN(ci.Message, "] ", 2)
+				if len(bare) == 2 {
+					if !strings.Contains(bare[1], rider) {
+						t.Errorf("branch %s cherry-pick %q is missing backport rider %q", ib, bare[1], strings.TrimPrefix(rider, "\n"))
+					}
+					msgs[strings.ReplaceAll(bare[1], rider, "")] = true
+				}
+			}
+			branchCPSets[ib] = msgs
+		}
+		set26 := branchCPSets["internal-release-branch.go1.26.1"]
+		set25 := branchCPSets["internal-release-branch.go1.25.1"]
+		if len(set26) != len(set25) {
+			t.Errorf("cherry-pick set sizes differ: go1.26.1 has %d, go1.25.1 has %d", len(set26), len(set25))
+		}
+		for msg := range set26 {
+			if !set25[msg] {
+				t.Errorf("cherry-pick %q on go1.26.1 but not go1.25.1", msg)
+			}
+		}
+	})
+}
+
+func TestMinorReleaseSecurityCoalesceWithRC(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+
+		base, err := deps.gerrit.ReadBranchHead(deps.ctx, "go", "release-branch.go1.26")
+		if err != nil {
+			t.Fatal(err)
+		}
+		deps.goRepo.Branch("release-branch.go1.27", base)
+
+		privGoRepo, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := privGerrit.CreateBranch(deps.ctx, "go", "release-branch.go1.27", gerrit.BranchInput{Revision: privGoRepo}); err != nil {
+			t.Fatal(err)
+		}
+
+		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+				return nil
+			}
+			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+		}
+
+		publicHeadBefore, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
+		if err != nil {
+			t.Fatalf("reading public head: %v", err)
+		}
+
+		comm := task.CommunicationTasks{
+			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+		}
+		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := workflow.Start(wd, minorReleaseParams())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+
+		wantBranches := []string{
+			"internal-release-branch.go1.27rc1",
+			"internal-release-branch.go1.26.1",
+			"internal-release-branch.go1.25.1",
+		}
+		for _, ib := range wantBranches {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
+			if err != nil {
+				t.Fatalf("reading head of %s: %v", ib, err)
+			}
+			if head == publicHeadBefore {
+				t.Errorf("internal branch %s head equals public head; cherry-picks did not land", ib)
+			}
+			commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHeadBefore)
+			if err != nil {
+				t.Fatalf("ListCommits on %s: %v", ib, err)
+			}
+			if got := len(commits); got != 2 {
+				t.Errorf("branch %s has %d commits above public head, want 2", ib, got)
+			}
+		}
+	})
+}
+
+func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, false)
+
+		// There are no PRIVATE patches, so each release's confirm task takes the "no
+		// security fix" path. Allow those approvals; fail any other approval request.
+		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+			if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
+				t.Errorf("no-milestone approval gate fired for non-empty milestone")
+				return nil
+			}
+			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+				return nil
+			}
+			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+		}
+
+		// Run until the release coordinator approval is rejected, so we can check
+		// the coalesce's side effects without driving the full build. By then the
+		// checkpoint and internal release branches would have been created (if the
+		// coalesce didn't short-circuit).
+
+		comm := task.CommunicationTasks{
+			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+		}
+		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := workflow.Start(wd, minorReleaseParams())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+
+		// The coalesce must not have created any security branches.
+		branches, err := privGerrit.ListBranches(deps.ctx, "go")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, b := range branches {
+			name := strings.TrimPrefix(b.Ref, "refs/heads/")
+			if strings.Contains(name, "checkpoint") || strings.HasPrefix(name, "internal-") {
+				t.Errorf("coalesce created branch %q despite there being no PRIVATE-track patches", name)
+			}
+		}
+	})
+}
+
+func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, false)
+
+		var approvedNoMilestone bool
+		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+			if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
+				approvedNoMilestone = true
+				return nil
+			}
+			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+				return nil
+			}
+			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+		}
+
+		comm := task.CommunicationTasks{
+			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+		}
+		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
+		if err != nil {
+			t.Fatal(err)
+		}
+		params := minorReleaseParams()
+		params[task.SecurityMilestoneParameter.Name] = ""
+		w, err := workflow.Start(wd, params)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+		if !approvedNoMilestone {
+			t.Errorf("no-milestone approval gate did not fire for empty milestone")
+		}
+	})
+}
+
+func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+
+		workflow.MaxRetries = 3
+
+		privGerrit.AddChange("go", "1234", &gerrit.ChangeInfo{
+			ID:                   "1234",
+			ChangeID:             "1234",
+			ChangeNumber:         1234,
+			Branch:               "public",
+			Submittable:          true,
+			Mergeable:            true,
+			ContainsGitConflicts: true,
+		}, "crypto/tls: fix something")
+		privGerrit.AddChange("go", "5678", &gerrit.ChangeInfo{
+			ID:                   "5678",
+			ChangeID:             "5678",
+			ChangeNumber:         5678,
+			Branch:               "public",
+			Submittable:          true,
+			Mergeable:            true,
+			ContainsGitConflicts: true,
+		}, "cmd/compile: fix something else")
+
+		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+				return nil
+			}
+			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+		}
+
+		comm := task.CommunicationTasks{
+			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+		}
+		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w, err := workflow.Start(wd, minorReleaseParams())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		tracker := &taskStartTracker{Listener: &workflowtest.VerboseListener{T: t}}
+		errMsg := workflowtest.RunToFailure(t, deps.ctx, w, "Create cherry-picks", tracker)
+
+		var (
+			changes    []*gerrit.ChangeInfo
+			conflicted = map[string]*gerrit.ChangeInfo{}
+			branches   = map[string]bool{}
+		)
+		for _, num := range []string{"1234", "5678"} {
+			if !strings.Contains(errMsg, "go-internal-review.git.corp.google.com/c/go/+/"+num) {
+				t.Errorf("error does not mention source CL %s: %s", num, errMsg)
+			}
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			changes = append(changes, ci)
+			existing, err := privGerrit.QueryChanges(deps.ctx, "change:"+num)
+			if err != nil {
+				t.Fatalf("QueryChanges(%s): %v", num, err)
+			}
+			var created int
+			for _, ci := range existing {
+				if strings.HasPrefix(ci.Branch, "internal-release-branch.go1.") {
+					created++
+					conflicted[ci.ID] = ci
+					branches[ci.Branch] = true
+				}
+			}
+			if created != 2 {
+				t.Errorf("change %s: got %d conflicted cherry-picks left on internal branches, want 2", num, created)
+			}
+		}
+
+		var internalBranches []string
+		for b := range branches {
+			internalBranches = append(internalBranches, b)
+		}
+		for id, ci := range conflicted {
+			resolved := *ci
+			resolved.ContainsGitConflicts = false
+			resolved.Submittable = true
+			privGerrit.AddChange("go", id, &resolved, "")
+		}
+
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "cherry-picks"}}
+		retried, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, changes, coalesceRM(), coalesceBackports())
+		if err != nil {
+			t.Fatalf("createSecurityCherryPicks after resolving conflicts: %v", err)
+		}
+		if len(retried) != len(conflicted) {
+			t.Fatalf("retry returned %d cherry-picks, want %d", len(retried), len(conflicted))
+		}
+		for _, cp := range retried {
+			if _, ok := conflicted[cp.ID]; !ok {
+				t.Errorf("retry created new cherry-pick %s instead of reusing the resolved CL", cp.ID)
+			}
+		}
+		submitted, err := deps.buildTasks.submitCherryPicks(taskCtx, retried)
+		if err != nil {
+			t.Fatalf("submitCherryPicks after resolving conflicts: %v", err)
+		}
+		for _, cp := range retried {
+			ci, err := privGerrit.GetChange(deps.ctx, cp.ID)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", cp.ID, err)
+			}
+			if ci.Status != gerrit.ChangeStatusMerged {
+				t.Errorf("cherry-pick %s status = %q, want %q; submitted = %v", cp.ID, ci.Status, gerrit.ChangeStatusMerged, submitted)
+			}
+		}
+		if !strings.Contains(errMsg, "internal-release-branch.go1.") {
+			t.Errorf("error does not mention target branch: %s", errMsg)
+		}
+		if !strings.Contains(errMsg, "merge conflicts") {
+			t.Errorf("error does not mention merge conflicts: %s", errMsg)
+		}
+		if _, started := tracker.started.Load("Submit cherry-picks"); started {
+			t.Error("Submit cherry-picks ran despite cherry-pick conflict")
+		}
+	})
+}
+
+func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "coalesce"}}
+
+		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var cls []*gerrit.ChangeInfo
+		for _, num := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			cls = append(cls, ci)
+		}
+
+		// First run: establish a prior-iteration checkpoint branch.
+		first, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
+		if err != nil {
+			t.Fatalf("first createSecurityCheckpoint: %v", err)
+		}
+		if !strings.HasPrefix(first, bi.CheckpointName+"-") {
+			t.Errorf("checkpoint name %q is not prefixed with %q", first, bi.CheckpointName+"-")
+		}
+		firstHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", first)
+		if err != nil {
+			t.Fatalf("reading first checkpoint head: %v", err)
+		}
+
+		// Second run: a restart forks a new checkpoint. The branch name embeds a
+		// second-resolution timestamp, so a same-second restart collides on the
+		// branch name (real Gerrit 409). When the second has rolled over, the
+		// restart succeeds with a distinct name; either way, the first run's
+		// checkpoint branch must remain exactly as it was.
+		second, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
+		if err != nil {
+			var httpErr *gerrit.HTTPError
+			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict {
+				t.Fatalf("second createSecurityCheckpoint: %v", err)
+			}
+			t.Logf("same-second restart collided on the timestamped checkpoint name (expected): %v", err)
+		} else if second == first {
+			t.Errorf("restart reused checkpoint name %q; want a distinct timestamped branch", second)
+		}
+
+		// The first run's checkpoint branch is left untouched.
+		gotHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", first)
+		if err != nil {
+			t.Fatalf("re-reading first checkpoint head: %v", err)
+		}
+		if gotHead != firstHead {
+			t.Errorf("first checkpoint head moved: was %q, now %q", firstHead, gotHead)
+		}
+	})
+}
+
+func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedRiders(privGerrit)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "restart-mergedcp"}}
+
+		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var cls []*gerrit.ChangeInfo
+		for _, num := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			cls = append(cls, ci)
+		}
+
+		branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+		if err != nil {
+			t.Fatalf("first createInternalReleaseBranches: %v", err)
+		}
+		cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
+		if err != nil {
+			t.Fatalf("first createSecurityCherryPicks: %v", err)
+		}
+		if _, err := deps.buildTasks.submitCherryPicks(taskCtx, cps); err != nil {
+			t.Fatalf("submitCherryPicks: %v", err)
+		}
+
+		coalescedHeads := map[string]string{}
+		for _, b := range branches {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+			if err != nil {
+				t.Fatalf("reading head of %s: %v", b, err)
+			}
+			coalescedHeads[b] = head
+		}
+
+		branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+		if err != nil {
+			t.Fatalf("restart createInternalReleaseBranches with merged CPs: %v", err)
+		}
+		if len(branches2) != len(branches) {
+			t.Fatalf("branch count mismatch: first=%d, restart=%d", len(branches), len(branches2))
+		}
+		cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
+		if err != nil {
+			t.Fatalf("restart createSecurityCherryPicks with merged CPs: %v", err)
+		}
+		if got, want := len(cps2), len(cls)*len(branches); got != want {
+			t.Fatalf("restart cherry-picks: got %d, want %d", got, want)
+		}
+		for _, cp := range cps2 {
+			if cp.Status != gerrit.ChangeStatusMerged {
+				t.Errorf("restart cherry-pick CL %d status = %q, want %q", cp.ChangeNumber, cp.Status, gerrit.ChangeStatusMerged)
+			}
+		}
+		if _, err := deps.buildTasks.submitCherryPicks(taskCtx, cps2); err != nil {
+			t.Fatalf("restart submitCherryPicks: %v", err)
+		}
+
+		for _, b := range branches2 {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+			if err != nil {
+				t.Fatalf("reading head of %s after restart: %v", b, err)
+			}
+			if head != coalescedHeads[b] {
+				t.Errorf("branch %s head changed after restart: got %s, want %s", b, head, coalescedHeads[b])
+			}
+			publicHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", majorFromMinor(strings.TrimPrefix(b, "internal-")))
+			if err != nil {
+				t.Fatal(err)
+			}
+			commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHead)
+			if err != nil {
+				t.Fatalf("ListCommits(%s): %v", b, err)
+			}
+			if len(commits) != len(cls) {
+				t.Errorf("branch %s has %d security commits above public head, want %d", b, len(commits), len(cls))
+			}
+		}
+	})
 }
 
 func TestReadSecurityRefRestart(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "secref-restart"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "secref-restart"}}
 
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
+		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
 		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
+			t.Fatal(err)
 		}
-		cls = append(cls, ci)
-	}
 
-	branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
+		var cls []*gerrit.ChangeInfo
+		for _, num := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			cls = append(cls, ci)
+		}
 
-	for _, b := range branches {
-		version := strings.TrimPrefix(b, "internal-release-branch.")
-		commit, err := deps.buildTasks.readSecurityRef(taskCtx, version)
+		branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
-			t.Fatalf("readSecurityRef(%s): %v", version, err)
+			t.Fatal(err)
 		}
-		wantHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
-		if err != nil {
-			t.Fatalf("ReadBranchHead(%s): %v", b, err)
-		}
-		if commit != wantHead {
-			t.Errorf("readSecurityRef(%s) = %q, want %q (branch head of %s)", version, commit, wantHead, b)
-		}
-	}
 
-	_, err = deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
+		for _, b := range branches {
+			version := strings.TrimPrefix(b, "internal-release-branch.")
+			commit, err := deps.buildTasks.readSecurityRef(taskCtx, version)
+			if err != nil {
+				t.Fatalf("readSecurityRef(%s): %v", version, err)
+			}
+			wantHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+			if err != nil {
+				t.Fatalf("ReadBranchHead(%s): %v", b, err)
+			}
+			if commit != wantHead {
+				t.Errorf("readSecurityRef(%s) = %q, want %q (branch head of %s)", version, commit, wantHead, b)
+			}
+		}
 
-	for _, b := range branches {
-		version := strings.TrimPrefix(b, "internal-release-branch.")
-		commit, err := deps.buildTasks.readSecurityRef(taskCtx, version)
+		_, err = deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
-			t.Fatalf("readSecurityRef(%s) after restart: %v", version, err)
+			t.Fatal(err)
 		}
-		wantHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
-		if err != nil {
-			t.Fatalf("ReadBranchHead(%s) after restart: %v", b, err)
-		}
-		if commit != wantHead {
-			t.Errorf("readSecurityRef(%s) after restart = %q, want %q", version, commit, wantHead)
-		}
-	}
 
-	commit, err := deps.buildTasks.readSecurityRef(taskCtx, "go1.99.99")
-	if err != nil {
-		t.Fatalf("readSecurityRef for nonexistent version: %v", err)
-	}
-	if commit != "" {
-		t.Errorf("readSecurityRef for nonexistent version = %q, want empty", commit)
-	}
+		for _, b := range branches {
+			version := strings.TrimPrefix(b, "internal-release-branch.")
+			commit, err := deps.buildTasks.readSecurityRef(taskCtx, version)
+			if err != nil {
+				t.Fatalf("readSecurityRef(%s) after restart: %v", version, err)
+			}
+			wantHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+			if err != nil {
+				t.Fatalf("ReadBranchHead(%s) after restart: %v", b, err)
+			}
+			if commit != wantHead {
+				t.Errorf("readSecurityRef(%s) after restart = %q, want %q", version, commit, wantHead)
+			}
+		}
+
+		commit, err := deps.buildTasks.readSecurityRef(taskCtx, "go1.99.99")
+		if err != nil {
+			t.Fatalf("readSecurityRef for nonexistent version: %v", err)
+		}
+		if commit != "" {
+			t.Errorf("readSecurityRef for nonexistent version = %q, want empty", commit)
+		}
+	})
 }
 
 func TestPublicizeIdempotent(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("Requires bash shell scripting support.")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
-
-	pubRepo := task.NewFakeRepo(t, "go")
-	base := pubRepo.Commit(map[string]string{"README": "hello"})
-	pubRepo.Branch("release-branch.go1.26", base)
-
-	privRepo := task.CloneFakeRepo(t, "go", pubRepo)
-	privRepo.Branch("internal-release-branch.go1.26.1", base)
-	privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-		"crypto/tls: fix vuln\n\nFixes CVE-2026-1234\n\nChange-Id: I0000000000000000000000000000000000000001",
-		map[string]string{"security1.txt": "fix1"})
-	privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-		"cmd/compile: fix another vuln\n\nFixes CVE-2026-5678\n\nChange-Id: I0000000000000000000000000000000000000002",
-		map[string]string{"security2.txt": "fix2"})
-
-	pubGerrit := task.NewFakeGerrit(t, pubRepo)
-	privGerrit := task.NewFakeGerrit(t, privRepo)
-
-	securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
-		ID:           "pub-1",
-		ChangeID:     "I0000000000000000000000000000000000000001",
-		ChangeNumber: 9001,
-		Branch:       "release-branch.go1.26",
-		Status:       "NEW",
-	}, "crypto/tls: fix vuln")
-	pubGerrit.AddChange("go", "pub-2", &gerrit.ChangeInfo{
-		ID:           "pub-2",
-		ChangeID:     "I0000000000000000000000000000000000000002",
-		ChangeNumber: 9002,
-		Branch:       "release-branch.go1.26",
-		Status:       "NEW",
-	}, "cmd/compile: fix another vuln")
-
-	build := &BuildReleaseTasks{
-		GerritClient:         pubGerrit,
-		GerritProject:        "go",
-		PrivateGerritClient:  privGerrit,
-		PrivateGerritProject: "go",
-		Git:                  new(task.Git),
-	}
-
-	cls, err := build.publicizePrivateSecurityCLs(taskCtx,
-		"go1.26.1", "release-branch.go1.26", base, securityCommit, nil)
-	if err != nil {
-		t.Fatalf("publicize with existing CLs: %v", err)
-	}
-	if len(cls) != 2 {
-		t.Fatalf("publicize returned %d CL IDs, want 2", len(cls))
-	}
-	for _, cl := range cls {
-		if !strings.Contains(cl, "go~") {
-			t.Errorf("unexpected CL ID format: %q", cl)
+	synctest.Test(t, func(t *testing.T) {
+		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+			t.Skip("Requires bash shell scripting support.")
 		}
-	}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
+
+		pubRepo := task.NewFakeRepo(t, "go")
+		base := pubRepo.Commit(map[string]string{"README": "hello"})
+		pubRepo.Branch("release-branch.go1.26", base)
+
+		privRepo := task.CloneFakeRepo(t, "go", pubRepo)
+		privRepo.Branch("internal-release-branch.go1.26.1", base)
+		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
+			"crypto/tls: fix vuln\n\nFixes CVE-2026-1234\n\nChange-Id: I0000000000000000000000000000000000000001",
+			map[string]string{"security1.txt": "fix1"})
+		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
+			"cmd/compile: fix another vuln\n\nFixes CVE-2026-5678\n\nChange-Id: I0000000000000000000000000000000000000002",
+			map[string]string{"security2.txt": "fix2"})
+
+		pubGerrit := task.NewFakeGerrit(t, pubRepo)
+		privGerrit := task.NewFakeGerrit(t, privRepo)
+
+		securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
+			ID:           "pub-1",
+			ChangeID:     "I0000000000000000000000000000000000000001",
+			ChangeNumber: 9001,
+			Branch:       "release-branch.go1.26",
+			Status:       "NEW",
+		}, "crypto/tls: fix vuln")
+		pubGerrit.AddChange("go", "pub-2", &gerrit.ChangeInfo{
+			ID:           "pub-2",
+			ChangeID:     "I0000000000000000000000000000000000000002",
+			ChangeNumber: 9002,
+			Branch:       "release-branch.go1.26",
+			Status:       "NEW",
+		}, "cmd/compile: fix another vuln")
+
+		build := &BuildReleaseTasks{
+			GerritClient:         pubGerrit,
+			GerritProject:        "go",
+			PrivateGerritClient:  privGerrit,
+			PrivateGerritProject: "go",
+			Git:                  new(task.Git),
+		}
+
+		cls, err := build.publicizePrivateSecurityCLs(taskCtx,
+			"go1.26.1", "release-branch.go1.26", base, securityCommit, nil)
+		if err != nil {
+			t.Fatalf("publicize with existing CLs: %v", err)
+		}
+		if len(cls) != 2 {
+			t.Fatalf("publicize returned %d CL IDs, want 2", len(cls))
+		}
+		for _, cl := range cls {
+			if !strings.Contains(cl, "go~") {
+				t.Errorf("unexpected CL ID format: %q", cl)
+			}
+		}
+	})
 }
 
 func TestCheckAlreadyPublicizedIgnoresAbandoned(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("Requires bash shell scripting support.")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+			t.Skip("Requires bash shell scripting support.")
+		}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
 
-	pubRepo := task.NewFakeRepo(t, "go")
-	base := pubRepo.Commit(map[string]string{"README": "hello"})
-	pubRepo.Branch("release-branch.go1.26", base)
+		pubRepo := task.NewFakeRepo(t, "go")
+		base := pubRepo.Commit(map[string]string{"README": "hello"})
+		pubRepo.Branch("release-branch.go1.26", base)
 
-	privRepo := task.CloneFakeRepo(t, "go", pubRepo)
-	privRepo.Branch("internal-release-branch.go1.26.1", base)
-	privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-		"crypto/tls: fix vuln\n\nFixes CVE-2026-1234\n\nChange-Id: I0000000000000000000000000000000000000001",
-		map[string]string{"security1.txt": "fix1"})
+		privRepo := task.CloneFakeRepo(t, "go", pubRepo)
+		privRepo.Branch("internal-release-branch.go1.26.1", base)
+		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
+			"crypto/tls: fix vuln\n\nFixes CVE-2026-1234\n\nChange-Id: I0000000000000000000000000000000000000001",
+			map[string]string{"security1.txt": "fix1"})
 
-	pubGerrit := task.NewFakeGerrit(t, pubRepo)
-	privGerrit := task.NewFakeGerrit(t, privRepo)
+		pubGerrit := task.NewFakeGerrit(t, pubRepo)
+		privGerrit := task.NewFakeGerrit(t, privRepo)
 
-	securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
-	if err != nil {
-		t.Fatal(err)
-	}
+		securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
-		ID:           "pub-1",
-		ChangeID:     "I0000000000000000000000000000000000000001",
-		ChangeNumber: 9001,
-		Branch:       "release-branch.go1.26",
-		Status:       gerrit.ChangeStatusAbandoned,
-	}, "crypto/tls: fix vuln")
+		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
+			ID:           "pub-1",
+			ChangeID:     "I0000000000000000000000000000000000000001",
+			ChangeNumber: 9001,
+			Branch:       "release-branch.go1.26",
+			Status:       gerrit.ChangeStatusAbandoned,
+		}, "crypto/tls: fix vuln")
 
-	build := &BuildReleaseTasks{
-		GerritClient:         pubGerrit,
-		GerritProject:        "go",
-		PrivateGerritClient:  privGerrit,
-		PrivateGerritProject: "go",
-		Git:                  new(task.Git),
-	}
+		build := &BuildReleaseTasks{
+			GerritClient:         pubGerrit,
+			GerritProject:        "go",
+			PrivateGerritClient:  privGerrit,
+			PrivateGerritProject: "go",
+			Git:                  new(task.Git),
+		}
 
-	repo, err := build.Git.CloneBranch(taskCtx, pubGerrit.GitRepoURL("go"), "release-branch.go1.26")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer repo.Close()
-	if _, err := repo.RunCommand(taskCtx, "fetch", privGerrit.GitRepoURL("go"), "refs/heads/internal-release-branch.go1.26.1"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repo.RunCommand(taskCtx, "cherry-pick", base+".."+securityCommit); err != nil {
-		t.Fatal(err)
-	}
+		repo, err := build.Git.CloneBranch(taskCtx, pubGerrit.GitRepoURL("go"), "release-branch.go1.26")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer repo.Close()
+		if _, err := repo.RunCommand(taskCtx, "fetch", privGerrit.GitRepoURL("go"), "refs/heads/internal-release-branch.go1.26.1"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repo.RunCommand(taskCtx, "cherry-pick", base+".."+securityCommit); err != nil {
+			t.Fatal(err)
+		}
 
-	existing, err := build.checkAlreadyPublicized(taskCtx, repo, "release-branch.go1.26", base)
-	if err != nil {
-		t.Fatalf("checkAlreadyPublicized: %v", err)
-	}
-	if len(existing) != 0 {
-		t.Errorf("checkAlreadyPublicized treated abandoned CLs as already publicized: %v", existing)
-	}
+		existing, err := build.checkAlreadyPublicized(taskCtx, repo, "release-branch.go1.26", base)
+		if err != nil {
+			t.Fatalf("checkAlreadyPublicized: %v", err)
+		}
+		if len(existing) != 0 {
+			t.Errorf("checkAlreadyPublicized treated abandoned CLs as already publicized: %v", existing)
+		}
+	})
 }
 
 func TestPublicizePartialFailsOpen(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("Requires bash shell scripting support.")
-	}
+	synctest.Test(t, func(t *testing.T) {
+		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+			t.Skip("Requires bash shell scripting support.")
+		}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
 
-	pubRepo := task.NewFakeRepo(t, "go")
-	base := pubRepo.Commit(map[string]string{"README": "hello"})
-	pubRepo.Branch("release-branch.go1.26", base)
+		pubRepo := task.NewFakeRepo(t, "go")
+		base := pubRepo.Commit(map[string]string{"README": "hello"})
+		pubRepo.Branch("release-branch.go1.26", base)
 
-	privRepo := task.CloneFakeRepo(t, "go", pubRepo)
-	privRepo.Branch("internal-release-branch.go1.26.1", base)
-	privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-		"crypto/tls: fix vuln\n\nChange-Id: I0000000000000000000000000000000000000001",
-		map[string]string{"security1.txt": "fix1"})
-	privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-		"cmd/compile: fix another\n\nChange-Id: I0000000000000000000000000000000000000002",
-		map[string]string{"security2.txt": "fix2"})
+		privRepo := task.CloneFakeRepo(t, "go", pubRepo)
+		privRepo.Branch("internal-release-branch.go1.26.1", base)
+		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
+			"crypto/tls: fix vuln\n\nChange-Id: I0000000000000000000000000000000000000001",
+			map[string]string{"security1.txt": "fix1"})
+		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
+			"cmd/compile: fix another\n\nChange-Id: I0000000000000000000000000000000000000002",
+			map[string]string{"security2.txt": "fix2"})
 
-	pubGerrit := task.NewFakeGerrit(t, pubRepo)
-	privGerrit := task.NewFakeGerrit(t, privRepo)
+		pubGerrit := task.NewFakeGerrit(t, pubRepo)
+		privGerrit := task.NewFakeGerrit(t, privRepo)
 
-	securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
-	if err != nil {
-		t.Fatal(err)
-	}
+		securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
-		ID:           "pub-1",
-		ChangeID:     "I0000000000000000000000000000000000000001",
-		ChangeNumber: 9001,
-		Branch:       "release-branch.go1.26",
-		Status:       "NEW",
-	}, "crypto/tls: fix vuln")
+		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
+			ID:           "pub-1",
+			ChangeID:     "I0000000000000000000000000000000000000001",
+			ChangeNumber: 9001,
+			Branch:       "release-branch.go1.26",
+			Status:       "NEW",
+		}, "crypto/tls: fix vuln")
 
-	build := &BuildReleaseTasks{
-		GerritClient:         pubGerrit,
-		GerritProject:        "go",
-		PrivateGerritClient:  privGerrit,
-		PrivateGerritProject: "go",
-		Git:                  new(task.Git),
-	}
+		build := &BuildReleaseTasks{
+			GerritClient:         pubGerrit,
+			GerritProject:        "go",
+			PrivateGerritClient:  privGerrit,
+			PrivateGerritProject: "go",
+			Git:                  new(task.Git),
+		}
 
-	_, err = build.publicizePrivateSecurityCLs(taskCtx,
-		"go1.26.1", "release-branch.go1.26", base, securityCommit, nil)
-	if err == nil {
-		t.Fatal("expected error for partial publicize, got nil")
-	}
-	if !strings.Contains(err.Error(), "partial publicize") {
-		t.Errorf("error does not mention partial publicize: %v", err)
-	}
-	if !strings.Contains(err.Error(), "manual intervention") {
-		t.Errorf("error does not mention manual intervention: %v", err)
-	}
+		_, err = build.publicizePrivateSecurityCLs(taskCtx,
+			"go1.26.1", "release-branch.go1.26", base, securityCommit, nil)
+		if err == nil {
+			t.Fatal("expected error for partial publicize, got nil")
+		}
+		if !strings.Contains(err.Error(), "partial publicize") {
+			t.Errorf("error does not mention partial publicize: %v", err)
+		}
+		if !strings.Contains(err.Error(), "manual intervention") {
+			t.Errorf("error does not mention manual intervention: %v", err)
+		}
+	})
 }
 
 func TestFetchSecurityMilestone(t *testing.T) {
@@ -1586,63 +1609,67 @@ func TestFetchSecurityMilestone(t *testing.T) {
 }
 
 func TestComputeSecurityBranchInfoWithRC(t *testing.T) {
-	deps, _ := newMinorCoalesceTestDeps(t, true)
-	ctx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "branchinfo"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, _ := newMinorCoalesceTestDeps(t, true)
+		ctx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "branchinfo"}}
 
-	// The base deps set up go1.25 and go1.26 release branches but no go1.27. Add a
-	// go1.27 release branch on the public repo so ReadBranchHead succeeds and the
-	// RC path fires (currentMajor=26 -> looks for release-branch.go1.27).
-	base, err := deps.gerrit.ReadBranchHead(deps.ctx, "go", "release-branch.go1.26")
-	if err != nil {
-		t.Fatal(err)
-	}
-	deps.goRepo.Branch("release-branch.go1.27", base)
+		// The base deps set up go1.25 and go1.26 release branches but no go1.27. Add a
+		// go1.27 release branch on the public repo so ReadBranchHead succeeds and the
+		// RC path fires (currentMajor=26 -> looks for release-branch.go1.27).
+		base, err := deps.gerrit.ReadBranchHead(deps.ctx, "go", "release-branch.go1.26")
+		if err != nil {
+			t.Fatal(err)
+		}
+		deps.goRepo.Branch("release-branch.go1.27", base)
 
-	bi, err := computeSecurityBranchInfo(ctx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
+		bi, err := computeSecurityBranchInfo(ctx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	nextRC, err := deps.versionTasks.GetNextVersion(deps.ctx, 27, task.KindRC)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(bi.CheckpointName, nextRC+"-") {
-		t.Errorf("checkpoint name = %q, want it prefixed with %q", bi.CheckpointName, nextRC+"-")
-	}
-	wantRCBranch := "release-branch." + nextRC
-	if len(bi.PublicReleaseBranches) == 0 || bi.PublicReleaseBranches[0] != wantRCBranch {
-		t.Errorf("public release branches = %v, want %q first", bi.PublicReleaseBranches, wantRCBranch)
-	}
+		nextRC, err := deps.versionTasks.GetNextVersion(deps.ctx, 27, task.KindRC)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(bi.CheckpointName, nextRC+"-") {
+			t.Errorf("checkpoint name = %q, want it prefixed with %q", bi.CheckpointName, nextRC+"-")
+		}
+		wantRCBranch := "release-branch." + nextRC
+		if len(bi.PublicReleaseBranches) == 0 || bi.PublicReleaseBranches[0] != wantRCBranch {
+			t.Errorf("public release branches = %v, want %q first", bi.PublicReleaseBranches, wantRCBranch)
+		}
+	})
 }
 
 func TestCheckPrivateChangesLint(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	ctx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "lint"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		ctx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "lint"}}
 
-	privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix\n\nFixes CVE-1985-0703\nFixes golang/go#1")
+		privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix\n\nFixes CVE-1985-0703\nFixes golang/go#1")
 
-	rm := &relmeta.ReleaseMilestone{
-		Patches: []*relmeta.SecurityPatch{{
-			Track:       relmeta.Private,
-			Package:     "crypto/tls",
-			Changelists: []string{"https://go-internal-review.git.corp.google.com/c/go/+/1234"},
-		}},
-	}
-	_, err := deps.buildTasks.checkPrivateChanges(ctx, rm)
-	if err == nil {
-		t.Fatal("checkPrivateChanges with metadata in the commit message: got nil error")
-	}
-	for _, want := range []string{"must not contain a CVE reference", "must not contain a GitHub issue reference"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q does not mention %q", err, want)
+		rm := &relmeta.ReleaseMilestone{
+			Patches: []*relmeta.SecurityPatch{{
+				Track:       relmeta.Private,
+				Package:     "crypto/tls",
+				Changelists: []string{"https://go-internal-review.git.corp.google.com/c/go/+/1234"},
+			}},
 		}
-	}
+		_, err := deps.buildTasks.checkPrivateChanges(ctx, rm)
+		if err == nil {
+			t.Fatal("checkPrivateChanges with metadata in the commit message: got nil error")
+		}
+		for _, want := range []string{"must not contain a CVE reference", "must not contain a GitHub issue reference"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not mention %q", err, want)
+			}
+		}
 
-	privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nNo references here.")
-	if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm); err != nil {
-		t.Errorf("checkPrivateChanges with a clean message: %v", err)
-	}
+		privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nNo references here.")
+		if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm); err != nil {
+			t.Errorf("checkPrivateChanges with a clean message: %v", err)
+		}
+	})
 }
 
 // mustGetNextMinors returns the next minor versions for the 26 and 25 series.
@@ -1669,35 +1696,37 @@ func minorReleaseParams() map[string]any {
 }
 
 func TestAdvisoryTestsFail(t *testing.T) {
-	deps := newReleaseTestDeps(t, "go1.26.0", 26, "go1.26.1")
-	deps.buildBucket.FailBuilds = append(deps.buildBucket.FailBuilds, "linux-amd64-longtest")
-	defaultApprove := deps.buildTasks.ApproveAction
-	var testApprovals atomic.Int32
-	deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-		if strings.Contains(ctx.TaskName, "Run advisory") {
-			testApprovals.Add(1)
-			return nil
+	synctest.Test(t, func(t *testing.T) {
+		deps := newReleaseTestDeps(t, "go1.26.0", 26, "go1.26.1")
+		deps.buildBucket.FailBuilds = append(deps.buildBucket.FailBuilds, "linux-amd64-longtest")
+		defaultApprove := deps.buildTasks.ApproveAction
+		var testApprovals atomic.Int32
+		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+			if strings.Contains(ctx.TaskName, "Run advisory") {
+				testApprovals.Add(1)
+				return nil
+			}
+			return defaultApprove(ctx)
 		}
-		return defaultApprove(ctx)
-	}
 
-	// Run the release.
-	wd := workflow.New(workflow.ACL{})
-	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 26, task.KindMinor, workflow.Slice[string]())
-	workflow.Output(wd, "Published Go version", v)
+		// Run the release.
+		wd := workflow.New(workflow.ACL{})
+		v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 26, task.KindMinor, workflow.Slice[string]())
+		workflow.Output(wd, "Published Go version", v)
 
-	w, err := workflow.Start(wd, map[string]any{
-		"Targets to skip testing (or 'all') (optional)": []string(nil),
+		w, err := workflow.Start(wd, map[string]any{
+			"Targets to skip testing (or 'all') (optional)": []string(nil),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Run(deps.ctx, &workflowtest.VerboseListener{T: t}); err != nil {
+			t.Fatal(err)
+		}
+		if testApprovals.Load() != 1 {
+			t.Errorf("failed advisory builder didn't need approval")
+		}
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := w.Run(deps.ctx, &workflowtest.VerboseListener{T: t}); err != nil {
-		t.Fatal(err)
-	}
-	if testApprovals.Load() != 1 {
-		t.Errorf("failed advisory builder didn't need approval")
-	}
 }
 
 // makeScript pretends to be make.bash. It creates a fake go command that
@@ -1805,21 +1834,20 @@ var goFiles = map[string]string{
 }
 
 func checkFile(t *testing.T, client *http.Client, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, check func(*testing.T, []byte)) {
-	t.Run(filename, func(t *testing.T) {
-		resolvedName := filename
-		if files != nil {
-			f, ok := files[filename]
-			if !ok {
-				t.Fatalf("file %q not published", filename)
-			}
-			if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(task.WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
-				t.Errorf("file metadata mismatch (-want +got):\n%v", diff)
-			}
-			resolvedName = f.Filename
+	t.Helper()
+	resolvedName := filename
+	if files != nil {
+		f, ok := files[filename]
+		if !ok {
+			t.Fatalf("file %q not published", filename)
 		}
-		body := fetch(t, client, dlURL+"/"+resolvedName)
-		check(t, body)
-	})
+		if diff := cmp.Diff(meta, f, cmpopts.IgnoreFields(task.WebsiteFile{}, "Filename", "Version", "ChecksumSHA256", "Size")); diff != "" {
+			t.Errorf("file %v metadata mismatch (-want +got):\n%v", filename, diff)
+		}
+		resolvedName = f.Filename
+	}
+	body := fetch(t, client, dlURL+"/"+resolvedName)
+	check(t, body)
 }
 
 func fetch(t *testing.T, client *http.Client, url string) []byte {
@@ -1976,162 +2004,166 @@ func periodicallyDo(ctx context.Context, t *testing.T, period time.Duration, f f
 }
 
 func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "id8-opencp"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedRiders(privGerrit)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "id8-opencp"}}
 
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
+		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
 		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
+			t.Fatal(err)
 		}
-		cls = append(cls, ci)
-	}
 
-	branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("first createInternalReleaseBranches: %v", err)
-	}
-	if len(branches) == 0 {
-		t.Fatal("first run created no internal release branches")
-	}
+		var cls []*gerrit.ChangeInfo
+		for _, num := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			cls = append(cls, ci)
+		}
 
-	freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("createSecurityCherryPicks: %v", err)
-	}
-	wantCPCount := len(cls) * len(branches)
-	if got := len(freshCPs); got != wantCPCount {
-		t.Fatalf("fresh cherry-picks: got %d, want %d", got, wantCPCount)
-	}
-
-	reusedHeads := map[string]string{}
-	for _, b := range branches {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+		branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
-			t.Fatalf("reading head of %s: %v", b, err)
+			t.Fatalf("first createInternalReleaseBranches: %v", err)
 		}
-		reusedHeads[b] = head
-	}
+		if len(branches) == 0 {
+			t.Fatal("first run created no internal release branches")
+		}
 
-	branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("restart createInternalReleaseBranches with open CPs: %v", err)
-	}
-	if len(branches2) != len(branches) {
-		t.Fatalf("branch count mismatch: first=%d, restart=%d", len(branches), len(branches2))
-	}
-
-	for _, b := range branches2 {
-		head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+		freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
 		if err != nil {
-			t.Fatalf("reading head of %s after restart: %v", b, err)
+			t.Fatalf("createSecurityCherryPicks: %v", err)
 		}
-		if head != reusedHeads[b] {
-			t.Errorf("branch %s head changed after restart: got %s, want %s", b, head, reusedHeads[b])
+		wantCPCount := len(cls) * len(branches)
+		if got := len(freshCPs); got != wantCPCount {
+			t.Fatalf("fresh cherry-picks: got %d, want %d", got, wantCPCount)
 		}
-	}
 
-	restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("restart createSecurityCherryPicks: %v", err)
-	}
-	if got := len(restartCPs); got != wantCPCount {
-		t.Fatalf("restart cherry-picks: got %d, want %d", got, wantCPCount)
-	}
-
-	freshNums := map[int]bool{}
-	for _, cp := range freshCPs {
-		freshNums[cp.ChangeNumber] = true
-	}
-	for _, cp := range restartCPs {
-		if !freshNums[cp.ChangeNumber] {
-			t.Errorf("restart returned unknown cherry-pick CL %d; want reuse of existing CL", cp.ChangeNumber)
+		reusedHeads := map[string]string{}
+		for _, b := range branches {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+			if err != nil {
+				t.Fatalf("reading head of %s: %v", b, err)
+			}
+			reusedHeads[b] = head
 		}
-	}
 
-	for _, b := range branches2 {
-		existing, err := privGerrit.QueryChanges(deps.ctx,
-			fmt.Sprintf("project:go branch:%s -is:abandoned", b))
+		branches2, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
-			t.Fatalf("QueryChanges for %s: %v", b, err)
+			t.Fatalf("restart createInternalReleaseBranches with open CPs: %v", err)
 		}
-		for _, ci := range existing {
-			if !freshNums[ci.ChangeNumber] {
-				t.Errorf("orphaned CL %d on branch %s after restart; fixed-name strategy must not orphan cherry-picks", ci.ChangeNumber, b)
+		if len(branches2) != len(branches) {
+			t.Fatalf("branch count mismatch: first=%d, restart=%d", len(branches), len(branches2))
+		}
+
+		for _, b := range branches2 {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", b)
+			if err != nil {
+				t.Fatalf("reading head of %s after restart: %v", b, err)
+			}
+			if head != reusedHeads[b] {
+				t.Errorf("branch %s head changed after restart: got %s, want %s", b, head, reusedHeads[b])
 			}
 		}
-	}
+
+		restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
+		if err != nil {
+			t.Fatalf("restart createSecurityCherryPicks: %v", err)
+		}
+		if got := len(restartCPs); got != wantCPCount {
+			t.Fatalf("restart cherry-picks: got %d, want %d", got, wantCPCount)
+		}
+
+		freshNums := map[int]bool{}
+		for _, cp := range freshCPs {
+			freshNums[cp.ChangeNumber] = true
+		}
+		for _, cp := range restartCPs {
+			if !freshNums[cp.ChangeNumber] {
+				t.Errorf("restart returned unknown cherry-pick CL %d; want reuse of existing CL", cp.ChangeNumber)
+			}
+		}
+
+		for _, b := range branches2 {
+			existing, err := privGerrit.QueryChanges(deps.ctx,
+				fmt.Sprintf("project:go branch:%s -is:abandoned", b))
+			if err != nil {
+				t.Fatalf("QueryChanges for %s: %v", b, err)
+			}
+			for _, ci := range existing {
+				if !freshNums[ci.ChangeNumber] {
+					t.Errorf("orphaned CL %d on branch %s after restart; fixed-name strategy must not orphan cherry-picks", ci.ChangeNumber, b)
+				}
+			}
+		}
+	})
 }
 
 func TestCreateSecurityCherryPicksPartialDedup(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "id9-partial"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedRiders(privGerrit)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "id9-partial"}}
 
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
+		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
 		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
+			t.Fatal(err)
 		}
-		cls = append(cls, ci)
-	}
 
-	releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Pre-seed a cherry-pick for the first CL onto the first branch only.
-	// This simulates a partial prior run.
-	firstBranch := releaseBranches[0]
-	preseeded := &gerrit.ChangeInfo{
-		ID:           "pre-cp-1",
-		ChangeID:     cls[0].ChangeID, // same Change-Id as original
-		ChangeNumber: 9999,
-		Branch:       firstBranch,
-		Submittable:  true,
-		Mergeable:    true,
-		Status:       "NEW",
-	}
-	privGerrit.AddChange("go", "pre-cp-1", preseeded, "preseeded cherry-pick")
-
-	cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
-	if err != nil {
-		t.Fatalf("partial createSecurityCherryPicks: %v", err)
-	}
-	wantCount := len(cls) * len(releaseBranches)
-	if got := len(cps); got != wantCount {
-		t.Fatalf("partial cherry-picks: got %d, want %d", got, wantCount)
-	}
-
-	// The preseeded cherry-pick must be reused (its ChangeNumber is 9999).
-	found := false
-	for _, cp := range cps {
-		if cp.ChangeNumber == 9999 {
-			found = true
-			break
+		var cls []*gerrit.ChangeInfo
+		for _, num := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			cls = append(cls, ci)
 		}
-	}
-	if !found {
-		t.Error("preseeded cherry-pick (CL 9999) was not reused")
-	}
+
+		releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Pre-seed a cherry-pick for the first CL onto the first branch only.
+		// This simulates a partial prior run.
+		firstBranch := releaseBranches[0]
+		preseeded := &gerrit.ChangeInfo{
+			ID:           "pre-cp-1",
+			ChangeID:     cls[0].ChangeID, // same Change-Id as original
+			ChangeNumber: 9999,
+			Branch:       firstBranch,
+			Submittable:  true,
+			Mergeable:    true,
+			Status:       "NEW",
+		}
+		privGerrit.AddChange("go", "pre-cp-1", preseeded, "preseeded cherry-pick")
+
+		cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
+		if err != nil {
+			t.Fatalf("partial createSecurityCherryPicks: %v", err)
+		}
+		wantCount := len(cls) * len(releaseBranches)
+		if got := len(cps); got != wantCount {
+			t.Fatalf("partial cherry-picks: got %d, want %d", got, wantCount)
+		}
+
+		// The preseeded cherry-pick must be reused (its ChangeNumber is 9999).
+		found := false
+		for _, cp := range cps {
+			if cp.ChangeNumber == 9999 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("preseeded cherry-pick (CL 9999) was not reused")
+		}
+	})
 }
 
 func TestMoveAndRebasePrivateChanges(t *testing.T) {
-	t.Run("fresh", func(t *testing.T) {
+	workflowtest.Subtest(t, "fresh", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "move-fresh"}}
 
@@ -2168,7 +2200,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 		}
 	})
 
-	t.Run("restart_already_moved", func(t *testing.T) {
+	workflowtest.Subtest(t, "restart_already_moved", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "move-restart"}}
 
@@ -2207,7 +2239,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 		}
 	})
 
-	t.Run("restart_already_merged", func(t *testing.T) {
+	workflowtest.Subtest(t, "restart_already_merged", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "move-merged"}}
 
@@ -2251,7 +2283,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 }
 
 func TestSubmitPrivateChanges(t *testing.T) {
-	t.Run("happy", func(t *testing.T) {
+	workflowtest.Subtest(t, "happy", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-happy"}}
 
@@ -2293,7 +2325,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 		}
 	})
 
-	t.Run("already_merged_skip", func(t *testing.T) {
+	workflowtest.Subtest(t, "already_merged_skip", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-skip"}}
 
@@ -2349,92 +2381,94 @@ func TestSubmitPrivateChanges(t *testing.T) {
 }
 
 func TestCreateVulnReportsStdCmd(t *testing.T) {
-	deps, _ := newMinorCoalesceTestDeps(t, true)
+	synctest.Test(t, func(t *testing.T) {
+		deps, _ := newMinorCoalesceTestDeps(t, true)
 
-	vulndbRepo := task.NewFakeRepo(t, "vulndb")
-	vulndbRepo.CommitOnBranch("master", map[string]string{"README": "vulndb"})
-	pubGerrit := task.NewFakeGerrit(t, vulndbRepo)
-	deps.buildTasks.GerritClient = pubGerrit
+		vulndbRepo := task.NewFakeRepo(t, "vulndb")
+		vulndbRepo.CommitOnBranch("master", map[string]string{"README": "vulndb"})
+		pubGerrit := task.NewFakeGerrit(t, vulndbRepo)
+		deps.buildTasks.GerritClient = pubGerrit
 
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "vu1"}}
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "vu1"}}
 
-	const announceURL = "https://groups.google.com/g/golang-announce/c/test-minor"
+		const announceURL = "https://groups.google.com/g/golang-announce/c/test-minor"
 
-	rm := &relmeta.ReleaseMilestone{
-		Patches: []*relmeta.SecurityPatch{
-			{
-				ID:             40027190,
-				Track:          relmeta.Private,
-				Package:        "crypto/tls",
-				Changelists:    []string{"https://go-internal-review.git.corp.google.com/c/go/+/1234"},
-				TargetReleases: []string{"go1.25.1", "go1.26.1"},
-				ReleaseNote:    "crypto/tls: bad handshake causes panic.\n\nA specially crafted ClientHello triggers a nil pointer dereference.",
-				GitHubIssueID:  99999,
-				VulnReportID:   "GO-2026-9001",
-				CVE:            "CVE-2026-9001",
-				Credits:        []string{"Alice"},
+		rm := &relmeta.ReleaseMilestone{
+			Patches: []*relmeta.SecurityPatch{
+				{
+					ID:             40027190,
+					Track:          relmeta.Private,
+					Package:        "crypto/tls",
+					Changelists:    []string{"https://go-internal-review.git.corp.google.com/c/go/+/1234"},
+					TargetReleases: []string{"go1.25.1", "go1.26.1"},
+					ReleaseNote:    "crypto/tls: bad handshake causes panic.\n\nA specially crafted ClientHello triggers a nil pointer dereference.",
+					GitHubIssueID:  99999,
+					VulnReportID:   "GO-2026-9001",
+					CVE:            "CVE-2026-9001",
+					Credits:        []string{"Alice"},
+				},
+				{
+					ID:             40027191,
+					Track:          relmeta.Private,
+					Package:        "cmd/go",
+					Changelists:    []string{"https://go-internal-review.git.corp.google.com/c/go/+/5678"},
+					TargetReleases: []string{"go1.26.1"},
+					ReleaseNote:    "cmd/go: module download executes arbitrary code.\n\nA crafted go.sum allows execution of untrusted binaries.",
+					GitHubIssueID:  99998,
+					VulnReportID:   "GO-2026-9002",
+					CVE:            "CVE-2026-9002",
+					Credits:        []string{"Bob"},
+				},
 			},
-			{
-				ID:             40027191,
-				Track:          relmeta.Private,
-				Package:        "cmd/go",
-				Changelists:    []string{"https://go-internal-review.git.corp.google.com/c/go/+/5678"},
-				TargetReleases: []string{"go1.26.1"},
-				ReleaseNote:    "cmd/go: module download executes arbitrary code.\n\nA crafted go.sum allows execution of untrusted binaries.",
-				GitHubIssueID:  99998,
-				VulnReportID:   "GO-2026-9002",
-				CVE:            "CVE-2026-9002",
-				Credits:        []string{"Bob"},
-			},
-		},
-	}
+		}
 
-	wantReviewers := []string{"vuln-reviewer-a@google.com", "vuln-reviewer-b@google.com"}
-	changeID, err := deps.buildTasks.createVulnReports(taskCtx, rm, announceURL, wantReviewers)
-	if err != nil {
-		t.Fatalf("createVulnReports: %v", err)
-	}
-	if changeID == "" {
-		t.Fatal("createVulnReports returned empty change ID")
-	}
-	if !reflect.DeepEqual(pubGerrit.LastReviewers, wantReviewers) {
-		t.Errorf("vulndb reviewers = %v, want %v", pubGerrit.LastReviewers, wantReviewers)
-	}
-
-	vulndbHead, err := pubGerrit.ReadBranchHead(deps.ctx, "vulndb", "master")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for _, p := range rm.Patches {
-		reportPath := path.Join("data", "reports", p.VulnReportID+".yaml")
-		b, err := pubGerrit.ReadFile(deps.ctx, "vulndb", vulndbHead, reportPath)
+		wantReviewers := []string{"vuln-reviewer-a@google.com", "vuln-reviewer-b@google.com"}
+		changeID, err := deps.buildTasks.createVulnReports(taskCtx, rm, announceURL, wantReviewers)
 		if err != nil {
-			t.Fatalf("reading %s: %v", reportPath, err)
+			t.Fatalf("createVulnReports: %v", err)
+		}
+		if changeID == "" {
+			t.Fatal("createVulnReports returned empty change ID")
+		}
+		if !reflect.DeepEqual(pubGerrit.LastReviewers, wantReviewers) {
+			t.Errorf("vulndb reviewers = %v, want %v", pubGerrit.LastReviewers, wantReviewers)
 		}
 
-		if !bytes.Contains(b, []byte(announceURL)) {
-			t.Errorf("report %s does not contain announcement URL %s", p.VulnReportID, announceURL)
+		vulndbHead, err := pubGerrit.ReadBranchHead(deps.ctx, "vulndb", "master")
+		if err != nil {
+			t.Fatal(err)
 		}
 
-		var vr report.Report
-		if err := yaml.Unmarshal(b, &vr); err != nil {
-			t.Fatalf("unmarshal %s: %v", reportPath, err)
-		}
+		for _, p := range rm.Patches {
+			reportPath := path.Join("data", "reports", p.VulnReportID+".yaml")
+			b, err := pubGerrit.ReadFile(deps.ctx, "vulndb", vulndbHead, reportPath)
+			if err != nil {
+				t.Fatalf("reading %s: %v", reportPath, err)
+			}
 
-		if len(vr.Modules) != 1 {
-			t.Errorf("%s: got %d modules, want 1", p.VulnReportID, len(vr.Modules))
-			continue
-		}
-		wantModule := task.VulnModule(p.Package)
-		if vr.Modules[0].Module != wantModule {
-			t.Errorf("%s: module = %q, want %q", p.VulnReportID, vr.Modules[0].Module, wantModule)
-		}
+			if !bytes.Contains(b, []byte(announceURL)) {
+				t.Errorf("report %s does not contain announcement URL %s", p.VulnReportID, announceURL)
+			}
 
-		if vr.Modules[0].VulnerableAt == nil {
-			t.Errorf("%s: VulnerableAt is nil", p.VulnReportID)
+			var vr report.Report
+			if err := yaml.Unmarshal(b, &vr); err != nil {
+				t.Fatalf("unmarshal %s: %v", reportPath, err)
+			}
+
+			if len(vr.Modules) != 1 {
+				t.Errorf("%s: got %d modules, want 1", p.VulnReportID, len(vr.Modules))
+				continue
+			}
+			wantModule := task.VulnModule(p.Package)
+			if vr.Modules[0].Module != wantModule {
+				t.Errorf("%s: module = %q, want %q", p.VulnReportID, vr.Modules[0].Module, wantModule)
+			}
+
+			if vr.Modules[0].VulnerableAt == nil {
+				t.Errorf("%s: VulnerableAt is nil", p.VulnReportID)
+			}
 		}
-	}
+	})
 }
 
 func TestCreateVulnReportsNilMilestone(t *testing.T) {
@@ -2463,88 +2497,94 @@ func TestCreateVulnReportsNilMilestone(t *testing.T) {
 }
 
 func TestConvertInternalChangelists(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	pubGerrit := deps.gerrit.FakeGerrit
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc1"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		pubGerrit := deps.gerrit.FakeGerrit
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc1"}}
 
-	privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1\n\nChange-Id: I0000000000000000000000000000000000000001")
-	privGerrit.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1970-0001\nFixes #2\n\nChange-Id: I0000000000000000000000000000000000000002")
-	pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
-		ID:           "pub-1",
-		ChangeID:     "I0000000000000000000000000000000000000001",
-		ChangeNumber: 700001,
-		Branch:       "master",
-		Status:       gerrit.ChangeStatusMerged,
-	}, "crypto/tls: fix something\n\nChange-Id: I0000000000000000000000000000000000000001")
-	pubGerrit.AddChange("go", "pub-2", &gerrit.ChangeInfo{
-		ID:           "pub-2",
-		ChangeID:     "I0000000000000000000000000000000000000002",
-		ChangeNumber: 700002,
-		Branch:       "master",
-		Status:       gerrit.ChangeStatusMerged,
-	}, "cmd/compile: fix something else\n\nChange-Id: I0000000000000000000000000000000000000002")
+		privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1\n\nChange-Id: I0000000000000000000000000000000000000001")
+		privGerrit.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1970-0001\nFixes #2\n\nChange-Id: I0000000000000000000000000000000000000002")
+		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
+			ID:           "pub-1",
+			ChangeID:     "I0000000000000000000000000000000000000001",
+			ChangeNumber: 700001,
+			Branch:       "master",
+			Status:       gerrit.ChangeStatusMerged,
+		}, "crypto/tls: fix something\n\nChange-Id: I0000000000000000000000000000000000000001")
+		pubGerrit.AddChange("go", "pub-2", &gerrit.ChangeInfo{
+			ID:           "pub-2",
+			ChangeID:     "I0000000000000000000000000000000000000002",
+			ChangeNumber: 700002,
+			Branch:       "master",
+			Status:       gerrit.ChangeStatusMerged,
+		}, "cmd/compile: fix something else\n\nChange-Id: I0000000000000000000000000000000000000002")
 
-	rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantReviewers := []string{"vuln-reviewer-a@google.com"}
-	converted, err := deps.buildTasks.convertInternalChangelists(taskCtx, rm, wantReviewers)
-	if err != nil {
-		t.Fatalf("convertInternalChangelists: %v", err)
-	}
-	if got, want := converted.Patches[0].Changelists, []string{"https://go.dev/cl/700001", "https://go.dev/cl/700002"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("changelists = %v, want %v", got, want)
-	}
-	if !reflect.DeepEqual(privGerrit.LastReviewers, wantReviewers) {
-		t.Errorf("metadata reviewers = %v, want %v", privGerrit.LastReviewers, wantReviewers)
-	}
-	head, err := privGerrit.ReadBranchHead(deps.ctx, "security-metadata", "main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := privGerrit.ReadFile(deps.ctx, "security-metadata", head, path.Join("data", "milestones", "99915010.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if bytes.Contains(b, []byte("go-internal-review")) {
-		t.Errorf("milestone at head still has private links:\n%s", b)
-	}
+		rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantReviewers := []string{"vuln-reviewer-a@google.com"}
+		converted, err := deps.buildTasks.convertInternalChangelists(taskCtx, rm, wantReviewers)
+		if err != nil {
+			t.Fatalf("convertInternalChangelists: %v", err)
+		}
+		if got, want := converted.Patches[0].Changelists, []string{"https://go.dev/cl/700001", "https://go.dev/cl/700002"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("changelists = %v, want %v", got, want)
+		}
+		if !reflect.DeepEqual(privGerrit.LastReviewers, wantReviewers) {
+			t.Errorf("metadata reviewers = %v, want %v", privGerrit.LastReviewers, wantReviewers)
+		}
+		head, err := privGerrit.ReadBranchHead(deps.ctx, "security-metadata", "main")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := privGerrit.ReadFile(deps.ctx, "security-metadata", head, path.Join("data", "milestones", "99915010.yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(b, []byte("go-internal-review")) {
+			t.Errorf("milestone at head still has private links:\n%s", b)
+		}
+	})
 }
 
 func TestConvertInternalChangelistsEmptyMilestone(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, false)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc3"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, false)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc3"}}
 
-	empty := &relmeta.ReleaseMilestone{}
-	got, err := deps.buildTasks.convertInternalChangelists(taskCtx, empty, []string{"vuln-reviewer-a@google.com"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != empty {
-		t.Errorf("milestone = %p, want passthrough of %p", got, empty)
-	}
-	if privGerrit.LastReviewers != nil {
-		t.Errorf("mailed a change with reviewers %v, want none", privGerrit.LastReviewers)
-	}
+		empty := &relmeta.ReleaseMilestone{}
+		got, err := deps.buildTasks.convertInternalChangelists(taskCtx, empty, []string{"vuln-reviewer-a@google.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != empty {
+			t.Errorf("milestone = %p, want passthrough of %p", got, empty)
+		}
+		if privGerrit.LastReviewers != nil {
+			t.Errorf("mailed a change with reviewers %v, want none", privGerrit.LastReviewers)
+		}
+	})
 }
 
 func TestConvertInternalChangelistsMissingChangeID(t *testing.T) {
-	deps, _ := newMinorCoalesceTestDeps(t, true)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc2"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, _ := newMinorCoalesceTestDeps(t, true)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc2"}}
 
-	rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = deps.buildTasks.convertInternalChangelists(taskCtx, rm, nil)
-	if err == nil || !strings.Contains(err.Error(), "no Change-Id footer") {
-		t.Fatalf("convertInternalChangelists error = %v, want Change-Id footer error", err)
-	}
+		rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = deps.buildTasks.convertInternalChangelists(taskCtx, rm, nil)
+		if err == nil || !strings.Contains(err.Error(), "no Change-Id footer") {
+			t.Fatalf("convertInternalChangelists error = %v, want Change-Id footer error", err)
+		}
+	})
 }
 
 func TestSubmitCherryPicks(t *testing.T) {
-	t.Run("happy", func(t *testing.T) {
+	workflowtest.Subtest(t, "happy", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-cp"}}
 
@@ -2616,7 +2656,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 		}
 	})
 
-	t.Run("already_merged_skip", func(t *testing.T) {
+	workflowtest.Subtest(t, "already_merged_skip", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-cp-skip"}}
 
@@ -2681,7 +2721,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 }
 
 func TestCheckPrivateChangesErrors(t *testing.T) {
-	t.Run("get_change_error", func(t *testing.T) {
+	workflowtest.Subtest(t, "get_change_error", func(t *testing.T) {
 		deps, _ := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "check-err"}}
 
@@ -2699,7 +2739,7 @@ func TestCheckPrivateChangesErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("not_submittable", func(t *testing.T) {
+	workflowtest.Subtest(t, "not_submittable", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "check-notsub"}}
 
@@ -2726,7 +2766,7 @@ func TestCheckPrivateChangesErrors(t *testing.T) {
 }
 
 func TestMoveAndRebasePrivateChangesErrors(t *testing.T) {
-	t.Run("get_change_error", func(t *testing.T) {
+	workflowtest.Subtest(t, "get_change_error", func(t *testing.T) {
 		deps, _ := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "move-err"}}
 
@@ -2745,118 +2785,124 @@ func TestMoveAndRebasePrivateChangesErrors(t *testing.T) {
 }
 
 func TestSubmitPrivateChangesError(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-err"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-err"}}
 
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
+		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
 		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
+			t.Fatal(err)
 		}
-		cls = append(cls, ci)
-	}
 
-	checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatalf("createSecurityCheckpoint: %v", err)
-	}
+		var cls []*gerrit.ChangeInfo
+		for _, num := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			cls = append(cls, ci)
+		}
 
-	cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
-	if err != nil {
-		t.Fatalf("moveAndRebasePrivateChanges: %v", err)
-	}
-
-	for _, ci := range cls {
-		stored, err := privGerrit.GetChange(deps.ctx, ci.ID)
+		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
-			t.Fatalf("GetChange(%s): %v", ci.ID, err)
+			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
-		stored.Submittable = false
-	}
 
-	errCtx, cancel := context.WithTimeout(deps.ctx, 2*time.Second)
-	defer cancel()
-	errTaskCtx := &workflow.TaskContext{Context: errCtx, Logger: &workflowtest.Logger{T: t, Task: "submit-err"}}
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		if err != nil {
+			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
+		}
 
-	_, err = deps.buildTasks.submitPrivateChanges(errTaskCtx, cls)
-	if err == nil {
-		t.Fatal("expected error from submitPrivateChanges with non-submittable CLs")
-	}
+		for _, ci := range cls {
+			stored, err := privGerrit.GetChange(deps.ctx, ci.ID)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", ci.ID, err)
+			}
+			stored.Submittable = false
+		}
+
+		errCtx, cancel := context.WithTimeout(deps.ctx, 2*time.Second)
+		defer cancel()
+		errTaskCtx := &workflow.TaskContext{Context: errCtx, Logger: &workflowtest.Logger{T: t, Task: "submit-err"}}
+
+		_, err = deps.buildTasks.submitPrivateChanges(errTaskCtx, cls)
+		if err == nil {
+			t.Fatal("expected error from submitPrivateChanges with non-submittable CLs")
+		}
+	})
 }
 
 func TestCreateInternalReleaseBranchesError(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "ib-err"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "ib-err"}}
 
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	bi.PublicReleaseBranches = []string{"release-branch.go1.99"}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
+		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
 		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
+			t.Fatal(err)
 		}
-		cls = append(cls, ci)
-	}
 
-	_, err = deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err == nil {
-		t.Fatal("expected error for nonexistent release branch")
-	}
+		bi.PublicReleaseBranches = []string{"release-branch.go1.99"}
+
+		var cls []*gerrit.ChangeInfo
+		for _, num := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			cls = append(cls, ci)
+		}
+
+		_, err = deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+		if err == nil {
+			t.Fatal("expected error for nonexistent release branch")
+		}
+	})
 }
 
 func TestCreateSecurityCherryPicksConflictError(t *testing.T) {
-	deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-	seedRiders(privGerrit)
-	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "cp-conflict"}}
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedRiders(privGerrit)
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "cp-conflict"}}
 
-	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var cls []*gerrit.ChangeInfo
-	for _, num := range []string{"1234", "5678"} {
-		ci, err := privGerrit.GetChange(deps.ctx, num)
+		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
 		if err != nil {
-			t.Fatalf("GetChange(%s): %v", num, err)
+			t.Fatal(err)
 		}
-		cls = append(cls, ci)
-	}
 
-	releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
-	if err != nil {
-		t.Fatal(err)
-	}
+		var cls []*gerrit.ChangeInfo
+		for _, num := range []string{"1234", "5678"} {
+			ci, err := privGerrit.GetChange(deps.ctx, num)
+			if err != nil {
+				t.Fatalf("GetChange(%s): %v", num, err)
+			}
+			cls = append(cls, ci)
+		}
 
-	privGerrit.AddChange("go", "1234", &gerrit.ChangeInfo{
-		ID:                   "1234",
-		ChangeID:             "1234",
-		ChangeNumber:         1234,
-		Branch:               "public",
-		Submittable:          true,
-		Mergeable:            true,
-		ContainsGitConflicts: true,
-	}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor #70001")
+		releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	_, err = deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
-	if err == nil {
-		t.Fatal("expected error from cherry-pick conflict")
-	}
-	if !strings.Contains(err.Error(), "merge conflicts") {
-		t.Errorf("error = %v, want 'merge conflicts'", err)
-	}
+		privGerrit.AddChange("go", "1234", &gerrit.ChangeInfo{
+			ID:                   "1234",
+			ChangeID:             "1234",
+			ChangeNumber:         1234,
+			Branch:               "public",
+			Submittable:          true,
+			Mergeable:            true,
+			ContainsGitConflicts: true,
+		}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor #70001")
+
+		_, err = deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
+		if err == nil {
+			t.Fatal("expected error from cherry-pick conflict")
+		}
+		if !strings.Contains(err.Error(), "merge conflicts") {
+			t.Errorf("error = %v, want 'merge conflicts'", err)
+		}
+	})
 }
 
 func TestPublicizeErrors(t *testing.T) {
@@ -2897,7 +2943,7 @@ func TestPublicizeErrors(t *testing.T) {
 		return build, pubGerrit, privGerrit, base, securityCommit
 	}
 
-	t.Run("public_head_mismatch", func(t *testing.T) {
+	workflowtest.Subtest(t, "public_head_mismatch", func(t *testing.T) {
 		build, _, _, _, securityCommit := setup(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "pub-mismatch"}}
 
@@ -2912,7 +2958,7 @@ func TestPublicizeErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("private_head_mismatch", func(t *testing.T) {
+	workflowtest.Subtest(t, "private_head_mismatch", func(t *testing.T) {
 		build, _, _, base, _ := setup(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "priv-mismatch"}}
 
@@ -2927,7 +2973,7 @@ func TestPublicizeErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("public_branch_read_error", func(t *testing.T) {
+	workflowtest.Subtest(t, "public_branch_read_error", func(t *testing.T) {
 		build, _, _, _, securityCommit := setup(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "pub-read-err"}}
 
@@ -2943,7 +2989,7 @@ func TestPublicizeErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("private_branch_read_error", func(t *testing.T) {
+	workflowtest.Subtest(t, "private_branch_read_error", func(t *testing.T) {
 		build, _, _, base, _ := setup(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "priv-read-err"}}
 
@@ -2959,7 +3005,7 @@ func TestPublicizeErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("empty_security_commit_no_error", func(t *testing.T) {
+	workflowtest.Subtest(t, "empty_security_commit_no_error", func(t *testing.T) {
 		build, _, _, base, _ := setup(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "pub-noop"}}
 
@@ -2975,61 +3021,63 @@ func TestPublicizeErrors(t *testing.T) {
 }
 
 func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "rebase-success"}}
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "rebase-success"}}
 
-	pubRepo := task.NewFakeRepo(t, "go")
-	base := pubRepo.Commit(map[string]string{"README": "hello"})
-	pubRepo.Branch("public", base)
+		pubRepo := task.NewFakeRepo(t, "go")
+		base := pubRepo.Commit(map[string]string{"README": "hello"})
+		pubRepo.Branch("public", base)
 
-	privGerrit := task.NewFakeGerrit(t, pubRepo)
+		privGerrit := task.NewFakeGerrit(t, pubRepo)
 
-	privGerrit.AddChange("go", "rebase-cl", &gerrit.ChangeInfo{
-		ID:           "rebase-cl",
-		ChangeID:     "rebase-cl",
-		ChangeNumber: 4242,
-		Branch:       "public",
-		Submittable:  true,
-		Mergeable:    true,
-	}, "test: rebase target")
+		privGerrit.AddChange("go", "rebase-cl", &gerrit.ChangeInfo{
+			ID:           "rebase-cl",
+			ChangeID:     "rebase-cl",
+			ChangeNumber: 4242,
+			Branch:       "public",
+			Submittable:  true,
+			Mergeable:    true,
+		}, "test: rebase target")
 
-	pubRepo.CommitOnBranch("public", map[string]string{"advance.txt": "advance"})
+		pubRepo.CommitOnBranch("public", map[string]string{"advance.txt": "advance"})
 
-	newHead, err := privGerrit.ReadBranchHead(ctx, "go", "public")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := privGerrit.CreateBranch(ctx, "go", "checkpoint-rebase-test", gerrit.BranchInput{Revision: newHead}); err != nil {
-		t.Fatal(err)
-	}
+		newHead, err := privGerrit.ReadBranchHead(ctx, "go", "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := privGerrit.CreateBranch(ctx, "go", "checkpoint-rebase-test", gerrit.BranchInput{Revision: newHead}); err != nil {
+			t.Fatal(err)
+		}
 
-	build := &BuildReleaseTasks{
-		PrivateGerritClient:  privGerrit,
-		PrivateGerritProject: "go",
-	}
+		build := &BuildReleaseTasks{
+			PrivateGerritClient:  privGerrit,
+			PrivateGerritProject: "go",
+		}
 
-	ci, err := privGerrit.GetChange(ctx, "rebase-cl")
-	if err != nil {
-		t.Fatal(err)
-	}
+		ci, err := privGerrit.GetChange(ctx, "rebase-cl")
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	moved, err := build.moveAndRebasePrivateChanges(taskCtx, "checkpoint-rebase-test", []*gerrit.ChangeInfo{ci}, &relmeta.ReleaseMilestone{
-		Patches: []*relmeta.SecurityPatch{{
-			ID:            1,
-			Track:         relmeta.Private,
-			GitHubIssueID: 70001,
-			CVE:           "CVE-1985-0703",
-			Changelists:   []string{"https://go-internal-review.git.corp.google.com/c/go/+/4242"},
-		}},
+		moved, err := build.moveAndRebasePrivateChanges(taskCtx, "checkpoint-rebase-test", []*gerrit.ChangeInfo{ci}, &relmeta.ReleaseMilestone{
+			Patches: []*relmeta.SecurityPatch{{
+				ID:            1,
+				Track:         relmeta.Private,
+				GitHubIssueID: 70001,
+				CVE:           "CVE-1985-0703",
+				Changelists:   []string{"https://go-internal-review.git.corp.google.com/c/go/+/4242"},
+			}},
+		})
+		if err != nil {
+			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
+		}
+		if len(moved) != 1 {
+			t.Fatalf("got %d CLs, want 1", len(moved))
+		}
+		if moved[0].Branch != "checkpoint-rebase-test" {
+			t.Errorf("CL branch = %q, want %q", moved[0].Branch, "checkpoint-rebase-test")
+		}
 	})
-	if err != nil {
-		t.Fatalf("moveAndRebasePrivateChanges: %v", err)
-	}
-	if len(moved) != 1 {
-		t.Fatalf("got %d CLs, want 1", len(moved))
-	}
-	if moved[0].Branch != "checkpoint-rebase-test" {
-		t.Errorf("CL branch = %q, want %q", moved[0].Branch, "checkpoint-rebase-test")
-	}
 }

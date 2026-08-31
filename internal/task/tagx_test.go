@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/google/go-cmp/cmp"
 	"go.chromium.org/luci/auth"
@@ -195,7 +196,7 @@ func TestAwaitGreen(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf("find_%v_pass_%v", tt.findBuild, tt.passBuild), func(t *testing.T) {
+		workflowtest.Subtest(t, fmt.Sprintf("find_%v_pass_%v", tt.findBuild, tt.passBuild), func(t *testing.T) {
 			tools := NewFakeRepo(t, "tools")
 			commit := tools.Commit(map[string]string{
 				"gopls.go": "I'm gopls!",
@@ -296,152 +297,154 @@ esac
 }
 
 func TestTagXRepos(t *testing.T) {
-	sys := NewFakeRepo(t, "sys")
-	sys1 := sys.Commit(map[string]string{
-		"go.mod": "module golang.org/x/sys\n",
-		"go.sum": "\n",
+	synctest.Test(t, func(t *testing.T) {
+		sys := NewFakeRepo(t, "sys")
+		sys1 := sys.Commit(map[string]string{
+			"go.mod": "module golang.org/x/sys\n",
+			"go.sum": "\n",
+		})
+		sys.Tag("v0.1.0", sys1)
+		sys2 := sys.Commit(map[string]string{
+			"main.go": "package main",
+		})
+		mod := NewFakeRepo(t, "mod")
+		mod1 := mod.Commit(map[string]string{
+			"go.mod": "module golang.org/x/mod\n",
+			"go.sum": "\n",
+		})
+		mod.Tag("v1.0.0", mod1)
+		tools := NewFakeRepo(t, "tools")
+		tools1 := tools.Commit(map[string]string{
+			"go.mod": `module golang.org/x/tools
+
+	go 1.18
+
+	require (
+		// The workflow itself tags these.
+		golang.org/x/sys v0.1.0
+		golang.org/x/mod v1.0.0
+
+		// The x/build repo isn't being tagged.
+		golang.org/x/build v0.0.0
+
+		// An example of a nested golang.org/x module.
+		golang.org/x/exp/event v0.0.0
+
+		// An example of a tagx:ignore'd repo.
+		golang.org/x/net v0.21.0 // tagx:ignore
+
+		// An example of an external dependency.
+		external.example.com v0.1.0
+	)
+	`,
+			"go.sum":               "\n",
+			"gopls/go.mod":         "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
+			"gopls/go.sum":         "\n",
+			"withtoolchain/go.mod": "module golang.org/x/tools/withtoolchain\ngo 1.23.1\ntoolchain go1.23.2\n",
+		})
+		tools.Tag("v1.1.5", tools1)
+		build := NewFakeRepo(t, "build")
+		build.Commit(map[string]string{
+			"go.mod": "module golang.org/x/build\ngo 1.18\nrequire golang.org/x/tools v1.0.0\nrequire golang.org/x/sys v0.1.0\n",
+			"go.sum": "\n",
+		})
+
+		deps := newTagXTestDeps(t, sys, mod, tools, build)
+
+		wd := deps.tagXTasks.NewDefinition()
+		w, err := wf.Start(wd, map[string]any{
+			reviewersParam.Name: []string(nil),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx := deps.ctx
+		_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		tag, err := deps.gerrit.GetTag(ctx, "sys", "v0.2.0")
+		if err != nil {
+			t.Fatalf("sys should have been tagged with v0.2.0: %v", err)
+		}
+		if tag.Revision != sys2 {
+			t.Errorf("sys v0.2.0 = %v, want %v", tag.Revision, sys2)
+		}
+
+		tags, err := deps.gerrit.ListTags(ctx, "mod")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(tags, []string{"v1.0.0"}) {
+			t.Errorf("mod has tags %v, wanted only v1.0.0", tags)
+		}
+
+		tag, err = deps.gerrit.GetTag(ctx, "tools", "v1.2.0")
+		if err != nil {
+			t.Fatalf("tools should have been tagged with v1.2.0: %v", err)
+		}
+		goMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "go.mod")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(goMod), "sys@v0.2.0") || !strings.Contains(string(goMod), "mod@v1.0.0") {
+			t.Errorf("tools should use sys v0.2.0 and mod v1.0.0. go.mod: %v", string(goMod))
+		}
+		if !strings.Contains(string(goMod), "we've upgraded to golang.org/x/build@upgrade") ||
+			!strings.Contains(string(goMod), "we've upgraded to golang.org/x/net@upgrade") ||
+			!strings.Contains(string(goMod), "we've upgraded to golang.org/x/exp/event@upgrade") {
+			t.Errorf("tools should have upgraded x/build, x/net, x/exp/event: %v", string(goMod))
+		}
+		if strings.Contains(string(goMod), "we've upgraded to external.example.com") {
+			t.Errorf("tools should not have upgraded external.example.com: %v", string(goMod))
+		}
+		if !strings.Contains(string(goMod), "tidied!") {
+			t.Error("tools go.mod should be tidied")
+		}
+		if strings.Contains(string(goMod), "edited!") {
+			t.Error("tools go.mod should not be edited")
+		}
+		goplsMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "gopls/go.mod")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(goplsMod), "mod@v1.0.0") || strings.Contains(string(goplsMod), "sys") {
+			t.Errorf("gopls should use mod v1.0.0 and no sys. go.mod: %v", string(goplsMod))
+		}
+		if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "upgraded") || strings.Contains(string(goplsMod), "edited!") {
+			t.Errorf("gopls go.mod should be tidied+upgraded and not edited:\n%s", goplsMod)
+		}
+		if !strings.Contains(string(goplsMod), "we've upgraded to golang.org/x/mod@v1.0.0") ||
+			strings.Contains(string(goplsMod), "we've upgraded to golang.org/x/sys") {
+			t.Errorf("gopls should have upgraded x/mod to v1.0.0, but not x/sys: %v", string(goplsMod))
+		}
+		withtoolchainMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "withtoolchain/go.mod")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(withtoolchainMod), "tidied!") || strings.Contains(string(withtoolchainMod), "edited!") {
+			t.Errorf("withtoolchain go.mod should be tidied and not edited:\n%s", withtoolchainMod)
+		}
+
+		tags, err = deps.gerrit.ListTags(ctx, "build")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(tags) != 0 {
+			t.Errorf("build has tags %q, should not have been tagged", tags)
+		}
+		goMod, err = deps.gerrit.ReadFile(ctx, "build", "master", "go.mod")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(goMod), "tools@v1.2.0") || !strings.Contains(string(goMod), "sys@v0.2.0") {
+			t.Errorf("build should use tools v1.2.0 and sys v0.2.0. go.mod: %v", string(goMod))
+		}
+		if !strings.Contains(string(goMod), "tidied!") {
+			t.Error("build go.mod should be tidied")
+		}
 	})
-	sys.Tag("v0.1.0", sys1)
-	sys2 := sys.Commit(map[string]string{
-		"main.go": "package main",
-	})
-	mod := NewFakeRepo(t, "mod")
-	mod1 := mod.Commit(map[string]string{
-		"go.mod": "module golang.org/x/mod\n",
-		"go.sum": "\n",
-	})
-	mod.Tag("v1.0.0", mod1)
-	tools := NewFakeRepo(t, "tools")
-	tools1 := tools.Commit(map[string]string{
-		"go.mod": `module golang.org/x/tools
-
-go 1.18
-
-require (
-	// The workflow itself tags these.
-	golang.org/x/sys v0.1.0
-	golang.org/x/mod v1.0.0
-
-	// The x/build repo isn't being tagged.
-	golang.org/x/build v0.0.0
-
-	// An example of a nested golang.org/x module.
-	golang.org/x/exp/event v0.0.0
-
-	// An example of a tagx:ignore'd repo.
-	golang.org/x/net v0.21.0 // tagx:ignore
-
-	// An example of an external dependency.
-	external.example.com v0.1.0
-)
-`,
-		"go.sum":               "\n",
-		"gopls/go.mod":         "module golang.org/x/tools/gopls\nrequire golang.org/x/mod v1.0.0\n",
-		"gopls/go.sum":         "\n",
-		"withtoolchain/go.mod": "module golang.org/x/tools/withtoolchain\ngo 1.23.1\ntoolchain go1.23.2\n",
-	})
-	tools.Tag("v1.1.5", tools1)
-	build := NewFakeRepo(t, "build")
-	build.Commit(map[string]string{
-		"go.mod": "module golang.org/x/build\ngo 1.18\nrequire golang.org/x/tools v1.0.0\nrequire golang.org/x/sys v0.1.0\n",
-		"go.sum": "\n",
-	})
-
-	deps := newTagXTestDeps(t, sys, mod, tools, build)
-
-	wd := deps.tagXTasks.NewDefinition()
-	w, err := wf.Start(wd, map[string]any{
-		reviewersParam.Name: []string(nil),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := deps.ctx
-	_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tag, err := deps.gerrit.GetTag(ctx, "sys", "v0.2.0")
-	if err != nil {
-		t.Fatalf("sys should have been tagged with v0.2.0: %v", err)
-	}
-	if tag.Revision != sys2 {
-		t.Errorf("sys v0.2.0 = %v, want %v", tag.Revision, sys2)
-	}
-
-	tags, err := deps.gerrit.ListTags(ctx, "mod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(tags, []string{"v1.0.0"}) {
-		t.Errorf("mod has tags %v, wanted only v1.0.0", tags)
-	}
-
-	tag, err = deps.gerrit.GetTag(ctx, "tools", "v1.2.0")
-	if err != nil {
-		t.Fatalf("tools should have been tagged with v1.2.0: %v", err)
-	}
-	goMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "go.mod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(goMod), "sys@v0.2.0") || !strings.Contains(string(goMod), "mod@v1.0.0") {
-		t.Errorf("tools should use sys v0.2.0 and mod v1.0.0. go.mod: %v", string(goMod))
-	}
-	if !strings.Contains(string(goMod), "we've upgraded to golang.org/x/build@upgrade") ||
-		!strings.Contains(string(goMod), "we've upgraded to golang.org/x/net@upgrade") ||
-		!strings.Contains(string(goMod), "we've upgraded to golang.org/x/exp/event@upgrade") {
-		t.Errorf("tools should have upgraded x/build, x/net, x/exp/event: %v", string(goMod))
-	}
-	if strings.Contains(string(goMod), "we've upgraded to external.example.com") {
-		t.Errorf("tools should not have upgraded external.example.com: %v", string(goMod))
-	}
-	if !strings.Contains(string(goMod), "tidied!") {
-		t.Error("tools go.mod should be tidied")
-	}
-	if strings.Contains(string(goMod), "edited!") {
-		t.Error("tools go.mod should not be edited")
-	}
-	goplsMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "gopls/go.mod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(goplsMod), "mod@v1.0.0") || strings.Contains(string(goplsMod), "sys") {
-		t.Errorf("gopls should use mod v1.0.0 and no sys. go.mod: %v", string(goplsMod))
-	}
-	if !strings.Contains(string(goplsMod), "tidied!") || !strings.Contains(string(goplsMod), "upgraded") || strings.Contains(string(goplsMod), "edited!") {
-		t.Errorf("gopls go.mod should be tidied+upgraded and not edited:\n%s", goplsMod)
-	}
-	if !strings.Contains(string(goplsMod), "we've upgraded to golang.org/x/mod@v1.0.0") ||
-		strings.Contains(string(goplsMod), "we've upgraded to golang.org/x/sys") {
-		t.Errorf("gopls should have upgraded x/mod to v1.0.0, but not x/sys: %v", string(goplsMod))
-	}
-	withtoolchainMod, err := deps.gerrit.ReadFile(ctx, "tools", tag.Revision, "withtoolchain/go.mod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(withtoolchainMod), "tidied!") || strings.Contains(string(withtoolchainMod), "edited!") {
-		t.Errorf("withtoolchain go.mod should be tidied and not edited:\n%s", withtoolchainMod)
-	}
-
-	tags, err = deps.gerrit.ListTags(ctx, "build")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(tags) != 0 {
-		t.Errorf("build has tags %q, should not have been tagged", tags)
-	}
-	goMod, err = deps.gerrit.ReadFile(ctx, "build", "master", "go.mod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(goMod), "tools@v1.2.0") || !strings.Contains(string(goMod), "sys@v0.2.0") {
-		t.Errorf("build should use tools v1.2.0 and sys v0.2.0. go.mod: %v", string(goMod))
-	}
-	if !strings.Contains(string(goMod), "tidied!") {
-		t.Error("build go.mod should be tidied")
-	}
 }
 
 func testTagSingleRepo(t *testing.T, skipPostSubmit bool) {
@@ -500,7 +503,7 @@ func testTagSingleRepo(t *testing.T, skipPostSubmit bool) {
 }
 
 func TestTagSingleRepo(t *testing.T) {
-	t.Run("with post-submit check", func(t *testing.T) { testTagSingleRepo(t, false) })
+	workflowtest.Subtest(t, "with post-submit check", func(t *testing.T) { testTagSingleRepo(t, false) })
 	// If skipPostSubmit is false, AwaitGreen should sit an spin for a minute before failing
-	t.Run("without post-submit check", func(t *testing.T) { testTagSingleRepo(t, true) })
+	workflowtest.Subtest(t, "without post-submit check", func(t *testing.T) { testTagSingleRepo(t, true) })
 }

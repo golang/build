@@ -41,7 +41,7 @@ func TestVSCodeGoReleaseTask_buildVSCGO(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
+		workflowtest.Subtest(t, test.name, func(t *testing.T) {
 			repo := NewFakeRepo(t, "vscode-go")
 			t1 := repo.Commit(map[string]string{
 				"go.mod":        "module github.com/golang/vscode-go\n",

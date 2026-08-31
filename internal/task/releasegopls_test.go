@@ -46,7 +46,7 @@ func TestInterpretNextRelease(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			tools := NewFakeRepo(t, "tools")
 			commit := tools.Commit(map[string]string{
 				"go.mod": "module golang.org/x/tools\n",
@@ -118,7 +118,7 @@ func TestPossibleGoplsVersions(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			tools := NewFakeRepo(t, "tools")
 			commit := tools.Commit(map[string]string{
 				"go.mod": "module golang.org/x/tools\n",
@@ -183,7 +183,7 @@ func TestCreateBranchIfMinor(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			tools := NewFakeRepo(t, "tools")
 			_ = tools.Commit(map[string]string{
 				"go.mod": "module golang.org/x/tools\n",
@@ -290,7 +290,7 @@ parent-branch: master
 		},
 	}
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			tools := NewFakeRepo(t, "tools")
 			_ = tools.Commit(map[string]string{
 				"go.mod": "module golang.org/x/tools\n",
@@ -403,7 +403,7 @@ func TestNextPrerelease(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			tools := NewFakeRepo(t, "tools")
 			commit := tools.Commit(map[string]string{
 				"go.mod": "module golang.org/x/tools\n",
@@ -610,7 +610,7 @@ parent-branch: master
 	}
 
 	for _, tc := range testcases {
-		runTestWithInput := func(input map[string]any) {
+		runTestWithInput := func(t *testing.T, input map[string]any) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -861,8 +861,8 @@ esac`, tc.wantVersion)
 			}
 		}
 
-		t.Run("manual input version: "+tc.name, func(t *testing.T) {
-			runTestWithInput(map[string]any{
+		workflowtest.Subtest(t, "manual input version: "+tc.name, func(t *testing.T) {
+			runTestWithInput(t, map[string]any{
 				releaseCoordinatorsParam.Name: []string{"gobot"},
 				"explicit version (optional)": tc.release.String(),
 				"next version":                "use explicit version",
@@ -872,8 +872,8 @@ esac`, tc.wantVersion)
 		if tc.release.Patch == 0 {
 			versionBump = "next minor"
 		}
-		t.Run("interpret version "+versionBump+" : "+tc.name, func(t *testing.T) {
-			runTestWithInput(map[string]any{
+		workflowtest.Subtest(t, "interpret version "+versionBump+" : "+tc.name, func(t *testing.T) {
+			runTestWithInput(t, map[string]any{
 				releaseCoordinatorsParam.Name: []string{"gobot"},
 				"explicit version (optional)": "",
 				"next version":                versionBump,
@@ -924,7 +924,7 @@ func TestTagRelease(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			tools := NewFakeRepo(t, "tools")
 			_ = tools.Commit(map[string]string{
 				"go.mod": "module golang.org/x/tools\n",
@@ -1029,7 +1029,7 @@ echo -n "foo" > file_b
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			tools := NewFakeRepo(t, "tools")
 			initial := tools.Commit(map[string]string{
 				"gopls/go.mod": "module golang.org/x/tools\n",
@@ -1152,7 +1152,7 @@ func TestGoplsReleaseFlow(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		runTestWithInput := func(input map[string]any) {
+		runTestWithInput := func(t *testing.T, input map[string]any) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			releaseBranch := goplsReleaseBranchName(tc.release)
@@ -1428,8 +1428,8 @@ esac
 				t.Errorf("NewReleaseDefinition().Run(): got email subject %q, want %q", gotSubject, wantSubject)
 			}
 		}
-		t.Run("manual input version: "+tc.name, func(t *testing.T) {
-			runTestWithInput(map[string]any{
+		workflowtest.Subtest(t, "manual input version: "+tc.name, func(t *testing.T) {
+			runTestWithInput(t, map[string]any{
 				releaseCoordinatorsParam.Name: []string{"gobot"},
 				"explicit version (optional)": tc.release.String(),
 				"next version":                "use explicit version",
@@ -1439,8 +1439,8 @@ esac
 		if tc.release.Patch == 0 {
 			versionBump = "next minor"
 		}
-		t.Run("interpret version "+versionBump+": "+tc.name, func(t *testing.T) {
-			runTestWithInput(map[string]any{
+		workflowtest.Subtest(t, "interpret version "+versionBump+": "+tc.name, func(t *testing.T) {
+			runTestWithInput(t, map[string]any{
 				releaseCoordinatorsParam.Name: []string{"gobot"},
 				"explicit version (optional)": "",
 				"next version":                versionBump,

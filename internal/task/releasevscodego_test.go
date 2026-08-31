@@ -204,7 +204,7 @@ func TestCreateReleaseBranch(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			release, prerelease, ok := parseVersion(tc.version)
 			if !ok {
 				t.Fatalf("failed to parse the want version: %q", tc.version)
@@ -284,7 +284,7 @@ func TestDetermineReleaseAndNextPrereleaseVersion(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"go.mod": "module github.com/golang/vscode-go\n",
@@ -342,7 +342,7 @@ func TestVSCodeGoActiveReleaseBranch(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"go.mod": "module github.com/golang/vscode-go\n",
@@ -403,7 +403,7 @@ esac
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"go.mod":         "module github.com/golang/vscode-go\n",
@@ -463,7 +463,7 @@ func TestGeneratePackageExtension(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"go.mod":                             "module github.com/golang/vscode-go\n",
@@ -562,7 +562,7 @@ func TestDetermineInsiderVersion(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"go.mod": "module github.com/golang/vscode-go\n",
@@ -670,7 +670,7 @@ CHANGE FOR v0.42.0 LINE 2
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"go.mod":       "module github.com/golang/vscode-go\n",
@@ -729,7 +729,7 @@ func TestUpdatePackageJSONVersionInMasterBranch(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"go.mod":                      "module github.com/golang/vscode-go\n",
@@ -821,7 +821,7 @@ func TestUpdatePackageJSONVersionInReleaseBranch(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"go.mod":                      "module github.com/golang/vscode-go\n",
@@ -1028,7 +1028,7 @@ CHANGE FOR v0.42.1
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			commit := vscodego.Commit(map[string]string{
 				"CHANGELOG.md": changelog,
@@ -1110,7 +1110,7 @@ func TestUpdateDependenciesIfMinor(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		t.Run(tc.name, func(t *testing.T) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
 			vscodego := NewFakeRepo(t, "vscode-go")
 			vscodego.Commit(map[string]string{
 				"go.mod":           "module github.com/golang/vscode-go\n\ngo 1.23\n",

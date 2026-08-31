@@ -19,8 +19,8 @@ func TestUpdateX509Bundle(t *testing.T) {
 	if testing.Short() {
 		t.Skip("not running test that uses internet in short mode")
 	}
-	t.Run("new content", func(t *testing.T) { testUpdateX509Bundle(t, true) })
-	t.Run("old content", func(t *testing.T) { testUpdateX509Bundle(t, false) })
+	workflowtest.Subtest(t, "new content", func(t *testing.T) { testUpdateX509Bundle(t, true) })
+	workflowtest.Subtest(t, "old content", func(t *testing.T) { testUpdateX509Bundle(t, false) })
 }
 
 func testUpdateX509Bundle(t *testing.T, newContent bool) {

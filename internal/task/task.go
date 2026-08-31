@@ -33,13 +33,11 @@ type CommunicationTasks struct {
 	SocialMediaTasks
 }
 
-var AwaitDivisor int = 1
-
 // AwaitCondition calls the condition function every period until it returns
 // true to indicate success, or an error. If the condition succeeds,
 // AwaitCondition returns its result.
 func AwaitCondition[T any](ctx *wf.TaskContext, period time.Duration, condition func() (T, bool, error)) (T, error) {
-	pollTimer := time.NewTicker(period / time.Duration(AwaitDivisor))
+	pollTimer := time.NewTicker(period)
 	defer pollTimer.Stop()
 	for {
 		res, done, err := condition()

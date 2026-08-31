@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -217,11 +216,11 @@ func TestAnnounceBlogPostWorkflow(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		workflowtest.Subtest(t, tc.name, func(t *testing.T) {
+			feedURL, feedClient, feedCleanup := workflowtest.NewInMemoryServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte(tc.atomXML))
 			}))
-			defer ts.Close()
+			t.Cleanup(feedCleanup)
 
 			twitter := &mockPoster{service: "twitter"}
 			mastodon := &mockPoster{service: "mastodon"}
@@ -230,7 +229,8 @@ func TestAnnounceBlogPostWorkflow(t *testing.T) {
 				TwitterClient:             twitter,
 				MastodonClient:            mastodon,
 				BlueskyClient:             bluesky,
-				OverrideGoBlogPostAtomURL: ts.URL,
+				OverrideGoBlogPostAtomURL: feedURL,
+				HTTPClient:                feedClient,
 			}
 			wd := NewAnnounceBlogPostWorkflow(comm)
 			w, err := workflow.Start(wd, map[string]any{

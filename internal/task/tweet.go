@@ -95,6 +95,8 @@ type SocialMediaTasks struct {
 	// atom feed URL. This is useful for tests.
 	OverrideGoBlogPostAtomURL string
 
+	HTTPClient *http.Client
+
 	// RandomSeed is the pseudo-random number generator seed to use for presentational
 	// choices, such as selecting one out of many available emoji or release archives.
 	// The zero value means to use time.Now().UnixNano().
@@ -865,8 +867,12 @@ type BlogPost struct {
 	URL    string
 }
 
-func GetBlogPostMetadata(ctx *workflow.TaskContext, atomURL string, blogPostURL string) (blogPost BlogPost, err error) {
-	resp, err := ctxhttp.Get(ctx, http.DefaultClient, atomURL)
+func (t SocialMediaTasks) GetBlogPostMetadata(ctx *workflow.TaskContext, atomURL string, blogPostURL string) (blogPost BlogPost, err error) {
+	client := t.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := ctxhttp.Get(ctx, client, atomURL)
 	if err != nil {
 		return BlogPost{}, fmt.Errorf("unable to query atom feed for blog post entries: %s", err)
 	}

@@ -391,7 +391,7 @@ func NewAnnounceBlogPostWorkflow(comm task.SocialMediaTasks) *wf.Definition {
 		atomURL = comm.OverrideGoBlogPostAtomURL
 	}
 
-	blogPost := wf.Task2(wd, "retrieve-blog-post", task.GetBlogPostMetadata, wf.Const(atomURL), url)
+	blogPost := wf.Task2(wd, "retrieve-blog-post", comm.GetBlogPostMetadata, wf.Const(atomURL), url)
 	tweetURL := wf.Task1(wd, "post-tweet", comm.TweetBlogPost, blogPost)
 	mastodonURL := wf.Task1(wd, "post-mastodon", comm.TrumpetBlogPost, blogPost)
 	blueskyURL := wf.Task1(wd, "post-bluesky", comm.SkeetBlogPost, blogPost)

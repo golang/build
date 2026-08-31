@@ -56,7 +56,7 @@ func TestTagTelemetry(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(test.label, func(t *testing.T) {
+		workflowtest.Subtest(t, test.label, func(t *testing.T) {
 			// Gerrit setup: create an initial commit with the initialConfig
 			// contents, all tags at that initial commit, and then a master commit
 			// with the masterConfig contents.

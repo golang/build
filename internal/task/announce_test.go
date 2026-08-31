@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -24,14 +25,16 @@ import (
 // Test that the task doesn't start running if the provided
 // context doesn't have sufficient time for the task to run.
 func TestAnnounceReleaseShortContext(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, KindMinor, []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, nil, nil)
-	if err == nil {
-		t.Errorf("want non-nil error")
-	} else if !strings.HasPrefix(err.Error(), "insufficient time") {
-		t.Errorf("want error that starts with 'insufficient time' instead of: %s", err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_, err := (AnnounceMailTasks{}).AnnounceRelease(&workflow.TaskContext{Context: ctx}, KindMinor, []Published{{Version: "go1.18.1"}, {Version: "go1.17.8"}}, nil, nil)
+		if err == nil {
+			t.Errorf("want non-nil error")
+		} else if !strings.HasPrefix(err.Error(), "insufficient time") {
+			t.Errorf("want error that starts with 'insufficient time' instead of: %s", err)
+		}
+	})
 }
 
 func TestAnnouncementMail(t *testing.T) {
