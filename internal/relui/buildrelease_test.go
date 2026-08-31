@@ -17,7 +17,6 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path"
@@ -120,6 +119,7 @@ type releaseTestDeps struct {
 	buildTasks     *BuildReleaseTasks
 	milestoneTasks *task.MilestoneTasks
 	publishedFiles map[string]task.WebsiteFile
+	dlClient       *http.Client
 }
 
 func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion string) *releaseTestDeps {
@@ -135,15 +135,11 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 	t.Cleanup(func() { task.AwaitDivisor, workflow.MaxRetries = 1, 3 })
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Set up a server that will be used to serve inputs to the build.
-	bootstrapServer := httptest.NewServer(http.HandlerFunc(serveBootstrap))
-	t.Cleanup(bootstrapServer.Close)
-
 	// Set up the fake CDN publishing process.
 	servingDir := t.TempDir()
 	dlDir := t.TempDir()
-	dlServer := httptest.NewServer(http.FileServer(http.FS(os.DirFS(dlDir))))
-	t.Cleanup(dlServer.Close)
+	dlURL, dlClient, dlCleanup := workflowtest.NewInMemoryServer(http.FileServer(http.FS(os.DirFS(dlDir))))
+	t.Cleanup(dlCleanup)
 	go fakeCDNLoad(ctx, t, servingDir, dlDir)
 
 	// Set up the fake website to publish to.
@@ -216,8 +212,9 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		SignedURL:                "file://" + scratchDir + "/signed/outputs",
 		ServingURL:               "file://" + filepath.ToSlash(servingDir),
 		SignService:              task.NewFakeSignService(t, scratchDir+"/signed/outputs"),
-		DownloadURL:              dlServer.URL,
-		ProxyPrefix:              dlServer.URL,
+		DownloadURL:              dlURL,
+		DownloadClient:           dlClient,
+		ProxyPrefix:              dlURL,
 		PublishFile:              publishFile,
 		GoogleDockerBuildProject: dockerProject,
 		GoogleDockerBuildTrigger: dockerTrigger,
@@ -249,6 +246,7 @@ func newReleaseTestDeps(t *testing.T, previousTag string, major int, wantVersion
 		buildTasks:     buildTasks,
 		milestoneTasks: milestoneTasks,
 		publishedFiles: files,
+		dlClient:       dlClient,
 	}
 }
 
@@ -293,7 +291,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		}
 	}
 
-	dlURL, files := deps.buildTasks.DownloadURL, deps.publishedFiles
+	dlURL, dlClient, files := deps.buildTasks.DownloadURL, deps.dlClient, deps.publishedFiles
 	for _, f := range deps.publishedFiles {
 		wantKind, ok := wantPublishedFiles[f.Filename]
 		if !ok {
@@ -303,18 +301,18 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		}
 		delete(wantPublishedFiles, f.Filename)
 
-		checkFile(t, dlURL, files, strings.TrimPrefix(f.Filename, wantVersion+"."), f, func(t *testing.T, b []byte) {
+		checkFile(t, dlClient, dlURL, files, strings.TrimPrefix(f.Filename, wantVersion+"."), f, func(t *testing.T, b []byte) {
 			if got, want := len(b), int(f.Size); got != want {
 				t.Errorf("%s size mismatch with metadata: %v != %v", f.Filename, got, want)
 			}
 			if got, want := fmt.Sprintf("%x", sha256.Sum256(b)), f.ChecksumSHA256; got != want {
 				t.Errorf("%s sha256 mismatch with metadata: %q != %q", f.Filename, got, want)
 			}
-			if got, want := fmt.Sprintf("%x", sha256.Sum256(b)), string(fetch(t, dlURL+"/"+f.Filename+".sha256")); got != want {
+			if got, want := fmt.Sprintf("%x", sha256.Sum256(b)), string(fetch(t, dlClient, dlURL+"/"+f.Filename+".sha256")); got != want {
 				t.Errorf("%s sha256 mismatch with .sha256 file: %q != %q", f.Filename, got, want)
 			}
 			if strings.HasSuffix(f.Filename, ".tar.gz") {
-				if got, want := string(fetch(t, dlURL+"/"+f.Filename+".asc")), fmt.Sprintf("I'm a GPG signature for %x!", sha256.Sum256(b)); got != want {
+				if got, want := string(fetch(t, dlClient, dlURL+"/"+f.Filename+".asc")), fmt.Sprintf("I'm a GPG signature for %x!", sha256.Sum256(b)); got != want {
 					t.Errorf("%v doesn't have the expected GPG signature: got %s, want %s", f.Filename, got, want)
 				}
 			}
@@ -327,7 +325,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 	if !strings.Contains(versionFile, wantVersion) {
 		t.Errorf("version file should contain %q, got %q", wantVersion, versionFile)
 	}
-	checkTGZ(t, dlURL, files, "src.tar.gz", task.WebsiteFile{
+	checkTGZ(t, dlClient, dlURL, files, "src.tar.gz", task.WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
@@ -335,12 +333,12 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		"go/VERSION":       versionFile,
 		"go/src/make.bash": makeScript,
 	})
-	checkContents(t, dlURL, files, "windows-amd64.msi", task.WebsiteFile{
+	checkContents(t, dlClient, dlURL, files, "windows-amd64.msi", task.WebsiteFile{
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "installer",
 	}, "I'm an MSI!\n-signed <Windows>")
-	checkTGZ(t, dlURL, files, "linux-amd64.tar.gz", task.WebsiteFile{
+	checkTGZ(t, dlClient, dlURL, files, "linux-amd64.tar.gz", task.WebsiteFile{
 		OS:   "linux",
 		Arch: "amd64",
 		Kind: "archive",
@@ -348,7 +346,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
-	checkZip(t, dlURL, files, "windows-amd64.zip", task.WebsiteFile{
+	checkZip(t, dlClient, dlURL, files, "windows-amd64.zip", task.WebsiteFile{
 		OS:   "windows",
 		Arch: "amd64",
 		Kind: "archive",
@@ -356,7 +354,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
-	checkTGZ(t, dlURL, files, "linux-armv6l.tar.gz", task.WebsiteFile{
+	checkTGZ(t, dlClient, dlURL, files, "linux-armv6l.tar.gz", task.WebsiteFile{
 		OS:   "linux",
 		Arch: "armv6l",
 		Kind: "archive",
@@ -364,7 +362,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
-	checkTGZ(t, dlURL, files, "netbsd-arm.tar.gz", task.WebsiteFile{
+	checkTGZ(t, dlClient, dlURL, files, "netbsd-arm.tar.gz", task.WebsiteFile{
 		OS:   "netbsd",
 		Arch: "arm" + map[int]string{21: "v6l", 22: "v6l"}[major],
 		Kind: "archive",
@@ -372,7 +370,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		"go/VERSION":                        versionFile,
 		"go/tool/something_orother/compile": "",
 	})
-	checkTGZ(t, dlURL, files, "darwin-amd64.tar.gz", task.WebsiteFile{
+	checkTGZ(t, dlClient, dlURL, files, "darwin-amd64.tar.gz", task.WebsiteFile{
 		OS:   "darwin",
 		Arch: "amd64",
 		Kind: "archive",
@@ -380,15 +378,15 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 		"go/VERSION": versionFile,
 		"go/bin/go":  "-signed <macOS>",
 	})
-	checkContents(t, dlURL, files, "darwin-amd64.pkg", task.WebsiteFile{
+	checkContents(t, dlClient, dlURL, files, "darwin-amd64.pkg", task.WebsiteFile{
 		OS:   "darwin",
 		Arch: "amd64",
 		Kind: "installer",
 	}, "I'm a PKG! -signed <macOS>")
 	modVer := "v0.0.1-" + wantVersion + ".darwin-amd64"
-	checkContents(t, dlURL, nil, modVer+".mod", task.WebsiteFile{}, "module golang.org/toolchain")
-	checkContents(t, dlURL, nil, modVer+".info", task.WebsiteFile{}, fmt.Sprintf(`"Version":"%v"`, modVer))
-	checkZip(t, dlURL, nil, modVer+".zip", task.WebsiteFile{}, map[string]string{
+	checkContents(t, dlClient, dlURL, nil, modVer+".mod", task.WebsiteFile{}, "module golang.org/toolchain")
+	checkContents(t, dlClient, dlURL, nil, modVer+".info", task.WebsiteFile{}, fmt.Sprintf(`"Version":"%v"`, modVer))
+	checkZip(t, dlClient, dlURL, nil, modVer+".zip", task.WebsiteFile{}, map[string]string{
 		"golang.org/toolchain@" + modVer + "/bin/go": "-signed <macOS>",
 	})
 
@@ -534,7 +532,7 @@ esac
 		workflowtest.RunToFailure(t, deps.ctx, w, "Check branch state matches source archive", &workflowtest.VerboseListener{T: t})
 		return
 	}
-	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", task.WebsiteFile{
+	checkTGZ(t, deps.dlClient, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", task.WebsiteFile{
 		OS:   "",
 		Arch: "",
 		Kind: "source",
@@ -1803,13 +1801,7 @@ var goFiles = map[string]string{
 	"src/race.bat":  raceScript,
 }
 
-func serveBootstrap(w http.ResponseWriter, r *http.Request) {
-	task.ServeTarball("go-builder-data/go", map[string]string{
-		"bin/go": fakeGo,
-	}, w, r)
-}
-
-func checkFile(t *testing.T, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, check func(*testing.T, []byte)) {
+func checkFile(t *testing.T, client *http.Client, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, check func(*testing.T, []byte)) {
 	t.Run(filename, func(t *testing.T) {
 		resolvedName := filename
 		if files != nil {
@@ -1822,14 +1814,14 @@ func checkFile(t *testing.T, dlURL string, files map[string]task.WebsiteFile, fi
 			}
 			resolvedName = f.Filename
 		}
-		body := fetch(t, dlURL+"/"+resolvedName)
+		body := fetch(t, client, dlURL+"/"+resolvedName)
 		check(t, body)
 	})
 }
 
-func fetch(t *testing.T, url string) []byte {
+func fetch(t *testing.T, client *http.Client, url string) []byte {
 	t.Helper()
-	resp, err := http.Get(url)
+	resp, err := client.Get(url)
 	if err != nil {
 		t.Fatalf("getting %v: %v", url, err)
 	}
@@ -1844,16 +1836,16 @@ func fetch(t *testing.T, url string) []byte {
 	return b
 }
 
-func checkContents(t *testing.T, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents string) {
-	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
+func checkContents(t *testing.T, client *http.Client, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents string) {
+	checkFile(t, client, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		if got, want := string(b), contents; !strings.Contains(got, want) {
 			t.Errorf("%v contains %q, want %q", filename, got, want)
 		}
 	})
 }
 
-func checkTGZ(t *testing.T, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents map[string]string) {
-	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
+func checkTGZ(t *testing.T, client *http.Client, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents map[string]string) {
+	checkFile(t, client, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		gzr, err := gzip.NewReader(bytes.NewReader(b))
 		if err != nil {
 			t.Fatal(err)
@@ -1886,8 +1878,8 @@ func checkTGZ(t *testing.T, dlURL string, files map[string]task.WebsiteFile, fil
 	})
 }
 
-func checkZip(t *testing.T, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents map[string]string) {
-	checkFile(t, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
+func checkZip(t *testing.T, client *http.Client, dlURL string, files map[string]task.WebsiteFile, filename string, meta task.WebsiteFile, contents map[string]string) {
+	checkFile(t, client, dlURL, files, filename, meta, func(t *testing.T, b []byte) {
 		zr, err := zip.NewReader(bytes.NewReader(b), int64(len(b)))
 		if err != nil {
 			t.Fatal(err)

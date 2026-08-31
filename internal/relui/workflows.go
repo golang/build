@@ -927,6 +927,7 @@ type BuildReleaseTasks struct {
 	SignedURL                string // SignedURL is a gs:// or file:// URL, no trailing slash.
 	ServingURL               string // ServingURL is a gs:// or file:// URL, no trailing slash.
 	DownloadURL              string
+	DownloadClient           *http.Client
 	ProxyPrefix              string // ProxyPrefix is the prefix at which module files are published, e.g. https://proxy.golang.org/golang.org/toolchain/@v
 	PublishFile              func(task.WebsiteFile) error
 	SignService              sign.Service
@@ -2446,7 +2447,7 @@ func (tasks *BuildReleaseTasks) uploadArtifacts(ctx *wf.TaskContext, artifacts [
 			want[tasks.DownloadURL+"/"+a.Filename+".asc"] = true
 		}
 	}
-	_, err = task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, want))
+	_, err = task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, tasks.DownloadClient, want))
 	return err
 }
 
@@ -2471,7 +2472,7 @@ func (tasks *BuildReleaseTasks) uploadModules(ctx *wf.TaskContext, version strin
 			want[tasks.DownloadURL+"/"+base+ext] = true
 		}
 	}
-	_, err = task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, want))
+	_, err = task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, tasks.DownloadClient, want))
 	return err
 }
 
@@ -2481,17 +2482,20 @@ func (tasks *BuildReleaseTasks) awaitProxy(ctx *wf.TaskContext, version string, 
 		url := fmt.Sprintf("%v/%v.info", tasks.ProxyPrefix, task.ToolchainModuleVersion(mod.Target, version))
 		want[url] = true
 	}
-	_, err := task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, want))
+	_, err := task.AwaitCondition(ctx, 30*time.Second, checkFiles(ctx, tasks.DownloadClient, want))
 	return err
 }
 
-func checkFiles(ctx context.Context, want map[string]bool) func() (int, bool, error) {
+func checkFiles(ctx context.Context, client *http.Client, want map[string]bool) func() (int, bool, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
 	found := map[string]bool{}
 	return func() (int, bool, error) {
 		for url := range want {
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			resp, err := ctxhttp.Head(ctx, http.DefaultClient, url)
+			resp, err := ctxhttp.Head(ctx, client, url)
 			if err == context.DeadlineExceeded {
 				cancel()
 				continue
