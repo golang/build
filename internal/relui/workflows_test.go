@@ -88,7 +88,7 @@ func TestAwaitFunc(t *testing.T) {
 			}
 			go func() {
 				if c.wantErr {
-					runToFailure(t, ctx, w, "AwaitFunc", &workflowtest.VerboseListener{T: t})
+					workflowtest.RunToFailure(t, ctx, w, "AwaitFunc", &workflowtest.VerboseListener{T: t})
 				} else {
 					outputs, err := runWorkflow(t, ctx, w, nil)
 					if err != nil {
@@ -237,7 +237,7 @@ func TestAnnounceBlogPostWorkflow(t *testing.T) {
 				t.Fatalf("workflow.Start() = _, %v; want no error", err)
 			}
 			if tc.wantErr {
-				runToFailure(t, context.Background(), w, "retrieve-blog-post", &workflowtest.VerboseListener{T: t})
+				workflowtest.RunToFailure(t, context.Background(), w, "retrieve-blog-post", &workflowtest.VerboseListener{T: t})
 				return
 			}
 			outputs, err := runWorkflow(t, context.Background(), w, nil)

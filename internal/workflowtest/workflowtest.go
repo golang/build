@@ -5,6 +5,7 @@
 package workflowtest
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -53,4 +54,37 @@ func (l *VerboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *wf.TaskSta
 
 func (l *VerboseListener) Logger(_ uuid.UUID, task string) wf.Logger {
 	return &Logger{T: l.T, Task: task}
+}
+
+type ErrorListener struct {
+	TaskName string
+	Callback func(string)
+	wf.Listener
+}
+
+func (l *ErrorListener) TaskStateChanged(id uuid.UUID, taskID string, st *wf.TaskState) error {
+	if st.Name == l.TaskName && st.Finished && st.Error != "" {
+		l.Callback(st.Error)
+	}
+	return l.Listener.TaskStateChanged(id, taskID, st)
+}
+
+func RunToFailure(t testing.TB, ctx context.Context, w *wf.Workflow, task string, listener wf.Listener) string {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	t.Helper()
+	var message string
+	l := &ErrorListener{
+		TaskName: task,
+		Callback: func(m string) {
+			message = m
+			cancel()
+		},
+		Listener: listener,
+	}
+	_, err := w.Run(ctx, l)
+	if err == nil {
+		t.Fatalf("workflow unexpectedly succeeded")
+	}
+	return message
 }

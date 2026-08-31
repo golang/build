@@ -531,7 +531,7 @@ esac
 			t.Fatal(err)
 		}
 	} else {
-		runToFailure(t, deps.ctx, w, "Check branch state matches source archive", &workflowtest.VerboseListener{T: t})
+		workflowtest.RunToFailure(t, deps.ctx, w, "Check branch state matches source archive", &workflowtest.VerboseListener{T: t})
 		return
 	}
 	checkTGZ(t, deps.buildTasks.DownloadURL, deps.publishedFiles, "src.tar.gz", task.WebsiteFile{
@@ -711,7 +711,7 @@ func TestMinorReleaseSecurityCoalesce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+	workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
 
 	branches, err := privGerrit.ListBranches(deps.ctx, "go")
 	if err != nil {
@@ -870,7 +870,7 @@ func TestMinorReleaseSecurityCoalesceWithRC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+	workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
 
 	wantBranches := []string{
 		"internal-release-branch.go1.27rc1",
@@ -928,7 +928,7 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+	workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
 
 	// The coalesce must not have created any security branches.
 	branches, err := privGerrit.ListBranches(deps.ctx, "go")
@@ -972,7 +972,7 @@ func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+	workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
 	if !approvedNoMilestone {
 		t.Errorf("no-milestone approval gate did not fire for empty milestone")
 	}
@@ -1022,7 +1022,7 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 	}
 
 	tracker := &taskStartTracker{Listener: &workflowtest.VerboseListener{T: t}}
-	errMsg := runToFailure(t, deps.ctx, w, "Create cherry-picks", tracker)
+	errMsg := workflowtest.RunToFailure(t, deps.ctx, w, "Create cherry-picks", tracker)
 
 	var (
 		changes    []*gerrit.ChangeInfo
@@ -1928,41 +1928,7 @@ func (g *reviewerCheckGerrit) CreateAutoSubmitChange(ctx *workflow.TaskContext, 
 	return g.FakeGerrit.CreateAutoSubmitChange(ctx, input, reviewers, contents)
 }
 
-func runToFailure(t *testing.T, ctx context.Context, w *workflow.Workflow, task string, wrap workflow.Listener) string {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	t.Helper()
-	var message string
-	listener := &errorListener{
-		taskName: task,
-		callback: func(m string) {
-			message = m
-			cancel()
-		},
-		Listener: wrap,
-	}
-	_, err := w.Run(ctx, listener)
-	if err == nil {
-		t.Fatalf("workflow unexpectedly succeeded")
-	}
-	return message
-}
-
-type errorListener struct {
-	taskName string
-	callback func(string)
-	workflow.Listener
-}
-
-func (l *errorListener) TaskStateChanged(id uuid.UUID, taskID string, st *workflow.TaskState) error {
-	if st.Name == l.taskName && st.Finished && st.Error != "" {
-		l.callback(st.Error)
-	}
-	l.Listener.TaskStateChanged(id, taskID, st)
-	return nil
-}
-
-type taskStartTracker struct {
+type taskStartTracker struct { // TODO(nealpatel): Fold into internal/workflowtest
 	started sync.Map
 	workflow.Listener
 }

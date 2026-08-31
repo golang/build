@@ -84,7 +84,7 @@ func TestDependencyError(t *testing.T) {
 	dep := wf.Action0(wd, "failing action", action)
 	wf.Output(wd, "output", wf.Task0(wd, "task", task, wf.After(dep)))
 	w := startWorkflow(t, wd, nil)
-	if got, want := runToFailure(t, w, nil, "failing action"), "hardcoded error"; got != want {
+	if got, want := workflowtest.RunToFailure(t, context.Background(), w, "failing action", &workflowtest.VerboseListener{T: t}), "hardcoded error"; got != want {
 		t.Errorf("got error %q, want %q", got, want)
 	}
 }
@@ -95,7 +95,7 @@ func TestTaskPanic(t *testing.T) {
 		panic("pretend unexpected panic")
 	}))
 	w := startWorkflow(t, wd, nil)
-	if got, wantPrefix := runToFailure(t, w, nil, "panicking task"), "task unexpectedly panicked: "+
+	if got, wantPrefix := workflowtest.RunToFailure(t, context.Background(), w, "panicking task", &workflowtest.VerboseListener{T: t}), "task unexpectedly panicked: "+
 		"internal panic: pretend unexpected panic\n\n"; !strings.HasPrefix(got, wantPrefix) {
 		t.Errorf("got error %q, want prefix %q", got, wantPrefix)
 	}
@@ -271,7 +271,7 @@ func TestExpansionPanic(t *testing.T) {
 		panic("pretend unexpected panic")
 	}))
 	w := startWorkflow(t, wd, nil)
-	if got, wantPrefix := runToFailure(t, w, nil, "panicking expansion"), "expansion unexpectedly panicked: "+
+	if got, wantPrefix := workflowtest.RunToFailure(t, context.Background(), w, "panicking expansion", &workflowtest.VerboseListener{T: t}), "expansion unexpectedly panicked: "+
 		"internal panic: pretend unexpected panic\n\n"; !strings.HasPrefix(got, wantPrefix) {
 		t.Errorf("got error %q, want prefix %q", got, wantPrefix)
 	}
@@ -322,9 +322,9 @@ func TestRetryExpansion(t *testing.T) {
 			w.RetryTask(context.Background(), "expand")
 		}()
 	}
-	listener := &errorListener{
-		taskName: "expand",
-		callback: retry,
+	listener := &workflowtest.ErrorListener{
+		TaskName: "expand",
+		Callback: retry,
 		Listener: &workflowtest.VerboseListener{T: t},
 	}
 	runWorkflow(t, w, listener)
@@ -354,9 +354,9 @@ func TestManualRetry(t *testing.T) {
 			w.RetryTask(context.Background(), "needs retry")
 		}()
 	}
-	listener := &errorListener{
-		taskName: "needs retry",
-		callback: retry,
+	listener := &workflowtest.ErrorListener{
+		TaskName: "needs retry",
+		Callback: retry,
 		Listener: &workflowtest.VerboseListener{T: t},
 	}
 	runWorkflow(t, w, listener)
@@ -393,9 +393,9 @@ func TestManualRetryMultipleExpansions(t *testing.T) {
 	}
 
 	w := startWorkflow(t, wd, nil)
-	listener := &errorListener{
-		taskName: "sub1: work 1",
-		callback: func(string) {
+	listener := &workflowtest.ErrorListener{
+		TaskName: "sub1: work 1",
+		Callback: func(string) {
 			go func() {
 				retried[0]++
 				err := w.RetryTask(context.Background(), "sub1: work 1")
@@ -404,9 +404,9 @@ func TestManualRetryMultipleExpansions(t *testing.T) {
 				}
 			}()
 		},
-		Listener: &errorListener{
-			taskName: "sub2: work 2",
-			callback: func(string) {
+		Listener: &workflowtest.ErrorListener{
+			TaskName: "sub2: work 2",
+			Callback: func(string) {
 				go func() {
 					retried[1]++
 					err := w.RetryTask(context.Background(), "sub2: work 2")
@@ -468,7 +468,7 @@ func TestAutomaticRetryDisabled(t *testing.T) {
 	wf.Output(wd, "result", wf.Task0(wd, "no retry", noRetry))
 
 	w := startWorkflow(t, wd, nil)
-	if got, want := runToFailure(t, w, nil, "no retry"), "do not pass go"; got != want {
+	if got, want := workflowtest.RunToFailure(t, context.Background(), w, "no retry", &workflowtest.VerboseListener{T: t}), "do not pass go"; got != want {
 		t.Errorf("got error %q, want %q", got, want)
 	}
 	if counter != 1 {
@@ -517,7 +517,7 @@ func testWatchdog(t *testing.T, success bool) {
 	if success {
 		runWorkflow(t, w, nil)
 	} else {
-		if got, want := runToFailure(t, w, nil, "sleepy"), "assumed hung"; !strings.Contains(got, want) {
+		if got, want := workflowtest.RunToFailure(t, context.Background(), w, "sleepy", &workflowtest.VerboseListener{T: t}), "assumed hung"; !strings.Contains(got, want) {
 			t.Errorf("got error %q, want %q", got, want)
 		}
 	}
@@ -545,7 +545,7 @@ func TestLogging(t *testing.T) {
 	}
 }
 
-type logTestListener struct {
+type logTestListener struct { // TODO(nealpatel): Fold into internal/workflowtest
 	wf.Listener
 	logger wf.Logger
 }
@@ -554,7 +554,7 @@ func (l *logTestListener) Logger(_ uuid.UUID, _ string) wf.Logger {
 	return l.logger
 }
 
-type capturingLogger struct {
+type capturingLogger struct { // TODO(nealpatel): Fold into internal/workflowtest
 	lines []string
 }
 
@@ -640,12 +640,12 @@ func TestBadMarshaling(t *testing.T) {
 	wd := wf.New(wf.ACL{})
 	wf.Output(wd, "greeting", wf.Task0(wd, "greet", greet))
 	w := startWorkflow(t, wd, nil)
-	if got, want := runToFailure(t, w, nil, "greet"), "JSON marshaling"; !strings.Contains(got, want) {
+	if got, want := workflowtest.RunToFailure(t, context.Background(), w, "greet", &workflowtest.VerboseListener{T: t}), "JSON marshaling"; !strings.Contains(got, want) {
 		t.Errorf("got error %q, want %q", got, want)
 	}
 }
 
-type mapListener struct {
+type mapListener struct { // TODO(nealpatel): Fold into internal/workflowtest
 	wf.Listener
 	states map[uuid.UUID]map[string]*wf.TaskState
 }
@@ -689,42 +689,4 @@ func runWorkflow(t *testing.T, w *wf.Workflow, listener wf.Listener) map[string]
 		t.Fatalf("w.Run() = _, %v, wanted no error", err)
 	}
 	return outputs
-}
-
-func runToFailure(t *testing.T, w *wf.Workflow, listener wf.Listener, task string) string {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	t.Helper()
-	if listener == nil {
-		listener = &workflowtest.VerboseListener{T: t}
-	}
-	var message string
-	listener = &errorListener{
-		taskName: task,
-		callback: func(m string) {
-			message = m
-			// Allow other tasks to run before shutting down the workflow.
-			time.AfterFunc(50*time.Millisecond, cancel)
-		},
-		Listener: listener,
-	}
-	_, err := w.Run(ctx, listener)
-	if err == nil {
-		t.Fatalf("workflow unexpectedly succeeded")
-	}
-	return message
-}
-
-type errorListener struct {
-	taskName string
-	callback func(string)
-	wf.Listener
-}
-
-func (l *errorListener) TaskStateChanged(id uuid.UUID, taskID string, st *wf.TaskState) error {
-	if st.Name == l.taskName && st.Finished && st.Error != "" {
-		l.callback(st.Error)
-	}
-	l.Listener.TaskStateChanged(id, taskID, st)
-	return nil
 }
