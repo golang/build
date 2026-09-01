@@ -366,6 +366,7 @@ SLOW_HOSTS = {
     "netbsd-arm": struct(
         scale = 10,
         scope = ["go", "net", "sys"],  # not tools; see go.dev/issue/72061#issuecomment-2695226251
+        execution_timeout = 6 * time.hour,
     ),
     "netbsd-arm64": struct(scale = 2),
     "openbsd-amd64": struct(scale = 4),
@@ -384,6 +385,13 @@ def host_timeout_scale(host):
     if host in SLOW_HOSTS:
         return SLOW_HOSTS[host].scale
     return 1
+
+# host_execution_timeout returns the execution timeout for a given host.
+# The LUCI default is 3h.
+def host_execution_timeout(host):
+    if host in SLOW_HOSTS and hasattr(SLOW_HOSTS[host], "execution_timeout"):
+        return SLOW_HOSTS[host].execution_timeout
+    return None
 
 # DEFAULT_HOST_SUFFIX defines the default host suffixes for builder types which
 # do not specify one.
@@ -2023,6 +2031,7 @@ def define_allmode_builder(env, name, builder_type, base_props, base_dims, emit_
         properties = all_props,
         triggering_policy = triggering_policy(env, builder_type),
         service_account = env.worker_sa,
+        execution_timeout = host_execution_timeout(builder_type),
     )
 
 def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit_builder):
