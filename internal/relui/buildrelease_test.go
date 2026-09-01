@@ -1261,36 +1261,48 @@ func TestReadSecurityRefRestart(t *testing.T) {
 	})
 }
 
+func newPublicizeTestDeps(t *testing.T) (*BuildReleaseTasks, *task.FakeGerrit, *task.FakeGerrit, string, string) {
+	t.Helper()
+
+	pubRepo := task.NewFakeRepo(t, "go")
+	base := pubRepo.Commit(map[string]string{"README": "hello"})
+	pubRepo.Branch("release-branch.go1.26", base)
+
+	privRepo := task.CloneFakeRepo(t, "go", pubRepo)
+	privRepo.Branch("internal-release-branch.go1.26.1", base)
+	privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
+		"crypto/tls: fix vuln\n\nFixes CVE-2026-1234\n\nChange-Id: I0000000000000000000000000000000000000001",
+		map[string]string{"security1.txt": "fix1"})
+	privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
+		"cmd/compile: fix another vuln\n\nFixes CVE-2026-5678\n\nChange-Id: I0000000000000000000000000000000000000002",
+		map[string]string{"security2.txt": "fix2"})
+
+	pubGerrit := task.NewFakeGerrit(t, pubRepo)
+	privGerrit := task.NewFakeGerrit(t, privRepo)
+
+	securityCommit, err := privGerrit.ReadBranchHead(context.Background(), "go", "internal-release-branch.go1.26.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	build := &BuildReleaseTasks{
+		GerritClient:         pubGerrit,
+		GerritProject:        "go",
+		PrivateGerritClient:  privGerrit,
+		PrivateGerritProject: "go",
+		Git:                  new(task.Git),
+	}
+	return build, pubGerrit, privGerrit, base, securityCommit
+}
+
 func TestPublicizeIdempotent(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 			t.Skip("Requires bash shell scripting support.")
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-		taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
-
-		pubRepo := task.NewFakeRepo(t, "go")
-		base := pubRepo.Commit(map[string]string{"README": "hello"})
-		pubRepo.Branch("release-branch.go1.26", base)
-
-		privRepo := task.CloneFakeRepo(t, "go", pubRepo)
-		privRepo.Branch("internal-release-branch.go1.26.1", base)
-		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-			"crypto/tls: fix vuln\n\nFixes CVE-2026-1234\n\nChange-Id: I0000000000000000000000000000000000000001",
-			map[string]string{"security1.txt": "fix1"})
-		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-			"cmd/compile: fix another vuln\n\nFixes CVE-2026-5678\n\nChange-Id: I0000000000000000000000000000000000000002",
-			map[string]string{"security2.txt": "fix2"})
-
-		pubGerrit := task.NewFakeGerrit(t, pubRepo)
-		privGerrit := task.NewFakeGerrit(t, privRepo)
-
-		securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
-		if err != nil {
-			t.Fatal(err)
-		}
+		build, pubGerrit, _, base, securityCommit := newPublicizeTestDeps(t)
+		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: t.Name()}}
 
 		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
 			ID:           "pub-1",
@@ -1306,14 +1318,6 @@ func TestPublicizeIdempotent(t *testing.T) {
 			Branch:       "release-branch.go1.26",
 			Status:       "NEW",
 		}, "cmd/compile: fix another vuln")
-
-		build := &BuildReleaseTasks{
-			GerritClient:         pubGerrit,
-			GerritProject:        "go",
-			PrivateGerritClient:  privGerrit,
-			PrivateGerritProject: "go",
-			Git:                  new(task.Git),
-		}
 
 		cls, err := build.publicizePrivateSecurityCLs(taskCtx,
 			"go1.26.1", "release-branch.go1.26", base, securityCommit, nil)
@@ -1337,27 +1341,8 @@ func TestCheckAlreadyPublicizedIgnoresAbandoned(t *testing.T) {
 			t.Skip("Requires bash shell scripting support.")
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-		taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
-
-		pubRepo := task.NewFakeRepo(t, "go")
-		base := pubRepo.Commit(map[string]string{"README": "hello"})
-		pubRepo.Branch("release-branch.go1.26", base)
-
-		privRepo := task.CloneFakeRepo(t, "go", pubRepo)
-		privRepo.Branch("internal-release-branch.go1.26.1", base)
-		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-			"crypto/tls: fix vuln\n\nFixes CVE-2026-1234\n\nChange-Id: I0000000000000000000000000000000000000001",
-			map[string]string{"security1.txt": "fix1"})
-
-		pubGerrit := task.NewFakeGerrit(t, pubRepo)
-		privGerrit := task.NewFakeGerrit(t, privRepo)
-
-		securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
-		if err != nil {
-			t.Fatal(err)
-		}
+		build, pubGerrit, privGerrit, base, securityCommit := newPublicizeTestDeps(t)
+		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: t.Name()}}
 
 		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
 			ID:           "pub-1",
@@ -1366,14 +1351,6 @@ func TestCheckAlreadyPublicizedIgnoresAbandoned(t *testing.T) {
 			Branch:       "release-branch.go1.26",
 			Status:       gerrit.ChangeStatusAbandoned,
 		}, "crypto/tls: fix vuln")
-
-		build := &BuildReleaseTasks{
-			GerritClient:         pubGerrit,
-			GerritProject:        "go",
-			PrivateGerritClient:  privGerrit,
-			PrivateGerritProject: "go",
-			Git:                  new(task.Git),
-		}
 
 		repo, err := build.Git.CloneBranch(taskCtx, pubGerrit.GitRepoURL("go"), "release-branch.go1.26")
 		if err != nil {
@@ -1403,30 +1380,8 @@ func TestPublicizePartialFailsOpen(t *testing.T) {
 			t.Skip("Requires bash shell scripting support.")
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-		taskCtx := &workflow.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t, Task: "publicize"}}
-
-		pubRepo := task.NewFakeRepo(t, "go")
-		base := pubRepo.Commit(map[string]string{"README": "hello"})
-		pubRepo.Branch("release-branch.go1.26", base)
-
-		privRepo := task.CloneFakeRepo(t, "go", pubRepo)
-		privRepo.Branch("internal-release-branch.go1.26.1", base)
-		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-			"crypto/tls: fix vuln\n\nChange-Id: I0000000000000000000000000000000000000001",
-			map[string]string{"security1.txt": "fix1"})
-		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-			"cmd/compile: fix another\n\nChange-Id: I0000000000000000000000000000000000000002",
-			map[string]string{"security2.txt": "fix2"})
-
-		pubGerrit := task.NewFakeGerrit(t, pubRepo)
-		privGerrit := task.NewFakeGerrit(t, privRepo)
-
-		securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
-		if err != nil {
-			t.Fatal(err)
-		}
+		build, pubGerrit, _, base, securityCommit := newPublicizeTestDeps(t)
+		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: t.Name()}}
 
 		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
 			ID:           "pub-1",
@@ -1436,15 +1391,7 @@ func TestPublicizePartialFailsOpen(t *testing.T) {
 			Status:       "NEW",
 		}, "crypto/tls: fix vuln")
 
-		build := &BuildReleaseTasks{
-			GerritClient:         pubGerrit,
-			GerritProject:        "go",
-			PrivateGerritClient:  privGerrit,
-			PrivateGerritProject: "go",
-			Git:                  new(task.Git),
-		}
-
-		_, err = build.publicizePrivateSecurityCLs(taskCtx,
+		_, err := build.publicizePrivateSecurityCLs(taskCtx,
 			"go1.26.1", "release-branch.go1.26", base, securityCommit, nil)
 		if err == nil {
 			t.Fatal("expected error for partial publicize, got nil")
@@ -2685,41 +2632,8 @@ func TestPublicizeErrors(t *testing.T) {
 		t.Skip("Requires bash shell scripting support.")
 	}
 
-	setup := func(t *testing.T) (*BuildReleaseTasks, *task.FakeGerrit, *task.FakeGerrit, string, string) {
-		t.Helper()
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-
-		pubRepo := task.NewFakeRepo(t, "go")
-		base := pubRepo.Commit(map[string]string{"README": "hello"})
-		pubRepo.Branch("release-branch.go1.26", base)
-
-		privRepo := task.CloneFakeRepo(t, "go", pubRepo)
-		privRepo.Branch("internal-release-branch.go1.26.1", base)
-		privRepo.CommitOnBranchWithMessage("internal-release-branch.go1.26.1",
-			"crypto/tls: fix vuln\n\nChange-Id: I0000000000000000000000000000000000000001",
-			map[string]string{"security1.txt": "fix1"})
-
-		pubGerrit := task.NewFakeGerrit(t, pubRepo)
-		privGerrit := task.NewFakeGerrit(t, privRepo)
-
-		securityCommit, err := privGerrit.ReadBranchHead(ctx, "go", "internal-release-branch.go1.26.1")
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		build := &BuildReleaseTasks{
-			GerritClient:         pubGerrit,
-			GerritProject:        "go",
-			PrivateGerritClient:  privGerrit,
-			PrivateGerritProject: "go",
-			Git:                  new(task.Git),
-		}
-		return build, pubGerrit, privGerrit, base, securityCommit
-	}
-
 	workflowtest.Subtest(t, "public_head_mismatch", func(t *testing.T) {
-		build, _, _, _, securityCommit := setup(t)
+		build, _, _, _, securityCommit := newPublicizeTestDeps(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "pub-mismatch"}}
 
 		fakeOldHead := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -2734,7 +2648,7 @@ func TestPublicizeErrors(t *testing.T) {
 	})
 
 	workflowtest.Subtest(t, "private_head_mismatch", func(t *testing.T) {
-		build, _, _, base, _ := setup(t)
+		build, _, _, base, _ := newPublicizeTestDeps(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "priv-mismatch"}}
 
 		fakeOldCommit := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
@@ -2749,7 +2663,7 @@ func TestPublicizeErrors(t *testing.T) {
 	})
 
 	workflowtest.Subtest(t, "public_branch_read_error", func(t *testing.T) {
-		build, _, _, _, securityCommit := setup(t)
+		build, _, _, _, securityCommit := newPublicizeTestDeps(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "pub-read-err"}}
 
 		build.GerritClient = task.NewFakeGerrit(t, task.NewFakeRepo(t, "empty"))
@@ -2765,7 +2679,7 @@ func TestPublicizeErrors(t *testing.T) {
 	})
 
 	workflowtest.Subtest(t, "private_branch_read_error", func(t *testing.T) {
-		build, _, _, base, _ := setup(t)
+		build, _, _, base, _ := newPublicizeTestDeps(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "priv-read-err"}}
 
 		build.PrivateGerritClient = task.NewFakeGerrit(t, task.NewFakeRepo(t, "empty"))
@@ -2781,7 +2695,7 @@ func TestPublicizeErrors(t *testing.T) {
 	})
 
 	workflowtest.Subtest(t, "empty_security_commit_no_error", func(t *testing.T) {
-		build, _, _, base, _ := setup(t)
+		build, _, _, base, _ := newPublicizeTestDeps(t)
 		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: "pub-noop"}}
 
 		cls, err := build.publicizePrivateSecurityCLs(taskCtx,
