@@ -83,20 +83,17 @@ func TestAwaitFunc(t *testing.T) {
 				truth := workflow.Task0(wd, "truth", func(_ context.Context) (bool, error) { return true, nil }, workflow.After(await))
 				workflow.Output(wd, "await", truth)
 
-				w, err := workflow.Start(wd, nil)
-				if err != nil {
-					t.Fatalf("workflow.Start(%v, %v) = %v, %v, wanted no error", wd, nil, w, err)
-				}
+				w := workflowtest.Start(t, wd, nil)
 				go func() {
 					if c.wantErr {
 						workflowtest.RunToFailure(t, ctx, w, "AwaitFunc", &workflowtest.VerboseListener{T: t})
 					} else {
-						outputs, err := runWorkflow(t, ctx, w, nil)
+						outputs, err := w.Run(ctx, &workflowtest.VerboseListener{T: t})
 						if err != nil {
-							t.Errorf("runworkflow() = _, %v", err)
+							t.Errorf("w.Run() = _, %v", err)
 						}
 						if diff := cmp.Diff(c.want, outputs); diff != "" {
-							t.Errorf("runWorkflow() mismatch (-want +got):\n%s", diff)
+							t.Errorf("w.Run() mismatch (-want +got):\n%s", diff)
 						}
 					}
 					close(done)
@@ -233,20 +230,14 @@ func TestAnnounceBlogPostWorkflow(t *testing.T) {
 				HTTPClient:                feedClient,
 			}
 			wd := NewAnnounceBlogPostWorkflow(comm)
-			w, err := workflow.Start(wd, map[string]any{
+			w := workflowtest.Start(t, wd, map[string]any{
 				"Blog Post URL": tc.blogURL,
 			})
-			if err != nil {
-				t.Fatalf("workflow.Start() = _, %v; want no error", err)
-			}
 			if tc.wantErr {
 				workflowtest.RunToFailure(t, context.Background(), w, "retrieve-blog-post", &workflowtest.VerboseListener{T: t})
 				return
 			}
-			outputs, err := runWorkflow(t, context.Background(), w, nil)
-			if err != nil {
-				t.Fatalf("runWorkflow() = _, %v; want no error", err)
-			}
+			outputs := workflowtest.Run(t, context.Background(), w, nil)
 			wantText := "“Test Post” by Test Author — https://go.dev/blog/hello-world\n\n#golang"
 			if twitter.post != wantText {
 				t.Errorf("twitter.post = %q; want %q", twitter.post, wantText)
@@ -279,16 +270,6 @@ func (m *mockPoster) PostTweet(text string, imagePNG []byte, altText string) (st
 	m.postTweetPNG = imagePNG
 	m.altText = altText
 	return fmt.Sprintf("https://%s.com/status/123", m.service), nil
-}
-
-func runWorkflow(t *testing.T, ctx context.Context, w *workflow.Workflow, listener workflow.Listener) (map[string]any, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	t.Helper()
-	if listener == nil {
-		listener = &workflowtest.VerboseListener{T: t}
-	}
-	return w.Run(ctx, listener)
 }
 
 var flagRelevantBuildersMajor = flag.Int("relevant-builders-major", 0, "TestReadRelevantBuildersLive's readRelevantBuilders major version")

@@ -203,6 +203,27 @@ func Subtest(t *testing.T, name string, f func(*testing.T)) {
 	})
 }
 
+func Start(t testing.TB, wd *wf.Definition, params map[string]any) *wf.Workflow {
+	t.Helper()
+	w, err := wf.Start(wd, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return w
+}
+
+func Run(t testing.TB, ctx context.Context, w *wf.Workflow, listener wf.Listener) map[string]any {
+	t.Helper()
+	if listener == nil {
+		listener = &VerboseListener{T: t}
+	}
+	outputs, err := w.Run(ctx, listener)
+	if err != nil {
+		t.Fatalf("w.Run() = _, %v, wanted no error", err)
+	}
+	return outputs
+}
+
 func RunToFailure(t testing.TB, ctx context.Context, w *wf.Workflow, task string, listener wf.Listener) string {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

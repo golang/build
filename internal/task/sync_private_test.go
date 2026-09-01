@@ -6,7 +6,6 @@ import (
 	"testing"
 	"testing/synctest"
 
-	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/internal/workflowtest"
 )
 
@@ -28,14 +27,8 @@ func TestSyncPrivate(t *testing.T) {
 		}
 
 		wd := sync.NewDefinition()
-		w, err := workflow.Start(wd, map[string]any{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = w.Run(context.Background(), &workflowtest.VerboseListener{T: t})
-		if err != nil {
-			t.Fatal(err)
-		}
+		w := workflowtest.Start(t, wd, map[string]any{})
+		workflowtest.Run(t, context.Background(), w, nil)
 
 		fakeRepo.runGit("switch", "master")
 		newMasterCommit := strings.TrimSpace(string(fakeRepo.runGit("rev-parse", "HEAD")))

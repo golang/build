@@ -37,16 +37,11 @@ func TestReleaseGovulncheckActionTasks_NewDefinition(t *testing.T) {
 		ctx := t.Context()
 
 		// Start the workflow with version v1.2.0
-		w, err := workflow.Start(wd, map[string]any{
+		w := workflowtest.Start(t, wd, map[string]any{
 			"Version": "v1.2.0",
 		})
-		if err != nil {
-			t.Fatalf("workflow.Start failed: %v", err)
-		}
 
-		if _, err := w.Run(ctx, &workflowtest.VerboseListener{T: t}); err != nil {
-			t.Fatalf("workflow.Run failed: %v", err)
-		}
+		workflowtest.Run(t, ctx, w, nil)
 
 		// Verify tags
 		tags, err := fakeGerrit.ListTags(ctx, "govulncheck-action")
@@ -176,14 +171,11 @@ func TestReleaseGovulncheckActionTasks_Validation(t *testing.T) {
 				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
 
-				w, err := workflow.Start(wd, map[string]any{
+				w := workflowtest.Start(t, wd, map[string]any{
 					"Version": tc.new,
 				})
-				if err != nil {
-					t.Fatalf("workflow.Start failed: %v", err)
-				}
 
-				_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t, OnStall: func() error { cancel(); return nil }})
+				_, err := w.Run(ctx, &workflowtest.VerboseListener{T: t, OnStall: func() error { cancel(); return nil }})
 				if (err != nil) != tc.wantErr {
 					t.Errorf("workflow.Run error = %v, wantErr %v", err, tc.wantErr)
 				}

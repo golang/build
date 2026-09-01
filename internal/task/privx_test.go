@@ -370,23 +370,17 @@ echo`)
 
 		tagxGerrit := NewFakeGerrit(t, pubRepo)
 		wd := p.NewDefinition(&TagXReposTasks{Gerrit: tagxGerrit})
-		w, err := wf.Start(wd, map[string]any{
+		w := workflowtest.Start(t, wd, map[string]any{
 			SecurityMilestoneParameter.Name:      "88810010",
 			reviewersParam.Name:                  []string{},
 			SecurityReviewersParameter.Name:      []string{"vulnreviewer@google.com"},
 			"Repository name":                    "net",
 			"Skip post submit result (optional)": true,
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
 
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
-		_, err = w.Run(&wf.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, &workflowtest.VerboseListener{T: t})
-		if err != nil {
-			t.Fatal(err)
-		}
+		workflowtest.Run(t, &wf.TaskContext{Context: ctx, Logger: &workflowtest.Logger{T: t}}, w, nil)
 
 		if diff := cmp.Diff(p.AnnounceMailHeader, announcementHeader); diff != "" {
 			t.Errorf("announcement header mismatch (-want +got):\n%s", diff)

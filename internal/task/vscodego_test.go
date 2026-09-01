@@ -17,7 +17,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/internal/workflowtest"
 )
 
@@ -103,12 +102,9 @@ esac
 			}
 
 			wd := releaseTask.NewDefinition()
-			w, err := workflow.Start(wd, map[string]any{
+			w := workflowtest.Start(t, wd, map[string]any{
 				vscgoVersionParam.Name: "v0.0.0",
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

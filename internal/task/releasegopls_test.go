@@ -733,15 +733,9 @@ esac`, tc.wantVersion)
 			}
 
 			wd := tasks.NewPrereleaseDefinition()
-			w, err := workflow.Start(wd, input)
-			if err != nil {
-				t.Fatal(err)
-			}
+			w := workflowtest.Start(t, wd, input)
 
-			outputs, err := w.Run(ctx, &workflowtest.VerboseListener{T: t})
-			if err != nil {
-				t.Fatal(err)
-			}
+			outputs := workflowtest.Run(t, ctx, w, nil)
 
 			// Verify that workflow will create the release branch for minor releases.
 			// The release branch is created before the flow run for patch releases.
@@ -1270,15 +1264,9 @@ esac
 			}
 
 			wd := tasks.NewReleaseDefinition()
-			w, err := workflow.Start(wd, input)
-			if err != nil {
-				t.Fatal(err)
-			}
+			w := workflowtest.Start(t, wd, input)
 
-			_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t})
-			if err != nil {
-				t.Fatal(err)
-			}
+			workflowtest.Run(t, ctx, w, nil)
 
 			// Verify that the expected commits were made to each repository's branches.
 			// Ensure no unexpected commits were merged.

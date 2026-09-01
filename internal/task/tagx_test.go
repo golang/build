@@ -352,17 +352,11 @@ func TestTagXRepos(t *testing.T) {
 		deps := newTagXTestDeps(t, sys, mod, tools, build)
 
 		wd := deps.tagXTasks.NewDefinition()
-		w, err := wf.Start(wd, map[string]any{
+		w := workflowtest.Start(t, wd, map[string]any{
 			reviewersParam.Name: []string(nil),
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
 		ctx := deps.ctx
-		_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t})
-		if err != nil {
-			t.Fatal(err)
-		}
+		workflowtest.Run(t, ctx, w, nil)
 
 		tag, err := deps.gerrit.GetTag(ctx, "sys", "v0.2.0")
 		if err != nil {
@@ -479,15 +473,9 @@ func testTagSingleRepo(t *testing.T, skipPostSubmit bool) {
 	}
 
 	wd := deps.tagXTasks.NewSingleDefinition()
-	w, err := wf.Start(wd, args)
-	if err != nil {
-		t.Fatal(err)
-	}
+	w := workflowtest.Start(t, wd, args)
 	ctx := deps.ctx
-	_, err = w.Run(ctx, &workflowtest.VerboseListener{T: t})
-	if err != nil {
-		t.Fatal(err)
-	}
+	workflowtest.Run(t, ctx, w, nil)
 
 	tag, err := deps.gerrit.GetTag(ctx, "foo", "v1.2.0")
 	if err != nil {

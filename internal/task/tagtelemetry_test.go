@@ -7,7 +7,6 @@ package task
 import (
 	"testing"
 
-	"golang.org/x/build/internal/workflow"
 	"golang.org/x/build/internal/workflowtest"
 )
 
@@ -85,19 +84,13 @@ func TestTagTelemetry(t *testing.T) {
 			}
 
 			wd := tasks.NewDefinition()
-			w, err := workflow.Start(wd, map[string]any{
+			w := workflowtest.Start(t, wd, map[string]any{
 				reviewersParam.Name: []string(nil),
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
 
 			ctx := t.Context()
 
-			outputs, err := w.Run(ctx, &workflowtest.VerboseListener{T: t})
-			if err != nil {
-				t.Fatal(err)
-			}
+			outputs := workflowtest.Run(t, ctx, w, nil)
 
 			// Verify that the master branch was updated as expected.
 			gotMaster, err := gerrit.ReadBranchHead(ctx, "telemetry", "master")

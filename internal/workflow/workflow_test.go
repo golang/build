@@ -32,8 +32,8 @@ func TestTrivial(t *testing.T) {
 		greeting := wf.Task1(wd, "echo", echo, wf.Const("hello world"))
 		wf.Output(wd, "greeting", greeting)
 
-		w := startWorkflow(t, wd, nil)
-		outputs := runWorkflow(t, w, nil)
+		w := workflowtest.Start(t, wd, nil)
+		outputs := workflowtest.Run(t, t.Context(), w, nil)
 		if got, want := outputs["greeting"], "hello world"; got != want {
 			t.Errorf("greeting = %q, want %q", got, want)
 		}
@@ -66,8 +66,8 @@ func TestDependency(t *testing.T) {
 		secondDep := wf.Task0(wd, "check action", checkAction, wf.After(firstDep))
 		wf.Output(wd, "greeting", wf.Task0(wd, "say hi", hi, wf.After(secondDep)))
 
-		w := startWorkflow(t, wd, nil)
-		outputs := runWorkflow(t, w, nil)
+		w := workflowtest.Start(t, wd, nil)
+		outputs := workflowtest.Run(t, t.Context(), w, nil)
 		if got, want := outputs["greeting"], "hello world"; got != want {
 			t.Errorf("greeting = %q, want %q", got, want)
 		}
@@ -86,7 +86,7 @@ func TestDependencyError(t *testing.T) {
 		wd := wf.New(wf.ACL{})
 		dep := wf.Action0(wd, "failing action", action)
 		wf.Output(wd, "output", wf.Task0(wd, "task", task, wf.After(dep)))
-		w := startWorkflow(t, wd, nil)
+		w := workflowtest.Start(t, wd, nil)
 		if got, want := workflowtest.RunToFailure(t, context.Background(), w, "failing action", &workflowtest.VerboseListener{T: t}), "hardcoded error"; got != want {
 			t.Errorf("got error %q, want %q", got, want)
 		}
@@ -99,7 +99,7 @@ func TestTaskPanic(t *testing.T) {
 		wf.Output(wd, "output", wf.Task0(wd, "panicking task", func(context.Context) (string, error) {
 			panic("pretend unexpected panic")
 		}))
-		w := startWorkflow(t, wd, nil)
+		w := workflowtest.Start(t, wd, nil)
 		if got, wantPrefix := workflowtest.RunToFailure(t, context.Background(), w, "panicking task", &workflowtest.VerboseListener{T: t}), "task unexpectedly panicked: "+
 			"internal panic: pretend unexpected panic\n\n"; !strings.HasPrefix(got, wantPrefix) {
 			t.Errorf("got error %q, want prefix %q", got, wantPrefix)
@@ -125,8 +125,8 @@ func TestSub(t *testing.T) {
 		wf.Output(wd, "result", wf.Task2(wd, "Concatenate", concat, g1, g2))
 
 		storage := &workflowtest.MapListener{Listener: &workflowtest.VerboseListener{T: t}}
-		w := startWorkflow(t, wd, nil)
-		outputs := runWorkflow(t, w, storage)
+		w := workflowtest.Start(t, wd, nil)
+		outputs := workflowtest.Run(t, t.Context(), w, storage)
 		if got, want := outputs["result"], "hi hi"; got != want {
 			t.Errorf("result = %q, want %q", got, want)
 		}
@@ -157,8 +157,8 @@ func TestSplitJoin(t *testing.T) {
 		out := wf.Task1(wd, "join", join, both)
 		wf.Output(wd, "strings", out)
 
-		w := startWorkflow(t, wd, nil)
-		outputs := runWorkflow(t, w, nil)
+		w := workflowtest.Start(t, wd, nil)
+		outputs := workflowtest.Run(t, t.Context(), w, nil)
 		if got, want := outputs["strings"], "string #1,string #2"; got != want {
 			t.Errorf("joined output = %q, want %q", got, want)
 		}
@@ -191,8 +191,8 @@ func TestParallelism(t *testing.T) {
 		wf.Output(wd, "out1", out1)
 		wf.Output(wd, "out2", out2)
 
-		w := startWorkflow(t, wd, nil)
-		runWorkflow(t, w, nil)
+		w := workflowtest.Start(t, wd, nil)
+		workflowtest.Run(t, t.Context(), w, nil)
 	})
 }
 
@@ -210,8 +210,8 @@ func TestParameters(t *testing.T) {
 	wf.Output(wd, "out2", out2)
 
 	synctest.Test(t, func(t *testing.T) {
-		w := startWorkflow(t, wd, map[string]any{"param1": "#1", "param2": "#2"})
-		outputs := runWorkflow(t, w, nil)
+		w := workflowtest.Start(t, wd, map[string]any{"param1": "#1", "param2": "#2"})
+		outputs := workflowtest.Run(t, t.Context(), w, nil)
 		if want := map[string]any{"out1": "#1", "out2": "#2"}; !reflect.DeepEqual(outputs, want) {
 			t.Errorf("outputs = %#v, want %#v", outputs, want)
 		}
@@ -273,8 +273,8 @@ func TestExpansion(t *testing.T) {
 		}, v1)
 		wf.Output(wd, "final value", joined)
 
-		w := startWorkflow(t, wd, nil)
-		outputs := runWorkflow(t, w, nil)
+		w := workflowtest.Start(t, wd, nil)
+		outputs := workflowtest.Run(t, t.Context(), w, nil)
 		if got, want := outputs["final value"], "hey there friend"; got != want {
 			t.Errorf("joined output = %q, want %q", got, want)
 		}
@@ -287,7 +287,7 @@ func TestExpansionPanic(t *testing.T) {
 		wf.Output(wd, "output", wf.Expand0(wd, "panicking expansion", func(*wf.Definition) (wf.Value[string], error) {
 			panic("pretend unexpected panic")
 		}))
-		w := startWorkflow(t, wd, nil)
+		w := workflowtest.Start(t, wd, nil)
 		if got, wantPrefix := workflowtest.RunToFailure(t, context.Background(), w, "panicking expansion", &workflowtest.VerboseListener{T: t}), "expansion unexpectedly panicked: "+
 			"internal panic: pretend unexpected panic\n\n"; !strings.HasPrefix(got, wantPrefix) {
 			t.Errorf("got error %q, want prefix %q", got, wantPrefix)
@@ -309,13 +309,13 @@ func TestResumeExpansion(t *testing.T) {
 		wf.Output(wd, "result", result)
 
 		storage := &workflowtest.MapListener{Listener: &workflowtest.VerboseListener{T: t}}
-		w := startWorkflow(t, wd, nil)
-		runWorkflow(t, w, storage)
+		w := workflowtest.Start(t, wd, nil)
+		workflowtest.Run(t, t.Context(), w, storage)
 		resumed, err := wf.Resume(wd, &wf.WorkflowState{ID: w.ID}, storage.States[w.ID])
 		if err != nil {
 			t.Fatal(err)
 		}
-		runWorkflow(t, resumed, nil)
+		workflowtest.Run(t, t.Context(), resumed, nil)
 		if counter != 1 {
 			t.Errorf("task ran %v times, wanted 1", counter)
 		}
@@ -337,7 +337,7 @@ func TestRetryExpansion(t *testing.T) {
 		})
 		wf.Output(wd, "out", out)
 
-		w := startWorkflow(t, wd, nil)
+		w := workflowtest.Start(t, wd, nil)
 		retry := func(string) {
 			go func() {
 				w.RetryTask(context.Background(), "expand")
@@ -348,7 +348,7 @@ func TestRetryExpansion(t *testing.T) {
 			Callback: retry,
 			Listener: &workflowtest.VerboseListener{T: t, OnStall: func() error { return nil }},
 		}
-		runWorkflow(t, w, listener)
+		workflowtest.Run(t, t.Context(), w, listener)
 		if counter != 2 {
 			t.Errorf("task ran %v times, wanted 2", counter)
 		}
@@ -370,7 +370,7 @@ func TestManualRetry(t *testing.T) {
 		wd := wf.New(wf.ACL{})
 		wf.Output(wd, "result", wf.Task0(wd, "needs retry", needsRetry))
 
-		w := startWorkflow(t, wd, nil)
+		w := workflowtest.Start(t, wd, nil)
 
 		retry := func(string) {
 			go func() {
@@ -382,7 +382,7 @@ func TestManualRetry(t *testing.T) {
 			Callback: retry,
 			Listener: &workflowtest.VerboseListener{T: t, OnStall: func() error { return nil }},
 		}
-		runWorkflow(t, w, listener)
+		workflowtest.Run(t, t.Context(), w, listener)
 		if counter != 2 {
 			t.Errorf("task ran %v times, wanted 2", counter)
 		}
@@ -417,7 +417,7 @@ func TestManualRetryMultipleExpansions(t *testing.T) {
 			wf.Output(wd, "out", out)
 		}
 
-		w := startWorkflow(t, wd, nil)
+		w := workflowtest.Start(t, wd, nil)
 		listener := &workflowtest.ErrorListener{
 			TaskName: "sub1: work 1",
 			Callback: func(string) {
@@ -443,7 +443,7 @@ func TestManualRetryMultipleExpansions(t *testing.T) {
 				Listener: &workflowtest.VerboseListener{T: t, OnStall: func() error { return nil }},
 			},
 		}
-		runWorkflow(t, w, listener)
+		workflowtest.Run(t, t.Context(), w, listener)
 		if counters[0] != 2 {
 			t.Errorf("sub1 task ran %v times, wanted 2", counters[0])
 		}
@@ -473,8 +473,8 @@ func TestAutomaticRetry(t *testing.T) {
 		wd := wf.New(wf.ACL{})
 		wf.Output(wd, "result", wf.Task0(wd, "needs retry", needsRetry))
 
-		w := startWorkflow(t, wd, nil)
-		outputs := runWorkflow(t, w, nil)
+		w := workflowtest.Start(t, wd, nil)
+		outputs := workflowtest.Run(t, t.Context(), w, nil)
 		if got, want := outputs["result"], "hi"; got != want {
 			t.Errorf("result = %q, want %q", got, want)
 		}
@@ -496,7 +496,7 @@ func TestAutomaticRetryDisabled(t *testing.T) {
 		wd := wf.New(wf.ACL{})
 		wf.Output(wd, "result", wf.Task0(wd, "no retry", noRetry))
 
-		w := startWorkflow(t, wd, nil)
+		w := workflowtest.Start(t, wd, nil)
 		if got, want := workflowtest.RunToFailure(t, context.Background(), w, "no retry", &workflowtest.VerboseListener{T: t}), "do not pass go"; got != want {
 			t.Errorf("got error %q, want %q", got, want)
 		}
@@ -547,9 +547,9 @@ func testWatchdog(t *testing.T, success bool) {
 	wd := wf.New(wf.ACL{})
 	wf.Output(wd, "result", wf.Task0(wd, "sleepy", maybeLog))
 
-	w := startWorkflow(t, wd, nil)
+	w := workflowtest.Start(t, wd, nil)
 	if success {
-		runWorkflow(t, w, nil)
+		workflowtest.Run(t, t.Context(), w, nil)
 	} else {
 		if got, want := workflowtest.RunToFailure(t, context.Background(), w, "sleepy", &workflowtest.VerboseListener{T: t}), "assumed hung"; !strings.Contains(got, want) {
 			t.Errorf("got error %q, want %q", got, want)
@@ -573,8 +573,8 @@ func TestLogging(t *testing.T) {
 			Listener: &workflowtest.VerboseListener{T: t},
 			Log:      logger,
 		}
-		w := startWorkflow(t, wd, nil)
-		runWorkflow(t, w, listener)
+		w := workflowtest.Start(t, wd, nil)
+		workflowtest.Run(t, t.Context(), w, listener)
 		if want := []string{"logging argument: hey there"}; !reflect.DeepEqual(logger.Lines, want) {
 			t.Errorf("unexpected logging result: got %v, want %v", logger.Lines, want)
 		}
@@ -635,7 +635,7 @@ func TestResume(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		out := runWorkflow(t, w2, storage)
+		out := workflowtest.Run(t, t.Context(), w2, storage)
 		if got, want := out["output"], "not blocked"; got != want {
 			t.Errorf("output from maybeBlock was %q, wanted %q", got, want)
 		}
@@ -661,32 +661,9 @@ func TestBadMarshaling(t *testing.T) {
 
 		wd := wf.New(wf.ACL{})
 		wf.Output(wd, "greeting", wf.Task0(wd, "greet", greet))
-		w := startWorkflow(t, wd, nil)
+		w := workflowtest.Start(t, wd, nil)
 		if got, want := workflowtest.RunToFailure(t, context.Background(), w, "greet", &workflowtest.VerboseListener{T: t}), "JSON marshaling"; !strings.Contains(got, want) {
 			t.Errorf("got error %q, want %q", got, want)
 		}
 	})
-}
-
-func startWorkflow(t *testing.T, wd *wf.Definition, params map[string]any) *wf.Workflow {
-	t.Helper()
-	w, err := wf.Start(wd, params)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return w
-}
-
-func runWorkflow(t *testing.T, w *wf.Workflow, listener wf.Listener) map[string]any {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	t.Helper()
-	if listener == nil {
-		listener = &workflowtest.VerboseListener{T: t}
-	}
-	outputs, err := w.Run(ctx, listener)
-	if err != nil {
-		t.Fatalf("w.Run() = _, %v, wanted no error", err)
-	}
-	return outputs
 }

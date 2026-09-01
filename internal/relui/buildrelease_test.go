@@ -260,7 +260,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, major, kind, workflow.Const(deps.gerrit.wantReviewers))
 	workflow.Output(wd, "Published Go version", v)
 
-	w, err := workflow.Start(wd, map[string]any{
+	w := workflowtest.Start(t, wd, map[string]any{
 		"Targets to skip testing (or 'all') (optional)": []string{
 			// allScript is intentionally hardcoded to fail on GOOS=js
 			// and we confirm here that it's possible to skip that.
@@ -268,13 +268,7 @@ func testRelease(t *testing.T, prevTag string, major int, wantVersion string, ki
 			"js-wasm",        // Builder used on 1.20 and older.
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	outputs, err := w.Run(deps.ctx, &workflowtest.VerboseListener{T: t, OnStall: func() error { deps.cancel(); return nil }})
-	if err != nil {
-		t.Fatal(err)
-	}
+	outputs := workflowtest.Run(t, deps.ctx, w, &workflowtest.VerboseListener{T: t, OnStall: func() error { deps.cancel(); return nil }})
 
 	// Create a complete list of expected published files.
 	wantPublishedFiles := map[string]string{
@@ -519,18 +513,12 @@ esac
 	v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 26, task.KindMinor, workflow.Slice[string]())
 	workflow.Output(wd, "Published Go version", v)
 
-	w, err := workflow.Start(wd, map[string]any{
+	w := workflowtest.Start(t, wd, map[string]any{
 		"Targets to skip testing (or 'all') (optional)": []string{"js-wasm"},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	if mergeFixes {
-		_, err = w.Run(deps.ctx, &workflowtest.VerboseListener{T: t})
-		if err != nil {
-			t.Fatal(err)
-		}
+		workflowtest.Run(t, deps.ctx, w, nil)
 	} else {
 		workflowtest.RunToFailure(t, deps.ctx, w, "Check branch state matches source archive", &workflowtest.VerboseListener{T: t})
 		return
@@ -709,10 +697,7 @@ func TestMinorReleaseSecurityCoalesce(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		w, err := workflow.Start(wd, minorReleaseParams())
-		if err != nil {
-			t.Fatal(err)
-		}
+		w := workflowtest.Start(t, wd, minorReleaseParams())
 
 		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
 
@@ -870,10 +855,7 @@ func TestMinorReleaseSecurityCoalesceWithRC(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		w, err := workflow.Start(wd, minorReleaseParams())
-		if err != nil {
-			t.Fatal(err)
-		}
+		w := workflowtest.Start(t, wd, minorReleaseParams())
 
 		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
 
@@ -930,10 +912,7 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		w, err := workflow.Start(wd, minorReleaseParams())
-		if err != nil {
-			t.Fatal(err)
-		}
+		w := workflowtest.Start(t, wd, minorReleaseParams())
 
 		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
 
@@ -976,10 +955,7 @@ func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
 		}
 		params := minorReleaseParams()
 		params[task.SecurityMilestoneParameter.Name] = ""
-		w, err := workflow.Start(wd, params)
-		if err != nil {
-			t.Fatal(err)
-		}
+		w := workflowtest.Start(t, wd, params)
 
 		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
 		if !approvedNoMilestone {
@@ -1027,10 +1003,7 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		w, err := workflow.Start(wd, minorReleaseParams())
-		if err != nil {
-			t.Fatal(err)
-		}
+		w := workflowtest.Start(t, wd, minorReleaseParams())
 
 		tracker := &taskStartTracker{Listener: &workflowtest.VerboseListener{T: t}}
 		errMsg := workflowtest.RunToFailure(t, deps.ctx, w, "Create cherry-picks", tracker)
@@ -1690,15 +1663,10 @@ func TestAdvisoryTestsFail(t *testing.T) {
 		v := addSingleReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, wd, 26, task.KindMinor, workflow.Slice[string]())
 		workflow.Output(wd, "Published Go version", v)
 
-		w, err := workflow.Start(wd, map[string]any{
+		w := workflowtest.Start(t, wd, map[string]any{
 			"Targets to skip testing (or 'all') (optional)": []string(nil),
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := w.Run(deps.ctx, &workflowtest.VerboseListener{T: t}); err != nil {
-			t.Fatal(err)
-		}
+		workflowtest.Run(t, deps.ctx, w, nil)
 		if testApprovals.Load() != 1 {
 			t.Errorf("failed advisory builder didn't need approval")
 		}
