@@ -1118,21 +1118,7 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "coalesce"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		// First run: establish a prior-iteration checkpoint branch.
 		first, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
@@ -1178,21 +1164,7 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		seedRiders(privGerrit)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "restart-mergedcp"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
@@ -1264,21 +1236,7 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 func TestReadSecurityRefRestart(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "secref-restart"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
@@ -1682,6 +1640,24 @@ func mustGetNextMinors(t *testing.T, deps *releaseTestDeps) []string {
 	return next
 }
 
+func mustSecuritySetup(t *testing.T, deps *releaseTestDeps, privGerrit *task.FakeGerrit) (*workflow.TaskContext, securityBranchInfo, []*gerrit.ChangeInfo) {
+	t.Helper()
+	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: t.Name()}}
+	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cls []*gerrit.ChangeInfo
+	for _, num := range []string{"1234", "5678"} {
+		ci, err := privGerrit.GetChange(deps.ctx, num)
+		if err != nil {
+			t.Fatalf("GetChange(%s): %v", num, err)
+		}
+		cls = append(cls, ci)
+	}
+	return taskCtx, bi, cls
+}
+
 // minorReleaseParams returns the parameters needed to start the workflow built
 // by createMinorReleaseWorkflow(.., 25, 26). Each minor's sub-workflow
 // contributes its own prefixed "Targets to skip testing" parameter.
@@ -2007,21 +1983,7 @@ func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		seedRiders(privGerrit)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "id8-opencp"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		branches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
@@ -2104,21 +2066,7 @@ func TestCreateSecurityCherryPicksPartialDedup(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		seedRiders(privGerrit)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "id9-partial"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
@@ -2165,21 +2113,7 @@ func TestCreateSecurityCherryPicksPartialDedup(t *testing.T) {
 func TestMoveAndRebasePrivateChanges(t *testing.T) {
 	workflowtest.Subtest(t, "fresh", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "move-fresh"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
@@ -2202,21 +2136,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 
 	workflowtest.Subtest(t, "restart_already_moved", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "move-restart"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
@@ -2241,21 +2161,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 
 	workflowtest.Subtest(t, "restart_already_merged", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "move-merged"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
@@ -2285,21 +2191,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 func TestSubmitPrivateChanges(t *testing.T) {
 	workflowtest.Subtest(t, "happy", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-happy"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
@@ -2327,21 +2219,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 
 	workflowtest.Subtest(t, "already_merged_skip", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-skip"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
@@ -2586,21 +2464,7 @@ func TestConvertInternalChangelistsMissingChangeID(t *testing.T) {
 func TestSubmitCherryPicks(t *testing.T) {
 	workflowtest.Subtest(t, "happy", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-cp"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
@@ -2658,21 +2522,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 
 	workflowtest.Subtest(t, "already_merged_skip", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-cp-skip"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
@@ -2787,21 +2637,7 @@ func TestMoveAndRebasePrivateChangesErrors(t *testing.T) {
 func TestSubmitPrivateChangesError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "submit-err"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
 		if err != nil {
@@ -2835,25 +2671,10 @@ func TestSubmitPrivateChangesError(t *testing.T) {
 func TestCreateInternalReleaseBranchesError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "ib-err"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 		bi.PublicReleaseBranches = []string{"release-branch.go1.99"}
 
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
-
-		_, err = deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+		_, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err == nil {
 			t.Fatal("expected error for nonexistent release branch")
 		}
@@ -2864,21 +2685,7 @@ func TestCreateSecurityCherryPicksConflictError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		seedRiders(privGerrit)
-		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "cp-conflict"}}
-
-		bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, num := range []string{"1234", "5678"} {
-			ci, err := privGerrit.GetChange(deps.ctx, num)
-			if err != nil {
-				t.Fatalf("GetChange(%s): %v", num, err)
-			}
-			cls = append(cls, ci)
-		}
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
 
 		releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
 		if err != nil {
