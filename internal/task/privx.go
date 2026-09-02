@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -28,8 +27,6 @@ type PrivXPatch struct {
 	Git           *Git
 	PublicGerrit  GerritClient
 	PrivateGerrit GerritClient
-	// PublicRepoURL returns a git clone URL for repo
-	PublicRepoURL func(repo string) string
 
 	GitHub             GitHubClientInterface
 	ApproveAction      func(*wf.TaskContext) error
@@ -55,13 +52,15 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	rm := wf.Task1(wd, "Pull release milestone", x.PullMilestone, milestoneNum)
 	patches := wf.Task3(wd, "Get changes for target x repo", x.FilterPatches, rm, targetRepo, availableRepos)
-	branch := wf.Task1(wd, "Create checkpoint branch", x.CreateCheckpoint, targetRepo)
-	patches = wf.Task2(wd, "Move and rebase all changes per x repo", x.MoveAndRebaseAll, branch, patches)
+	checkpoint := wf.Task1(wd, "Create checkpoint branch", x.CreateCheckpoint, targetRepo)
+	patches = wf.Task2(wd, "Move and rebase all changes per x repo", x.MoveAndRebaseAll, checkpoint, patches)
 	patches = wf.Task1(wd, "Waiting for submissions", x.AwaitSubmissions, patches)
+	securityCommit := wf.Task2(wd, "Read checkpoint head", x.ReadCheckpointHead, targetRepo, checkpoint, wf.After(patches))
 	// block for manual review before pushing changes to public
-	okayToDisclose := wf.Action0(wd, "Wait to disclose", x.ApproveAction, wf.After(patches)) // TODO(nealpatel): Add warning text
-	patches = wf.Task2(wd, "Publish changes", x.PublishChanges, targetRepo, patches, wf.After(okayToDisclose))
-	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, availableRepos, targetRepo, skipPostSubmit, reviewers, wf.After(patches))
+	okayToDisclose := wf.Action0(wd, "Wait to disclose", x.ApproveAction, wf.After(securityCommit)) // TODO(nealpatel): Add warning text
+	disclosed := wf.Task3(wd, "Publish changes", x.PublishChanges, targetRepo, checkpoint, securityCommit, wf.After(okayToDisclose))
+	submitted := wf.Action1(wd, "Wait for submission of published changes", x.AwaitPublicSubmissions, disclosed)
+	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, availableRepos, targetRepo, skipPostSubmit, reviewers, wf.After(submitted))
 	vulnerableAt := wf.Task1(wd, "Resolve vulnerable version", x.ResolveVulnerableVersion, tagged)
 
 	// wait for manual approval of the announcement message
@@ -72,7 +71,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	// post-announcement tasks
 	updated := wf.Action1(wd, "Update GitHub issues", x.UpdateGitHubIssues, rm, wf.After(announcementURL))
-	converted := wf.Task3(wd, "Convert internal changelists", x.ConvertInternalChangelists, milestoneNum, patches, securityReviewers, wf.After(announcementURL))
+	converted := wf.Task4(wd, "Convert internal changelists", x.ConvertInternalChangelists, targetRepo, milestoneNum, patches, securityReviewers, wf.After(announcementURL))
 	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, converted, vulnerableAt, tagged, announcementURL, securityReviewers, wf.After(updated))
 	wf.Output(wd, "File VulnDB Reports", changeID)
 
@@ -137,9 +136,13 @@ func internalXRepoChangeURL[T int | string](xrepo string, clNum T) string {
 }
 
 type ref struct {
-	Patch     *relmeta.SecurityPatch
-	Changes   []*gerrit.ChangeInfo
-	Disclosed []string
+	Patch   *relmeta.SecurityPatch
+	Changes []*gerrit.ChangeInfo
+}
+
+type checkpointInfo struct {
+	Branch       string
+	StartingHead string
 }
 
 // repoName returns the repo implied by the
@@ -158,23 +161,27 @@ func repoName(modPkg string) (string, error) {
 	return repo, nil
 }
 
-func (x *PrivXPatch) CreateCheckpoint(ctx *wf.TaskContext, repoName string) (string, error) {
+func (x *PrivXPatch) CreateCheckpoint(ctx *wf.TaskContext, repoName string) (checkpointInfo, error) {
 	publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, repoName, "public")
 	if err != nil {
-		return "", err
+		return checkpointInfo{}, err
 	}
 	// Append the formatted timestamp to make any restarts idempotent.
 	checkpointName := fmt.Sprintf("public-%s", time.Now().UTC().Format("20060102-150405"))
 	if _, err := x.PrivateGerrit.CreateBranch(ctx, repoName, checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
-		return "", err
+		return checkpointInfo{}, err
 	}
-	return checkpointName, nil
+	return checkpointInfo{Branch: checkpointName, StartingHead: publicHead}, nil
 }
 
-func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, branch string, patches []*ref) ([]*ref, error) {
+func (x *PrivXPatch) ReadCheckpointHead(ctx *wf.TaskContext, repoName string, cp checkpointInfo) (string, error) {
+	return x.PrivateGerrit.ReadBranchHead(ctx, repoName, cp.Branch)
+}
+
+func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, cp checkpointInfo, patches []*ref) ([]*ref, error) {
 	for _, p := range patches {
 		for i, ci := range p.Changes {
-			movedCI, err := x.PrivateGerrit.MoveChange(ctx, ci.ID, branch)
+			movedCI, err := x.PrivateGerrit.MoveChange(ctx, ci.ID, cp.Branch)
 			if err != nil {
 				// In case we need to re-run the Move step, tolerate the case where the change
 				// is already on the branch.
@@ -258,24 +265,33 @@ func (x *PrivXPatch) ResolveVulnerableVersion(ctx *wf.TaskContext, tagged TagRep
 	return report.VulnerableAt(predecessor[1:]), nil
 }
 
-func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, patches []*ref) ([]*ref, error) {
-	// TODO(nealpatel): Unless allowing for multiple modules, hoist to global.
-	clRE := regexp.MustCompile(fmt.Sprintf(`https://go-review\.googlesource\.com/c/%s/\+/(\d+)`, regexp.QuoteMeta(repoName)))
-	var disclosed []string
-	for _, p := range patches {
-		p.Disclosed = make([]string, len(p.Changes))
-		for i, change := range p.Changes {
-			cl, err := x.publishChange(ctx, repoName, p.Patch.Changelists[i], change, clRE)
-			if err != nil {
-				return nil, err
-			}
-			p.Disclosed[i] = cl
-			disclosed = append(disclosed, cl)
-		}
+func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, cp checkpointInfo, securityCommit string) ([]string, error) {
+	if publicHead, err := x.PublicGerrit.ReadBranchHead(ctx, repoName, "master"); err != nil {
+		return nil, fmt.Errorf("reading public branch head (safe to retry this step): %w", err)
+	} else if publicHead != cp.StartingHead {
+		return nil, fmt.Errorf("head of public master is %q, but was %q when the checkpoint was created; retrying this step alone will not help; restart the workflow to re-coalesce against the current head", publicHead, cp.StartingHead)
 	}
+	if head, err := x.PrivateGerrit.ReadBranchHead(ctx, repoName, cp.Branch); err != nil {
+		return nil, fmt.Errorf("reading private branch head (safe to retry this step): %w", err)
+	} else if head != securityCommit {
+		return nil, fmt.Errorf("head of private %q branch is %q, but was %q after submissions; retrying this step alone will not help; restart the workflow to re-coalesce against the current head", cp.Branch, head, securityCommit)
+	}
+	return PublicizePrivateChanges(ctx, PublicizeParams{
+		Git:            x.Git,
+		Public:         x.PublicGerrit,
+		Project:        repoName,
+		TargetBranch:   "master",
+		StartingHead:   cp.StartingHead,
+		PrivateOrigin:  x.PrivateGerrit.GitRepoURL(repoName),
+		PrivateRef:     "refs/heads/" + cp.Branch,
+		SecurityCommit: securityCommit,
+		Labels:         []string{"Auto-Submit+1", "Commit-Queue+1"},
+	})
+}
 
+func (x *PrivXPatch) AwaitPublicSubmissions(ctx *wf.TaskContext, changeIDs []string) error {
 	var g errgroup.Group
-	for _, cl := range disclosed {
+	for _, cl := range changeIDs {
 		g.Go(func() error {
 			ctx.Printf("Awaiting review/submit of %v", cl)
 			_, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
@@ -284,82 +300,7 @@ func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, patche
 			return err
 		})
 	}
-
-	// TODO(nealpatel): Is changeInfo supposed to be
-	// stored in .Changes similarly the other workflow?
-	//
-	// If not, this can be an ActionN.
-	return patches, g.Wait()
-}
-
-func (x *PrivXPatch) publishChange(ctx *wf.TaskContext, repoName, clLink string, change *gerrit.ChangeInfo, clRE *regexp.Regexp) (string, error) {
-	changeInfo, err := x.PrivateGerrit.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION"}})
-	if err != nil {
-		return "", err
-	}
-	if changeInfo.Status != gerrit.ChangeStatusMerged {
-		return "", fmt.Errorf("CL %s not merged, status is %s", clLink, changeInfo.Status)
-	}
-	rev, ok := changeInfo.Revisions[changeInfo.CurrentRevision]
-	if !ok {
-		return "", errors.New("current revision not found")
-	}
-	fetch, ok := rev.Fetch["http"]
-	if !ok {
-		return "", errors.New("fetch info not found")
-	}
-	origin, ref := fetch.URL, fetch.Ref
-
-	// We directly use Git here, rather than the Gerrit API, as there are
-	// limitations to the types of patches which you can create using said
-	// API. In particular patches which contain any binary content are hard
-	// to replicate from one instance to another using the API alone. Rather
-	// than adding workarounds for those edge cases, we just use Git
-	// directly, which makes the process extremely simple.
-	repo, err := x.Git.Clone(ctx, x.PublicRepoURL(repoName))
-	if err != nil {
-		return "", err
-	}
-	defer repo.Close()
-	ctx.Printf("cloned repo into %s", repo.dir)
-
-	ctx.Printf("fetching %s from %s", ref, origin)
-	if _, err := repo.RunCommand(ctx, "fetch", origin, ref); err != nil {
-		return "", err
-	}
-	ctx.Printf("fetched")
-	if _, err := repo.RunCommand(ctx, "cherry-pick", "FETCH_HEAD"); err != nil {
-		return "", err
-	}
-	ctx.Printf("cherry-picked")
-	var refspec strings.Builder
-	refspec.WriteString("HEAD:refs/for/master%l=Auto-Submit,l=Commit-Queue+1")
-	// We don't typically specify reviews in the historical releases;
-	// so this should NOT be hardcoded; instead, it should pull from
-	// some ACL somewhere?
-	reviewerEmails, err := coordinatorEmails([]string{})
-	if err != nil {
-		return "", err
-	}
-	for _, reviewer := range reviewerEmails {
-		fmt.Fprintf(&refspec, ",r=%s", reviewer)
-	}
-
-	// Beyond this point we don't want to retry any of the following steps.
-	ctx.DisableRetries()
-
-	ctx.Printf("pushing %s to %s", refspec.String(), x.PublicRepoURL(repoName))
-	gitPushOutput, err := repo.RunGitPush(ctx, x.PublicRepoURL(repoName), refspec.String())
-	if err != nil {
-		return "", err
-	}
-
-	matches := clRE.FindSubmatch(gitPushOutput)
-	if len(matches) != 2 {
-		return "", errors.New("unable to find CL number")
-	}
-
-	return string(matches[1]), err
+	return g.Wait()
 }
 
 func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *relmeta.ReleaseMilestone) (SentMail, error) {
@@ -391,12 +332,14 @@ func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *r
 	return SentMail{Subject: mc.Subject}, nil
 }
 
-func (x *PrivXPatch) ConvertInternalChangelists(ctx *wf.TaskContext, milestoneNum string, patches []*ref, reviewers []string) (*relmeta.ReleaseMilestone, error) {
-	external := make(map[string]string)
+func (x *PrivXPatch) ConvertInternalChangelists(ctx *wf.TaskContext, repoName, milestoneNum string, patches []*ref, reviewers []string) (*relmeta.ReleaseMilestone, error) {
+	var sps []*relmeta.SecurityPatch
 	for _, p := range patches {
-		for i, cl := range p.Disclosed {
-			external[p.Patch.Changelists[i]] = "https://go.dev/cl/" + cl
-		}
+		sps = append(sps, p.Patch)
+	}
+	external, err := ResolveExternalChangelists(ctx, x.PrivateGerrit, x.PublicGerrit, repoName, sps)
+	if err != nil {
+		return nil, err
 	}
 	rm, err := ConvertInternalChangelists(ctx, x.PrivateGerrit, milestoneNum, external, reviewers)
 	if err != nil {

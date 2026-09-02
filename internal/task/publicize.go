@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
+	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
+	"golang.org/x/build/relmeta"
 )
 
 type PublicizeParams struct {
@@ -21,6 +24,7 @@ type PublicizeParams struct {
 	PrivateOrigin  string
 	PrivateRef     string
 	SecurityCommit string
+	Labels         []string
 	Reviewers      []string
 }
 
@@ -75,7 +79,13 @@ func PublicizePrivateChanges(ctx *wf.TaskContext, in PublicizeParams) (changeIDs
 	}
 
 	var refspec strings.Builder
-	fmt.Fprintf(&refspec, "HEAD:refs/for/%s%%l=Auto-Submit+1,l=TryBot-Bypass+1", in.TargetBranch)
+	fmt.Fprintf(&refspec, "HEAD:refs/for/%s%%", in.TargetBranch)
+	for i, l := range in.Labels {
+		if i > 0 {
+			refspec.WriteString(",")
+		}
+		fmt.Fprintf(&refspec, "l=%s", l)
+	}
 	reviewerEmails, err := coordinatorEmails(in.Reviewers)
 	if err != nil {
 		return nil, fmt.Errorf("resolving coordinator emails (safe to retry this step): %w", err)
@@ -181,4 +191,44 @@ func checkAlreadyPublicized(ctx *wf.TaskContext, repo *GitDir, public GerritClie
 		return existingCLs, nil
 	}
 	return nil, nil
+}
+
+func ResolveExternalChangelists(ctx *wf.TaskContext, private, public GerritClient, project string, patches []*relmeta.SecurityPatch) (map[string]string, error) {
+	external := make(map[string]string)
+	for _, p := range patches {
+		if p.Track == relmeta.Public {
+			continue
+		}
+		for _, clURL := range p.Changelists {
+			_, num, ok := strings.Cut(clURL, "/+/")
+			if !ok {
+				continue
+			}
+			msg, err := private.GetCommitMessage(ctx, num)
+			if err != nil {
+				return nil, err
+			}
+			m := changeIDRe.FindStringSubmatch(msg)
+			if m == nil {
+				return nil, fmt.Errorf("private CL %s has no Change-Id footer (manual intervention required)", clURL)
+			}
+			query := fmt.Sprintf("project:%s branch:master change:%s", project, m[1])
+			ci, err := AwaitCondition(ctx, time.Minute, func() (*gerrit.ChangeInfo, bool, error) {
+				results, err := public.QueryChanges(ctx, query)
+				if err != nil {
+					return nil, false, err
+				}
+				if len(results) == 0 {
+					ctx.Printf("awaiting public master CL for %s (Change-Id %s)", clURL, m[1])
+					return nil, false, nil
+				}
+				return results[0], true, nil
+			})
+			if err != nil {
+				return nil, err
+			}
+			external[clURL] = fmt.Sprintf("https://go.dev/cl/%d", ci.ChangeNumber)
+		}
+	}
+	return external, nil
 }

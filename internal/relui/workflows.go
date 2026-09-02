@@ -569,41 +569,9 @@ func (b *BuildReleaseTasks) convertInternalChangelists(ctx *wf.TaskContext, rm *
 	if rm == nil || len(rm.Patches) == 0 {
 		return rm, nil
 	}
-	external := make(map[string]string)
-	for _, p := range rm.Patches {
-		if p.Track == relmeta.Public {
-			continue
-		}
-		for _, clURL := range p.Changelists {
-			_, num, ok := strings.Cut(clURL, "/+/")
-			if !ok {
-				continue
-			}
-			msg, err := b.PrivateGerritClient.GetCommitMessage(ctx, num)
-			if err != nil {
-				return nil, err
-			}
-			m := changeIDRe.FindStringSubmatch(msg)
-			if m == nil {
-				return nil, fmt.Errorf("private CL %s has no Change-Id footer (manual intervention required)", clURL)
-			}
-			query := fmt.Sprintf("project:%s branch:master change:%s", b.GerritProject, m[1])
-			ci, err := task.AwaitCondition(ctx, time.Minute, func() (*gerrit.ChangeInfo, bool, error) {
-				results, err := b.GerritClient.QueryChanges(ctx, query)
-				if err != nil {
-					return nil, false, err
-				}
-				if len(results) == 0 {
-					ctx.Printf("awaiting public master CL for %s (Change-Id %s)", clURL, m[1])
-					return nil, false, nil
-				}
-				return results[0], true, nil
-			})
-			if err != nil {
-				return nil, err
-			}
-			external[clURL] = fmt.Sprintf("https://go.dev/cl/%d", ci.ChangeNumber)
-		}
+	external, err := task.ResolveExternalChangelists(ctx, b.PrivateGerritClient, b.GerritClient, b.GerritProject, rm.Patches)
+	if err != nil {
+		return nil, err
 	}
 	converted, err := task.ConvertInternalChangelists(ctx, b.PrivateGerritClient, strconv.FormatInt(rm.ID, 10), external, reviewers)
 	if err != nil {
@@ -971,11 +939,10 @@ func (b *BuildReleaseTasks) publicizePrivateSecurityCLs(ctx *wf.TaskContext,
 		PrivateOrigin:  b.PrivateGerritClient.GitRepoURL(b.PrivateGerritProject),
 		PrivateRef:     "refs/heads/" + internalBranch,
 		SecurityCommit: securityCommit,
+		Labels:         []string{"Auto-Submit+1", "TryBot-Bypass+1"},
 		Reviewers:      reviewers,
 	})
 }
-
-var changeIDRe = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-f]{40})$`)
 
 // readSecurityRef reads the head of the internal release branch that corresponds
 // to the specified Go version. If the branch doesn't exist (as is the case when
