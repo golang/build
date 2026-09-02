@@ -167,24 +167,15 @@ func (x *PrivXPatch) ResolveVulnerableVersion(ctx *wf.TaskContext, tagged TagRep
 }
 
 func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, cp checkpointInfo, securityCommit string) ([]string, error) {
-	if publicHead, err := x.PublicGerrit.ReadBranchHead(ctx, repoName, "master"); err != nil {
-		return nil, fmt.Errorf("reading public branch head (safe to retry this step): %w", err)
-	} else if publicHead != cp.StartingHead {
-		return nil, fmt.Errorf("head of public master is %q, but was %q when the checkpoint was created; retrying this step alone will not help; restart the workflow to re-coalesce against the current head", publicHead, cp.StartingHead)
-	}
-	if head, err := x.PrivateGerrit.ReadBranchHead(ctx, repoName, cp.Branch); err != nil {
-		return nil, fmt.Errorf("reading private branch head (safe to retry this step): %w", err)
-	} else if head != securityCommit {
-		return nil, fmt.Errorf("head of private %q branch is %q, but was %q after submissions; retrying this step alone will not help; restart the workflow to re-coalesce against the current head", cp.Branch, head, securityCommit)
-	}
 	return PublicizePrivateChanges(ctx, PublicizeParams{
 		Git:            x.Git,
 		Public:         x.PublicGerrit,
 		Project:        repoName,
 		TargetBranch:   "master",
 		StartingHead:   cp.StartingHead,
-		PrivateOrigin:  x.PrivateGerrit.GitRepoURL(repoName),
-		PrivateRef:     "refs/heads/" + cp.Branch,
+		Private:        x.PrivateGerrit,
+		PrivateProject: repoName,
+		PrivateBranch:  cp.Branch,
 		SecurityCommit: securityCommit,
 		Labels:         []string{"Auto-Submit+1", "Commit-Queue+1"},
 	})

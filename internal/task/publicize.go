@@ -21,8 +21,9 @@ type PublicizeParams struct {
 	Project        string
 	TargetBranch   string
 	StartingHead   string
-	PrivateOrigin  string
-	PrivateRef     string
+	Private        GerritClient
+	PrivateProject string
+	PrivateBranch  string
 	SecurityCommit string
 	Labels         []string
 	Reviewers      []string
@@ -48,6 +49,16 @@ func PublicizePrivateChanges(ctx *wf.TaskContext, in PublicizeParams) (changeIDs
 
 		Finally we parse out the newly created CL numbers and return those to be awaited for.
 	*/
+	if head, err := in.Public.ReadBranchHead(ctx, in.Project, in.TargetBranch); err != nil {
+		return nil, fmt.Errorf("reading public branch head (safe to retry this step): %w", err)
+	} else if head != in.StartingHead {
+		return nil, fmt.Errorf("head of public %q branch is %q, want %q; retrying this step alone will not help; restart the release workflow to re-coalesce against the current head", in.TargetBranch, head, in.StartingHead)
+	}
+	if head, err := in.Private.ReadBranchHead(ctx, in.PrivateProject, in.PrivateBranch); err != nil {
+		return nil, fmt.Errorf("reading private branch head (safe to retry this step): %w", err)
+	} else if head != in.SecurityCommit {
+		return nil, fmt.Errorf("head of private %q branch is %q, want %q; retrying this step alone will not help; restart the release workflow to re-coalesce against the current head", in.PrivateBranch, head, in.SecurityCommit)
+	}
 	publicOrigin := in.Public.GitRepoURL(in.Project)
 	repo, err := in.Git.CloneBranch(ctx, publicOrigin, in.TargetBranch)
 	if err != nil {
@@ -56,8 +67,9 @@ func PublicizePrivateChanges(ctx *wf.TaskContext, in PublicizeParams) (changeIDs
 	defer repo.Close()
 	ctx.Printf("cloned public repo")
 
-	ctx.Printf("fetching %s from %s", in.PrivateRef, in.PrivateOrigin)
-	if _, err := repo.RunCommand(ctx, "fetch", in.PrivateOrigin, in.PrivateRef); err != nil {
+	privateOrigin, privateRef := in.Private.GitRepoURL(in.PrivateProject), "refs/heads/"+in.PrivateBranch
+	ctx.Printf("fetching %s from %s", privateRef, privateOrigin)
+	if _, err := repo.RunCommand(ctx, "fetch", privateOrigin, privateRef); err != nil {
 		return nil, fmt.Errorf("fetching private branch (safe to retry this step): %w", err)
 	}
 	ctx.Printf("fetched")

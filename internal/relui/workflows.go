@@ -908,36 +908,15 @@ func (b *BuildReleaseTasks) publicizePrivateSecurityCLs(ctx *wf.TaskContext,
 		return nil, nil
 	}
 
-	// Detect and handle the unexpected case of either the public or internal release branches
-	// changing from the time the workflow was started.
-	if releaseDayPublicHead, err := b.GerritClient.ReadBranchHead(ctx, b.GerritProject, targetBranch); err != nil {
-		return nil, fmt.Errorf("reading public branch head (safe to retry this step): %w", err)
-	} else if releaseDayPublicHead != startingHead {
-		// Something is unexpected if the public release branch now doesn't match what it was
-		// when the workflow started. Whether or not it's possible to proceed depends on what
-		// exactly happened. For now handle this by refusing to proceed, but if we learn that
-		// it's worth handling this differently, we'll revisit this.
-		return nil, fmt.Errorf("head of public %q branch is %q, but was %q when the workflow started; retrying this step alone will not help; restart the release workflow to re-coalesce against the current head", targetBranch, releaseDayPublicHead, startingHead)
-	}
-	internalBranch := fmt.Sprintf("internal-release-branch.%s", version)
-	if releaseDayPrivateHead, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, internalBranch); err != nil {
-		return nil, fmt.Errorf("reading private branch head (safe to retry this step): %w", err)
-	} else if releaseDayPrivateHead != securityCommit {
-		// Something is unexpected if the internal release branch now doesn't match what it was
-		// when the workflow started. Whether or not it's possible to proceed depends on what
-		// exactly happened. For now handle this by refusing to proceed, but if we learn that
-		// it's worth handling this differently, we'll revisit this.
-		return nil, fmt.Errorf("head of private %q branch is %q, but was %q when the workflow started; retrying this step alone will not help; restart the release workflow to re-coalesce against the current head", internalBranch, releaseDayPrivateHead, securityCommit)
-	}
-
 	return task.PublicizePrivateChanges(ctx, task.PublicizeParams{
 		Git:            b.Git,
 		Public:         b.GerritClient,
 		Project:        b.GerritProject,
 		TargetBranch:   targetBranch,
 		StartingHead:   startingHead,
-		PrivateOrigin:  b.PrivateGerritClient.GitRepoURL(b.PrivateGerritProject),
-		PrivateRef:     "refs/heads/" + internalBranch,
+		Private:        b.PrivateGerritClient,
+		PrivateProject: b.PrivateGerritProject,
+		PrivateBranch:  "internal-release-branch." + version,
 		SecurityCommit: securityCommit,
 		Labels:         []string{"Auto-Submit+1", "TryBot-Bypass+1"},
 		Reviewers:      reviewers,
