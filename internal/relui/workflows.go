@@ -590,58 +590,10 @@ func addSingleReleaseWorkflow(
 
 	// Read the security ref for internal branches.
 	securityCommit := wf.Task1(wd, "Read security ref", build.readSecurityRef, nextVersion, wf.After(securityPrereqs...))
-
-	confirmPrivateSecurityFixes := wf.Action4(wd, "Confirm PRIVATE-track security CLs", func(ctx *wf.TaskContext,
-		version, targetBranch, startingHead, securityCommit string,
-	) error {
-		if securityCommit == "" {
-			var summary strings.Builder
-			fmt.Fprintf(&summary, "No PRIVATE-track security fix CLs. Will build from public %s as is.\n", targetBranch)
-
-			ctx.Printf("\n\n%s\nApprove this task if that is expected.", &summary)
-			return build.ApproveAction(ctx)
-		}
-
-		if kind == task.KindBeta {
-			// It's not viable to include PRIVATE-track security fixes in beta releases,
-			// not as long as they're built from the main development branch and that branch
-			// can't be frozen for the beta release. But it doesn't matter since we don't do
-			// beta releases now anyway.
-			return fmt.Errorf("PRIVATE-track security CLs for beta release kind is not supported")
-		} else if !strings.HasPrefix(targetBranch, "release-branch.go1.") {
-			return fmt.Errorf("upstreaming PRIVATE-track security CLs to branch %q is not supported", targetBranch)
-		}
-
-		// Fetch a list of security commits, run some checks on it and present a summary.
-		commits, err := build.PrivateGerritClient.ListCommits(ctx, build.PrivateGerritProject, securityCommit, startingHead)
-		if err != nil {
-			return err
-		}
-		if len(commits) == 0 {
-			return fmt.Errorf("a security commit was specified, but the list of commits to be upstreamed is empty")
-		}
-		if bottomSecurityCL := commits[len(commits)-1]; len(bottomSecurityCL.Parents) != 1 {
-			return fmt.Errorf("bottom-most security commit %q has %d parents, want 1 parent", bottomSecurityCL.Commit, len(bottomSecurityCL.Parents))
-		} else if bottomSecurityCL.Parents[0] != startingHead {
-			// The security fixes were coalesced onto a public head that has since
-			// diverged from the current public release-branch head. Because each
-			// coalesce run now produces a fresh timestamped checkpoint and the old
-			// artifacts are left untouched, the cheap and safe remedy is to restart
-			// the workflow so the coalesce re-runs against the current head.
-			return fmt.Errorf("bottom-most security commit %q's parent is %q, but the current public %s head is %q; the coalesced security fixes are stale. Restart the release workflow to re-coalesce against the current head", bottomSecurityCL.Commit, bottomSecurityCL.Parents[0], targetBranch, startingHead)
-		}
-		var summary strings.Builder
-		fmt.Fprintf(&summary, "Will build with %d security fix CL(s) on top of public %s:\n\n", len(commits), targetBranch)
-		for _, c := range commits {
-			fmt.Fprintf(&summary, "• %.8s %s\n", c.Commit, c.Title())
-		}
-
-		ctx.Printf("\n\n%s\nApprove this task if that is expected.", &summary)
-		return build.ApproveAction(ctx)
-	}, nextVersion, branchVal, startingHead, securityCommit)
-	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, startingHead, securityCommit, versionFile, wf.After(checkedStartingBlockingIssues), wf.After(confirmPrivateSecurityFixes))
+	confirmedPrivateSecurityCLs := wf.Action5(wd, "Confirm PRIVATE-track security CLs", build.confirmPrivateSecurityCLs, nextVersion, kindVal, branchVal, startingHead, securityCommit)
 
 	// Build, test, and sign release.
+	srcSpec := wf.Task4(wd, "Select source spec", build.getGitSource, branchVal, startingHead, securityCommit, versionFile, wf.After(checkedStartingBlockingIssues), wf.After(confirmedPrivateSecurityCLs))
 	source, signedAndTestedArtifacts, modules := build.addBuildTasks(wd, major, kind, nextVersion, timestamp, srcSpec)
 
 	// Wait for planned release day,
@@ -835,6 +787,55 @@ type BuildReleaseTasks struct {
 	SwarmingClient           task.SwarmingClient
 	ApproveAction            func(*wf.TaskContext) error
 	GitHub                   task.GitHubClientInterface
+}
+
+func (b *BuildReleaseTasks) confirmPrivateSecurityCLs(ctx *wf.TaskContext,
+	version string, kind task.ReleaseKind, targetBranch, startingHead, securityCommit string,
+) error {
+	if securityCommit == "" {
+		var summary strings.Builder
+		fmt.Fprintf(&summary, "No PRIVATE-track security fix CLs. Will build from public %s as is.\n", targetBranch)
+
+		ctx.Printf("\n\n%s\nApprove this task if that is expected.", &summary)
+		return b.ApproveAction(ctx)
+	}
+
+	if kind == task.KindBeta {
+		// It's not viable to include PRIVATE-track security fixes in beta releases,
+		// not as long as they're built from the main development branch and that branch
+		// can't be frozen for the beta release. But it doesn't matter since we don't do
+		// beta releases now anyway.
+		return fmt.Errorf("PRIVATE-track security CLs for beta release kind is not supported")
+	} else if !strings.HasPrefix(targetBranch, "release-branch.go1.") {
+		return fmt.Errorf("upstreaming PRIVATE-track security CLs to branch %q is not supported", targetBranch)
+	}
+
+	// Fetch a list of security commits, run some checks on it and present a summary.
+	commits, err := b.PrivateGerritClient.ListCommits(ctx, b.PrivateGerritProject, securityCommit, startingHead)
+	if err != nil {
+		return err
+	}
+	if len(commits) == 0 {
+		return fmt.Errorf("a security commit was specified, but the list of commits to be upstreamed is empty")
+	}
+	if bottomSecurityCL := commits[len(commits)-1]; len(bottomSecurityCL.Parents) != 1 {
+		return fmt.Errorf("bottom-most security commit %q has %d parents, want 1 parent", bottomSecurityCL.Commit, len(bottomSecurityCL.Parents))
+	} else if bottomSecurityCL.Parents[0] != startingHead {
+		// The security fixes were coalesced onto a public head that has since
+		// diverged from the current public release-branch head. Because each
+		// coalesce run now produces a fresh timestamped checkpoint and the old
+		// artifacts are left untouched, the cheap and safe remedy is to restart
+		// the workflow so the coalesce re-runs against the current head.
+		return fmt.Errorf("bottom-most security commit %q's parent is %q, but the current public %s head is %q; the coalesced security fixes are stale. Restart the release workflow to re-coalesce against the current head", bottomSecurityCL.Commit, bottomSecurityCL.Parents[0], targetBranch, startingHead)
+	}
+	var summary strings.Builder
+	fmt.Fprintf(&summary, "Will build with %d security fix CL(s) on top of public %s:\n\n", len(commits), targetBranch)
+	for _, c := range commits {
+		fmt.Fprintf(&summary, "• %.8s %s\n", c.Commit, c.Title())
+	}
+
+	ctx.Printf("\n\n%s\nApprove this task if that is expected.", &summary)
+	return b.ApproveAction(ctx)
 }
 
 func (b *BuildReleaseTasks) publicizePrivateSecurityCLs(ctx *wf.TaskContext,
