@@ -196,3 +196,27 @@ func SubmitPrivateChanges(ctx *wf.TaskContext, client GerritClient, project stri
 	}
 	return patches, nil
 }
+
+func AwaitSubmitted(ctx *wf.TaskContext, client GerritClient, changeIDs []string) error {
+	if len(changeIDs) == 0 {
+		ctx.Printf("No CLs were necessary.")
+		return nil
+	}
+	ctx.Printf("Awaiting review/submit of %d changes.", len(changeIDs))
+	for _, c := range changeIDs {
+		ctx.Printf("• %s", ChangeLink(c))
+	}
+	_, err := AwaitCondition(ctx, 10*time.Second, func() (struct{}, bool, error) {
+		for _, c := range changeIDs {
+			_, submitted, err := client.Submitted(ctx, c, "")
+			if err != nil {
+				return struct{}{}, false, err
+			}
+			if !submitted {
+				return struct{}{}, false, nil
+			}
+		}
+		return struct{}{}, true, nil
+	})
+	return err
+}

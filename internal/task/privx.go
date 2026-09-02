@@ -17,7 +17,6 @@ import (
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/build/relmeta"
 	"golang.org/x/mod/semver"
-	"golang.org/x/sync/errgroup"
 	"golang.org/x/vulndb/report"
 )
 
@@ -57,7 +56,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	// block for manual review before pushing changes to public
 	okayToDisclose := wf.Action0(wd, "Wait to disclose", x.ApproveAction, wf.After(securityCommit)) // TODO(nealpatel): Add warning text
 	disclosed := wf.Task3(wd, "Publish changes", x.PublishChanges, targetRepo, checkpoint, securityCommit, wf.After(okayToDisclose))
-	submitted := wf.Action1(wd, "Wait for submission of published changes", x.AwaitPublicSubmissions, disclosed)
+	submitted := wf.Action2(wd, "Wait for submission of published changes", AwaitSubmitted, wf.Const(x.PublicGerrit), disclosed)
 	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, availableRepos, targetRepo, skipPostSubmit, reviewers, wf.After(submitted))
 	vulnerableAt := wf.Task1(wd, "Resolve vulnerable version", x.ResolveVulnerableVersion, tagged)
 
@@ -179,20 +178,6 @@ func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, cp che
 		SecurityCommit: securityCommit,
 		Labels:         []string{"Auto-Submit+1", "Commit-Queue+1"},
 	})
-}
-
-func (x *PrivXPatch) AwaitPublicSubmissions(ctx *wf.TaskContext, changeIDs []string) error {
-	var g errgroup.Group
-	for _, cl := range changeIDs {
-		g.Go(func() error {
-			ctx.Printf("Awaiting review/submit of %v", cl)
-			_, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
-				return x.PublicGerrit.Submitted(ctx, cl, "")
-			})
-			return err
-		})
-	}
-	return g.Wait()
 }
 
 func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *relmeta.ReleaseMilestone) (SentMail, error) {

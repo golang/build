@@ -689,31 +689,7 @@ func addSingleReleaseWorkflow(
 	waitReleaseApproval := wf.Action0(wd, "Wait for Release Coordinator Approval", build.ApproveAction, wf.After(signedAndTestedArtifacts))
 	recheckedBlockingIssues := wf.Action3(wd, "Re-check blocking issues", milestone.CheckBlockers, milestones, nextVersion, kindVal, wf.After(waitReleaseApproval))
 	upstreamedPrivateSecurityCLs := wf.Task5(wd, "Publicize PRIVATE-track security fixes (if any)", build.publicizePrivateSecurityCLs, nextVersion, branchVal, startingHead, securityCommit, coordinators, wf.After(waitReleaseApproval), wf.After(recheckedBlockingIssues))
-	okayToTagAndPublish := wf.Action1(wd, "Wait for submission of upstreamed PRIVATE-track security CLs (if any)", func(ctx *wf.TaskContext, changeIDs []string) error {
-		if len(changeIDs) == 0 {
-			ctx.Printf("No CLs were necessary.")
-			return nil
-		}
-		ctx.Printf("Awaiting review/submit of %d changes.", len(changeIDs))
-		for _, c := range changeIDs {
-			ctx.Printf("• %s", task.ChangeLink(c))
-		}
-		_, err := task.AwaitCondition(ctx, time.Minute, func() (struct{}, bool, error) {
-			for _, c := range changeIDs {
-				_, submitted, err := build.GerritClient.Submitted(ctx, c, "")
-				if err != nil {
-					return struct{}{}, false, err
-				}
-				if !submitted {
-					// At least one CL hasn't been submitted yet.
-					return struct{}{}, false, nil
-				}
-			}
-			// All CLs submitted.
-			return struct{}{}, true, nil
-		})
-		return err
-	}, upstreamedPrivateSecurityCLs)
+	okayToTagAndPublish := wf.Action2(wd, "Wait for submission of upstreamed PRIVATE-track security CLs (if any)", task.AwaitSubmitted, wf.Const(build.GerritClient), upstreamedPrivateSecurityCLs)
 
 	dlcl := wf.Task5(wd, "Mail DL CL", version.MailDLCL, wf.Const(major), kindVal, nextVersion, coordinators, wf.Const(false), wf.After(okayToTagAndPublish))
 	dlclCommit := wf.Task2(wd, "Wait for DL CL submission", version.AwaitCL, dlcl, wf.Const(""))
