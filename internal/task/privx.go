@@ -59,7 +59,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	patches = wf.Task2(wd, "Move and rebase all changes per x repo", x.MoveAndRebaseAll, branch, patches)
 	patches = wf.Task1(wd, "Waiting for submissions", x.AwaitSubmissions, patches)
 	// block for manual review before pushing changes to public
-	okayToDisclose := wf.Action0(wd, "Wait to disclose", x.ApproveAction) // TODO(nealpatel): Add warning text
+	okayToDisclose := wf.Action0(wd, "Wait to disclose", x.ApproveAction, wf.After(patches)) // TODO(nealpatel): Add warning text
 	patches = wf.Task2(wd, "Publish changes", x.PublishChanges, targetRepo, patches, wf.After(okayToDisclose))
 	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, availableRepos, targetRepo, skipPostSubmit, reviewers, wf.After(patches))
 	vulnerableAt := wf.Task1(wd, "Resolve vulnerable version", x.ResolveVulnerableVersion, tagged)
