@@ -741,7 +741,7 @@ func TestMoveAndRebaseAllRebaseSuccess(t *testing.T) {
 			Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
 		}}
 
-		result, err := p.MoveAndRebaseAll(ctx, checkpointInfo{Branch: "checkpoint-test"}, patches)
+		result, err := p.MoveAndRebaseAll(ctx, Checkpoint{Branch: "checkpoint-test"}, patches)
 		if err != nil {
 			t.Fatalf("MoveAndRebaseAll: %v", err)
 		}
@@ -787,7 +787,7 @@ func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
 			Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
 		}}
 
-		result, err := p.MoveAndRebaseAll(ctx, checkpointInfo{Branch: "checkpoint-test"}, patches)
+		result, err := p.MoveAndRebaseAll(ctx, Checkpoint{Branch: "checkpoint-test"}, patches)
 		if err != nil {
 			t.Fatalf("MoveAndRebaseAll with already-destined CL: %v", err)
 		}

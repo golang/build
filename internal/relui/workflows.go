@@ -982,26 +982,16 @@ func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta
 	return patches, nil
 }
 
-func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi securityBranchInfo, patches []*task.PatchChanges) (string, error) {
+func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi securityBranchInfo, patches []*task.PatchChanges) (task.Checkpoint, error) {
 	if len(patches) == 0 {
 		ctx.Printf("No PRIVATE-track security patches; skipping checkpoint branch creation.")
-		return "", nil
+		return task.Checkpoint{}, nil
 	}
-	publicHead, err := b.PrivateGerritClient.ReadBranchHead(ctx, b.PrivateGerritProject, "public")
-	if err != nil {
-		return "", err
-	}
-
-	// Append the formatted timestamp to make any restarts idempotent.
-	checkpointName := bi.CheckpointName + "-" + time.Now().UTC().Format("20060102-150405")
-	if _, err := b.PrivateGerritClient.CreateBranch(ctx, b.PrivateGerritProject, checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
-		return "", err
-	}
-	return checkpointName, nil
+	return task.CreateCheckpoint(ctx, b.PrivateGerritClient, b.PrivateGerritProject, bi.CheckpointName)
 }
 
-func (b *BuildReleaseTasks) moveAndRebasePrivateChanges(ctx *wf.TaskContext, checkpointBranch string, patches []*task.PatchChanges) ([]*task.PatchChanges, error) {
-	return task.MoveAndRebaseAll(ctx, b.PrivateGerritClient, checkpointBranch, patches)
+func (b *BuildReleaseTasks) moveAndRebasePrivateChanges(ctx *wf.TaskContext, cp task.Checkpoint, patches []*task.PatchChanges) ([]*task.PatchChanges, error) {
+	return task.MoveAndRebaseAll(ctx, b.PrivateGerritClient, cp, patches)
 }
 
 func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, bi securityBranchInfo, patches []*task.PatchChanges) ([]string, error) {

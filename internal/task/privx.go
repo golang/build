@@ -9,10 +9,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/google/go-github/v74/github"
-	"golang.org/x/build/gerrit"
 	"golang.org/x/build/internal/relui/groups"
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/build/relmeta"
@@ -49,7 +47,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	rm := wf.Task1(wd, "Pull release milestone", x.PullMilestone, milestoneNum)
 	patches := wf.Task3(wd, "Get changes for target x repo", x.FilterPatches, rm, targetRepo, availableRepos)
-	checkpoint := wf.Task1(wd, "Create checkpoint branch", x.CreateCheckpoint, targetRepo)
+	checkpoint := wf.Task3(wd, "Create checkpoint branch", CreateCheckpoint, wf.Const(x.PrivateGerrit), targetRepo, wf.Const("public"))
 	patches = wf.Task2(wd, "Move and rebase all changes per x repo", x.MoveAndRebaseAll, checkpoint, patches)
 	patches = wf.Task3(wd, "Waiting for submissions", SubmitPrivateChanges, wf.Const(x.PrivateGerrit), targetRepo, patches)
 	securityCommit := wf.Task2(wd, "Read checkpoint head", x.ReadCheckpointHead, targetRepo, checkpoint, wf.After(patches))
@@ -100,11 +98,6 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 	return CheckPrivateChanges(ctx, x.PrivateGerrit, target, sps)
 }
 
-type checkpointInfo struct {
-	Branch       string
-	StartingHead string
-}
-
 // repoName returns the repo implied by the
 // modPkg; for example, 'golang.org/x/crypto',
 // returns 'crypto' as the repo.
@@ -121,25 +114,12 @@ func repoName(modPkg string) (string, error) {
 	return repo, nil
 }
 
-func (x *PrivXPatch) CreateCheckpoint(ctx *wf.TaskContext, repoName string) (checkpointInfo, error) {
-	publicHead, err := x.PrivateGerrit.ReadBranchHead(ctx, repoName, "public")
-	if err != nil {
-		return checkpointInfo{}, err
-	}
-	// Append the formatted timestamp to make any restarts idempotent.
-	checkpointName := fmt.Sprintf("public-%s", time.Now().UTC().Format("20060102-150405"))
-	if _, err := x.PrivateGerrit.CreateBranch(ctx, repoName, checkpointName, gerrit.BranchInput{Revision: publicHead}); err != nil {
-		return checkpointInfo{}, err
-	}
-	return checkpointInfo{Branch: checkpointName, StartingHead: publicHead}, nil
-}
-
-func (x *PrivXPatch) ReadCheckpointHead(ctx *wf.TaskContext, repoName string, cp checkpointInfo) (string, error) {
+func (x *PrivXPatch) ReadCheckpointHead(ctx *wf.TaskContext, repoName string, cp Checkpoint) (string, error) {
 	return x.PrivateGerrit.ReadBranchHead(ctx, repoName, cp.Branch)
 }
 
-func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, cp checkpointInfo, patches []*PatchChanges) ([]*PatchChanges, error) {
-	return MoveAndRebaseAll(ctx, x.PrivateGerrit, cp.Branch, patches)
+func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, cp Checkpoint, patches []*PatchChanges) ([]*PatchChanges, error) {
+	return MoveAndRebaseAll(ctx, x.PrivateGerrit, cp, patches)
 }
 
 func (x *PrivXPatch) ResolveVulnerableVersion(ctx *wf.TaskContext, tagged TagRepo) (*report.Version, error) {
@@ -165,7 +145,7 @@ func (x *PrivXPatch) ResolveVulnerableVersion(ctx *wf.TaskContext, tagged TagRep
 	return report.VulnerableAt(predecessor[1:]), nil
 }
 
-func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, cp checkpointInfo, securityCommit string) ([]string, error) {
+func (x *PrivXPatch) PublishChanges(ctx *wf.TaskContext, repoName string, cp Checkpoint, securityCommit string) ([]string, error) {
 	return PublicizePrivateChanges(ctx, PublicizeParams{
 		Git:            x.Git,
 		Public:         x.PublicGerrit,

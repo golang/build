@@ -1030,10 +1030,10 @@ func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
 		if err != nil {
 			t.Fatalf("first createSecurityCheckpoint: %v", err)
 		}
-		if !strings.HasPrefix(first, bi.CheckpointName+"-") {
-			t.Errorf("checkpoint name %q is not prefixed with %q", first, bi.CheckpointName+"-")
+		if !strings.HasPrefix(first.Branch, bi.CheckpointName+"-") {
+			t.Errorf("checkpoint name %q is not prefixed with %q", first.Branch, bi.CheckpointName+"-")
 		}
-		firstHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", first)
+		firstHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", first.Branch)
 		if err != nil {
 			t.Fatalf("reading first checkpoint head: %v", err)
 		}
@@ -1050,12 +1050,12 @@ func TestMinorReleaseSecurityCoalesceRestart(t *testing.T) {
 				t.Fatalf("second createSecurityCheckpoint: %v", err)
 			}
 			t.Logf("same-second restart collided on the timestamped checkpoint name (expected): %v", err)
-		} else if second == first {
-			t.Errorf("restart reused checkpoint name %q; want a distinct timestamped branch", second)
+		} else if second.Branch == first.Branch {
+			t.Errorf("restart reused checkpoint name %q; want a distinct timestamped branch", second.Branch)
 		}
 
 		// The first run's checkpoint branch is left untouched.
-		gotHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", first)
+		gotHead, err := privGerrit.ReadBranchHead(deps.ctx, "go", first.Branch)
 		if err != nil {
 			t.Fatalf("re-reading first checkpoint head: %v", err)
 		}
@@ -1936,8 +1936,8 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 			t.Fatalf("got %d CLs, want %d", len(moved[0].Changes), len(cls[0].Changes))
 		}
 		for _, ci := range moved[0].Changes {
-			if ci.Branch != checkpoint {
-				t.Errorf("CL %d branch = %q, want %q", ci.ChangeNumber, ci.Branch, checkpoint)
+			if ci.Branch != checkpoint.Branch {
+				t.Errorf("CL %d branch = %q, want %q", ci.ChangeNumber, ci.Branch, checkpoint.Branch)
 			}
 		}
 	})
@@ -1955,7 +1955,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 		// by a prior run, so moveAndRebasePrivateChanges sees them as already
 		// on the correct branch and tolerates the 409.
 		for _, ci := range cls[0].Changes {
-			ci.Branch = checkpoint
+			ci.Branch = checkpoint.Branch
 		}
 
 		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
@@ -2435,7 +2435,7 @@ func TestMoveAndRebasePrivateChangesErrors(t *testing.T) {
 			Submittable: true,
 		}
 
-		_, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, "whatever", []*task.PatchChanges{{Patch: coalesceRM().Patches[0], Changes: []*gerrit.ChangeInfo{fakeCL}}})
+		_, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, task.Checkpoint{Branch: "whatever"}, []*task.PatchChanges{{Patch: coalesceRM().Patches[0], Changes: []*gerrit.ChangeInfo{fakeCL}}})
 		if err == nil {
 			t.Fatal("expected error for nonexistent CL")
 		}
@@ -2643,7 +2643,7 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		moved, err := build.moveAndRebasePrivateChanges(taskCtx, "checkpoint-rebase-test", []*task.PatchChanges{{
+		moved, err := build.moveAndRebasePrivateChanges(taskCtx, task.Checkpoint{Branch: "checkpoint-rebase-test"}, []*task.PatchChanges{{
 			Patch: &relmeta.SecurityPatch{
 				ID:            1,
 				Track:         relmeta.Private,

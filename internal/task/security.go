@@ -40,7 +40,7 @@ func insertRiders(message, riders string) string {
 	return message + "\n\n" + riders + "\n"
 }
 
-func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, branch string, patches []*PatchChanges) ([]*PatchChanges, error) {
+func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, cp Checkpoint, patches []*PatchChanges) ([]*PatchChanges, error) {
 	for _, p := range patches {
 		riders, err := securityRiders(p.Patch)
 		if err != nil {
@@ -58,7 +58,7 @@ func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, branch string, p
 				p.Changes[i] = fresh
 				continue
 			}
-			movedCI, err := client.MoveChange(ctx, ci.ID, branch)
+			movedCI, err := client.MoveChange(ctx, ci.ID, cp.Branch)
 			if err != nil {
 				var httpErr *gerrit.HTTPError
 				if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
@@ -219,4 +219,22 @@ func AwaitSubmitted(ctx *wf.TaskContext, client GerritClient, changeIDs []string
 		return struct{}{}, true, nil
 	})
 	return err
+}
+
+type Checkpoint struct {
+	Branch       string
+	StartingHead string
+}
+
+func CreateCheckpoint(ctx *wf.TaskContext, client GerritClient, project, prefix string) (Checkpoint, error) {
+	publicHead, err := client.ReadBranchHead(ctx, project, "public")
+	if err != nil {
+		return Checkpoint{}, err
+	}
+	// Append the formatted timestamp to make any restarts idempotent.
+	branch := prefix + "-" + time.Now().UTC().Format("20060102-150405")
+	if _, err := client.CreateBranch(ctx, project, branch, gerrit.BranchInput{Revision: publicHead}); err != nil {
+		return Checkpoint{}, err
+	}
+	return Checkpoint{Branch: branch, StartingHead: publicHead}, nil
 }
