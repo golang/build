@@ -1928,7 +1928,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		moved, err := task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -1958,7 +1958,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 			ci.Branch = checkpoint.Branch
 		}
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		moved, err := task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges on already-moved CLs: %v", err)
 		}
@@ -1981,7 +1981,7 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 		cls[0].Changes[0].Status = gerrit.ChangeStatusMerged
 		cls[0].Changes[0].Submittable = false
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		moved, err := task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges with merged CL: %v", err)
 		}
@@ -2006,7 +2006,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2034,7 +2034,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2279,7 +2279,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2337,7 +2337,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2425,7 +2425,7 @@ func TestCheckPrivateChangesErrors(t *testing.T) {
 
 func TestMoveAndRebasePrivateChangesErrors(t *testing.T) {
 	workflowtest.Subtest(t, "get_change_error", func(t *testing.T) {
-		deps, _ := newMinorCoalesceTestDeps(t, true)
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "move-err"}}
 
 		fakeCL := &gerrit.ChangeInfo{
@@ -2435,7 +2435,7 @@ func TestMoveAndRebasePrivateChangesErrors(t *testing.T) {
 			Submittable: true,
 		}
 
-		_, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, task.Checkpoint{Branch: "whatever"}, []*task.PatchChanges{{Patch: coalesceRM().Patches[0], Changes: []*gerrit.ChangeInfo{fakeCL}}})
+		_, err := task.MoveAndRebaseAll(taskCtx, privGerrit, task.Checkpoint{Branch: "whatever"}, []*task.PatchChanges{{Patch: coalesceRM().Patches[0], Changes: []*gerrit.ChangeInfo{fakeCL}}})
 		if err == nil {
 			t.Fatal("expected error for nonexistent CL")
 		}
@@ -2452,7 +2452,7 @@ func TestSubmitPrivateChangesError(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
+		cls, err = task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2633,17 +2633,12 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		build := &BuildReleaseTasks{
-			PrivateGerritClient:  privGerrit,
-			PrivateGerritProject: "go",
-		}
-
 		ci, err := privGerrit.GetChange(ctx, "rebase-cl")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		moved, err := build.moveAndRebasePrivateChanges(taskCtx, task.Checkpoint{Branch: "checkpoint-rebase-test"}, []*task.PatchChanges{{
+		moved, err := task.MoveAndRebaseAll(taskCtx, privGerrit, task.Checkpoint{Branch: "checkpoint-rebase-test"}, []*task.PatchChanges{{
 			Patch: &relmeta.SecurityPatch{
 				ID:            1,
 				Track:         relmeta.Private,

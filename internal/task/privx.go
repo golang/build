@@ -48,7 +48,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	rm := wf.Task1(wd, "Pull release milestone", x.PullMilestone, milestoneNum)
 	patches := wf.Task3(wd, "Get changes for target x repo", x.FilterPatches, rm, targetRepo, availableRepos)
 	checkpoint := wf.Task3(wd, "Create checkpoint branch", CreateCheckpoint, wf.Const(x.PrivateGerrit), targetRepo, wf.Const("public"))
-	patches = wf.Task2(wd, "Move and rebase all changes per x repo", x.MoveAndRebaseAll, checkpoint, patches)
+	patches = wf.Task3(wd, "Move and rebase all changes per x repo", MoveAndRebaseAll, wf.Const(x.PrivateGerrit), checkpoint, patches)
 	patches = wf.Task3(wd, "Waiting for submissions", SubmitPrivateChanges, wf.Const(x.PrivateGerrit), targetRepo, patches)
 	securityCommit := wf.Task2(wd, "Read checkpoint head", x.ReadCheckpointHead, targetRepo, checkpoint, wf.After(patches))
 	// block for manual review before pushing changes to public
@@ -65,7 +65,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	wf.Output(wd, "Announcement URL", announcementURL)
 
 	// post-announcement tasks
-	updated := wf.Action1(wd, "Update GitHub issues", x.UpdateGitHubIssues, rm, wf.After(announcementURL))
+	updated := wf.Action2(wd, "Update GitHub issues", UpdateGitHubIssues, wf.Const(x.GitHub), rm, wf.After(announcementURL))
 	converted := wf.Task6(wd, "Convert internal changelists", ConvertPatchChangelists, wf.Const(x.PrivateGerrit), wf.Const(x.PublicGerrit), targetRepo, rm, patches, securityReviewers, wf.After(announcementURL))
 	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, converted, vulnerableAt, tagged, announcementURL, securityReviewers, wf.After(updated))
 	wf.Output(wd, "File VulnDB Reports", changeID)
@@ -116,10 +116,6 @@ func repoName(modPkg string) (string, error) {
 
 func (x *PrivXPatch) ReadCheckpointHead(ctx *wf.TaskContext, repoName string, cp Checkpoint) (string, error) {
 	return x.PrivateGerrit.ReadBranchHead(ctx, repoName, cp.Branch)
-}
-
-func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, cp Checkpoint, patches []*PatchChanges) ([]*PatchChanges, error) {
-	return MoveAndRebaseAll(ctx, x.PrivateGerrit, cp, patches)
 }
 
 func (x *PrivXPatch) ResolveVulnerableVersion(ctx *wf.TaskContext, tagged TagRepo) (*report.Version, error) {
@@ -229,10 +225,6 @@ func (x *PrivXPatch) vulnModuleInfo(p *relmeta.SecurityPatch, tagged TagRepo, vu
 		Versions:     report.Versions{report.Fixed(strings.TrimPrefix(tagged.NewerVersion, "v"))},
 		VulnerableAt: vulnerableAt,
 	}, nil
-}
-
-func (x *PrivXPatch) UpdateGitHubIssues(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) error {
-	return UpdateGitHubIssues(ctx, x.GitHub, rm)
 }
 
 // UpdateGitHubIssues updates the body of each security issue in rm

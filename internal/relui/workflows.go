@@ -510,7 +510,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	// checkpoint is created with a timestamp trailer
 	// to ensure that workflow restarts are idempotent.
 	checkpoint := wf.Task2(wd, "Create checkpoint branch", build.createSecurityCheckpoint, branchInfo, cls)
-	cls = wf.Task2(wd, "Move and rebase private changes", build.moveAndRebasePrivateChanges, checkpoint, cls)
+	cls = wf.Task3(wd, "Move and rebase private changes", task.MoveAndRebaseAll, wf.Const(build.PrivateGerritClient), checkpoint, cls)
 	cls = wf.Task3(wd, "Submit private changes", task.SubmitPrivateChanges, wf.Const(build.PrivateGerritClient), wf.Const(build.PrivateGerritProject), cls)
 
 	// internalBranches are NOT created with a timestamp
@@ -974,10 +974,6 @@ func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi sec
 	return task.CreateCheckpoint(ctx, b.PrivateGerritClient, b.PrivateGerritProject, bi.CheckpointName)
 }
 
-func (b *BuildReleaseTasks) moveAndRebasePrivateChanges(ctx *wf.TaskContext, cp task.Checkpoint, patches []*task.PatchChanges) ([]*task.PatchChanges, error) {
-	return task.MoveAndRebaseAll(ctx, b.PrivateGerritClient, cp, patches)
-}
-
 func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, bi securityBranchInfo, patches []*task.PatchChanges) ([]string, error) {
 	if len(patches) == 0 {
 		ctx.Printf("No PRIVATE-track security patches; skipping internal release branch creation.")
@@ -1027,7 +1023,7 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 				if len(existing) > 0 {
 					ctx.Printf("Skipping cherry-pick of %s to %s: existing CL %s (status %s)",
 						ci.ChangeID, releaseBranch,
-						privateChangeURL(existing[0].ChangeNumber),
+						task.PrivateChangeURL(b.PrivateGerritProject, existing[0].ChangeNumber),
 						existing[0].Status)
 					cherryPicks = append(cherryPicks, existing[0])
 					continue
@@ -1041,7 +1037,7 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 				}
 				loc := task.RiderIssueRE.FindStringIndex(commitMessage)
 				if loc == nil {
-					return nil, fmt.Errorf("change %s is missing its security riders", privateChangeURL(ci.ChangeNumber))
+					return nil, fmt.Errorf("change %s is missing its security riders", task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber))
 				}
 				if backport, ok := backports[p.Patch.ID][line]; ok {
 					commitMessage = fmt.Sprintf("%s\nFixes golang/go#%d%s", commitMessage[:loc[1]], backport, commitMessage[loc[1]:])
@@ -1054,7 +1050,7 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 				}
 				if conflicts {
 					conflictErrs = append(conflictErrs, fmt.Errorf("cherry-pick of %s has merge conflicts against %s: %s",
-						privateChangeURL(ci.ChangeNumber), releaseBranch, privateChangeURL(cpCI.ChangeNumber)))
+						task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber), releaseBranch, task.PrivateChangeURL(b.PrivateGerritProject, cpCI.ChangeNumber)))
 					continue
 				}
 				cp := cpCI
@@ -1086,7 +1082,7 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 				return "", false, err
 			}
 			if !ci.Submittable {
-				blocking = append(blocking, privateChangeURL(ci.ChangeNumber))
+				blocking = append(blocking, task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber))
 				continue
 			}
 			submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
@@ -1106,7 +1102,7 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 	}
 	submitted := map[string][]string{}
 	for _, cp := range cherryPicks {
-		submitted[cp.Branch] = append(submitted[cp.Branch], privateChangeURL(cp.ChangeNumber))
+		submitted[cp.Branch] = append(submitted[cp.Branch], task.PrivateChangeURL(b.PrivateGerritProject, cp.ChangeNumber))
 	}
 	return submitted, nil
 }
@@ -1114,10 +1110,6 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 func majorFromMinor(branch string) string {
 	stripped := strings.TrimPrefix(branch, "release-branch.")
 	return "release-branch." + goversion.Lang(stripped)
-}
-
-func privateChangeURL[T int | string](clNum T) string {
-	return task.PrivateChangeURL("go", clNum)
 }
 
 // getGitSource selects a source spec from the provided inputs.

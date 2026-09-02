@@ -734,14 +734,12 @@ func TestMoveAndRebaseAllRebaseSuccess(t *testing.T) {
 		privGerrit.changes["1111"].Branch = "checkpoint-test"
 
 		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
-		p := &PrivXPatch{PrivateGerrit: privGerrit}
-
 		patches := []*PatchChanges{{
 			Patch:   &relmeta.SecurityPatch{CVE: "CVE-1970-0001", GitHubIssueID: 4294967296},
 			Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
 		}}
 
-		result, err := p.MoveAndRebaseAll(ctx, Checkpoint{Branch: "checkpoint-test"}, patches)
+		result, err := MoveAndRebaseAll(ctx, privGerrit, Checkpoint{Branch: "checkpoint-test"}, patches)
 		if err != nil {
 			t.Fatalf("MoveAndRebaseAll: %v", err)
 		}
@@ -780,14 +778,12 @@ func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
 		privGerrit.changesMu.Unlock()
 
 		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
-		p := &PrivXPatch{PrivateGerrit: privGerrit}
-
 		patches := []*PatchChanges{{
 			Patch:   &relmeta.SecurityPatch{CVE: "CVE-1970-0001", GitHubIssueID: 4294967296},
 			Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
 		}}
 
-		result, err := p.MoveAndRebaseAll(ctx, Checkpoint{Branch: "checkpoint-test"}, patches)
+		result, err := MoveAndRebaseAll(ctx, privGerrit, Checkpoint{Branch: "checkpoint-test"}, patches)
 		if err != nil {
 			t.Fatalf("MoveAndRebaseAll with already-destined CL: %v", err)
 		}
