@@ -307,7 +307,7 @@ echo`)
 		tagxGerrit := NewFakeGerrit(t, pubRepo)
 		wd := p.NewDefinition(&TagXReposTasks{Gerrit: tagxGerrit})
 		w := workflowtest.Start(t, wd, map[string]any{
-			SecurityMilestoneParameter.Name:      "88810010",
+			privXMilestoneParameter.Name:         "88810010",
 			reviewersParam.Name:                  []string{},
 			SecurityReviewersParameter.Name:      []string{"vulnreviewer@google.com"},
 			"Repository name":                    "net",

@@ -32,10 +32,8 @@ type PrivXPatch struct {
 
 func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	var (
-		wd = wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
-		// TODO(nealpatel): SecurityMilestoneParameter says "Go release" which
-		// is technically incorrect documentation for the parameter here.
-		milestoneNum = wf.Param(wd, SecurityMilestoneParameter)
+		wd           = wf.New(wf.ACL{Groups: []string{groups.SecurityTeam}})
+		milestoneNum = wf.Param(wd, privXMilestoneParameter)
 		targetRepo   = wf.Param(wd, wf.ParamDef[string]{Name: "Repository name", Example: "net"})
 		// TODO: probably always want to skip, might make sense to not include this
 		skipPostSubmit    = wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
@@ -240,4 +238,12 @@ func UpdateGitHubIssues(ctx *wf.TaskContext, gh GitHubClientInterface, rm *relme
 		ctx.Printf("Updated https://go.dev/issue/%d", p.GitHubIssueID)
 	}
 	return nil
+}
+
+var privXMilestoneParameter = wf.ParamDef[string]{
+	Name:      "Security Milestone",
+	ParamType: wf.BasicString,
+	Doc:       `Security Milestone owns the canonical source for all security patches of the x repo.`,
+	Example:   SecurityMilestoneParameter.Example,
+	Check:     SecurityMilestoneParameter.Check,
 }

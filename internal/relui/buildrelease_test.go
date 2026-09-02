@@ -1306,7 +1306,7 @@ func TestFetchSecurityMilestone(t *testing.T) {
 		b := *deps.buildTasks
 		b.PrivateGerritClient = nil
 		b.PrivateGerritProject = ""
-		rm, err := b.fetchSecurityMilestone(ctx, "99915010")
+		rm, err := task.FetchReleaseMilestone(ctx, b.PrivateGerritClient, "99915010")
 		if err != nil {
 			t.Fatalf("fetchSecurityMilestone: %v", err)
 		}
@@ -1316,20 +1316,20 @@ func TestFetchSecurityMilestone(t *testing.T) {
 	})
 
 	t.Run("empty milestone", func(t *testing.T) {
-		rm, err := deps.buildTasks.fetchSecurityMilestone(ctx, "")
+		rm, err := task.FetchReleaseMilestone(ctx, privGerrit, "")
 		if err != nil {
 			t.Fatalf("fetchSecurityMilestone(%q): %v", "", err)
 		}
 		if rm != nil {
 			t.Errorf("fetchSecurityMilestone(%q): got %+v, want nil milestone", "", rm)
 		}
-		if rm, err := deps.buildTasks.fetchSecurityMilestone(ctx, "0"); err == nil {
+		if rm, err := task.FetchReleaseMilestone(ctx, privGerrit, "0"); err == nil {
 			t.Errorf("fetchSecurityMilestone(%q): got %+v, want error for nonexistent milestone", "0", rm)
 		}
 	})
 
 	t.Run("happy", func(t *testing.T) {
-		rm, err := deps.buildTasks.fetchSecurityMilestone(ctx, "99915010")
+		rm, err := task.FetchReleaseMilestone(ctx, privGerrit, "99915010")
 		if err != nil {
 			t.Fatalf("fetchSecurityMilestone: %v", err)
 		}
@@ -1345,7 +1345,7 @@ func TestFetchSecurityMilestone(t *testing.T) {
 		// A private Gerrit with no security-metadata repo makes ReadBranchHead fail.
 		b := *deps.buildTasks
 		b.PrivateGerritClient = task.NewFakeGerrit(t, deps.goRepo)
-		_, err := b.fetchSecurityMilestone(ctx, "99915010")
+		_, err := task.FetchReleaseMilestone(ctx, b.PrivateGerritClient, "99915010")
 		if err == nil {
 			t.Fatal("fetchSecurityMilestone with no security-metadata repo: got nil error")
 		}
@@ -1353,7 +1353,7 @@ func TestFetchSecurityMilestone(t *testing.T) {
 
 	t.Run("read file error", func(t *testing.T) {
 		// A milestone number with no corresponding YAML file makes ReadFile fail.
-		_, err := deps.buildTasks.fetchSecurityMilestone(ctx, "00000000")
+		_, err := task.FetchReleaseMilestone(ctx, privGerrit, "00000000")
 		if err == nil {
 			t.Fatal("fetchSecurityMilestone for a missing milestone file: got nil error")
 		}
@@ -1369,7 +1369,7 @@ func TestFetchSecurityMilestone(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		_, err := deps.buildTasks.fetchSecurityMilestone(ctx, "12345678")
+		_, err := task.FetchReleaseMilestone(ctx, privGerrit, "12345678")
 		if err == nil {
 			t.Fatal("fetchSecurityMilestone for invalid YAML: got nil error")
 		}
@@ -2205,7 +2205,7 @@ func TestConvertInternalChangelists(t *testing.T) {
 			Status:       gerrit.ChangeStatusMerged,
 		}, "cmd/compile: fix something else\n\nChange-Id: I0000000000000000000000000000000000000002")
 
-		rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
+		rm, err := task.FetchReleaseMilestone(taskCtx, privGerrit, "99915010")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2258,7 +2258,7 @@ func TestConvertInternalChangelistsMissingChangeID(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc2"}}
 
-		rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
+		rm, err := task.FetchReleaseMilestone(taskCtx, privGerrit, "99915010")
 		if err != nil {
 			t.Fatal(err)
 		}

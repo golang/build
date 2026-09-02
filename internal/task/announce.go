@@ -1051,6 +1051,9 @@ You can check with the security release coordinator to confirm this input.`,
 )
 
 func FetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (*relmeta.ReleaseMilestone, error) {
+	if private == nil || milestoneNum == "" {
+		return nil, nil
+	}
 	const project = "security-metadata"
 	head, err := private.ReadBranchHead(ctx, project, "main")
 	if err != nil {

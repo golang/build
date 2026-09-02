@@ -490,7 +490,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	securityReviewers := wf.Param(wd, task.SecurityReviewersParameter)
 	milestoneNum := wf.Param(wd, task.SecurityMilestoneParameter)
 
-	rm := wf.Task1(wd, "Fetch security milestone", build.fetchSecurityMilestone, milestoneNum)
+	rm := wf.Task2(wd, "Fetch security milestone", task.FetchReleaseMilestone, wf.Const(build.PrivateGerritClient), milestoneNum)
 	backports := wf.Task2(wd, "Check security issues", milestone.CheckSecurityIssues, rm, wf.Const(currentMajor+1))
 
 	// cls are drafted by patch owners against `public`
@@ -901,18 +901,6 @@ func (b *BuildReleaseTasks) readSecurityRef(ctx *wf.TaskContext, version string)
 		return "", fmt.Errorf("error reading private Gerrit project's branch %q head: %v", internalBranch, err)
 	}
 	return commit, nil
-}
-
-func (b *BuildReleaseTasks) fetchSecurityMilestone(ctx *wf.TaskContext, milestoneNum string) (*relmeta.ReleaseMilestone, error) {
-	if b.PrivateGerritClient == nil || b.PrivateGerritProject == "" {
-		ctx.Printf("Private Gerrit fields are unset, no security milestone to fetch.")
-		return nil, nil
-	}
-	if milestoneNum == "" {
-		ctx.Printf("No security milestone specified, no security milestone to fetch.")
-		return nil, nil
-	}
-	return task.FetchReleaseMilestone(ctx, b.PrivateGerritClient, milestoneNum)
 }
 
 type securityBranchInfo struct {
