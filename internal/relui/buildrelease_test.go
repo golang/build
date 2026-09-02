@@ -668,38 +668,51 @@ func seedRiders(g *task.FakeGerrit) {
 	g.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1985-0703\nFor #70001")
 }
 
+func approveSecurityCLsOnly(ctx *workflow.TaskContext) error {
+	if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
+		return nil
+	}
+	return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+}
+
+func runMinorReleaseToFailure(t *testing.T, deps *releaseTestDeps, privGerrit *task.FakeGerrit, params map[string]any, failTask string, listener workflow.Listener) string {
+	t.Helper()
+	comm := task.CommunicationTasks{
+		SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
+	}
+	wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if params == nil {
+		params = minorReleaseParams()
+	}
+	if failTask == "" {
+		failTask = "Go 1.26: Wait for Release Coordinator Approval"
+	}
+	if listener == nil {
+		listener = &workflowtest.VerboseListener{T: t}
+	}
+	w := workflowtest.Start(t, wd, params)
+	return workflowtest.RunToFailure(t, deps.ctx, w, failTask, listener)
+}
+
 func TestMinorReleaseSecurityCoalesce(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 
 		// Approve the confirm step; fail any other approval request.
-		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-				return nil
-			}
-			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-		}
-
-		// Run until the release coordinator approval is rejected, so we don't
-		// have to drive the full build. By then both minors' confirm tasks have
-		// finished.
-
-		comm := task.CommunicationTasks{
-			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-		}
+		deps.buildTasks.ApproveAction = approveSecurityCLsOnly
 
 		publicHeadBefore, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
 		if err != nil {
 			t.Fatalf("reading public head before workflow: %v", err)
 		}
 
-		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-		if err != nil {
-			t.Fatal(err)
-		}
-		w := workflowtest.Start(t, wd, minorReleaseParams())
-
-		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+		// Run until the release coordinator approval is rejected, so we don't
+		// have to drive the full build. By then both minors' confirm tasks have
+		// finished.
+		runMinorReleaseToFailure(t, deps, privGerrit, nil, "", nil)
 
 		branches, err := privGerrit.ListBranches(deps.ctx, "go")
 		if err != nil {
@@ -836,28 +849,14 @@ func TestMinorReleaseSecurityCoalesceWithRC(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-				return nil
-			}
-			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-		}
+		deps.buildTasks.ApproveAction = approveSecurityCLsOnly
 
 		publicHeadBefore, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
 		if err != nil {
 			t.Fatalf("reading public head: %v", err)
 		}
 
-		comm := task.CommunicationTasks{
-			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-		}
-		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-		if err != nil {
-			t.Fatal(err)
-		}
-		w := workflowtest.Start(t, wd, minorReleaseParams())
-
-		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+		runMinorReleaseToFailure(t, deps, privGerrit, nil, "", nil)
 
 		wantBranches := []string{
 			"internal-release-branch.go1.27rc1",
@@ -894,27 +893,14 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 				t.Errorf("no-milestone approval gate fired for non-empty milestone")
 				return nil
 			}
-			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-				return nil
-			}
-			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+			return approveSecurityCLsOnly(ctx)
 		}
 
 		// Run until the release coordinator approval is rejected, so we can check
 		// the coalesce's side effects without driving the full build. By then the
 		// checkpoint and internal release branches would have been created (if the
 		// coalesce didn't short-circuit).
-
-		comm := task.CommunicationTasks{
-			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-		}
-		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-		if err != nil {
-			t.Fatal(err)
-		}
-		w := workflowtest.Start(t, wd, minorReleaseParams())
-
-		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+		runMinorReleaseToFailure(t, deps, privGerrit, nil, "", nil)
 
 		// The coalesce must not have created any security branches.
 		branches, err := privGerrit.ListBranches(deps.ctx, "go")
@@ -940,24 +926,12 @@ func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
 				approvedNoMilestone = true
 				return nil
 			}
-			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-				return nil
-			}
-			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
+			return approveSecurityCLsOnly(ctx)
 		}
 
-		comm := task.CommunicationTasks{
-			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-		}
-		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-		if err != nil {
-			t.Fatal(err)
-		}
 		params := minorReleaseParams()
 		params[task.SecurityMilestoneParameter.Name] = ""
-		w := workflowtest.Start(t, wd, params)
-
-		workflowtest.RunToFailure(t, deps.ctx, w, "Go 1.26: Wait for Release Coordinator Approval", &workflowtest.VerboseListener{T: t})
+		runMinorReleaseToFailure(t, deps, privGerrit, params, "", nil)
 		if !approvedNoMilestone {
 			t.Errorf("no-milestone approval gate did not fire for empty milestone")
 		}
@@ -989,24 +963,10 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 			ContainsGitConflicts: true,
 		}, "cmd/compile: fix something else")
 
-		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-			if strings.Contains(ctx.TaskName, "Confirm PRIVATE-track security CLs") {
-				return nil
-			}
-			return fmt.Errorf("unexpected approval request for %q", ctx.TaskName)
-		}
-
-		comm := task.CommunicationTasks{
-			SecurityCommunicationTasks: task.SecurityCommunicationTasks{PrivateGerrit: privGerrit},
-		}
-		wd, err := createMinorReleaseWorkflow(deps.buildTasks, deps.milestoneTasks, deps.versionTasks, comm, 25, 26)
-		if err != nil {
-			t.Fatal(err)
-		}
-		w := workflowtest.Start(t, wd, minorReleaseParams())
+		deps.buildTasks.ApproveAction = approveSecurityCLsOnly
 
 		tracker := &taskStartTracker{Listener: &workflowtest.VerboseListener{T: t}}
-		errMsg := workflowtest.RunToFailure(t, deps.ctx, w, "Create cherry-picks", tracker)
+		errMsg := runMinorReleaseToFailure(t, deps, privGerrit, nil, "Create cherry-picks", tracker)
 
 		var (
 			changes    []*gerrit.ChangeInfo
