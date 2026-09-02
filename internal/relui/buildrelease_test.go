@@ -1267,45 +1267,6 @@ func TestPublicizeIdempotent(t *testing.T) {
 	})
 }
 
-func TestCheckAlreadyPublicizedIgnoresAbandoned(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-			t.Skip("Requires bash shell scripting support.")
-		}
-
-		build, pubGerrit, privGerrit, base, securityCommit := newPublicizeTestDeps(t)
-		taskCtx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t, Task: t.Name()}}
-
-		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
-			ID:           "pub-1",
-			ChangeID:     "I0000000000000000000000000000000000000001",
-			ChangeNumber: 9001,
-			Branch:       "release-branch.go1.26",
-			Status:       gerrit.ChangeStatusAbandoned,
-		}, "crypto/tls: fix vuln")
-
-		repo, err := build.Git.CloneBranch(taskCtx, pubGerrit.GitRepoURL("go"), "release-branch.go1.26")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer repo.Close()
-		if _, err := repo.RunCommand(taskCtx, "fetch", privGerrit.GitRepoURL("go"), "refs/heads/internal-release-branch.go1.26.1"); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := repo.RunCommand(taskCtx, "cherry-pick", base+".."+securityCommit); err != nil {
-			t.Fatal(err)
-		}
-
-		existing, err := build.checkAlreadyPublicized(taskCtx, repo, "release-branch.go1.26", base)
-		if err != nil {
-			t.Fatalf("checkAlreadyPublicized: %v", err)
-		}
-		if len(existing) != 0 {
-			t.Errorf("checkAlreadyPublicized treated abandoned CLs as already publicized: %v", existing)
-		}
-	})
-}
-
 func TestPublicizePartialFailsOpen(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {

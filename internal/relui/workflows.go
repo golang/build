@@ -962,164 +962,20 @@ func (b *BuildReleaseTasks) publicizePrivateSecurityCLs(ctx *wf.TaskContext,
 		return nil, fmt.Errorf("head of private %q branch is %q, but was %q when the workflow started; retrying this step alone will not help; restart the release workflow to re-coalesce against the current head", internalBranch, releaseDayPrivateHead, securityCommit)
 	}
 
-	/*
-		At this point we want to fetch the security commit and then upstream it to the public instance.
-		At a high-level what we're doing is:
-
-			git push {publicOrigin} {securityCommit}:refs/for/{targetBranch}
-
-		In practice we need to setup a temporary git repository that has securityCommit
-		available. It turns out not to be hard to use cherry-pick on a commit range to rewrite
-		the committer to be that of relui, so do that (it might be more clear and accurate,
-		and it also means no need to grant forgeCommitter permission to relui).
-		So the low-level git commands we run look like this:
-
-			git clone -b release-branch.go1.N https://go.googlesource.com/go
-			git fetch https://go-internal.googlesource.com/go internal-release-branch.go1.N.M
-			git cherry-pick {startingHead}..{securityCommit}
-			git push {publicOrigin} HEAD:refs/for/{targetBranch}%l=Auto-Submit+1,l=TryBot-Bypass+1,r=reviewer@golang.org
-
-		Finally we parse out the newly created CL numbers and return those to be awaited for.
-	*/
-	publicOrigin := b.GerritClient.GitRepoURL(b.GerritProject)
-	repo, err := b.Git.CloneBranch(ctx, publicOrigin, targetBranch)
-	if err != nil {
-		return nil, fmt.Errorf("cloning public repo (safe to retry this step): %w", err)
-	}
-	defer repo.Close()
-	ctx.Printf("cloned public repo")
-
-	privateOrigin, privateRef := b.PrivateGerritClient.GitRepoURL(b.PrivateGerritProject), "refs/heads/"+internalBranch
-	ctx.Printf("fetching %s from %s", privateRef, privateOrigin)
-	if _, err := repo.RunCommand(ctx, "fetch", privateOrigin, privateRef); err != nil {
-		return nil, fmt.Errorf("fetching private branch (safe to retry this step): %w", err)
-	}
-	ctx.Printf("fetched")
-	if _, err := repo.RunCommand(ctx, "cherry-pick", startingHead+".."+securityCommit); err != nil {
-		return nil, fmt.Errorf("cherry-picking security fixes (safe to retry this step): %w", err)
-	}
-	ctx.Printf("cherry-picked")
-
-	existingCLs, err := b.checkAlreadyPublicized(ctx, repo, targetBranch, startingHead)
-	if err != nil {
-		return nil, err
-	}
-	if len(existingCLs) != 0 {
-		ctx.Printf("All %d security CLs already exist on public Gerrit; skipping push.", len(existingCLs))
-		for _, c := range existingCLs {
-			ctx.Printf("• %s", task.ChangeLink(c))
-		}
-		return existingCLs, nil
-	}
-
-	var refspec strings.Builder
-	fmt.Fprintf(&refspec, "HEAD:refs/for/%s%%l=Auto-Submit+1,l=TryBot-Bypass+1", targetBranch)
-	reviewerEmails, err := task.CoordinatorEmails(reviewers)
-	if err != nil {
-		return nil, fmt.Errorf("resolving coordinator emails (safe to retry this step): %w", err)
-	}
-	for _, r := range reviewerEmails {
-		fmt.Fprintf(&refspec, ",r=%s", r)
-	}
-
-	// What's coming up next involves side-effects in external systems,
-	// so beyond this point of the task we want manual retries only, not automated ones.
-	ctx.DisableRetries()
-
-	ctx.Printf("pushing %s to %s", refspec.String(), publicOrigin)
-	gitPushOutput, err := repo.RunGitPush(ctx, publicOrigin, refspec.String())
-	if err != nil {
-		return nil, fmt.Errorf("pushing security CLs to public Gerrit (manual intervention required): %w", err)
-	}
-	ctx.Printf("git push output:\n%s\n", gitPushOutput)
-
-	// Extract the CL numbers from the output using a simple regexp.
-	re := regexp.MustCompile(`https:\/\/go-review\.googlesource\.com\/c\/go\/\+\/(\d+)`)
-	matches := re.FindAllSubmatch(gitPushOutput, -1)
-	if matches == nil {
-		return nil, fmt.Errorf("no matches for successful mail of CL in git push output:\n%s", gitPushOutput)
-	}
-	for i, match := range matches {
-		if len(match) != 2 {
-			return nil, fmt.Errorf("bad match %d for successful mail of CL in git push output:\n%s", i, gitPushOutput)
-		}
-		changeIDs = append(changeIDs, "go~"+string(match[1]))
-	}
-	ctx.Printf("Mailed %d changes to await for:", len(changeIDs))
-	for _, c := range changeIDs {
-		ctx.Printf("• %s", task.ChangeLink(c))
-	}
-
-	return changeIDs, nil
+	return task.PublicizePrivateChanges(ctx, task.PublicizeParams{
+		Git:            b.Git,
+		Public:         b.GerritClient,
+		Project:        b.GerritProject,
+		TargetBranch:   targetBranch,
+		StartingHead:   startingHead,
+		PrivateOrigin:  b.PrivateGerritClient.GitRepoURL(b.PrivateGerritProject),
+		PrivateRef:     "refs/heads/" + internalBranch,
+		SecurityCommit: securityCommit,
+		Reviewers:      reviewers,
+	})
 }
 
 var changeIDRe = regexp.MustCompile(`(?m)^Change-Id: (I[0-9a-f]{40})$`)
-
-// checkAlreadyPublicized returns a complete slice of already disclosed CLs
-// or an empty slice, indicating the caller owns pushing.
-//
-// If the number of resolved CLs does not match the complete list, an error
-// is returned. checkAlreadyPublicized assumes that any state that is not
-// "total disclosure" or "no disclosure" is an error requiring manual review.
-func (b *BuildReleaseTasks) checkAlreadyPublicized(ctx *wf.TaskContext, repo *task.GitDir, targetBranch, startingHead string) ([]string, error) {
-	out, err := repo.RunCommand(ctx, "log", "--format=%H %B%x00", startingHead+"..HEAD")
-	if err != nil {
-		return nil, fmt.Errorf("listing cherry-picked commits: %w", err)
-	}
-	type commitChangeID struct {
-		hash     string
-		changeID string
-	}
-	var commits []commitChangeID
-	for entry := range strings.SplitSeq(strings.TrimRight(string(out), "\x00"), "\x00") {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-		before, after, ok := strings.Cut(entry, " ")
-		if !ok {
-			continue
-		}
-		hash := before
-		body := after
-		m := changeIDRe.FindStringSubmatch(body)
-		if m == nil {
-			continue
-		}
-		commits = append(commits, commitChangeID{hash: hash, changeID: m[1]})
-	}
-	if len(commits) == 0 {
-		return nil, nil
-	}
-
-	var (
-		found, queryErrors int
-		existingCLs        []string
-	)
-	for _, c := range commits {
-		results, err := b.GerritClient.QueryChanges(ctx,
-			fmt.Sprintf("project:%s branch:%s change:%s -is:abandoned", b.GerritProject, targetBranch, c.changeID))
-		if err != nil {
-			ctx.Printf("error querying public Gerrit for Change-Id %s (commit %.8s): %v", c.changeID, c.hash, err)
-			queryErrors++
-			continue
-		}
-		if len(results) > 0 {
-			found++
-			existingCLs = append(existingCLs, fmt.Sprintf("%s~%d", b.GerritProject, results[0].ChangeNumber))
-		}
-	}
-	if queryErrors > 0 {
-		return nil, fmt.Errorf("querying public Gerrit for already-pushed CLs: %d of %d queries failed (manual intervention required)", queryErrors, len(commits))
-	}
-	if found > 0 && found < len(commits) {
-		return nil, fmt.Errorf("partial publicize detected: %d of %d security CLs already exist on public Gerrit; %d are missing (manual intervention required)", found, len(commits), len(commits)-found)
-	}
-	if found == len(commits) {
-		return existingCLs, nil
-	}
-	return nil, nil
-}
 
 // readSecurityRef reads the head of the internal release branch that corresponds
 // to the specified Go version. If the branch doesn't exist (as is the case when
