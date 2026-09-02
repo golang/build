@@ -888,13 +888,7 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 
 		// There are no PRIVATE patches, so each release's confirm task takes the "no
 		// security fix" path. Allow those approvals; fail any other approval request.
-		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-			if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
-				t.Errorf("no-milestone approval gate fired for non-empty milestone")
-				return nil
-			}
-			return approveSecurityCLsOnly(ctx)
-		}
+		deps.buildTasks.ApproveAction = approveSecurityCLsOnly
 
 		// Run until the release coordinator approval is rejected, so we can check
 		// the coalesce's side effects without driving the full build. By then the
@@ -912,28 +906,6 @@ func TestMinorReleaseCoalesceNoPrivatePatches(t *testing.T) {
 			if strings.Contains(name, "checkpoint") || strings.HasPrefix(name, "internal-") {
 				t.Errorf("coalesce created branch %q despite there being no PRIVATE-track patches", name)
 			}
-		}
-	})
-}
-
-func TestMinorReleaseNoMilestoneApproval(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		deps, privGerrit := newMinorCoalesceTestDeps(t, false)
-
-		var approvedNoMilestone bool
-		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
-			if strings.Contains(ctx.TaskName, "Confirm no-milestone run") {
-				approvedNoMilestone = true
-				return nil
-			}
-			return approveSecurityCLsOnly(ctx)
-		}
-
-		params := minorReleaseParams()
-		params[task.SecurityMilestoneParameter.Name] = ""
-		runMinorReleaseToFailure(t, deps, privGerrit, params, "", nil)
-		if !approvedNoMilestone {
-			t.Errorf("no-milestone approval gate did not fire for empty milestone")
 		}
 	})
 }

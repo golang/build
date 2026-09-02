@@ -491,15 +491,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	securityReviewers := wf.Param(wd, task.SecurityReviewersParameter)
 	milestoneNum := wf.Param(wd, task.SecurityMilestoneParameter)
 
-	noMilestoneApproved := wf.Action1(wd, "Confirm no-milestone run", func(ctx *wf.TaskContext, num string) error {
-		if num != "" {
-			return nil
-		}
-		ctx.Printf("No security milestone specified. This run will proceed without security content.\nApprove this task if that is expected.")
-		return build.ApproveAction(ctx)
-	}, milestoneNum)
-
-	rm := wf.Task1(wd, "Fetch security milestone", build.fetchSecurityMilestone, milestoneNum, wf.After(noMilestoneApproved))
+	rm := wf.Task1(wd, "Fetch security milestone", build.fetchSecurityMilestone, milestoneNum)
 	backports := wf.Task2(wd, "Check security issues", milestone.CheckSecurityIssues, rm, wf.Const(currentMajor+1))
 
 	// cls are drafted by patch owners against `public`
@@ -539,8 +531,8 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators, coalesced)
 	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindMinor, coordinators, coalesced)
 
-	securitySummary := wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum, wf.After(noMilestoneApproved))
-	securityFixes := wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum, wf.After(noMilestoneApproved))
+	securitySummary := wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum)
+	securityFixes := wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
 	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators, rm, securityReviewers)
 	wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, currPublished)
 
