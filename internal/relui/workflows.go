@@ -512,7 +512,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	// to ensure that workflow restarts are idempotent.
 	checkpoint := wf.Task2(wd, "Create checkpoint branch", build.createSecurityCheckpoint, branchInfo, cls)
 	cls = wf.Task2(wd, "Move and rebase private changes", build.moveAndRebasePrivateChanges, checkpoint, cls)
-	cls = wf.Task1(wd, "Submit private changes", build.submitPrivateChanges, cls)
+	cls = wf.Task3(wd, "Submit private changes", task.SubmitPrivateChanges, wf.Const(build.PrivateGerritClient), wf.Const(build.PrivateGerritProject), cls)
 
 	// internalBranches are NOT created with a timestamp
 	// trailer; on workflow-abandon-and-restart, existing
@@ -1047,40 +1047,6 @@ func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi sec
 
 func (b *BuildReleaseTasks) moveAndRebasePrivateChanges(ctx *wf.TaskContext, checkpointBranch string, patches []*task.PatchChanges) ([]*task.PatchChanges, error) {
 	return task.MoveAndRebaseAll(ctx, b.PrivateGerritClient, checkpointBranch, patches)
-}
-
-func (b *BuildReleaseTasks) submitPrivateChanges(ctx *wf.TaskContext, patches []*task.PatchChanges) ([]*task.PatchChanges, error) {
-	if _, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
-		var blocking []string
-		for _, p := range patches {
-			for i, change := range p.Changes {
-				if change.Status == gerrit.ChangeStatusMerged {
-					continue
-				}
-				ci, err := b.PrivateGerritClient.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
-				if err != nil {
-					return "", false, err
-				}
-				if !ci.Submittable {
-					blocking = append(blocking, privateChangeURL(ci.ChangeNumber))
-					continue
-				}
-				submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
-				if err != nil {
-					return "", false, err
-				}
-				p.Changes[i] = &submitted
-			}
-		}
-		if len(blocking) == 0 {
-			return "", true, nil
-		}
-		ctx.Printf("awaiting non-submittable CL(s): %s", strings.Join(blocking, ", "))
-		return "", false, nil
-	}); err != nil {
-		return nil, err
-	}
-	return patches, nil
 }
 
 func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, bi securityBranchInfo, patches []*task.PatchChanges) ([]string, error) {

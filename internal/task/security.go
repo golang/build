@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
@@ -156,4 +157,42 @@ func CheckPrivateChanges(ctx *wf.TaskContext, client GerritClient, project strin
 		return nil, err
 	}
 	return checked, nil
+}
+
+func SubmitPrivateChanges(ctx *wf.TaskContext, client GerritClient, project string, patches []*PatchChanges) ([]*PatchChanges, error) {
+	if _, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
+		var blocking []string
+		for _, p := range patches {
+			for i, change := range p.Changes {
+				if change.Status == gerrit.ChangeStatusMerged {
+					continue
+				}
+				ci, err := client.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+				if err != nil {
+					return "", false, err
+				}
+				if ci.Status == gerrit.ChangeStatusMerged {
+					p.Changes[i] = ci
+					continue
+				}
+				if !ci.Submittable {
+					blocking = append(blocking, PrivateChangeURL(project, ci.ChangeNumber))
+					continue
+				}
+				submitted, err := client.SubmitChange(ctx, ci.ID)
+				if err != nil {
+					return "", false, err
+				}
+				p.Changes[i] = &submitted
+			}
+		}
+		if len(blocking) == 0 {
+			return "", true, nil
+		}
+		ctx.Printf("awaiting non-submittable CL(s): %s", strings.Join(blocking, ", "))
+		return "", false, nil
+	}); err != nil {
+		return nil, err
+	}
+	return patches, nil
 }

@@ -52,7 +52,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	patches := wf.Task3(wd, "Get changes for target x repo", x.FilterPatches, rm, targetRepo, availableRepos)
 	checkpoint := wf.Task1(wd, "Create checkpoint branch", x.CreateCheckpoint, targetRepo)
 	patches = wf.Task2(wd, "Move and rebase all changes per x repo", x.MoveAndRebaseAll, checkpoint, patches)
-	patches = wf.Task1(wd, "Waiting for submissions", x.AwaitSubmissions, patches)
+	patches = wf.Task3(wd, "Waiting for submissions", SubmitPrivateChanges, wf.Const(x.PrivateGerrit), targetRepo, patches)
 	securityCommit := wf.Task2(wd, "Read checkpoint head", x.ReadCheckpointHead, targetRepo, checkpoint, wf.After(patches))
 	// block for manual review before pushing changes to public
 	okayToDisclose := wf.Action0(wd, "Wait to disclose", x.ApproveAction, wf.After(securityCommit)) // TODO(nealpatel): Add warning text
@@ -141,40 +141,6 @@ func (x *PrivXPatch) ReadCheckpointHead(ctx *wf.TaskContext, repoName string, cp
 
 func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, cp checkpointInfo, patches []*PatchChanges) ([]*PatchChanges, error) {
 	return MoveAndRebaseAll(ctx, x.PrivateGerrit, cp.Branch, patches)
-}
-
-func (x *PrivXPatch) AwaitSubmissions(ctx *wf.TaskContext, patches []*PatchChanges) ([]*PatchChanges, error) {
-	var g errgroup.Group
-	for _, p := range patches {
-		for _, cl := range p.Changes {
-			g.Go(func() error {
-				ctx.Printf("Awaiting review/submit of %v", cl.ID)
-				_, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
-					// The ChangeInfo object returned by RebaseChange doesn't contain
-					// information about submittability, so we need to refetch it using
-					// GetChange.
-					ci, err := x.PrivateGerrit.GetChange(ctx, cl.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
-					if err != nil {
-						return "", false, err
-					}
-					// TODO(nealpatel): Make more robust/obvious.
-					if strings.ToLower(ci.Status) == "merged" {
-						return "", true, nil
-					}
-					if !ci.Submittable {
-						return "", false, nil
-					}
-					_, err = x.PrivateGerrit.SubmitChange(ctx, ci.ID)
-					if err != nil {
-						return "", false, err
-					}
-					return "", true, nil
-				})
-				return err
-			})
-		}
-	}
-	return patches, g.Wait()
 }
 
 func (x *PrivXPatch) ResolveVulnerableVersion(ctx *wf.TaskContext, tagged TagRepo) (*report.Version, error) {

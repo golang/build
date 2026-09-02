@@ -2011,7 +2011,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
 
-		submitted, err := deps.buildTasks.submitPrivateChanges(taskCtx, cls)
+		submitted, err := task.SubmitPrivateChanges(taskCtx, privGerrit, "go", cls)
 		if err != nil {
 			t.Fatalf("submitPrivateChanges: %v", err)
 		}
@@ -2051,7 +2051,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 		cls[0].Changes[0].Status = gerrit.ChangeStatusMerged
 		cls[0].Changes[0].Submittable = false
 
-		submitted, err := deps.buildTasks.submitPrivateChanges(taskCtx, cls)
+		submitted, err := task.SubmitPrivateChanges(taskCtx, privGerrit, "go", cls)
 		if err != nil {
 			t.Fatalf("submitPrivateChanges with pre-merged CL: %v", err)
 		}
@@ -2284,7 +2284,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
 
-		submitted, err := deps.buildTasks.submitPrivateChanges(taskCtx, cls)
+		submitted, err := task.SubmitPrivateChanges(taskCtx, privGerrit, "go", cls)
 		if err != nil {
 			t.Fatalf("submitPrivateChanges: %v", err)
 		}
@@ -2342,7 +2342,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
 
-		submitted, err := deps.buildTasks.submitPrivateChanges(taskCtx, cls)
+		submitted, err := task.SubmitPrivateChanges(taskCtx, privGerrit, "go", cls)
 		if err != nil {
 			t.Fatalf("submitPrivateChanges: %v", err)
 		}
@@ -2469,7 +2469,7 @@ func TestSubmitPrivateChangesError(t *testing.T) {
 		defer cancel()
 		errTaskCtx := &workflow.TaskContext{Context: errCtx, Logger: &workflowtest.Logger{T: t, Task: "submit-err"}}
 
-		_, err = deps.buildTasks.submitPrivateChanges(errTaskCtx, cls)
+		_, err = task.SubmitPrivateChanges(errTaskCtx, privGerrit, "go", cls)
 		if err == nil {
 			t.Fatal("expected error from submitPrivateChanges with non-submittable CLs")
 		}
