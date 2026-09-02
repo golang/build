@@ -1016,6 +1016,7 @@ func computeSecurityBranchInfo(ctx *wf.TaskContext, version *task.VersionTasks, 
 var (
 	commitCVERE   = regexp.MustCompile(`(?m)^Fixes CVE-\d{4}-\d+`)
 	commitIssueRE = regexp.MustCompile(`(?m)^\w+ (?:golang/go)?#(\d+)`)
+	riderIssueRE  = regexp.MustCompile(`(?m)^\w+ golang/go#(\d+)`)
 )
 
 func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) ([]*gerrit.ChangeInfo, error) {
@@ -1120,7 +1121,7 @@ func securityRiders(p *relmeta.SecurityPatch) (string, error) {
 	if p.GitHubIssueID == 0 {
 		return "", fmt.Errorf("security patch %d has no GitHub issue", p.ID)
 	}
-	return fmt.Sprintf("Fixes %s\nFor #%d", p.CVE, p.GitHubIssueID), nil
+	return fmt.Sprintf("Fixes %s\nFor golang/go#%d", p.CVE, p.GitHubIssueID), nil
 }
 
 func insertRiders(message, riders string) string {
@@ -1294,12 +1295,12 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 			if err != nil {
 				return nil, err
 			}
-			loc := commitIssueRE.FindStringIndex(commitMessage)
+			loc := riderIssueRE.FindStringIndex(commitMessage)
 			if loc == nil {
 				return nil, fmt.Errorf("change %s is missing its security riders", privateChangeURL(ci.ChangeNumber))
 			}
 			if backport, ok := backports[p.ID][line]; ok {
-				commitMessage = fmt.Sprintf("%s\nFixes #%d%s", commitMessage[:loc[1]], backport, commitMessage[loc[1]:])
+				commitMessage = fmt.Sprintf("%s\nFixes golang/go#%d%s", commitMessage[:loc[1]], backport, commitMessage[loc[1]:])
 			}
 			commitMessage = fmt.Sprintf("[%s] %s", major, commitMessage)
 

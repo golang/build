@@ -664,8 +664,8 @@ func coalesceBackports() task.BackportManifest {
 }
 
 func seedRiders(g *task.FakeGerrit) {
-	g.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor #70001")
-	g.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1985-0703\nFor #70001")
+	g.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor golang/go#70001")
+	g.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1985-0703\nFor golang/go#70001")
 }
 
 func approveSecurityCLsOnly(ctx *workflow.TaskContext) error {
@@ -794,8 +794,8 @@ func TestMinorReleaseSecurityCoalesce(t *testing.T) {
 
 		branchCPSets := map[string]map[string]bool{}
 		branchRiders := map[string]string{
-			"internal-release-branch.go1.26.1": "\nFixes #70026",
-			"internal-release-branch.go1.25.1": "\nFixes #70025",
+			"internal-release-branch.go1.26.1": "\nFixes golang/go#70026",
+			"internal-release-branch.go1.25.1": "\nFixes golang/go#70025",
 		}
 		for ib, rider := range branchRiders {
 			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
@@ -2189,7 +2189,7 @@ func TestConvertInternalChangelists(t *testing.T) {
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc1"}}
 
 		privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFixes golang/go#1\n\nChange-Id: I0000000000000000000000000000000000000001")
-		privGerrit.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1970-0001\nFixes #2\n\nChange-Id: I0000000000000000000000000000000000000002")
+		privGerrit.AddChange("go", "5678", nil, "cmd/compile: fix something else\n\nFixes CVE-1970-0001\nFixes golang/go#2\n\nChange-Id: I0000000000000000000000000000000000000002")
 		pubGerrit.AddChange("go", "pub-1", &gerrit.ChangeInfo{
 			ID:           "pub-1",
 			ChangeID:     "I0000000000000000000000000000000000000001",
@@ -2508,7 +2508,7 @@ func TestCreateSecurityCherryPicksConflictError(t *testing.T) {
 			Submittable:          true,
 			Mergeable:            true,
 			ContainsGitConflicts: true,
-		}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor #70001")
+		}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor golang/go#70001")
 
 		_, err = deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
 		if err == nil {
