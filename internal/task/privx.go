@@ -66,7 +66,7 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 
 	// post-announcement tasks
 	updated := wf.Action1(wd, "Update GitHub issues", x.UpdateGitHubIssues, rm, wf.After(announcementURL))
-	converted := wf.Task4(wd, "Convert internal changelists", x.ConvertInternalChangelists, targetRepo, milestoneNum, patches, securityReviewers, wf.After(announcementURL))
+	converted := wf.Task6(wd, "Convert internal changelists", ConvertPatchChangelists, wf.Const(x.PrivateGerrit), wf.Const(x.PublicGerrit), targetRepo, rm, patches, securityReviewers, wf.After(announcementURL))
 	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, converted, vulnerableAt, tagged, announcementURL, securityReviewers, wf.After(updated))
 	wf.Output(wd, "File VulnDB Reports", changeID)
 
@@ -187,22 +187,6 @@ func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *r
 	}
 
 	return SentMail{Subject: mc.Subject}, nil
-}
-
-func (x *PrivXPatch) ConvertInternalChangelists(ctx *wf.TaskContext, repoName, milestoneNum string, patches []*PatchChanges, reviewers []string) (*relmeta.ReleaseMilestone, error) {
-	var sps []*relmeta.SecurityPatch
-	for _, p := range patches {
-		sps = append(sps, p.Patch)
-	}
-	external, err := ResolveExternalChangelists(ctx, x.PrivateGerrit, x.PublicGerrit, repoName, sps)
-	if err != nil {
-		return nil, err
-	}
-	rm, err := ConvertInternalChangelists(ctx, x.PrivateGerrit, milestoneNum, external, reviewers)
-	if err != nil {
-		return nil, err
-	}
-	return &rm, nil
 }
 
 func (x *PrivXPatch) CreateVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, vulnerableAt *report.Version, tagged TagRepo, announceURL string, reviewers []string) (string, error) {

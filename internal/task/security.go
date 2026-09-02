@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -237,4 +238,23 @@ func CreateCheckpoint(ctx *wf.TaskContext, client GerritClient, project, prefix 
 		return Checkpoint{}, err
 	}
 	return Checkpoint{Branch: branch, StartingHead: publicHead}, nil
+}
+
+func ConvertPatchChangelists(ctx *wf.TaskContext, private, public GerritClient, project string, rm *relmeta.ReleaseMilestone, patches []*PatchChanges, reviewers []string) (*relmeta.ReleaseMilestone, error) {
+	if rm == nil || len(patches) == 0 {
+		return rm, nil
+	}
+	var sps []*relmeta.SecurityPatch
+	for _, p := range patches {
+		sps = append(sps, p.Patch)
+	}
+	external, err := ResolveExternalChangelists(ctx, private, public, project, sps)
+	if err != nil {
+		return nil, err
+	}
+	converted, err := ConvertInternalChangelists(ctx, private, strconv.FormatInt(rm.ID, 10), external, reviewers)
+	if err != nil {
+		return nil, err
+	}
+	return &converted, nil
 }

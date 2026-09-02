@@ -25,7 +25,6 @@ import (
 	"regexp"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -446,7 +445,7 @@ func registerProdReleaseWorkflows(ctx context.Context, h *DefinitionHolder, buil
 		}
 
 		rm := wf.Const[*relmeta.ReleaseMilestone](nil)
-		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators, rm, wf.Const[[]string](nil))
+		addCommTasks(wd, build, comm, r.kind, wf.Slice(published), securitySummary, securityFixes, coordinators, rm, wf.Const[[]*task.PatchChanges](nil), wf.Const[[]string](nil))
 		if r.major >= currentMajor {
 			wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, published)
 		}
@@ -533,7 +532,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 
 	securitySummary := wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum)
 	securityFixes := wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
-	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators, rm, securityReviewers)
+	addCommTasks(wd, build, comm, task.KindMinor, wf.Slice(currPublished, prevPublished), securitySummary, securityFixes, coordinators, rm, cls, securityReviewers)
 	wf.Action1(wd, "update-proxy-test", version.UpdateProxyTestRepo, currPublished)
 
 	return wd, nil
@@ -543,7 +542,7 @@ func addCommTasks(
 	wd *wf.Definition, build *BuildReleaseTasks, comm task.CommunicationTasks,
 	kind task.ReleaseKind, published wf.Value[[]task.Published], securitySummary wf.Value[string],
 	securityFixes, coordinators wf.Value[[]string], rm wf.Value[*relmeta.ReleaseMilestone],
-	securityReviewers wf.Value[[]string],
+	patches wf.Value[[]*task.PatchChanges], securityReviewers wf.Value[[]string],
 ) {
 	okayToAnnounce := wf.Action0(wd, "Wait to Announce", build.ApproveAction, wf.After(published))
 
@@ -555,7 +554,7 @@ func addCommTasks(
 	blueskyURL := wf.Task4(wd, "post-bluesky", comm.SkeetRelease, wf.Const(kind), published, securitySummary, announcementURL, wf.After(okayToAnnounce))
 
 	updated := wf.Action2(wd, "Update GitHub issues", task.UpdateGitHubIssues, wf.Const(build.GitHub), rm, wf.After(announcementURL))
-	converted := wf.Task2(wd, "convert-internal-changelists", build.convertInternalChangelists, rm, securityReviewers, wf.After(announcementURL))
+	converted := wf.Task6(wd, "convert-internal-changelists", task.ConvertPatchChangelists, wf.Const(build.PrivateGerritClient), wf.Const(build.GerritClient), wf.Const(build.GerritProject), rm, patches, securityReviewers, wf.After(announcementURL))
 	vulndbChangeID := wf.Task3(wd, "file-vulndb-reports", build.createVulnReports, converted, announcementURL, securityReviewers, wf.After(updated))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
@@ -563,21 +562,6 @@ func addCommTasks(
 	wf.Output(wd, "Mastodon URL", mastodonURL)
 	wf.Output(wd, "Bluesky URL", blueskyURL)
 	wf.Output(wd, "VulnDB Change ID", vulndbChangeID)
-}
-
-func (b *BuildReleaseTasks) convertInternalChangelists(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, reviewers []string) (*relmeta.ReleaseMilestone, error) {
-	if rm == nil || len(rm.Patches) == 0 {
-		return rm, nil
-	}
-	external, err := task.ResolveExternalChangelists(ctx, b.PrivateGerritClient, b.GerritClient, b.GerritProject, rm.Patches)
-	if err != nil {
-		return nil, err
-	}
-	converted, err := task.ConvertInternalChangelists(ctx, b.PrivateGerritClient, strconv.FormatInt(rm.ID, 10), external, reviewers)
-	if err != nil {
-		return nil, err
-	}
-	return &converted, nil
 }
 
 // createVulnReports builds and submits vulndb reports for std/cmd

@@ -2210,7 +2210,7 @@ func TestConvertInternalChangelists(t *testing.T) {
 			t.Fatal(err)
 		}
 		wantReviewers := []string{"vuln-reviewer-a@google.com"}
-		converted, err := deps.buildTasks.convertInternalChangelists(taskCtx, rm, wantReviewers)
+		converted, err := task.ConvertPatchChangelists(taskCtx, privGerrit, deps.gerrit.FakeGerrit, deps.buildTasks.GerritProject, rm, patchChanges(rm), wantReviewers)
 		if err != nil {
 			t.Fatalf("convertInternalChangelists: %v", err)
 		}
@@ -2240,7 +2240,7 @@ func TestConvertInternalChangelistsEmptyMilestone(t *testing.T) {
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc3"}}
 
 		empty := &relmeta.ReleaseMilestone{}
-		got, err := deps.buildTasks.convertInternalChangelists(taskCtx, empty, []string{"vuln-reviewer-a@google.com"})
+		got, err := task.ConvertPatchChangelists(taskCtx, privGerrit, deps.gerrit.FakeGerrit, deps.buildTasks.GerritProject, empty, patchChanges(empty), []string{"vuln-reviewer-a@google.com"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2255,14 +2255,14 @@ func TestConvertInternalChangelistsEmptyMilestone(t *testing.T) {
 
 func TestConvertInternalChangelistsMissingChangeID(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		deps, _ := newMinorCoalesceTestDeps(t, true)
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "pc2"}}
 
 		rm, err := deps.buildTasks.fetchSecurityMilestone(taskCtx, "99915010")
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = deps.buildTasks.convertInternalChangelists(taskCtx, rm, nil)
+		_, err = task.ConvertPatchChangelists(taskCtx, privGerrit, deps.gerrit.FakeGerrit, deps.buildTasks.GerritProject, rm, patchChanges(rm), nil)
 		if err == nil || !strings.Contains(err.Error(), "no Change-Id footer") {
 			t.Fatalf("convertInternalChangelists error = %v, want Change-Id footer error", err)
 		}
@@ -2663,4 +2663,12 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 			t.Errorf("CL branch = %q, want %q", moved[0].Changes[0].Branch, "checkpoint-rebase-test")
 		}
 	})
+}
+
+func patchChanges(rm *relmeta.ReleaseMilestone) []*task.PatchChanges {
+	var patches []*task.PatchChanges
+	for _, p := range rm.Patches {
+		patches = append(patches, &task.PatchChanges{Patch: p})
+	}
+	return patches
 }
