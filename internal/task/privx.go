@@ -84,6 +84,7 @@ func (x *PrivXPatch) PullMilestone(ctx *wf.TaskContext, milestone string) (*relm
 }
 
 func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, target string, found []TagRepo) (patches []*PatchChanges, _ error) {
+	var sps []*relmeta.SecurityPatch
 	for _, p := range rm.Patches {
 		repo, err := repoName(p.Package)
 		if err != nil {
@@ -95,42 +96,9 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 		if !slices.ContainsFunc(found, func(r TagRepo) bool { return r.Name == repo }) {
 			return nil, fmt.Errorf("no repository %q", repo)
 		}
-
-		var cls []*gerrit.ChangeInfo
-		for _, clLink := range p.Changelists {
-			if p.Track == relmeta.Public {
-				continue
-			}
-			clNum := clLink[strings.LastIndex(clLink, "/")+1:]
-			ci, err := x.PrivateGerrit.GetChange(ctx, clNum, gerrit.QueryChangesOpt{Fields: []string{"CURRENT_REVISION", "SUBMITTABLE"}})
-			if err != nil {
-				return nil, err
-			}
-			if !strings.Contains(p.Package, ci.Project) {
-				return nil, fmt.Errorf("CL is for unexpected project, got: %s, want %s", ci.Project, p.Package)
-			}
-			if !ci.Submittable {
-				return nil, fmt.Errorf("change %s is not submittable", internalXRepoChangeURL(target, clNum))
-			}
-			ra, err := x.PrivateGerrit.GetRevisionActions(ctx, clNum, "current")
-			if err != nil {
-				return nil, err
-			}
-			if ra["submit"] == nil || !ra["submit"].Enabled {
-				return nil, fmt.Errorf("change %s is not submittable", internalXRepoChangeURL(target, clNum))
-			}
-			// TODO: Add regex for CVE / GH
-			// TODO(nealpatel): Edge case; order matters for stacked changes.
-			cls = append(cls, ci)
-		}
-		patches = append(patches, &PatchChanges{Patch: p, Changes: cls})
+		sps = append(sps, p)
 	}
-
-	return patches, nil
-}
-
-func internalXRepoChangeURL[T int | string](xrepo string, clNum T) string {
-	return fmt.Sprintf("https://go-internal-review.git.corp.google.com/c/%s/+/%v", xrepo, clNum)
+	return CheckPrivateChanges(ctx, x.PrivateGerrit, target, sps)
 }
 
 type checkpointInfo struct {

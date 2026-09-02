@@ -1013,65 +1013,18 @@ func computeSecurityBranchInfo(ctx *wf.TaskContext, version *task.VersionTasks, 
 	return bi, nil
 }
 
-var (
-	commitCVERE   = regexp.MustCompile(`(?m)^Fixes CVE-\d{4}-\d+`)
-	commitIssueRE = regexp.MustCompile(`(?m)^\w+ (?:golang/go)?#(\d+)`)
-	riderIssueRE  = regexp.MustCompile(`(?m)^\w+ golang/go#(\d+)`)
-)
-
 func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) ([]*task.PatchChanges, error) {
 	if rm == nil {
 		return nil, nil
 	}
-	var (
-		patches  []*task.PatchChanges
-		lintErrs []error
-	)
-	for _, patch := range rm.Patches {
-		if patch.Track == relmeta.Public {
-			continue
-		}
-		var cls []*gerrit.ChangeInfo
-		for _, clURL := range patch.Changelists {
-			_, num, _ := strings.Cut(clURL, "/+/")
-			ci, err := b.PrivateGerritClient.GetChange(ctx, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
-			if err != nil {
-				return nil, err
-			}
-			if ci.Status == gerrit.ChangeStatusMerged {
-				cls = append(cls, ci)
-				continue
-			}
-			if !ci.Submittable {
-				return nil, fmt.Errorf("change %s is not submittable", privateChangeURL(num))
-			}
-			ra, err := b.PrivateGerritClient.GetRevisionActions(ctx, num, "current")
-			if err != nil {
-				return nil, err
-			}
-			if ra["submit"] == nil || !ra["submit"].Enabled {
-				return nil, fmt.Errorf("change %s is not submittable", privateChangeURL(num))
-			}
-			if ci.Branch == "public" {
-				cm, err := b.PrivateGerritClient.GetCommitMessage(ctx, num)
-				if err != nil {
-					return nil, err
-				}
-				if commitCVERE.MatchString(cm) {
-					lintErrs = append(lintErrs, fmt.Errorf("change %s must not contain a CVE reference", privateChangeURL(num)))
-				}
-				if commitIssueRE.MatchString(cm) {
-					lintErrs = append(lintErrs, fmt.Errorf("change %s must not contain a GitHub issue reference", privateChangeURL(num)))
-				}
-			}
-			cls = append(cls, ci)
-		}
-		patches = append(patches, &task.PatchChanges{Patch: patch, Changes: cls})
+	patches, err := task.CheckPrivateChanges(ctx, b.PrivateGerritClient, b.PrivateGerritProject, rm.Patches)
+	if err != nil {
+		return nil, err
 	}
 	if len(patches) == 0 {
 		ctx.Printf("No non-PUBLIC security patches to prepare.")
 	}
-	return patches, errors.Join(lintErrs...)
+	return patches, nil
 }
 
 func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi securityBranchInfo, patches []*task.PatchChanges) (string, error) {
@@ -1191,7 +1144,7 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 				if err != nil {
 					return nil, err
 				}
-				loc := riderIssueRE.FindStringIndex(commitMessage)
+				loc := task.RiderIssueRE.FindStringIndex(commitMessage)
 				if loc == nil {
 					return nil, fmt.Errorf("change %s is missing its security riders", privateChangeURL(ci.ChangeNumber))
 				}
@@ -1269,7 +1222,7 @@ func majorFromMinor(branch string) string {
 }
 
 func privateChangeURL[T int | string](clNum T) string {
-	return fmt.Sprintf("https://go-internal-review.git.corp.google.com/c/go/+/%v", clNum)
+	return task.PrivateChangeURL("go", clNum)
 }
 
 // getGitSource selects a source spec from the provided inputs.

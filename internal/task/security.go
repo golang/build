@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"golang.org/x/build/gerrit"
@@ -87,4 +88,72 @@ func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, branch string, p
 		}
 	}
 	return patches, nil
+}
+
+var (
+	commitCVERE   = regexp.MustCompile(`(?m)^Fixes CVE-\d{4}-\d+`)
+	commitIssueRE = regexp.MustCompile(`(?m)^\w+ (?:golang/go)?#(\d+)`)
+	RiderIssueRE  = regexp.MustCompile(`(?m)^\w+ golang/go#(\d+)`)
+)
+
+func PrivateChangeURL[T int | string](project string, clNum T) string {
+	return fmt.Sprintf("https://go-internal-review.git.corp.google.com/c/%s/+/%v", project, clNum)
+}
+
+func CheckPrivateChanges(ctx *wf.TaskContext, client GerritClient, project string, patches []*relmeta.SecurityPatch) ([]*PatchChanges, error) {
+	var (
+		checked  []*PatchChanges
+		lintErrs []error
+	)
+	for _, p := range patches {
+		if p.Track == relmeta.Public {
+			continue
+		}
+		var cls []*gerrit.ChangeInfo
+		for _, clURL := range p.Changelists {
+			_, num, ok := strings.Cut(clURL, "/+/")
+			if !ok {
+				return nil, fmt.Errorf("security patch %d: malformed changelist URL %q", p.ID, clURL)
+			}
+			ci, err := client.GetChange(ctx, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+			if err != nil {
+				return nil, err
+			}
+			if ci.Project != project {
+				return nil, fmt.Errorf("change %s is for project %q, want %q", PrivateChangeURL(project, num), ci.Project, project)
+			}
+			if ci.Status == gerrit.ChangeStatusMerged {
+				cls = append(cls, ci)
+				continue
+			}
+			if !ci.Submittable {
+				return nil, fmt.Errorf("change %s is not submittable", PrivateChangeURL(project, num))
+			}
+			ra, err := client.GetRevisionActions(ctx, num, "current")
+			if err != nil {
+				return nil, err
+			}
+			if ra["submit"] == nil || !ra["submit"].Enabled {
+				return nil, fmt.Errorf("change %s is not submittable", PrivateChangeURL(project, num))
+			}
+			if ci.Branch == "public" {
+				cm, err := client.GetCommitMessage(ctx, num)
+				if err != nil {
+					return nil, err
+				}
+				if commitCVERE.MatchString(cm) {
+					lintErrs = append(lintErrs, fmt.Errorf("change %s must not contain a CVE reference", PrivateChangeURL(project, num)))
+				}
+				if commitIssueRE.MatchString(cm) {
+					lintErrs = append(lintErrs, fmt.Errorf("change %s must not contain a GitHub issue reference", PrivateChangeURL(project, num)))
+				}
+			}
+			cls = append(cls, ci)
+		}
+		checked = append(checked, &PatchChanges{Patch: p, Changes: cls})
+	}
+	if err := errors.Join(lintErrs...); err != nil {
+		return nil, err
+	}
+	return checked, nil
 }
