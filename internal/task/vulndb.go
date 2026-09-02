@@ -345,3 +345,29 @@ func ConvertInternalChangelists(ctx *wf.TaskContext, private GerritClient, miles
 	}
 	return FetchReleaseMilestone(ctx, private, milestoneNum)
 }
+
+func CreateVulnReports(ctx *wf.TaskContext, public GerritClient, rm *relmeta.ReleaseMilestone, moduleInfo func(*relmeta.SecurityPatch) (VulnModuleInfo, error), announceURL string, reviewers []string) (string, error) {
+	if rm == nil {
+		return "", nil
+	}
+	var reports []*report.Report
+	for _, p := range rm.Patches {
+		mod, err := moduleInfo(p)
+		if err != nil {
+			return "", err
+		}
+		r, err := VulnReport(p, mod, announceURL)
+		if err != nil {
+			return "", err
+		}
+		reports = append(reports, r)
+	}
+
+	// TODO(nealpatel): At this point, we need to
+	// run the linter; for x-repo this is more trivial.
+	// For std, the symbol resolution is more complex.
+	//
+	// These will generate the cve5/osv files that
+	// must be included in the diff below.
+	return MailVulnReports(ctx, public, reports, reviewers)
+}

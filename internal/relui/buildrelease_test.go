@@ -2109,7 +2109,7 @@ func TestCreateVulnReportsStdCmd(t *testing.T) {
 		}
 
 		wantReviewers := []string{"vuln-reviewer-a@google.com", "vuln-reviewer-b@google.com"}
-		changeID, err := deps.buildTasks.createVulnReports(taskCtx, rm, announceURL, wantReviewers)
+		changeID, err := task.CreateVulnReports(taskCtx, deps.buildTasks.GerritClient, rm, task.StdVulnModuleInfo, announceURL, wantReviewers)
 		if err != nil {
 			t.Fatalf("createVulnReports: %v", err)
 		}
@@ -2162,7 +2162,7 @@ func TestCreateVulnReportsNilMilestone(t *testing.T) {
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "vu1-noop"}}
 
 	t.Run("nil milestone", func(t *testing.T) {
-		got, err := deps.buildTasks.createVulnReports(taskCtx, nil, "https://example.com", nil)
+		got, err := task.CreateVulnReports(taskCtx, deps.buildTasks.GerritClient, nil, task.StdVulnModuleInfo, "https://example.com", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -2172,7 +2172,7 @@ func TestCreateVulnReportsNilMilestone(t *testing.T) {
 	})
 
 	t.Run("empty patches", func(t *testing.T) {
-		got, err := deps.buildTasks.createVulnReports(taskCtx, &relmeta.ReleaseMilestone{}, "https://example.com", nil)
+		got, err := task.CreateVulnReports(taskCtx, deps.buildTasks.GerritClient, &relmeta.ReleaseMilestone{}, task.StdVulnModuleInfo, "https://example.com", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

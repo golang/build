@@ -45,7 +45,6 @@ import (
 	wf "golang.org/x/build/internal/workflow"
 	"golang.org/x/build/relmeta"
 	"golang.org/x/net/context/ctxhttp"
-	"golang.org/x/vulndb/report"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -555,35 +554,13 @@ func addCommTasks(
 
 	updated := wf.Action2(wd, "Update GitHub issues", task.UpdateGitHubIssues, wf.Const(build.GitHub), rm, wf.After(announcementURL))
 	converted := wf.Task6(wd, "convert-internal-changelists", task.ConvertPatchChangelists, wf.Const(build.PrivateGerritClient), wf.Const(build.GerritClient), wf.Const(build.GerritProject), rm, patches, securityReviewers, wf.After(announcementURL))
-	vulndbChangeID := wf.Task3(wd, "file-vulndb-reports", build.createVulnReports, converted, announcementURL, securityReviewers, wf.After(updated))
+	vulndbChangeID := wf.Task5(wd, "file-vulndb-reports", task.CreateVulnReports, wf.Const(build.GerritClient), converted, wf.Const(task.StdVulnModuleInfo), announcementURL, securityReviewers, wf.After(updated))
 
 	wf.Output(wd, "Announcement URL", announcementURL)
 	wf.Output(wd, "Tweet URL", tweetURL)
 	wf.Output(wd, "Mastodon URL", mastodonURL)
 	wf.Output(wd, "Bluesky URL", blueskyURL)
 	wf.Output(wd, "VulnDB Change ID", vulndbChangeID)
-}
-
-// createVulnReports builds and submits vulndb reports for std/cmd
-// security patches. It no-ops when rm is nil or has no patches
-// (non-security minor release or major-release path).
-func (b *BuildReleaseTasks) createVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, announceURL string, reviewers []string) (string, error) {
-	if rm == nil || len(rm.Patches) == 0 {
-		return "", nil
-	}
-	var reports []*report.Report
-	for _, p := range rm.Patches {
-		mod, err := task.StdVulnModuleInfo(p)
-		if err != nil {
-			return "", err
-		}
-		r, err := task.VulnReport(p, mod, announceURL)
-		if err != nil {
-			return "", err
-		}
-		reports = append(reports, r)
-	}
-	return task.MailVulnReports(ctx, b.GerritClient, reports, reviewers)
 }
 
 func now(_ context.Context) (time.Time, error) {

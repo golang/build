@@ -178,26 +178,9 @@ func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *r
 }
 
 func (x *PrivXPatch) CreateVulnReports(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, vulnerableAt *report.Version, tagged TagRepo, announceURL string, reviewers []string) (string, error) {
-	var reports []*report.Report
-	for _, p := range rm.Patches {
-		mod, err := x.vulnModuleInfo(p, tagged, vulnerableAt)
-		if err != nil {
-			return "", err
-		}
-		r, err := VulnReport(p, mod, announceURL)
-		if err != nil {
-			return "", err
-		}
-		reports = append(reports, r)
-	}
-
-	// TODO(nealpatel): At this point, we need to
-	// run the linter; for x-repo this is more trivial.
-	// For std, the symbol resolution is more complex.
-	//
-	// These will generate the cve5/osv files that
-	// must be included in the diff below.
-	return MailVulnReports(ctx, x.PublicGerrit, reports, reviewers)
+	return CreateVulnReports(ctx, x.PublicGerrit, rm, func(p *relmeta.SecurityPatch) (VulnModuleInfo, error) {
+		return x.vulnModuleInfo(p, tagged, vulnerableAt)
+	}, announceURL, reviewers)
 }
 
 // vulnModuleInfo derives the [VulnModuleInfo] for a single patch.
