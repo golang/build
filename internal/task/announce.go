@@ -1050,19 +1050,19 @@ You can check with the security release coordinator to confirm this input.`,
 	}
 )
 
-func FetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (relmeta.ReleaseMilestone, error) {
+func FetchReleaseMilestone(ctx context.Context, private GerritClient, milestoneNum string) (*relmeta.ReleaseMilestone, error) {
 	const project = "security-metadata"
 	head, err := private.ReadBranchHead(ctx, project, "main")
 	if err != nil {
-		return relmeta.ReleaseMilestone{}, err
+		return nil, err
 	}
 	b, err := private.ReadFile(ctx, project, head, path.Join("data", "milestones", milestoneNum+".yaml"))
 	if err != nil {
-		return relmeta.ReleaseMilestone{}, err
+		return nil, err
 	}
 	var rm relmeta.ReleaseMilestone
 	if err := yaml.Unmarshal(b, &rm); err != nil {
-		return relmeta.ReleaseMilestone{}, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
+		return nil, fmt.Errorf("cannot YAML unmarshal the milestone: %v", err)
 	}
-	return rm, nil
+	return &rm, nil
 }

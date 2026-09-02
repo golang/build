@@ -912,11 +912,7 @@ func (b *BuildReleaseTasks) fetchSecurityMilestone(ctx *wf.TaskContext, mileston
 		ctx.Printf("No security milestone specified, no security milestone to fetch.")
 		return nil, nil
 	}
-	rm, err := task.FetchReleaseMilestone(ctx, b.PrivateGerritClient, milestoneNum)
-	if err != nil {
-		return nil, err
-	}
-	return &rm, nil
+	return task.FetchReleaseMilestone(ctx, b.PrivateGerritClient, milestoneNum)
 }
 
 type securityBranchInfo struct {

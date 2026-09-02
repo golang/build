@@ -41,20 +41,24 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 		skipPostSubmit    = wf.Param(wd, wf.ParamDef[bool]{Name: "Skip post submit result (optional)", ParamType: wf.Bool})
 		reviewers         = wf.Param(wd, reviewersParam) // We don't fill this.
 		securityReviewers = wf.Param(wd, SecurityReviewersParameter)
+
+		privGerrit = wf.Const(x.PrivateGerrit)
+		pubGerrit  = wf.Const(x.PublicGerrit)
+		github     = wf.Const(x.GitHub)
 	)
 
 	availableRepos := wf.Task0(wd, "Load all repositories", tagx.SelectRepos)
 
-	rm := wf.Task1(wd, "Pull release milestone", x.PullMilestone, milestoneNum)
+	rm := wf.Task2(wd, "Pull release milestone", FetchReleaseMilestone, privGerrit, milestoneNum)
 	patches := wf.Task3(wd, "Get changes for target x repo", x.FilterPatches, rm, targetRepo, availableRepos)
-	checkpoint := wf.Task3(wd, "Create checkpoint branch", CreateCheckpoint, wf.Const(x.PrivateGerrit), targetRepo, wf.Const("public"))
-	patches = wf.Task3(wd, "Move and rebase all changes per x repo", MoveAndRebaseAll, wf.Const(x.PrivateGerrit), checkpoint, patches)
-	patches = wf.Task3(wd, "Waiting for submissions", SubmitPrivateChanges, wf.Const(x.PrivateGerrit), targetRepo, patches)
-	securityCommit := wf.Task2(wd, "Read checkpoint head", x.ReadCheckpointHead, targetRepo, checkpoint, wf.After(patches))
+	checkpoint := wf.Task3(wd, "Create checkpoint branch", CreateCheckpoint, privGerrit, targetRepo, wf.Const("public"))
+	patches = wf.Task3(wd, "Move and rebase all changes per x repo", MoveAndRebaseAll, privGerrit, checkpoint, patches)
+	patches = wf.Task3(wd, "Waiting for submissions", SubmitPrivateChanges, privGerrit, targetRepo, patches)
+	securityCommit := wf.Task3(wd, "Read checkpoint head", ReadCheckpointHead, privGerrit, targetRepo, checkpoint, wf.After(patches))
 	// block for manual review before pushing changes to public
 	okayToDisclose := wf.Action0(wd, "Wait to disclose", x.ApproveAction, wf.After(securityCommit)) // TODO(nealpatel): Add warning text
 	disclosed := wf.Task3(wd, "Publish changes", x.PublishChanges, targetRepo, checkpoint, securityCommit, wf.After(okayToDisclose))
-	submitted := wf.Action2(wd, "Wait for submission of published changes", AwaitSubmitted, wf.Const(x.PublicGerrit), disclosed)
+	submitted := wf.Action2(wd, "Wait for submission of published changes", AwaitSubmitted, pubGerrit, disclosed)
 	tagged := wf.Expand4(wd, "Create single-repo plan", tagx.BuildSingleRepoPlan, availableRepos, targetRepo, skipPostSubmit, reviewers, wf.After(submitted))
 	vulnerableAt := wf.Task1(wd, "Resolve vulnerable version", x.ResolveVulnerableVersion, tagged)
 
@@ -65,19 +69,13 @@ func (x *PrivXPatch) NewDefinition(tagx *TagXReposTasks) *wf.Definition {
 	wf.Output(wd, "Announcement URL", announcementURL)
 
 	// post-announcement tasks
-	updated := wf.Action2(wd, "Update GitHub issues", UpdateGitHubIssues, wf.Const(x.GitHub), rm, wf.After(announcementURL))
-	converted := wf.Task6(wd, "Convert internal changelists", ConvertPatchChangelists, wf.Const(x.PrivateGerrit), wf.Const(x.PublicGerrit), targetRepo, rm, patches, securityReviewers, wf.After(announcementURL))
+	updated := wf.Action2(wd, "Update GitHub issues", UpdateGitHubIssues, github, rm, wf.After(announcementURL))
+	converted := wf.Task6(wd, "Convert internal changelists", ConvertPatchChangelists, privGerrit, pubGerrit, targetRepo, rm, patches, securityReviewers, wf.After(announcementURL))
 	changeID := wf.Task5(wd, "Create vuln reports", x.CreateVulnReports, converted, vulnerableAt, tagged, announcementURL, securityReviewers, wf.After(updated))
 	wf.Output(wd, "File VulnDB Reports", changeID)
 
 	wf.Output(wd, "done", tagged)
 	return wd
-}
-
-func (x *PrivXPatch) PullMilestone(ctx *wf.TaskContext, milestone string) (*relmeta.ReleaseMilestone, error) {
-	// TODO(nealpatel): Is this ceremony?
-	rm, err := FetchReleaseMilestone(ctx, x.PrivateGerrit, milestone)
-	return &rm, err
 }
 
 func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, target string, found []TagRepo) (patches []*PatchChanges, _ error) {
@@ -112,10 +110,6 @@ func repoName(modPkg string) (string, error) {
 		return "", fmt.Errorf("malformed package: %q", modPkg)
 	}
 	return repo, nil
-}
-
-func (x *PrivXPatch) ReadCheckpointHead(ctx *wf.TaskContext, repoName string, cp Checkpoint) (string, error) {
-	return x.PrivateGerrit.ReadBranchHead(ctx, repoName, cp.Branch)
 }
 
 func (x *PrivXPatch) ResolveVulnerableVersion(ctx *wf.TaskContext, tagged TagRepo) (*report.Version, error) {

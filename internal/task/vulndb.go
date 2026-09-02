@@ -309,16 +309,16 @@ func Subject(reports []*report.Report) string {
 // If at least one change needs to be converted, it mails a CL
 // and blocks until that CL is approved and submitted, returning
 // the updated release milestone from HEAD.
-func ConvertInternalChangelists(ctx *wf.TaskContext, private GerritClient, milestoneNum string, i2p map[string]string, reviewers []string) (relmeta.ReleaseMilestone, error) {
+func ConvertInternalChangelists(ctx *wf.TaskContext, private GerritClient, milestoneNum string, i2p map[string]string, reviewers []string) (*relmeta.ReleaseMilestone, error) {
 	const project = "security-metadata"
 	head, err := private.ReadBranchHead(ctx, project, "main")
 	if err != nil {
-		return relmeta.ReleaseMilestone{}, err
+		return nil, err
 	}
 	fp := path.Join("data", "milestones", milestoneNum+".yaml")
 	buf, err := private.ReadFile(ctx, project, head, fp)
 	if err != nil {
-		return relmeta.ReleaseMilestone{}, err
+		return nil, err
 	}
 	converted := string(buf)
 	for internal, public := range i2p {
@@ -332,14 +332,14 @@ func ConvertInternalChangelists(ctx *wf.TaskContext, private GerritClient, miles
 		}
 		changeID, err := private.CreateAutoSubmitChange(ctx, changeInput, reviewers, map[string]string{fp: converted})
 		if err != nil {
-			return relmeta.ReleaseMilestone{}, err
+			return nil, err
 		}
 		if changeID != "" {
 			ctx.Printf("Awaiting review/submit of %s", changeID)
 			if _, err := AwaitCondition(ctx, 10*time.Second, func() (string, bool, error) {
 				return private.Submitted(ctx, changeID, "")
 			}); err != nil {
-				return relmeta.ReleaseMilestone{}, err
+				return nil, err
 			}
 		}
 	}

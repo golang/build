@@ -5,6 +5,7 @@
 package task
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -252,9 +253,9 @@ func ConvertPatchChangelists(ctx *wf.TaskContext, private, public GerritClient, 
 	if err != nil {
 		return nil, err
 	}
-	converted, err := ConvertInternalChangelists(ctx, private, strconv.FormatInt(rm.ID, 10), external, reviewers)
-	if err != nil {
-		return nil, err
-	}
-	return &converted, nil
+	return ConvertInternalChangelists(ctx, private, strconv.FormatInt(rm.ID, 10), external, reviewers)
+}
+
+func ReadCheckpointHead(ctx context.Context, client GerritClient, project string, cp Checkpoint) (string, error) {
+	return client.ReadBranchHead(ctx, project, cp.Branch)
 }
