@@ -983,7 +983,7 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 		}
 
 		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: "cherry-picks"}}
-		retried, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, changes, coalesceRM(), coalesceBackports())
+		retried, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, []*task.PatchChanges{{Patch: coalesceRM().Patches[0], Changes: changes}}, coalesceBackports())
 		if err != nil {
 			t.Fatalf("createSecurityCherryPicks after resolving conflicts: %v", err)
 		}
@@ -1075,7 +1075,7 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 		if err != nil {
 			t.Fatalf("first createInternalReleaseBranches: %v", err)
 		}
-		cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
+		cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceBackports())
 		if err != nil {
 			t.Fatalf("first createSecurityCherryPicks: %v", err)
 		}
@@ -1099,11 +1099,11 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 		if len(branches2) != len(branches) {
 			t.Fatalf("branch count mismatch: first=%d, restart=%d", len(branches), len(branches2))
 		}
-		cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
+		cps2, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceBackports())
 		if err != nil {
 			t.Fatalf("restart createSecurityCherryPicks with merged CPs: %v", err)
 		}
-		if got, want := len(cps2), len(cls)*len(branches); got != want {
+		if got, want := len(cps2), len(cls[0].Changes)*len(branches); got != want {
 			t.Fatalf("restart cherry-picks: got %d, want %d", got, want)
 		}
 		for _, cp := range cps2 {
@@ -1131,8 +1131,8 @@ func TestRestartInternalBranchesMergedCherryPicks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ListCommits(%s): %v", b, err)
 			}
-			if len(commits) != len(cls) {
-				t.Errorf("branch %s has %d security commits above public head, want %d", b, len(commits), len(cls))
+			if len(commits) != len(cls[0].Changes) {
+				t.Errorf("branch %s has %d security commits above public head, want %d", b, len(commits), len(cls[0].Changes))
 			}
 		}
 	})
@@ -1453,7 +1453,7 @@ func mustGetNextMinors(t *testing.T, deps *releaseTestDeps) []string {
 	return next
 }
 
-func mustSecuritySetup(t *testing.T, deps *releaseTestDeps, privGerrit *task.FakeGerrit) (*workflow.TaskContext, securityBranchInfo, []*gerrit.ChangeInfo) {
+func mustSecuritySetup(t *testing.T, deps *releaseTestDeps, privGerrit *task.FakeGerrit) (*workflow.TaskContext, securityBranchInfo, []*task.PatchChanges) {
 	t.Helper()
 	taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: t.Name()}}
 	bi, err := computeSecurityBranchInfo(taskCtx, deps.versionTasks, 26, mustGetNextMinors(t, deps))
@@ -1468,7 +1468,7 @@ func mustSecuritySetup(t *testing.T, deps *releaseTestDeps, privGerrit *task.Fak
 		}
 		cls = append(cls, ci)
 	}
-	return taskCtx, bi, cls
+	return taskCtx, bi, []*task.PatchChanges{{Patch: coalesceRM().Patches[0], Changes: cls}}
 }
 
 // minorReleaseParams returns the parameters needed to start the workflow built
@@ -1801,11 +1801,11 @@ func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 			t.Fatal("first run created no internal release branches")
 		}
 
-		freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceRM(), coalesceBackports())
+		freshCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches, cls, coalesceBackports())
 		if err != nil {
 			t.Fatalf("createSecurityCherryPicks: %v", err)
 		}
-		wantCPCount := len(cls) * len(branches)
+		wantCPCount := len(cls[0].Changes) * len(branches)
 		if got := len(freshCPs); got != wantCPCount {
 			t.Fatalf("fresh cherry-picks: got %d, want %d", got, wantCPCount)
 		}
@@ -1837,7 +1837,7 @@ func TestCreateInternalReleaseBranchesOpenCherryPicks(t *testing.T) {
 			}
 		}
 
-		restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceRM(), coalesceBackports())
+		restartCPs, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, branches2, cls, coalesceBackports())
 		if err != nil {
 			t.Fatalf("restart createSecurityCherryPicks: %v", err)
 		}
@@ -1886,7 +1886,7 @@ func TestCreateSecurityCherryPicksPartialDedup(t *testing.T) {
 		firstBranch := releaseBranches[0]
 		preseeded := &gerrit.ChangeInfo{
 			ID:           "pre-cp-1",
-			ChangeID:     cls[0].ChangeID, // same Change-Id as original
+			ChangeID:     cls[0].Changes[0].ChangeID, // same Change-Id as original
 			ChangeNumber: 9999,
 			Branch:       firstBranch,
 			Submittable:  true,
@@ -1895,11 +1895,11 @@ func TestCreateSecurityCherryPicksPartialDedup(t *testing.T) {
 		}
 		privGerrit.AddChange("go", "pre-cp-1", preseeded, "preseeded cherry-pick")
 
-		cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
+		cps, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceBackports())
 		if err != nil {
 			t.Fatalf("partial createSecurityCherryPicks: %v", err)
 		}
-		wantCount := len(cls) * len(releaseBranches)
+		wantCount := len(cls[0].Changes) * len(releaseBranches)
 		if got := len(cps); got != wantCount {
 			t.Fatalf("partial cherry-picks: got %d, want %d", got, wantCount)
 		}
@@ -1928,14 +1928,14 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
-		if len(moved) != len(cls) {
-			t.Fatalf("got %d CLs, want %d", len(moved), len(cls))
+		if len(moved[0].Changes) != len(cls[0].Changes) {
+			t.Fatalf("got %d CLs, want %d", len(moved[0].Changes), len(cls[0].Changes))
 		}
-		for _, ci := range moved {
+		for _, ci := range moved[0].Changes {
 			if ci.Branch != checkpoint {
 				t.Errorf("CL %d branch = %q, want %q", ci.ChangeNumber, ci.Branch, checkpoint)
 			}
@@ -1954,16 +1954,16 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 		// Simulate the CLs having already been moved to the checkpoint branch
 		// by a prior run, so moveAndRebasePrivateChanges sees them as already
 		// on the correct branch and tolerates the 409.
-		for _, ci := range cls {
+		for _, ci := range cls[0].Changes {
 			ci.Branch = checkpoint
 		}
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges on already-moved CLs: %v", err)
 		}
-		if len(moved) != len(cls) {
-			t.Fatalf("got %d CLs, want %d", len(moved), len(cls))
+		if len(moved[0].Changes) != len(cls[0].Changes) {
+			t.Fatalf("got %d CLs, want %d", len(moved[0].Changes), len(cls[0].Changes))
 		}
 	})
 
@@ -1978,17 +1978,17 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 
 		// Simulate CL 1234 having already been merged by a prior run,
 		// so moveAndRebasePrivateChanges sees it as merged and tolerates the 409.
-		cls[0].Status = gerrit.ChangeStatusMerged
-		cls[0].Submittable = false
+		cls[0].Changes[0].Status = gerrit.ChangeStatusMerged
+		cls[0].Changes[0].Submittable = false
 
-		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		moved, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges with merged CL: %v", err)
 		}
-		if len(moved) != len(cls) {
-			t.Fatalf("got %d CLs, want %d", len(moved), len(cls))
+		if len(moved[0].Changes) != len(cls[0].Changes) {
+			t.Fatalf("got %d CLs, want %d", len(moved[0].Changes), len(cls[0].Changes))
 		}
-		for _, ci := range moved {
+		for _, ci := range moved[0].Changes {
 			if ci.ChangeNumber == 1234 && ci.Status != gerrit.ChangeStatusMerged {
 				t.Errorf("merged CL 1234 status = %q, want %q", ci.Status, gerrit.ChangeStatusMerged)
 			}
@@ -2006,7 +2006,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2015,10 +2015,10 @@ func TestSubmitPrivateChanges(t *testing.T) {
 		if err != nil {
 			t.Fatalf("submitPrivateChanges: %v", err)
 		}
-		if len(submitted) != len(cls) {
-			t.Fatalf("got %d CLs, want %d", len(submitted), len(cls))
+		if len(submitted[0].Changes) != len(cls[0].Changes) {
+			t.Fatalf("got %d CLs, want %d", len(submitted[0].Changes), len(cls[0].Changes))
 		}
-		for _, ci := range submitted {
+		for _, ci := range submitted[0].Changes {
 			if ci.Status != gerrit.ChangeStatusMerged {
 				t.Errorf("CL %d status = %q, want %q", ci.ChangeNumber, ci.Status, gerrit.ChangeStatusMerged)
 			}
@@ -2034,7 +2034,7 @@ func TestSubmitPrivateChanges(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2048,17 +2048,17 @@ func TestSubmitPrivateChanges(t *testing.T) {
 		}
 		merged1234.Status = gerrit.ChangeStatusMerged
 		merged1234.Submittable = false
-		cls[0].Status = gerrit.ChangeStatusMerged
-		cls[0].Submittable = false
+		cls[0].Changes[0].Status = gerrit.ChangeStatusMerged
+		cls[0].Changes[0].Submittable = false
 
 		submitted, err := deps.buildTasks.submitPrivateChanges(taskCtx, cls)
 		if err != nil {
 			t.Fatalf("submitPrivateChanges with pre-merged CL: %v", err)
 		}
-		if len(submitted) != len(cls) {
-			t.Fatalf("got %d CLs, want %d", len(submitted), len(cls))
+		if len(submitted[0].Changes) != len(cls[0].Changes) {
+			t.Fatalf("got %d CLs, want %d", len(submitted[0].Changes), len(cls[0].Changes))
 		}
-		for _, ci := range submitted {
+		for _, ci := range submitted[0].Changes {
 			if ci.Status != gerrit.ChangeStatusMerged {
 				t.Errorf("CL %d status = %q, want %q", ci.ChangeNumber, ci.Status, gerrit.ChangeStatusMerged)
 			}
@@ -2279,7 +2279,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2294,7 +2294,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createInternalReleaseBranches: %v", err)
 		}
 
-		cherryPicks, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, submitted, coalesceRM(), coalesceBackports())
+		cherryPicks, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, submitted, coalesceBackports())
 		if err != nil {
 			t.Fatalf("createSecurityCherryPicks: %v", err)
 		}
@@ -2337,7 +2337,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
@@ -2352,7 +2352,7 @@ func TestSubmitCherryPicks(t *testing.T) {
 			t.Fatalf("createInternalReleaseBranches: %v", err)
 		}
 
-		cherryPicks, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, submitted, coalesceRM(), coalesceBackports())
+		cherryPicks, err := deps.buildTasks.createSecurityCherryPicks(taskCtx, internalBranches, submitted, coalesceBackports())
 		if err != nil {
 			t.Fatalf("createSecurityCherryPicks: %v", err)
 		}
@@ -2435,7 +2435,7 @@ func TestMoveAndRebasePrivateChangesErrors(t *testing.T) {
 			Submittable: true,
 		}
 
-		_, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, "whatever", []*gerrit.ChangeInfo{fakeCL}, coalesceRM())
+		_, err := deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, "whatever", []*task.PatchChanges{{Patch: coalesceRM().Patches[0], Changes: []*gerrit.ChangeInfo{fakeCL}}})
 		if err == nil {
 			t.Fatal("expected error for nonexistent CL")
 		}
@@ -2452,12 +2452,12 @@ func TestSubmitPrivateChangesError(t *testing.T) {
 			t.Fatalf("createSecurityCheckpoint: %v", err)
 		}
 
-		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls, coalesceRM())
+		cls, err = deps.buildTasks.moveAndRebasePrivateChanges(taskCtx, checkpoint, cls)
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
 
-		for _, ci := range cls {
+		for _, ci := range cls[0].Changes {
 			stored, err := privGerrit.GetChange(deps.ctx, ci.ID)
 			if err != nil {
 				t.Fatalf("GetChange(%s): %v", ci.ID, err)
@@ -2510,7 +2510,7 @@ func TestCreateSecurityCherryPicksConflictError(t *testing.T) {
 			ContainsGitConflicts: true,
 		}, "crypto/tls: fix something\n\nFixes CVE-1985-0703\nFor golang/go#70001")
 
-		_, err = deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceRM(), coalesceBackports())
+		_, err = deps.buildTasks.createSecurityCherryPicks(taskCtx, releaseBranches, cls, coalesceBackports())
 		if err == nil {
 			t.Fatal("expected error from cherry-pick conflict")
 		}
@@ -2643,23 +2643,24 @@ func TestMoveAndRebaseRebaseSuccess(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		moved, err := build.moveAndRebasePrivateChanges(taskCtx, "checkpoint-rebase-test", []*gerrit.ChangeInfo{ci}, &relmeta.ReleaseMilestone{
-			Patches: []*relmeta.SecurityPatch{{
+		moved, err := build.moveAndRebasePrivateChanges(taskCtx, "checkpoint-rebase-test", []*task.PatchChanges{{
+			Patch: &relmeta.SecurityPatch{
 				ID:            1,
 				Track:         relmeta.Private,
 				GitHubIssueID: 70001,
 				CVE:           "CVE-1985-0703",
 				Changelists:   []string{"https://go-internal-review.git.corp.google.com/c/go/+/4242"},
-			}},
-		})
+			},
+			Changes: []*gerrit.ChangeInfo{ci},
+		}})
 		if err != nil {
 			t.Fatalf("moveAndRebasePrivateChanges: %v", err)
 		}
-		if len(moved) != 1 {
-			t.Fatalf("got %d CLs, want 1", len(moved))
+		if len(moved) != 1 || len(moved[0].Changes) != 1 {
+			t.Fatalf("unexpected result shape: %v", moved)
 		}
-		if moved[0].Branch != "checkpoint-rebase-test" {
-			t.Errorf("CL branch = %q, want %q", moved[0].Branch, "checkpoint-rebase-test")
+		if moved[0].Changes[0].Branch != "checkpoint-rebase-test" {
+			t.Errorf("CL branch = %q, want %q", moved[0].Changes[0].Branch, "checkpoint-rebase-test")
 		}
 	})
 }

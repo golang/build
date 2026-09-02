@@ -716,6 +716,7 @@ func TestMoveAndRebaseAllRebaseSuccess(t *testing.T) {
 			Branch:      "public",
 			Submittable: true,
 		}
+		privGerrit.AddChange("net", "1111", privGerrit.changes["1111"], "net/http2: fix 1111\n\nChange-Id: I1111")
 		privGerrit.changesMu.Lock()
 		privGerrit.clBases["1111"] = strings.TrimSpace(string(publicHead))
 		privGerrit.changesMu.Unlock()
@@ -735,7 +736,8 @@ func TestMoveAndRebaseAllRebaseSuccess(t *testing.T) {
 		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 		p := &PrivXPatch{PrivateGerrit: privGerrit}
 
-		patches := []*ref{{
+		patches := []*PatchChanges{{
+			Patch:   &relmeta.SecurityPatch{CVE: "CVE-1970-0001", GitHubIssueID: 4294967296},
 			Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
 		}}
 
@@ -768,6 +770,7 @@ func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
 			Branch:      "checkpoint-test",
 			Submittable: true,
 		}
+		privGerrit.AddChange("net", "1111", privGerrit.changes["1111"], "net/http2: fix 1111\n\nChange-Id: I1111")
 		publicHead, err := netRepo.dir.RunCommand(context.Background(), "rev-parse", "public")
 		if err != nil {
 			t.Fatal(err)
@@ -779,7 +782,8 @@ func TestMoveAndRebaseAllMoveAlreadyDestined(t *testing.T) {
 		ctx := &wf.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
 		p := &PrivXPatch{PrivateGerrit: privGerrit}
 
-		patches := []*ref{{
+		patches := []*PatchChanges{{
+			Patch:   &relmeta.SecurityPatch{CVE: "CVE-1970-0001", GitHubIssueID: 4294967296},
 			Changes: []*gerrit.ChangeInfo{privGerrit.changes["1111"]},
 		}}
 

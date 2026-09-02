@@ -6,9 +6,7 @@ package task
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -85,7 +83,7 @@ func (x *PrivXPatch) PullMilestone(ctx *wf.TaskContext, milestone string) (*relm
 	return &rm, err
 }
 
-func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, target string, found []TagRepo) (patches []*ref, _ error) {
+func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, target string, found []TagRepo) (patches []*PatchChanges, _ error) {
 	for _, p := range rm.Patches {
 		repo, err := repoName(p.Package)
 		if err != nil {
@@ -125,7 +123,7 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 			// TODO(nealpatel): Edge case; order matters for stacked changes.
 			cls = append(cls, ci)
 		}
-		patches = append(patches, &ref{Patch: p, Changes: cls})
+		patches = append(patches, &PatchChanges{Patch: p, Changes: cls})
 	}
 
 	return patches, nil
@@ -133,11 +131,6 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 
 func internalXRepoChangeURL[T int | string](xrepo string, clNum T) string {
 	return fmt.Sprintf("https://go-internal-review.git.corp.google.com/c/%s/+/%v", xrepo, clNum)
-}
-
-type ref struct {
-	Patch   *relmeta.SecurityPatch
-	Changes []*gerrit.ChangeInfo
 }
 
 type checkpointInfo struct {
@@ -178,37 +171,11 @@ func (x *PrivXPatch) ReadCheckpointHead(ctx *wf.TaskContext, repoName string, cp
 	return x.PrivateGerrit.ReadBranchHead(ctx, repoName, cp.Branch)
 }
 
-func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, cp checkpointInfo, patches []*ref) ([]*ref, error) {
-	for _, p := range patches {
-		for i, ci := range p.Changes {
-			movedCI, err := x.PrivateGerrit.MoveChange(ctx, ci.ID, cp.Branch)
-			if err != nil {
-				// In case we need to re-run the Move step, tolerate the case where the change
-				// is already on the branch.
-				var httpErr *gerrit.HTTPError
-				if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
-					return nil, err
-				}
-			} else {
-				ci = &movedCI
-			}
-			rebasedCI, err := x.PrivateGerrit.RebaseChange(ctx, ci.ID, "")
-			if err != nil {
-				// Don't fail if the branch is already up to date.
-				var httpErr *gerrit.HTTPError
-				if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
-					return nil, err
-				}
-			} else {
-				ci = &rebasedCI
-			}
-			p.Changes[i] = ci
-		}
-	}
-	return patches, nil
+func (x *PrivXPatch) MoveAndRebaseAll(ctx *wf.TaskContext, cp checkpointInfo, patches []*PatchChanges) ([]*PatchChanges, error) {
+	return MoveAndRebaseAll(ctx, x.PrivateGerrit, cp.Branch, patches)
 }
 
-func (x *PrivXPatch) AwaitSubmissions(ctx *wf.TaskContext, patches []*ref) ([]*ref, error) {
+func (x *PrivXPatch) AwaitSubmissions(ctx *wf.TaskContext, patches []*PatchChanges) ([]*PatchChanges, error) {
 	var g errgroup.Group
 	for _, p := range patches {
 		for _, cl := range p.Changes {
@@ -332,7 +299,7 @@ func (x *PrivXPatch) MailAnnouncement(ctx *wf.TaskContext, tagged TagRepo, rm *r
 	return SentMail{Subject: mc.Subject}, nil
 }
 
-func (x *PrivXPatch) ConvertInternalChangelists(ctx *wf.TaskContext, repoName, milestoneNum string, patches []*ref, reviewers []string) (*relmeta.ReleaseMilestone, error) {
+func (x *PrivXPatch) ConvertInternalChangelists(ctx *wf.TaskContext, repoName, milestoneNum string, patches []*PatchChanges, reviewers []string) (*relmeta.ReleaseMilestone, error) {
 	var sps []*relmeta.SecurityPatch
 	for _, p := range patches {
 		sps = append(sps, p.Patch)

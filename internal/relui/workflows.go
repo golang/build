@@ -511,14 +511,14 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	// checkpoint is created with a timestamp trailer
 	// to ensure that workflow restarts are idempotent.
 	checkpoint := wf.Task2(wd, "Create checkpoint branch", build.createSecurityCheckpoint, branchInfo, cls)
-	cls = wf.Task3(wd, "Move and rebase private changes", build.moveAndRebasePrivateChanges, checkpoint, cls, rm)
+	cls = wf.Task2(wd, "Move and rebase private changes", build.moveAndRebasePrivateChanges, checkpoint, cls)
 	cls = wf.Task1(wd, "Submit private changes", build.submitPrivateChanges, cls)
 
 	// internalBranches are NOT created with a timestamp
 	// trailer; on workflow-abandon-and-restart, existing
 	// internal release branches are adopted.
 	internalBranches := wf.Task2(wd, "Create internal release branches", build.createInternalReleaseBranches, branchInfo, cls)
-	cherryPicks := wf.Task4(wd, "Create cherry-picks", build.createSecurityCherryPicks, internalBranches, cls, rm, backports)
+	cherryPicks := wf.Task3(wd, "Create cherry-picks", build.createSecurityCherryPicks, internalBranches, cls, backports)
 	coalesced := wf.Task1(wd, "Submit cherry-picks", build.submitCherryPicks, cherryPicks)
 
 	// once all internal branches have their
@@ -1019,18 +1019,19 @@ var (
 	riderIssueRE  = regexp.MustCompile(`(?m)^\w+ golang/go#(\d+)`)
 )
 
-func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) ([]*gerrit.ChangeInfo, error) {
+func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) ([]*task.PatchChanges, error) {
 	if rm == nil {
 		return nil, nil
 	}
 	var (
-		cls      []*gerrit.ChangeInfo
+		patches  []*task.PatchChanges
 		lintErrs []error
 	)
 	for _, patch := range rm.Patches {
 		if patch.Track == relmeta.Public {
 			continue
 		}
+		var cls []*gerrit.ChangeInfo
 		for _, clURL := range patch.Changelists {
 			_, num, _ := strings.Cut(clURL, "/+/")
 			ci, err := b.PrivateGerritClient.GetChange(ctx, num, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
@@ -1065,15 +1066,16 @@ func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta
 			}
 			cls = append(cls, ci)
 		}
+		patches = append(patches, &task.PatchChanges{Patch: patch, Changes: cls})
 	}
-	if len(cls) == 0 {
+	if len(patches) == 0 {
 		ctx.Printf("No non-PUBLIC security patches to prepare.")
 	}
-	return cls, errors.Join(lintErrs...)
+	return patches, errors.Join(lintErrs...)
 }
 
-func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi securityBranchInfo, cls []*gerrit.ChangeInfo) (string, error) {
-	if len(cls) == 0 {
+func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi securityBranchInfo, patches []*task.PatchChanges) (string, error) {
+	if len(patches) == 0 {
 		ctx.Printf("No PRIVATE-track security patches; skipping checkpoint branch creation.")
 		return "", nil
 	}
@@ -1090,132 +1092,34 @@ func (b *BuildReleaseTasks) createSecurityCheckpoint(ctx *wf.TaskContext, bi sec
 	return checkpointName, nil
 }
 
-func patchesByChangeNumber(rm *relmeta.ReleaseMilestone) (map[int]*relmeta.SecurityPatch, error) {
-	patches := map[int]*relmeta.SecurityPatch{}
-	if rm == nil {
-		return patches, nil
-	}
-	for _, p := range rm.Patches {
-		if p.Track == relmeta.Public {
-			continue
-		}
-		for _, clURL := range p.Changelists {
-			_, num, ok := strings.Cut(clURL, "/+/")
-			if !ok {
-				return nil, fmt.Errorf("security patch %d: malformed changelist URL %q", p.ID, clURL)
-			}
-			n, err := strconv.Atoi(num)
-			if err != nil {
-				return nil, fmt.Errorf("security patch %d: malformed changelist URL %q: %v", p.ID, clURL, err)
-			}
-			patches[n] = p
-		}
-	}
-	return patches, nil
+func (b *BuildReleaseTasks) moveAndRebasePrivateChanges(ctx *wf.TaskContext, checkpointBranch string, patches []*task.PatchChanges) ([]*task.PatchChanges, error) {
+	return task.MoveAndRebaseAll(ctx, b.PrivateGerritClient, checkpointBranch, patches)
 }
 
-func securityRiders(p *relmeta.SecurityPatch) (string, error) {
-	if p.CVE == "" {
-		return "", fmt.Errorf("security patch %d has no CVE", p.ID)
-	}
-	if p.GitHubIssueID == 0 {
-		return "", fmt.Errorf("security patch %d has no GitHub issue", p.ID)
-	}
-	return fmt.Sprintf("Fixes %s\nFor golang/go#%d", p.CVE, p.GitHubIssueID), nil
-}
-
-func insertRiders(message, riders string) string {
-	message = strings.TrimRight(message, "\n")
-	if i := strings.LastIndex(message, "\n\n"); i >= 0 && strings.Contains(message[i+2:], "Change-Id:") {
-		return message[:i+2] + riders + "\n\n" + message[i+2:] + "\n"
-	}
-	return message + "\n\n" + riders + "\n"
-}
-
-func (b *BuildReleaseTasks) moveAndRebasePrivateChanges(ctx *wf.TaskContext, checkpointBranch string, cls []*gerrit.ChangeInfo, rm *relmeta.ReleaseMilestone) ([]*gerrit.ChangeInfo, error) {
-	patches, err := patchesByChangeNumber(rm)
-	if err != nil {
-		return nil, err
-	}
-	for i, ci := range cls {
-		// Idempotent. Changes can be in the MERGED (HTTP 409) state which means
-		// that they cannot be moved or rebased. Refetch it and if it is MERGED,
-		// skip it similarly to submitPrivateChanges.
-		fresh, err := b.PrivateGerritClient.GetChange(ctx, ci.ID)
-		if err != nil {
-			return nil, err
-		}
-		if fresh.Status == gerrit.ChangeStatusMerged {
-			cls[i] = fresh
-			continue
-		}
-		movedCI, err := b.PrivateGerritClient.MoveChange(ctx, ci.ID, checkpointBranch)
-		if err != nil {
-			var httpErr *gerrit.HTTPError
-			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
-				return nil, err
-			}
-			movedCI = *ci
-		} else {
-			cls[i] = &movedCI
-		}
-		rebasedCI, err := b.PrivateGerritClient.RebaseChange(ctx, movedCI.ID, "")
-		if err != nil {
-			var httpErr *gerrit.HTTPError
-			if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
-				return nil, err
-			}
-		} else {
-			cls[i] = &rebasedCI
-		}
-
-		p, ok := patches[cls[i].ChangeNumber]
-		if !ok {
-			return nil, fmt.Errorf("change %s does not correspond to any security patch", privateChangeURL(cls[i].ChangeNumber))
-		}
-		riders, err := securityRiders(p)
-		if err != nil {
-			return nil, err
-		}
-		cm, err := b.PrivateGerritClient.GetCommitMessage(ctx, cls[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		if strings.Contains(cm, riders) {
-			continue
-		}
-		if err := b.PrivateGerritClient.SetCommitMessage(ctx, cls[i].ID, insertRiders(cm, riders)); err != nil {
-			return nil, err
-		}
-	}
-	return cls, nil
-}
-
-func (b *BuildReleaseTasks) submitPrivateChanges(ctx *wf.TaskContext, cls []*gerrit.ChangeInfo) ([]*gerrit.ChangeInfo, error) {
+func (b *BuildReleaseTasks) submitPrivateChanges(ctx *wf.TaskContext, patches []*task.PatchChanges) ([]*task.PatchChanges, error) {
 	if _, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
-		unsubmitted := len(cls)
 		var blocking []string
-		for i, change := range cls {
-			if change.Status == gerrit.ChangeStatusMerged {
-				unsubmitted--
-				continue
+		for _, p := range patches {
+			for i, change := range p.Changes {
+				if change.Status == gerrit.ChangeStatusMerged {
+					continue
+				}
+				ci, err := b.PrivateGerritClient.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
+				if err != nil {
+					return "", false, err
+				}
+				if !ci.Submittable {
+					blocking = append(blocking, privateChangeURL(ci.ChangeNumber))
+					continue
+				}
+				submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
+				if err != nil {
+					return "", false, err
+				}
+				p.Changes[i] = &submitted
 			}
-			ci, err := b.PrivateGerritClient.GetChange(ctx, change.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
-			if err != nil {
-				return "", false, err
-			}
-			if !ci.Submittable {
-				blocking = append(blocking, privateChangeURL(ci.ChangeNumber))
-				continue
-			}
-			submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
-			if err != nil {
-				return "", false, err
-			}
-			cls[i] = &submitted
-			unsubmitted--
 		}
-		if unsubmitted == 0 {
+		if len(blocking) == 0 {
 			return "", true, nil
 		}
 		ctx.Printf("awaiting non-submittable CL(s): %s", strings.Join(blocking, ", "))
@@ -1223,11 +1127,11 @@ func (b *BuildReleaseTasks) submitPrivateChanges(ctx *wf.TaskContext, cls []*ger
 	}); err != nil {
 		return nil, err
 	}
-	return cls, nil
+	return patches, nil
 }
 
-func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, bi securityBranchInfo, cls []*gerrit.ChangeInfo) ([]string, error) {
-	if len(cls) == 0 {
+func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, bi securityBranchInfo, patches []*task.PatchChanges) ([]string, error) {
+	if len(patches) == 0 {
 		ctx.Printf("No PRIVATE-track security patches; skipping internal release branch creation.")
 		return nil, nil
 	}
@@ -1254,67 +1158,60 @@ func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, b
 	return internalBranches, nil
 }
 
-func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, releaseBranches []string, changes []*gerrit.ChangeInfo, rm *relmeta.ReleaseMilestone, backports task.BackportManifest) ([]*gerrit.ChangeInfo, error) {
-	patches, err := patchesByChangeNumber(rm)
-	if err != nil {
-		return nil, err
-	}
+func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, releaseBranches []string, patches []*task.PatchChanges, backports task.BackportManifest) ([]*gerrit.ChangeInfo, error) {
 	var (
 		cherryPicks  []*gerrit.ChangeInfo
 		conflictErrs []error
 	)
-	for _, ci := range changes {
-		for _, releaseBranch := range releaseBranches {
-			// Check whether a non-abandoned cherry-pick of this
-			// change already exists on the target branch (e.g. from
-			// a prior run). The Change-Id footer is preserved in
-			// the cherry-pick commit message, so we query by it.
-			existing, err := b.PrivateGerritClient.QueryChanges(ctx,
-				fmt.Sprintf("project:%s branch:%s change:%s -is:abandoned",
-					b.PrivateGerritProject, releaseBranch, ci.ChangeID))
-			if err != nil {
-				return nil, err
-			}
-			if len(existing) > 0 {
-				ctx.Printf("Skipping cherry-pick of %s to %s: existing CL %s (status %s)",
-					ci.ChangeID, releaseBranch,
-					privateChangeURL(existing[0].ChangeNumber),
-					existing[0].Status)
-				cherryPicks = append(cherryPicks, existing[0])
-				continue
-			}
+	for _, p := range patches {
+		for _, ci := range p.Changes {
+			for _, releaseBranch := range releaseBranches {
+				// Check whether a non-abandoned cherry-pick of this
+				// change already exists on the target branch (e.g. from
+				// a prior run). The Change-Id footer is preserved in
+				// the cherry-pick commit message, so we query by it.
+				existing, err := b.PrivateGerritClient.QueryChanges(ctx,
+					fmt.Sprintf("project:%s branch:%s change:%s -is:abandoned",
+						b.PrivateGerritProject, releaseBranch, ci.ChangeID))
+				if err != nil {
+					return nil, err
+				}
+				if len(existing) > 0 {
+					ctx.Printf("Skipping cherry-pick of %s to %s: existing CL %s (status %s)",
+						ci.ChangeID, releaseBranch,
+						privateChangeURL(existing[0].ChangeNumber),
+						existing[0].Status)
+					cherryPicks = append(cherryPicks, existing[0])
+					continue
+				}
+				major := majorFromMinor(strings.TrimPrefix(releaseBranch, "internal-"))
+				line := strings.TrimPrefix(strings.TrimPrefix(major, "release-branch."), "go")
 
-			p, ok := patches[ci.ChangeNumber]
-			if !ok {
-				return nil, fmt.Errorf("change %s does not correspond to any security patch", privateChangeURL(ci.ChangeNumber))
-			}
-			major := majorFromMinor(strings.TrimPrefix(releaseBranch, "internal-"))
-			line := strings.TrimPrefix(strings.TrimPrefix(major, "release-branch."), "go")
+				commitMessage, err := b.PrivateGerritClient.GetCommitMessage(ctx, ci.ID)
+				if err != nil {
+					return nil, err
+				}
+				loc := riderIssueRE.FindStringIndex(commitMessage)
+				if loc == nil {
+					return nil, fmt.Errorf("change %s is missing its security riders", privateChangeURL(ci.ChangeNumber))
+				}
+				if backport, ok := backports[p.Patch.ID][line]; ok {
+					commitMessage = fmt.Sprintf("%s\nFixes golang/go#%d%s", commitMessage[:loc[1]], backport, commitMessage[loc[1]:])
+				}
+				commitMessage = fmt.Sprintf("[%s] %s", major, commitMessage)
 
-			commitMessage, err := b.PrivateGerritClient.GetCommitMessage(ctx, ci.ID)
-			if err != nil {
-				return nil, err
+				cpCI, conflicts, err := b.PrivateGerritClient.CreateCherryPick(ctx, ci.ID, releaseBranch, commitMessage)
+				if err != nil {
+					return nil, err
+				}
+				if conflicts {
+					conflictErrs = append(conflictErrs, fmt.Errorf("cherry-pick of %s has merge conflicts against %s: %s",
+						privateChangeURL(ci.ChangeNumber), releaseBranch, privateChangeURL(cpCI.ChangeNumber)))
+					continue
+				}
+				cp := cpCI
+				cherryPicks = append(cherryPicks, &cp)
 			}
-			loc := riderIssueRE.FindStringIndex(commitMessage)
-			if loc == nil {
-				return nil, fmt.Errorf("change %s is missing its security riders", privateChangeURL(ci.ChangeNumber))
-			}
-			if backport, ok := backports[p.ID][line]; ok {
-				commitMessage = fmt.Sprintf("%s\nFixes golang/go#%d%s", commitMessage[:loc[1]], backport, commitMessage[loc[1]:])
-			}
-			commitMessage = fmt.Sprintf("[%s] %s", major, commitMessage)
-
-			cpCI, conflicts, err := b.PrivateGerritClient.CreateCherryPick(ctx, ci.ID, releaseBranch, commitMessage)
-			if err != nil {
-				return nil, err
-			}
-			if conflicts {
-				conflictErrs = append(conflictErrs, fmt.Errorf("cherry-pick of %s has merge conflicts against %s: %s",
-					privateChangeURL(ci.ChangeNumber), releaseBranch, privateChangeURL(cpCI.ChangeNumber)))
-				continue
-			}
-			cp := cpCI
-			cherryPicks = append(cherryPicks, &cp)
 		}
 	}
 	if len(conflictErrs) > 0 {
