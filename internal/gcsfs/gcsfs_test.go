@@ -5,45 +5,46 @@
 package gcsfs
 
 import (
-	"context"
-	"flag"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
-	"time"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/option"
 )
 
-var slowTest = flag.Bool("slow", false, "run slow tests that access GCS")
-
 func TestGCSFS(t *testing.T) {
-	if !*slowTest {
-		t.Skip("reads a largeish GCS bucket")
+	if testing.Short() {
+		t.Skip("reads a real GCS bucket over the internet")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	client, err := storage.NewClient(context.Background(), option.WithScopes(storage.ScopeReadOnly))
+
+	client, err := storage.NewClient(t.Context(), option.WithScopes(storage.ScopeReadOnly), option.WithoutAuthentication())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fsys := NewFS(ctx, client, "vcs-test")
+	// Note: It may be somewhat preferable to have a dedicated GCS bucket for this test,
+	// as that would make it viable to test NewFS without having to wrap it with fs.Sub.
+	// In the meantime, settle on using a dedicated directory in an existing GCS bucket.
+	fsys, err := fs.Sub(NewFS(t.Context(), client, "go-build-log"), "gcsfs-testdata")
+	if err != nil {
+		t.Fatal(err)
+	}
 	expected := []string{
-		"auth/or401.zip",
-		"bzr/hello.zip",
+		"a",
+		"b",
+		"dir/x",
 	}
 	if err := fstest.TestFS(fsys, expected...); err != nil {
 		t.Error(err)
 	}
 
-	sub, err := fs.Sub(fsys, "auth")
+	sub, err := fs.Sub(fsys, "dir")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fstest.TestFS(sub, "or401.zip"); err != nil {
+	if err := fstest.TestFS(sub, "x"); err != nil {
 		t.Error(err)
 	}
 }
