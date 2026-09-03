@@ -13,6 +13,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/md5"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -153,7 +154,7 @@ func alreadyUploaded(storageClient *storage.Client, bucket, object string) bool 
 		return false // don't know.
 	}
 	o, err := storageClient.Bucket(bucket).Object(object).Attrs(context.Background())
-	if err == storage.ErrObjectNotExist {
+	if errors.Is(err, storage.ErrObjectNotExist) {
 		return false
 	}
 	if err != nil {

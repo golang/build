@@ -530,7 +530,7 @@ func buildToOutputs(ctx *wf.TaskContext, buildClient CloudBuildClient, build Clo
 		return nil, err
 	}
 	outMap := map[string]string{}
-	return outMap, fs.WalkDir(outfs, ".", func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(outfs, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -538,9 +538,16 @@ func buildToOutputs(ctx *wf.TaskContext, buildClient CloudBuildClient, build Clo
 			return nil
 		}
 		bytes, err := fs.ReadFile(outfs, path)
+		if err != nil {
+			return err
+		}
 		outMap[path] = string(bytes)
-		return err
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return outMap, nil
 }
 
 func (x *TagXReposTasks) MailGoMod(ctx *wf.TaskContext, repo, branch string, files map[string]string, reviewers []string) (string, error) {

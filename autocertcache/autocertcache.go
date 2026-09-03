@@ -8,6 +8,7 @@ package autocertcache
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"cloud.google.com/go/storage"
@@ -33,7 +34,7 @@ type gcsAutocertCache struct {
 
 func (c *gcsAutocertCache) Get(ctx context.Context, key string) ([]byte, error) {
 	rd, err := c.gcs.Bucket(c.bucket).Object(key).NewReader(ctx)
-	if err == storage.ErrObjectNotExist {
+	if errors.Is(err, storage.ErrObjectNotExist) {
 		return nil, autocert.ErrCacheMiss
 	}
 	if err != nil {
@@ -53,7 +54,7 @@ func (c *gcsAutocertCache) Put(ctx context.Context, key string, data []byte) err
 
 func (c *gcsAutocertCache) Delete(ctx context.Context, key string) error {
 	err := c.gcs.Bucket(c.bucket).Object(key).Delete(ctx)
-	if err == storage.ErrObjectNotExist {
+	if errors.Is(err, storage.ErrObjectNotExist) {
 		return nil
 	}
 	return err

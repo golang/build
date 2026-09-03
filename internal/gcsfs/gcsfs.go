@@ -7,6 +7,7 @@ package gcsfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -232,12 +233,12 @@ func (f *GCSFile) ReadDir(n int) ([]fs.DirEntry, error) {
 	return result, f.translateError("readdir", err)
 }
 
-// Stats the file.
+// Stat stats the file.
 // The returned FileInfo exposes *storage.ObjectAttrs as its Sys() result.
 func (f *GCSFile) Stat() (fs.FileInfo, error) {
 	// Check for a real file.
 	attrs, err := f.fs.object(f.name).Attrs(f.fs.ctx)
-	if err != nil && err != storage.ErrObjectNotExist {
+	if err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
 		return nil, f.translateError("stat", err)
 	}
 	if err == nil {
@@ -260,7 +261,7 @@ func (f *GCSFile) translateError(op string, err error) error {
 		return err
 	}
 	nested := err
-	if err == storage.ErrBucketNotExist || err == storage.ErrObjectNotExist {
+	if errors.Is(err, storage.ErrBucketNotExist) || errors.Is(err, storage.ErrObjectNotExist) {
 		nested = fs.ErrNotExist
 	} else if pe, ok := err.(*fs.PathError); ok {
 		nested = pe.Err
