@@ -13,7 +13,8 @@ RUN go mod download
 
 COPY . /app
 
-RUN go build golang.org/x/build/cmd/relui
+# Build with race detector enabled for go.dev/issue/81284.
+RUN go build -race golang.org/x/build/cmd/relui
 
 FROM debian:trixie
 
