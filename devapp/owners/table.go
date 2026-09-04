@@ -46,6 +46,7 @@ var (
 	iant          = gh("ianlancetaylor")
 	jba           = gh("jba")
 	jbd           = gh("rakyll")
+	sunny         = gh("JunyangShao")
 	joetsai       = gh("dsnet")
 	jorropo       = gh("jorropo")
 	kardianos     = gh("kardianos")
@@ -819,6 +820,10 @@ var entries = map[string]*Entry{
 	"go/src/runtime/trace": {
 		Primary:   []Owner{runtimeTeam},
 		Secondary: []Owner{mknyszek, prattmic, dvyukov},
+	},
+	"go/src/simd": {
+		Primary:   []Owner{compilerTeam},
+		Secondary: []Owner{drchase, sunny},
 	},
 	"go/src/slices": {
 		Primary:   []Owner{iant},
