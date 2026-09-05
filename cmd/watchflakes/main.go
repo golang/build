@@ -99,23 +99,25 @@ func main() {
 	}
 
 	// Create an authenticated GitHub client.
-	if *useSecretManager {
-		// Fetch credentials from Secret Manager.
-		secretCl, err := secret.NewClientInProject(buildenv.FromFlags().ProjectName)
-		if err != nil {
-			log.Fatalln("failed to create a Secret Manager client:", err)
-		}
-		ghToken, err := secretCl.Retrieve(context.Background(), secret.NameWatchflakesGitHubToken)
-		if err != nil {
-			log.Fatalln("failed to retrieve GitHub token from Secret Manager:", err)
-		}
-		gh = github.NewClient(ghToken)
-	} else {
-		// Use credentials in $HOME/.netrc.
-		var err error
-		gh, err = github.Dial("")
-		if err != nil {
-			log.Fatalln("github.Dial:", err)
+	if query == nil {
+		if *useSecretManager {
+			// Fetch credentials from Secret Manager.
+			secretCl, err := secret.NewClientInProject(buildenv.FromFlags().ProjectName)
+			if err != nil {
+				log.Fatalln("failed to create a Secret Manager client:", err)
+			}
+			ghToken, err := secretCl.Retrieve(context.Background(), secret.NameWatchflakesGitHubToken)
+			if err != nil {
+				log.Fatalln("failed to retrieve GitHub token from Secret Manager:", err)
+			}
+			gh = github.NewClient(ghToken)
+		} else {
+			// Use credentials in $HOME/.netrc.
+			var err error
+			gh, err = github.Dial("")
+			if err != nil {
+				log.Fatalln("github.Dial:", err)
+			}
 		}
 	}
 
@@ -135,7 +137,7 @@ func main() {
 Repeat:
 	startTime := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	if !*onlyClose {
+	if query == nil && *build == "" && !*onlyClose {
 		reportBrokenBots(ctx, c)
 	}
 	var boards []*Dashboard
@@ -203,7 +205,7 @@ Repeat:
 			log.Fatalln("readIssues:", err)
 		}
 		findScripts(issues)
-		if !*onlyClose {
+		if *build == "" && !*onlyClose {
 			postIssueErrors(issues)
 		}
 	}
