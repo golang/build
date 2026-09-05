@@ -206,6 +206,9 @@ func (f *GCSFile) Write(b []byte) (int, error) {
 }
 
 // ReadDir implements io/fs.ReadDirFile.
+//
+// Explicit GCS directories (zero-byte objects whose name ends in a slash)
+// are treated as implicit GCS directories, and aren't included in the output.
 func (f *GCSFile) ReadDir(n int) ([]fs.DirEntry, error) {
 	if f.iterator == nil {
 		f.iterator = f.fs.iterator(f.name)
@@ -217,6 +220,10 @@ func (f *GCSFile) ReadDir(n int) ([]fs.DirEntry, error) {
 		info, err = f.iterator.Next()
 		if err != nil {
 			break
+		}
+		if strings.HasSuffix(info.Name, "/") {
+			// This object marks the directory itself, not one of its children.
+			continue
 		}
 		result = append(result, &gcsFileInfo{info})
 		if len(result) == n {
