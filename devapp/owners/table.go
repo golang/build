@@ -1066,6 +1066,10 @@ var entries = map[string]*Entry{
 	"tools/internal/fastwalk": {
 		Primary: []Owner{toolsTeam},
 	},
+	"tools/internal/refactor/inline": {
+		Primary:   []Owner{hxjiang},
+		Secondary: []Owner{toolsTeam, adonovan},
+	},
 	"tools/internal/gocommand": {
 		Primary: []Owner{toolsTeam},
 	},
