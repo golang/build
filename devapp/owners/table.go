@@ -1008,8 +1008,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{agnivade, bradfitz, gri, kevinburke},
 	},
 	"tools/cmd/goimports": {
-		Primary:   []Owner{toolsTeam},
-		Secondary: []Owner{bradfitz},
+		Primary:   []Owner{pjw, hxjiang},
+		Secondary: []Owner{toolsTeam, bradfitz},
 	},
 	"tools/cmd/present2md": {
 		Primary: []Owner{rsc},
@@ -1078,7 +1078,8 @@ var entries = map[string]*Entry{
 		Primary: []Owner{toolsTeam},
 	},
 	"tools/internal/imports": {
-		Primary: []Owner{toolsTeam},
+		Primary:   []Owner{pjw, hxjiang},
+		Secondary: []Owner{toolsTeam},
 	},
 	"tools/internal/jsonrpc2": {
 		Primary:   []Owner{adonovan},
