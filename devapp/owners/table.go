@@ -1018,8 +1018,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{mvdan},
 	},
 	"tools/go/analysis": {
-		Primary:   []Owner{adonovan, mkalil},
-		Secondary: []Owner{toolsTeam},
+		Primary:   []Owner{mkalil},
+		Secondary: []Owner{toolsTeam, adonovan},
 	},
 	"tools/go/ast": {
 		Primary:   []Owner{adonovan, gri},
