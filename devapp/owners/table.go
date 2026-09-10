@@ -27,6 +27,7 @@ var (
 	agnivade      = gh("agnivade")
 	alexbrainman  = gh("alexbrainman")
 	amedee        = gh("cagedmantis")
+	aputman       = gh("aputman")
 	austin        = gh("aclements")
 	bradfitz      = gh("bradfitz")
 	cherryyz      = gh("cherrymui")
@@ -1053,8 +1054,8 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{toolsTeam},
 	},
 	"tools/go/ssa": {
-		Primary:   []Owner{adonovan},
-		Secondary: []Owner{toolsTeam, findleyr},
+		Primary:   []Owner{aputman},
+		Secondary: []Owner{toolsTeam, adonovan},
 	},
 	"tools/imports": {
 		Primary: []Owner{toolsTeam},
