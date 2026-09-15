@@ -512,6 +512,7 @@ BUILDER_TYPES = [
     "linux-amd64_c4dh96-perf_vs_oldest_stable",
     "linux-amd64_debiansid",
     "linux-amd64_docker",
+    "linux-amd64_docker-screentest",
     "linux-arm",
     "linux-arm64",
     "linux-arm64-asan-clang15",
@@ -1232,6 +1233,12 @@ RUN_MODS = {
         enabled = define_for_postsubmit(["go"], ["gotip"]),
     ),
 
+    # Run pkgsite screentest E2E browser tests.
+    "screentest": make_run_mod(
+        add_env = {"PKGSITE_CI_MODE": "screentest"},
+        enabled = define_for_postsubmit(["pkgsite"], ["gotip"]),
+    ),
+
     # Build and test with GOEXPERIMENT=simd.
     #
     # This is an experiment for SIMD support introduced in
@@ -1763,10 +1770,10 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     if builder_type in NO_NETWORK_BUILDERS:
         base_props["no_network"] = True
 
-    # Increase the timeout for vscode-go tests to accommodate significant setup
-    # overhead, including building Docker images and initializing the VS Code
-    # extension host.
-    if project == "vscode-go":
+    # Increase the timeout for vscode-go and pkgsite Docker tests to accommodate
+    # significant setup overhead, including building Docker images and
+    # initializing the VS Code extension host.
+    if project == "vscode-go" or (project == "pkgsite" and suffix == "docker"):
         base_props["test_timeout_scale"] = 2
 
     for mod in run_mods:
@@ -2140,8 +2147,14 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     # Filter out new ports on old release branches.
     # Nothing to do here at this time.
 
-    # Docker builder should only be used in VSCode-Go repo.
-    if suffix == "docker" and project != "vscode-go":
+    # Docker builder should only be used in VSCode-Go and pkgsite repos.
+    if suffix == "docker" and project not in ["vscode-go", "pkgsite"]:
+        return False, PRESUBMIT.DISABLED, False, [], 0
+
+    # TODO(golang/go#71558): pkgsite's compose.yaml currently uses a pinned
+    # GO_VERSION from deploy-env.yaml rather than the builder's Go toolchain.
+    # Restrict to gotip until the container uses the host Go version.
+    if suffix == "docker" and project == "pkgsite" and go_branch_short != "gotip":
         return False, PRESUBMIT.DISABLED, False, [], 0
     if suffix != "docker" and project == "vscode-go":
         return False, PRESUBMIT.DISABLED, False, [], 0
@@ -2168,6 +2181,11 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
     presubmit = postsubmit  # Default to running in presubmit if and only if running in postsubmit.
+    if project == "pkgsite" and suffix == "docker":
+        # Keep pkgsite Docker builders optional in presubmit (includable_only = True)
+        # while go.dev/cl/833204 lands and stabilizes in postsubmit, before
+        # promoting linux-amd64_docker to required presubmit and turning off Kokoro.
+        presubmit = False
     presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
     presubmit = presubmit and not host_timeout_scale(host_type) > 1  # Speed.
     presubmit = presubmit and not ("longtest" in run_mods and "race" in run_mods)  # Speed.
