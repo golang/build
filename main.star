@@ -339,6 +339,17 @@ HOST_NOTIFIERS = {
     for host, emails in HOST_CONTACT_EMAILS.items()
 }
 
+# PKGSITE_MAINTAINER_EMAILS lists maintainers to notify on continuous test failures.
+PKGSITE_MAINTAINER_EMAILS = [
+    "jba@google.com",
+    "ethanalee@google.com",
+]
+PKGSITE_DOCKER_NOTIFIER = luci.notifier(
+    name = "pkgsite-docker-ci",
+    on_new_status = ["FAILURE"],
+    notify_emails = PKGSITE_MAINTAINER_EMAILS,
+)
+
 # SLOW_HOSTS lists hosts which are known to run slower than our typical fast
 # high-capacity machines. It is a mapping of the host to a base test timeout
 # scaling factor; run_mods may multiply this scaling factor further. It also
@@ -1841,6 +1852,11 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     # Add a notification for machine owners on infra failures.
     if host_type in HOST_NOTIFIERS:
         notifiers.append(HOST_NOTIFIERS[host_type])
+
+    # Add a notification for the x/pkgsite maintainers when a postsubmit Docker
+    # builder fails.
+    if project == "pkgsite" and suffix == "docker" and env.bucket == "ci":
+        notifiers.append(PKGSITE_DOCKER_NOTIFIER)
 
     # Create a helper to emit builder definitions, installing common fields from
     # the current context.
