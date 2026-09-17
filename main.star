@@ -1797,6 +1797,11 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
         "golang.shard_by_weight": 100,
     }
 
+    # Roll out 'go test -artifacts' on the x/pkgsite Docker builders first.
+    # TODO: Expand to rest of fleet once stabilized.
+    if project == "pkgsite" and suffix == "docker":
+        experiments["golang.go_test_artifacts"] = 100
+
     # Construct the executable reference.
     executable = luci.executable(
         name = "golangbuild",
