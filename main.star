@@ -2202,11 +2202,6 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
         fail("unhandled SPECIAL project: %s" % project)
     postsubmit = enable_types == None or any([x == "%s-%s" % (os, arch) for x in enable_types])
     presubmit = postsubmit  # Default to running in presubmit if and only if running in postsubmit.
-    if project == "pkgsite" and suffix == "docker":
-        # Keep pkgsite Docker builders optional in presubmit (includable_only = True)
-        # while go.dev/cl/833204 lands and stabilizes in postsubmit, before
-        # promoting linux-amd64_docker to required presubmit and turning off Kokoro.
-        presubmit = False
     presubmit = presubmit and not is_capacity_constrained(low_capacity_hosts, host_type)  # Capacity.
     presubmit = presubmit and not host_timeout_scale(host_type) > 1  # Speed.
     presubmit = presubmit and not ("longtest" in run_mods and "race" in run_mods)  # Speed.
