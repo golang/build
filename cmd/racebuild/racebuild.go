@@ -653,11 +653,6 @@ func (p *Platform) Build(ctx context.Context) error {
 	}
 	log.Printf("%s: using instance %v", p.Name(), p.Inst)
 
-	// putbootstrap
-	if _, err := p.Gomote(ctx, "putbootstrap", p.Inst); err != nil {
-		return err
-	}
-
 	// Execute the script.
 	script, err := os.CreateTemp("", "racebuild")
 	if err != nil {
