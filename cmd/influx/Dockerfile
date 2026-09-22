@@ -21,6 +21,10 @@ RUN go build -o run-influx golang.org/x/build/cmd/influx
 
 FROM marketplace.gcr.io/google/influxdb2:latest
 
+# Upgrade OS packages because marketplace.gcr.io/google/influxdb2:latest
+# has not been updated recently and includes vulnerable Debian 12 packages.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app/run-influx /run-influx
 
 ENTRYPOINT ["/bin/sh"]
