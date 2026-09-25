@@ -524,6 +524,7 @@ BUILDER_TYPES = [
     "linux-amd64_debiansid",
     "linux-amd64_docker",
     "linux-amd64_docker-screentest",
+    "linux-amd64_n4dh32",
     "linux-arm",
     "linux-arm64",
     "linux-arm64-asan-clang15",
@@ -630,6 +631,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
+    "linux-amd64_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
@@ -1443,6 +1445,8 @@ def dimensions_of(host_type):
             # linux-amd64_debian11  -> Debian-11
             # linux-amd64_debiansid -> Debian-13
             os = suffix.replace("debian", "Debian-").replace("sid", "13")
+        elif goos == "linux" and suffix == "n4dh32":
+            os = "Debian-12"
         elif goos == "linux" and suffix in ["avx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"]:
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
@@ -1480,6 +1484,8 @@ def dimensions_of(host_type):
                 machine_type = "c4d-highcpu-96"
             elif suffix == "avx512":
                 machine_type = "c3-standard-8"
+            elif suffix == "n4dh32":
+                machine_type = "n4d-highcpu-32"
             else:
                 machine_type = "n1-standard-16"
         elif goarch == "arm64":
@@ -1747,8 +1753,11 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     # Note that these should generally live in the worker pools.
     base_dims = dimensions_of(host_type)
     base_dims["pool"] = env.worker_pool
-    if is_capacity_constrained(env.low_capacity_hosts, host_type) and env.shared_worker_pool != "":
-        # Scarce resources live in the shared-workers pool when it is available.
+    capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
+    is_large_builder = "machine_type" in base_dims and base_dims["machine_type"] == "n4d-highcpu-32"
+    force_all_mode = capacity_constrained or is_large_builder
+    if force_all_mode and env.shared_worker_pool != "":
+        # allmode builders live in the shared-workers pool when it is available.
         base_dims["pool"] = env.shared_worker_pool
 
     # On less-supported platforms, we may not have bootstraps before 1.21
@@ -1839,7 +1848,6 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     # might need it is a high rate of presubmit builds including such builders, but the fact
     # that builds expire is good: it acts as a backpressure mechanism. We wait for capacity on
     # these builders because they frequently go down for maintenance or just because they're flaky.
-    capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
     expiration_timeout = 6 * time.hour
     wait_for_capacity = False
     if capacity_constrained:
@@ -1903,7 +1911,7 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
             test_shards = 1
     elif perfmode:
         test_shards = 1
-    elif project == "go" and not capacity_constrained:
+    elif project == "go" and not force_all_mode:
         if longtest:
             test_shards = 8
         else:
@@ -1929,7 +1937,7 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     downstream_builders = []
     if perfmode:
         define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
-    elif test_shards > 1 or (project == "go" and not capacity_constrained):
+    elif test_shards > 1 or (project == "go" and not force_all_mode):
         downstream_builders = define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
     elif test_shards == 1:
         define_allmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
