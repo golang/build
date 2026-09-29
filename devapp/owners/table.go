@@ -32,6 +32,7 @@ var (
 	bradfitz      = gh("bradfitz")
 	cherryyz      = gh("cherrymui")
 	codyoss       = gh("codyoss")
+	cuonglm       = gh("cuonglm")
 	cpu           = gh("cpu")
 	dmitshur      = gh("dmitshur")
 	danderson     = gh("danderson")
@@ -123,7 +124,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, gri, mdempsky, martisch},
+		Secondary: []Owner{khr, gri, mdempsky, martisch, cuonglm},
 	},
 	"go/src/cmd/compile/internal/amd64": {
 		Primary:   []Owner{compilerTeam},
