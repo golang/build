@@ -124,47 +124,47 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, gri, mdempsky, martisch, cuonglm},
+		Secondary: []Owner{khr, gri, cuonglm},
 	},
 	"go/src/cmd/compile/internal/amd64": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, rsc, drchase, cherryyz, martisch},
+		Secondary: []Owner{khr, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/arm": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, rsc, drchase, cherryyz},
+		Secondary: []Owner{khr, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/arm64": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, rsc, drchase, cherryyz},
+		Secondary: []Owner{khr, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/mips": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, rsc, drchase, cherryyz},
+		Secondary: []Owner{khr, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/mips64": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, rsc, drchase, cherryyz},
+		Secondary: []Owner{khr, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/ppc64": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, rsc, drchase, cherryyz},
+		Secondary: []Owner{khr, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/s390x": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, rsc, drchase, cherryyz},
+		Secondary: []Owner{khr, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/x86": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, rsc, drchase, cherryyz, martisch},
+		Secondary: []Owner{khr, drchase, cherryyz},
 	},
 	"go/src/cmd/compile/internal/syntax": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{gri, rsc, mdempsky},
+		Secondary: []Owner{gri},
 	},
 	"go/src/cmd/compile/internal/types": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{gri, mdempsky, rsc},
+		Secondary: []Owner{gri},
 	},
 	"go/src/cmd/compile/internal/types2": {
 		Primary:   []Owner{compilerTeam},
@@ -172,7 +172,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/compile/internal/ssa": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{khr, martisch, jorropo},
+		Secondary: []Owner{khr, jorropo},
 	},
 	"go/src/cmd/compile/internal/wasm": {
 		Primary:   []Owner{compilerTeam},
@@ -242,7 +242,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/cmd/link": {
 		Primary:   []Owner{compilerTeam},
-		Secondary: []Owner{cherryyz, rsc, iant, mwhudson, thanm},
+		Secondary: []Owner{cherryyz, iant, thanm},
 	},
 	"go/src/cmd/link/internal/wasm": {
 		Primary:   []Owner{compilerTeam},
@@ -363,8 +363,7 @@ var entries = map[string]*Entry{
 		Primary: []Owner{r},
 	},
 	"go/src/fmt": {
-		Primary:   []Owner{r},
-		Secondary: []Owner{martisch},
+		Primary: []Owner{r},
 	},
 	"go/src/go/ast": {
 		Primary: []Owner{gri},
@@ -488,8 +487,7 @@ var entries = map[string]*Entry{
 		Secondary: []Owner{neild},
 	},
 	"go/src/internal/fmtsort": {
-		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{martisch},
+		Primary: []Owner{runtimeTeam},
 	},
 	"go/src/internal/fuzz": {
 		Primary:   []Owner{securityTeam},
@@ -640,7 +638,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/internal/sysinfo": {
 		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{martisch, prattmic},
+		Secondary: []Owner{prattmic},
 	},
 	"go/src/internal/syslist": {
 		// Same as internal/platform.
@@ -797,7 +795,7 @@ var entries = map[string]*Entry{
 	},
 	"go/src/runtime": {
 		Primary:   []Owner{runtimeTeam},
-		Secondary: []Owner{austin, khr, mknyszek, prattmic, amedee, iant, dvyukov, martisch},
+		Secondary: []Owner{austin, khr, mknyszek, prattmic, amedee, iant, dvyukov},
 	},
 	"go/src/runtime/cgo": {
 		Primary:   []Owner{runtimeTeam},
