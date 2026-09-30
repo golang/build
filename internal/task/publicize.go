@@ -211,7 +211,7 @@ func ResolveExternalChangelists(ctx *wf.TaskContext, private, public GerritClien
 		if p.Track == relmeta.Public {
 			continue
 		}
-		for _, clURL := range p.Changelists {
+		for _, clURL := range DeployedChangelists(p, project, "public") {
 			_, num, ok := strings.Cut(clURL, "/+/")
 			if !ok {
 				continue

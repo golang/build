@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -543,7 +544,7 @@ esac
 // "go" repo and a security-metadata repo holding the milestone YAML.
 //
 // withPrivatePatches controls whether the milestone has any PRIVATE patches.
-func newMinorCoalesceTestDeps(t *testing.T, withPrivatePatches bool) (*releaseTestDeps, *task.FakeGerrit) {
+func newMinorCoalesceTestDeps(t *testing.T, withPrivatePatches bool, extraPatchYAML ...string) (*releaseTestDeps, *task.FakeGerrit) {
 	// currentMajor=26, prevMajor=25. newReleaseTestDeps sets up the 26 series;
 	// add the 25 series so GetNextMinorVersions([26,25]) returns the two minors.
 	deps := newReleaseTestDeps(t, "go1.26.0", 26, "go1.26.1")
@@ -599,7 +600,7 @@ security_patches:
         - https://go-internal-review.git.corp.google.com/c/go/+/5678
       target_releases:
         - go1.26.1
-        - go1.25.1`
+        - go1.25.1` + strings.Join(extraPatchYAML, "")
 	} else {
 		// A milestone with only PUBLIC patches: the coalesce must short-circuit.
 		milestoneYAML = `id: 99915010
@@ -1426,7 +1427,7 @@ func TestCheckPrivateChangesLint(t *testing.T) {
 				Changelists: []string{"https://go-internal-review.git.corp.google.com/c/go/+/1234"},
 			}},
 		}
-		_, err := deps.buildTasks.checkPrivateChanges(ctx, rm)
+		_, err := deps.buildTasks.checkPrivateChanges(ctx, rm, securityBranchInfo{})
 		if err == nil {
 			t.Fatal("checkPrivateChanges with metadata in the commit message: got nil error")
 		}
@@ -1437,7 +1438,7 @@ func TestCheckPrivateChangesLint(t *testing.T) {
 		}
 
 		privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nNo references here.")
-		if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm); err != nil {
+		if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm, securityBranchInfo{}); err != nil {
 			t.Errorf("checkPrivateChanges with a clean message: %v", err)
 		}
 	})
@@ -1918,6 +1919,241 @@ func TestCreateSecurityCherryPicksPartialDedup(t *testing.T) {
 	})
 }
 
+const manualPatchYAML = `
+    - id: 40027191
+      package: net/http
+      track: PRIVATE
+      github_issue_id: 70002
+      cve: CVE-1985-0704
+      changelists:
+        - https://go-internal-review.git.corp.google.com/c/go/+/9000
+        - https://go-internal-review.git.corp.google.com/c/go/+/9025
+        - https://go-internal-review.git.corp.google.com/c/go/+/9026
+        - https://go-internal-review.git.corp.google.com/c/net/+/9100
+      deployment_map:
+        "https://go-internal-review.git.corp.google.com/c/go/+/9000": go:public
+        "https://go-internal-review.git.corp.google.com/c/go/+/9025": go:internal-release-branch.go1.25.1
+        "https://go-internal-review.git.corp.google.com/c/go/+/9026": go:internal-release-branch.go1.26.1
+        "https://go-internal-review.git.corp.google.com/c/net/+/9100": net:public
+      target_releases:
+        - go1.26.1
+        - go1.25.1`
+
+func manualPatch() *relmeta.SecurityPatch {
+	const base = "https://go-internal-review.git.corp.google.com/c/"
+	return &relmeta.SecurityPatch{
+		ID:             40027191,
+		Track:          relmeta.Private,
+		Package:        "net/http",
+		GitHubIssueID:  70002,
+		CVE:            "CVE-1985-0704",
+		TargetReleases: []string{"go1.26.1", "go1.25.1"},
+		Changelists:    []string{base + "go/+/9000", base + "go/+/9025", base + "go/+/9026", base + "net/+/9100"},
+		DeploymentMap: map[string]string{
+			base + "go/+/9000":  "go:public",
+			base + "go/+/9025":  "go:internal-release-branch.go1.25.1",
+			base + "go/+/9026":  "go:internal-release-branch.go1.26.1",
+			base + "net/+/9100": "net:public",
+		},
+	}
+}
+
+// seedManualPatch adds the GitHub issue, the public CL, and the staged
+// backport CLs that manualPatchYAML refers to.
+func seedManualPatch(t *testing.T, deps *releaseTestDeps, privGerrit *task.FakeGerrit) {
+	t.Helper()
+	fakeGitHub := deps.milestoneTasks.Client.(*task.FakeGitHub)
+	fakeGitHub.Issues[70002] = &github.Issue{
+		Labels:    []*github.Label{{Name: github.Ptr("release-blocker")}, {Name: github.Ptr("Security")}},
+		Milestone: &github.Milestone{ID: github.Int64(0)},
+	}
+	fakeGitHub.Comments[70002] = []*github.IssueComment{{
+		User: &github.User{Login: github.Ptr("gopherbot")},
+		Body: github.Ptr("Backport issue(s) opened: #70125 (for 1.25), #70126 (for 1.26)."),
+	}}
+
+	base, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	privGerrit.AddChange("go", "9000", &gerrit.ChangeInfo{
+		ID: "9000", ChangeID: "I9000", ChangeNumber: 9000, Branch: "public", Submittable: true, Mergeable: true,
+	}, "net/http: fix something")
+	for _, cl := range []struct {
+		line string
+		num  int
+	}{{"25", 9025}, {"26", 9026}} {
+		staging := "internal-release-branch.go1." + cl.line + "-staging"
+		if _, err := privGerrit.CreateBranch(deps.ctx, "go", staging, gerrit.BranchInput{Revision: base}); err != nil {
+			t.Fatal(err)
+		}
+		id := strconv.Itoa(cl.num)
+		privGerrit.AddChange("go", id, &gerrit.ChangeInfo{
+			ID: id, ChangeID: "I" + id, ChangeNumber: cl.num, Branch: staging, Submittable: true, Mergeable: true,
+		}, "[release-branch.go1."+cl.line+"] net/http: fix something\n\nFixes CVE-1985-0704\nFor golang/go#70002\nFixes golang/go#701"+cl.line)
+	}
+}
+
+func TestCheckPrivateChangesManual(t *testing.T) {
+	workflowtest.Subtest(t, "accepts_congruent_map", func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, _ := mustSecuritySetup(t, deps, privGerrit)
+
+		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{manualPatch()}}
+		patches, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(patches) != 1 || len(patches[0].Changes) != 1 || patches[0].Changes[0].ChangeNumber != 9000 {
+			t.Fatalf("checked changes = %+v, want only CL 9000", patches)
+		}
+	})
+
+	workflowtest.Subtest(t, "rejects_unknown_branch", func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, _ := mustSecuritySetup(t, deps, privGerrit)
+
+		p := manualPatch()
+		p.DeploymentMap["https://go-internal-review.git.corp.google.com/c/go/+/9025"] = "go:internal-release-branch.go1.25.2"
+		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{p}}
+		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi)
+		if err == nil || !strings.Contains(err.Error(), "internal-release-branch.go1.25.2") {
+			t.Fatalf("err = %v, want unknown branch error", err)
+		}
+	})
+}
+
+func TestDeployManualBackports(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
+		cls = append(cls, &task.PatchChanges{Patch: manualPatch()})
+
+		releaseBranches, err := deps.buildTasks.createInternalReleaseBranches(taskCtx, bi, cls)
+		if err != nil {
+			t.Fatal(err)
+		}
+		heads := map[string]string{}
+		for _, rb := range releaseBranches {
+			if heads[rb], err = privGerrit.ReadBranchHead(deps.ctx, "go", rb); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		coalesced := map[string][]string{"internal-release-branch.go1.26.1": {"existing"}}
+		deployed, err := deps.buildTasks.deployManualBackports(taskCtx, releaseBranches, cls, coalesced)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := deployed["internal-release-branch.go1.26.1"]; len(got) != 2 || got[0] != "existing" {
+			t.Errorf("go1.26.1 deployments = %v, want existing plus one manual", got)
+		}
+		if got := deployed["internal-release-branch.go1.25.1"]; len(got) != 1 {
+			t.Errorf("go1.25.1 deployments = %v, want one manual", got)
+		}
+		if len(coalesced["internal-release-branch.go1.26.1"]) != 1 {
+			t.Errorf("input coalesced map was mutated: %v", coalesced)
+		}
+		for id, rb := range map[string]string{"9025": "internal-release-branch.go1.25.1", "9026": "internal-release-branch.go1.26.1"} {
+			ci, err := privGerrit.GetChange(deps.ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ci.Branch != rb || ci.Status != gerrit.ChangeStatusMerged {
+				t.Errorf("CL %s on %q with status %q, want merged on %q", id, ci.Branch, ci.Status, rb)
+			}
+			cm, err := privGerrit.GetCommitMessage(deps.ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Count(cm, "Fixes CVE-1985-0704") != 1 || strings.Contains(cm, "\n\nFixes CVE-1985-0704\nFor golang/go#70002\n\n") {
+				t.Errorf("CL %s commit message was rewritten:\n%s", id, cm)
+			}
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", rb)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if head == heads[rb] {
+				t.Errorf("%s head did not advance", rb)
+			}
+		}
+
+		again, err := deps.buildTasks.deployManualBackports(taskCtx, releaseBranches, cls, coalesced)
+		if err != nil {
+			t.Fatalf("restart: %v", err)
+		}
+		if len(again["internal-release-branch.go1.25.1"]) != 1 {
+			t.Errorf("restart deployments = %v", again)
+		}
+	})
+}
+
+func TestMinorReleaseSecurityCoalesceManual(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true, manualPatchYAML)
+		seedManualPatch(t, deps, privGerrit)
+		var confirmedManual bool
+		deps.buildTasks.ApproveAction = func(ctx *workflow.TaskContext) error {
+			if ctx.TaskName == "Confirm manual backports" {
+				confirmedManual = true
+				return nil
+			}
+			return approveSecurityCLsOnly(ctx)
+		}
+
+		publicHeadBefore, err := privGerrit.ReadBranchHead(deps.ctx, "go", "public")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		runMinorReleaseToFailure(t, deps, privGerrit, nil, "", nil)
+
+		if !confirmedManual {
+			t.Error("manual backport confirmation was not requested")
+		}
+		for _, id := range []string{"1234", "5678", "9000", "9025", "9026"} {
+			ci, err := privGerrit.GetChange(deps.ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ci.Status != gerrit.ChangeStatusMerged {
+				t.Errorf("CL %s status = %q, want merged", id, ci.Status)
+			}
+		}
+		for _, ib := range []string{
+			"internal-release-branch.go1.26.1",
+			"internal-release-branch.go1.25.1",
+		} {
+			head, err := privGerrit.ReadBranchHead(deps.ctx, "go", ib)
+			if err != nil {
+				t.Fatal(err)
+			}
+			commits, err := privGerrit.ListCommits(deps.ctx, "go", head, publicHeadBefore)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(commits); got != 3 {
+				t.Errorf("%s has %d commits above public head, want 2 cherry-picks plus 1 manual", ib, got)
+			}
+			var subjects []string
+			for _, c := range commits {
+				subjects = append(subjects, c.Title())
+			}
+			for _, s := range subjects {
+				if strings.Contains(s, "net/http") && !strings.HasPrefix(s, "["+majorFromMinor(strings.TrimPrefix(ib, "internal-"))+"]") {
+					t.Errorf("%s manual commit %q lacks the owner-written prefix", ib, s)
+				}
+			}
+			if n := strings.Count(strings.Join(subjects, "\n"), "net/http"); n != 1 {
+				t.Errorf("%s has %d net/http commits, want exactly the manual one (no auto cherry-pick): %v", ib, n, subjects)
+			}
+		}
+	})
+}
+
 func TestMoveAndRebasePrivateChanges(t *testing.T) {
 	workflowtest.Subtest(t, "fresh", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
@@ -2391,7 +2627,7 @@ func TestCheckPrivateChangesErrors(t *testing.T) {
 				Changelists: []string{"https://go-internal-review.git.corp.google.com/c/go/+/9999"},
 			}},
 		}
-		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm)
+		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, securityBranchInfo{})
 		if err == nil {
 			t.Fatal("expected error from GetChange on missing CL")
 		}
@@ -2413,7 +2649,7 @@ func TestCheckPrivateChangesErrors(t *testing.T) {
 				Changelists: []string{"https://go-internal-review.git.corp.google.com/c/go/+/1234"},
 			}},
 		}
-		_, err = deps.buildTasks.checkPrivateChanges(taskCtx, rm)
+		_, err = deps.buildTasks.checkPrivateChanges(taskCtx, rm, securityBranchInfo{})
 		if err == nil {
 			t.Fatal("expected error for non-submittable CL")
 		}

@@ -89,6 +89,9 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 		if !slices.ContainsFunc(found, func(r TagRepo) bool { return r.Name == repo }) {
 			return nil, fmt.Errorf("no repository %q", repo)
 		}
+		if err := CheckDeploymentMap(p, target, []string{"public"}); err != nil {
+			return nil, err
+		}
 		sps = append(sps, p)
 	}
 	return CheckPrivateChanges(ctx, x.PrivateGerrit, target, sps)

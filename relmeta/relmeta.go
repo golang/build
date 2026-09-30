@@ -23,19 +23,20 @@ type ReleaseMilestone struct {
 // SecurityPatch is a self-contained body
 // of work that addresses a vulnerability.
 type SecurityPatch struct {
-	ID             int64           `yaml:"id"`
-	Track          GoSecurityTrack `yaml:"track"`
-	Toolchain      bool            `yaml:"is_toolchain"`
-	Package        string          `yaml:"package"`
-	Changelists    []string        `yaml:"changelists"`
-	ReleaseNote    string          `yaml:"release_note"`
-	TargetReleases []string        `yaml:"target_releases,omitempty"` // required for std/cmd; omit for x-repo
-	GitHubIssueID  int64           `yaml:"github_issue_id"`
-	VulnReportID   string          `yaml:"vuln_report_id"`   // for example, GO-20YY-NNNN
-	VulnReportDesc string          `yaml:"vuln_report_desc"` // optional
-	Credits        []string        `yaml:"credits"`
-	CVE            string          `yaml:"cve"`
-	CWE            string          `yaml:"cwe"`
+	ID             int64             `yaml:"id"`
+	Track          GoSecurityTrack   `yaml:"track"`
+	Toolchain      bool              `yaml:"is_toolchain"`
+	Package        string            `yaml:"package"`
+	Changelists    []string          `yaml:"changelists"`
+	ReleaseNote    string            `yaml:"release_note"`
+	TargetReleases []string          `yaml:"target_releases,omitempty"` // required for std/cmd; omit for x-repo
+	DeploymentMap  map[string]string `yaml:"deployment_map,omitempty"`
+	GitHubIssueID  int64             `yaml:"github_issue_id"`
+	VulnReportID   string            `yaml:"vuln_report_id"`   // for example, GO-20YY-NNNN
+	VulnReportDesc string            `yaml:"vuln_report_desc"` // optional
+	Credits        []string          `yaml:"credits"`
+	CVE            string            `yaml:"cve"`
+	CWE            string            `yaml:"cwe"`
 }
 
 type GoSecurityTrack string

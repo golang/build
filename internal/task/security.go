@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +43,44 @@ func insertRiders(message, riders string) string {
 	return message + "\n\n" + riders + "\n"
 }
 
+func MoveAndRebase(ctx *wf.TaskContext, client GerritClient, changeID, branch string) (*gerrit.ChangeInfo, error) {
+	ci, err := client.GetChange(ctx, changeID)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(nealpatel): Think through how to
+	// deal with this footgun.
+	//
+	// For patches that specify DeploymentMap,
+	// this implies that a trusted patch owner
+	// who accidentally submits will cause the
+	// workflow to be blind: The workflow thinks
+	// it landed on the target branch but it only
+	// landed on the `-staging` branch.
+	if ci.Status == gerrit.ChangeStatusMerged {
+		return ci, nil
+	}
+	movedCI, err := client.MoveChange(ctx, ci.ID, branch)
+	if err != nil {
+		var httpErr *gerrit.HTTPError
+		if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
+			return nil, err
+		}
+	} else {
+		ci = &movedCI
+	}
+	rebasedCI, err := client.RebaseChange(ctx, ci.ID, "")
+	if err != nil {
+		var httpErr *gerrit.HTTPError
+		if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
+			return nil, err
+		}
+	} else {
+		ci = &rebasedCI
+	}
+	return ci, nil
+}
+
 func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, cp Checkpoint, patches []*PatchChanges) ([]*PatchChanges, error) {
 	for _, p := range patches {
 		riders, err := securityRiders(p.Patch)
@@ -49,34 +88,13 @@ func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, cp Checkpoint, p
 			return nil, err
 		}
 		for i, ci := range p.Changes {
-			// Idempotent. Changes can be in the MERGED (HTTP 409) state which means
-			// that they cannot be moved or rebased. Refetch it and if it is MERGED,
-			// skip it similarly to submitPrivateChanges.
-			fresh, err := client.GetChange(ctx, ci.ID)
+			ci, err := MoveAndRebase(ctx, client, ci.ID, cp.Branch)
 			if err != nil {
 				return nil, err
 			}
-			if fresh.Status == gerrit.ChangeStatusMerged {
-				p.Changes[i] = fresh
+			if ci.Status == gerrit.ChangeStatusMerged {
+				p.Changes[i] = ci
 				continue
-			}
-			movedCI, err := client.MoveChange(ctx, ci.ID, cp.Branch)
-			if err != nil {
-				var httpErr *gerrit.HTTPError
-				if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
-					return nil, err
-				}
-			} else {
-				ci = &movedCI
-			}
-			rebasedCI, err := client.RebaseChange(ctx, ci.ID, "")
-			if err != nil {
-				var httpErr *gerrit.HTTPError
-				if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
-					return nil, err
-				}
-			} else {
-				ci = &rebasedCI
 			}
 			cm, err := client.GetCommitMessage(ctx, ci.ID)
 			if err != nil {
@@ -103,6 +121,39 @@ func PrivateChangeURL[T int | string](project string, clNum T) string {
 	return fmt.Sprintf("https://go-internal-review.git.corp.google.com/c/%s/+/%v", project, clNum)
 }
 
+func DeployedChangelists(p *relmeta.SecurityPatch, project, branch string) []string {
+	if len(p.DeploymentMap) == 0 {
+		return p.Changelists
+	}
+	var cls []string
+	for _, clURL := range p.Changelists {
+		if p.DeploymentMap[clURL] == project+":"+branch {
+			cls = append(cls, clURL)
+		}
+	}
+	return cls
+}
+
+func CheckDeploymentMap(p *relmeta.SecurityPatch, project string, branches []string) error {
+	if len(p.DeploymentMap) == 0 {
+		return nil
+	}
+	for _, clURL := range p.Changelists {
+		deployment, ok := p.DeploymentMap[clURL]
+		if !ok {
+			return fmt.Errorf("security patch %d: changelist %s is missing from the deployment map", p.ID, clURL)
+		}
+		deployedProject, branch, ok := strings.Cut(deployment, ":")
+		if !ok {
+			return fmt.Errorf("security patch %d: changelist %s is deployed to %q, want <project>:<branch>", p.ID, clURL, deployment)
+		}
+		if deployedProject == project && !slices.Contains(branches, branch) {
+			return fmt.Errorf("security patch %d: changelist %s is deployed to %q, want one of %q", p.ID, clURL, branch, branches)
+		}
+	}
+	return nil
+}
+
 func CheckPrivateChanges(ctx *wf.TaskContext, client GerritClient, project string, patches []*relmeta.SecurityPatch) ([]*PatchChanges, error) {
 	var (
 		checked  []*PatchChanges
@@ -113,7 +164,7 @@ func CheckPrivateChanges(ctx *wf.TaskContext, client GerritClient, project strin
 			continue
 		}
 		var cls []*gerrit.ChangeInfo
-		for _, clURL := range p.Changelists {
+		for _, clURL := range DeployedChangelists(p, project, "public") {
 			_, num, ok := strings.Cut(clURL, "/+/")
 			if !ok {
 				return nil, fmt.Errorf("security patch %d: malformed changelist URL %q", p.ID, clURL)

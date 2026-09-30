@@ -492,42 +492,59 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 	rm := wf.Task2(wd, "Fetch security milestone", task.FetchReleaseMilestone, wf.Const(build.PrivateGerritClient), milestoneNum)
 	backports := wf.Task2(wd, "Check security issues", milestone.CheckSecurityIssues, rm, wf.Const(currentMajor+1))
 
-	// cls are drafted by patch owners against `public`
+	// CLs are drafted by patch owners against `public`
 	// branch of sso://go-internal/go. Typically, no
 	// human should submit these patches; however, the
 	// workflow is hardened against accidental submission
 	// in order to provide idempotent checkpoint branches.
-	cls := wf.Task1(wd, "Check private changes", build.checkPrivateChanges, rm, wf.After(backports))
-
 	var (
-		nextMinors = wf.Task1(wd, "Get next minor versions", version.GetNextMinorVersions, wf.Const([]int{currentMajor, prevMajor}))
-		vt         = wf.Const(version)
-		major      = wf.Const(currentMajor)
+		vt            = wf.Const(version)
+		major         = wf.Const(currentMajor)
+		currPrevMajor = wf.Const([]int{currentMajor, prevMajor})
+		nextMinors    = wf.Task1(wd, "Get next minor versions", version.GetNextMinorVersions, currPrevMajor)
 	)
-	branchInfo := wf.Task3(wd, "Compute security branch names", computeSecurityBranchInfo, vt, major, nextMinors, wf.After(cls))
+	branchInfo := wf.Task3(wd, "Compute security branch names", computeSecurityBranchInfo, vt, major, nextMinors, wf.After(backports))
+	cls := wf.Task2(wd, "Check private changes", build.checkPrivateChanges, rm, branchInfo)
 
-	// checkpoint is created with a timestamp trailer
-	// to ensure that workflow restarts are idempotent.
+	// All checkpoint branches are created with timestamp
+	// trailers to ensure workflow restarts are idempotent.
 	checkpoint := wf.Task2(wd, "Create checkpoint branch", build.createSecurityCheckpoint, branchInfo, cls)
 	cls = wf.Task3(wd, "Move and rebase private changes", task.MoveAndRebaseAll, wf.Const(build.PrivateGerritClient), checkpoint, cls)
 	cls = wf.Task3(wd, "Submit private changes", task.SubmitPrivateChanges, wf.Const(build.PrivateGerritClient), wf.Const(build.PrivateGerritProject), cls)
 
-	// internalBranches are NOT created with a timestamp
+	// All internalBranches are created without a timestamp
 	// trailer; on workflow-abandon-and-restart, existing
-	// internal release branches are adopted.
+	// internalBranches are adopted.
 	internalBranches := wf.Task2(wd, "Create internal release branches", build.createInternalReleaseBranches, branchInfo, cls)
-	cherryPicks := wf.Task3(wd, "Create cherry-picks", build.createSecurityCherryPicks, internalBranches, cls, backports)
-	coalesced := wf.Task1(wd, "Submit cherry-picks", build.submitCherryPicks, cherryPicks)
 
-	// once all internal branches have their
+	// For all backports, we create cherry-picks for each
+	// SecurityPatch that does not specify Manual and its
+	// DeploymentMap.
+	cherryPicks := wf.Task3(wd, "Create cherry-picks", build.createSecurityCherryPicks, internalBranches, cls, backports)
+
+	// In most cases, a single coalesce step is achieved
+	// after submitting all cherry-picks to their target
+	// branches. If one or more CLs specifies Manual and
+	// its DeploymentMap, we coalesce after all regular
+	// security patches land.
+	coalesced := wf.Task1(wd, "Submit cherry-picks", build.submitCherryPicks, cherryPicks)
+	coalesced = wf.Task3(wd, "Deploy manual backports", build.deployManualBackports, internalBranches, cls, coalesced)
+
+	// If any patch has DeploymentMap specified, we block
+	// for general approval from the Release Coordinator:
+	// The patch owner(s) are expected to confirm that the
+	// CLs landed in the fashion they were intended to.
+	confirmed := wf.Action2(wd, "Confirm manual backports", build.confirmManualBackports, internalBranches, cls, wf.After(coalesced))
+
+	// Once all internal branches have their
 	// respective cherrypicked patches, the
 	// security release coalescing is done
 	// and any single-release workflows can
 	// proceed by reaching the branch state.
 	wf.Output(wd, "Cherry-picks", coalesced)
 
-	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators, coalesced)
-	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindMinor, coordinators, coalesced)
+	currPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", currentMajor)), currentMajor, task.KindMinor, coordinators, coalesced, confirmed)
+	prevPublished := addSingleReleaseWorkflow(build, milestone, version, wd.Sub(fmt.Sprintf("Go 1.%d", prevMajor)), prevMajor, task.KindMinor, coordinators, coalesced, confirmed)
 
 	securitySummary := wf.Task1(wd, "Get short security content summary from metadata", comm.GetSecuritySummary, milestoneNum)
 	securityFixes := wf.Task1(wd, "Get security release notes from metadata", comm.GetSecurityReleaseNotes, milestoneNum)
@@ -914,9 +931,18 @@ func computeSecurityBranchInfo(ctx *wf.TaskContext, version *task.VersionTasks, 
 	return bi, nil
 }
 
-func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone) ([]*task.PatchChanges, error) {
+func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, bi securityBranchInfo) ([]*task.PatchChanges, error) {
 	if rm == nil {
 		return nil, nil
+	}
+	branches := []string{"public"}
+	for _, pb := range bi.PublicReleaseBranches {
+		branches = append(branches, "internal-"+pb)
+	}
+	for _, p := range rm.Patches {
+		if err := task.CheckDeploymentMap(p, b.PrivateGerritProject, branches); err != nil {
+			return nil, err
+		}
 	}
 	patches, err := task.CheckPrivateChanges(ctx, b.PrivateGerritClient, b.PrivateGerritProject, rm.Patches)
 	if err != nil {
@@ -970,6 +996,9 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 		conflictErrs []error
 	)
 	for _, p := range patches {
+		if len(p.Patch.DeploymentMap) != 0 {
+			continue
+		}
 		for _, ci := range p.Changes {
 			for _, releaseBranch := range releaseBranches {
 				// Check whether a non-abandoned cherry-pick of this
@@ -1067,6 +1096,64 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 		submitted[cp.Branch] = append(submitted[cp.Branch], task.PrivateChangeURL(b.PrivateGerritProject, cp.ChangeNumber))
 	}
 	return submitted, nil
+}
+
+func (b *BuildReleaseTasks) deployManualBackports(ctx *wf.TaskContext, releaseBranches []string, patches []*task.PatchChanges, coalesced map[string][]string) (map[string][]string, error) {
+	var cls []*gerrit.ChangeInfo
+	for _, p := range patches {
+		if len(p.Patch.DeploymentMap) == 0 {
+			continue
+		}
+		for _, releaseBranch := range releaseBranches {
+			for _, clURL := range task.DeployedChangelists(p.Patch, b.PrivateGerritProject, releaseBranch) {
+				_, num, _ := strings.Cut(clURL, "/+/")
+				ci, err := task.MoveAndRebase(ctx, b.PrivateGerritClient, num, releaseBranch)
+				if err != nil {
+					return nil, err
+				}
+				cls = append(cls, ci)
+			}
+		}
+	}
+	if len(cls) == 0 {
+		return coalesced, nil
+	}
+	submitted, err := b.submitCherryPicks(ctx, cls)
+	if err != nil {
+		return nil, err
+	}
+	deployed := maps.Clone(coalesced)
+	if deployed == nil {
+		deployed = map[string][]string{}
+	}
+	for branch, urls := range submitted {
+		deployed[branch] = append(deployed[branch], urls...)
+	}
+	return deployed, nil
+}
+
+func (b *BuildReleaseTasks) confirmManualBackports(ctx *wf.TaskContext, releaseBranches []string, patches []*task.PatchChanges) error {
+	var summary strings.Builder
+	for _, releaseBranch := range releaseBranches {
+		for _, p := range patches {
+			if len(p.Patch.DeploymentMap) == 0 {
+				continue
+			}
+			for _, clURL := range task.DeployedChangelists(p.Patch, b.PrivateGerritProject, releaseBranch) {
+				_, num, _ := strings.Cut(clURL, "/+/")
+				ci, err := b.PrivateGerritClient.GetChange(ctx, num)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(&summary, "• %s is %s on %s, want %s on %s\n", clURL, ci.Status, ci.Branch, gerrit.ChangeStatusMerged, releaseBranch)
+			}
+		}
+	}
+	if summary.Len() == 0 {
+		return nil
+	}
+	ctx.Printf("\n\nManual backports:\n\n%s\nApprove this task if that is expected.", &summary)
+	return b.ApproveAction(ctx)
 }
 
 func majorFromMinor(branch string) string {
@@ -1290,7 +1377,8 @@ func (b *BuildReleaseTasks) reproduceDistpack(ctx *wf.TaskContext, target *relea
 		// so we have to run it unadorned with . on PATH.
 		script := fmt.Sprintf(
 			`gcloud storage cat %s | tar -xzf - && cd go/src && make.bat -distpack && cd ../pkg/distpack && tar -czf - * | gcloud storage cp - %s`,
-			b.ScratchFS.URL(ctx, source.Scratch), b.ScratchFS.URL(ctx, scratchFile))
+			b.ScratchFS.URL(ctx, source.Scratch), b.ScratchFS.URL(ctx, scratchFile),
+		)
 
 		env := map[string]string{
 			"GOOS":   target.GOOS,
