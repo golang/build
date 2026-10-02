@@ -1286,8 +1286,8 @@ type CommitMessageInput struct {
 }
 
 func (c *Client) SetCommitMessage(ctx context.Context, changeID string, cmi CommitMessageInput) error {
-	var change ChangeInfo
-	return c.do(ctx, &change, "PUT", "/changes/"+changeID+"/message", reqBodyJSON{&cmi})
+	var ok string
+	return c.do(ctx, &ok, "PUT", "/changes/"+changeID+"/message", reqBodyJSON{&cmi})
 }
 
 // CommitMessageInfo contains information about a commit message.
