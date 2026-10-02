@@ -1427,7 +1427,7 @@ func TestCheckPrivateChangesLint(t *testing.T) {
 				Changelists: []string{"https://go-internal-review.git.corp.google.com/c/go/+/1234"},
 			}},
 		}
-		_, err := deps.buildTasks.checkPrivateChanges(ctx, rm, securityBranchInfo{})
+		_, err := deps.buildTasks.checkPrivateChanges(ctx, rm, securityBranchInfo{}, nil)
 		if err == nil {
 			t.Fatal("checkPrivateChanges with metadata in the commit message: got nil error")
 		}
@@ -1438,7 +1438,7 @@ func TestCheckPrivateChangesLint(t *testing.T) {
 		}
 
 		privGerrit.AddChange("go", "1234", nil, "crypto/tls: fix something\n\nNo references here.")
-		if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm, securityBranchInfo{}); err != nil {
+		if _, err := deps.buildTasks.checkPrivateChanges(ctx, rm, securityBranchInfo{}, nil); err != nil {
 			t.Errorf("checkPrivateChanges with a clean message: %v", err)
 		}
 	})
@@ -1958,6 +1958,8 @@ func manualPatch() *relmeta.SecurityPatch {
 	}
 }
 
+var manualBackports = task.BackportManifest{40027191: {"1.25": 70125, "1.26": 70126}}
+
 // seedManualPatch adds the GitHub issue, the public CL, and the staged
 // backport CLs that manualPatchYAML refers to.
 func seedManualPatch(t *testing.T, deps *releaseTestDeps, privGerrit *task.FakeGerrit) {
@@ -1978,7 +1980,7 @@ func seedManualPatch(t *testing.T, deps *releaseTestDeps, privGerrit *task.FakeG
 	}
 	privGerrit.AddChange("go", "9000", &gerrit.ChangeInfo{
 		ID: "9000", ChangeID: "I9000", ChangeNumber: 9000, Branch: "public", Submittable: true, Mergeable: true,
-	}, "net/http: fix something")
+	}, "net/http: fix something\n\nFixes CVE-1985-0704\nFor golang/go#70002")
 	for _, cl := range []struct {
 		line string
 		num  int
@@ -2001,7 +2003,7 @@ func TestCheckPrivateChangesManual(t *testing.T) {
 		taskCtx, bi, _ := mustSecuritySetup(t, deps, privGerrit)
 
 		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{manualPatch()}}
-		patches, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi)
+		patches, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi, manualBackports)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2018,9 +2020,67 @@ func TestCheckPrivateChangesManual(t *testing.T) {
 		p := manualPatch()
 		p.DeploymentMap["https://go-internal-review.git.corp.google.com/c/go/+/9025"] = "go:internal-release-branch.go1.25.2"
 		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{p}}
-		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi)
+		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi, manualBackports)
 		if err == nil || !strings.Contains(err.Error(), "internal-release-branch.go1.25.2") {
 			t.Fatalf("err = %v, want unknown branch error", err)
+		}
+	})
+
+	workflowtest.Subtest(t, "rejects_missing_riders", func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, _ := mustSecuritySetup(t, deps, privGerrit)
+
+		privGerrit.AddChange("go", "9000", nil, "net/http: fix something")
+		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{manualPatch()}}
+		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi, manualBackports)
+		for _, want := range []string{"c/go/+/9000", `missing rider "Fixes CVE-1985-0704"`, `missing rider "For golang/go#70002"`} {
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want mention of %q", err, want)
+			}
+		}
+	})
+
+	workflowtest.Subtest(t, "rejects_wrong_backport_rider", func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, _ := mustSecuritySetup(t, deps, privGerrit)
+
+		privGerrit.AddChange("go", "9025", nil, "[release-branch.go1.25] net/http: fix something\n\nFixes CVE-1985-0704\nFor golang/go#70002\nFixes golang/go#70126")
+		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{manualPatch()}}
+		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi, manualBackports)
+		for _, want := range []string{"c/go/+/9025", `missing rider "Fixes golang/go#70125"`} {
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want mention of %q", err, want)
+			}
+		}
+		if err != nil && strings.Contains(err.Error(), "9026") {
+			t.Errorf("err = %v, must not mention the correct CL 9026", err)
+		}
+	})
+
+	workflowtest.Subtest(t, "accepts_bare_issue_riders", func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, _ := mustSecuritySetup(t, deps, privGerrit)
+
+		privGerrit.AddChange("go", "9000", nil, "net/http: fix something\n\nFixes CVE-1985-0704\nFixes #70002")
+		privGerrit.AddChange("go", "9025", nil, "[release-branch.go1.25] net/http: fix something\n\nFixes CVE-1985-0704\nFor #70002\nFixes #70125")
+		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{manualPatch()}}
+		if _, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi, manualBackports); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	workflowtest.Subtest(t, "rejects_missing_backport_manifest", func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, _ := mustSecuritySetup(t, deps, privGerrit)
+
+		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{manualPatch()}}
+		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi, nil)
+		if err == nil || !strings.Contains(err.Error(), "has no backport issue for 1.25") {
+			t.Errorf("err = %v, want missing backport issue error", err)
 		}
 	})
 }
@@ -2227,6 +2287,48 @@ func TestMoveAndRebasePrivateChanges(t *testing.T) {
 		for _, ci := range moved[0].Changes {
 			if ci.ChangeNumber == 1234 && ci.Status != gerrit.ChangeStatusMerged {
 				t.Errorf("merged CL 1234 status = %q, want %q", ci.Status, gerrit.ChangeStatusMerged)
+			}
+		}
+	})
+	workflowtest.Subtest(t, "manual_message_untouched", func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, cls := mustSecuritySetup(t, deps, privGerrit)
+		ci, err := privGerrit.GetChange(deps.ctx, "9000")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cls = append(cls, &task.PatchChanges{Patch: manualPatch(), Changes: []*gerrit.ChangeInfo{ci}})
+		before, err := privGerrit.GetCommitMessage(deps.ctx, "9000")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		checkpoint, err := deps.buildTasks.createSecurityCheckpoint(taskCtx, bi, cls)
+		if err != nil {
+			t.Fatal(err)
+		}
+		moved, err := task.MoveAndRebaseAll(taskCtx, privGerrit, checkpoint, cls)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := moved[1].Changes[0].Branch; got != checkpoint.Branch {
+			t.Errorf("manual CL 9000 branch = %q, want %q", got, checkpoint.Branch)
+		}
+		after, err := privGerrit.GetCommitMessage(deps.ctx, "9000")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if after != before {
+			t.Errorf("manual CL 9000 commit message was rewritten:\n%s", after)
+		}
+		for _, ci := range moved[0].Changes {
+			cm, err := privGerrit.GetCommitMessage(deps.ctx, ci.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(cm, "Fixes CVE-") {
+				t.Errorf("regular CL %d did not receive riders:\n%s", ci.ChangeNumber, cm)
 			}
 		}
 	})
@@ -2627,7 +2729,7 @@ func TestCheckPrivateChangesErrors(t *testing.T) {
 				Changelists: []string{"https://go-internal-review.git.corp.google.com/c/go/+/9999"},
 			}},
 		}
-		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, securityBranchInfo{})
+		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, securityBranchInfo{}, nil)
 		if err == nil {
 			t.Fatal("expected error from GetChange on missing CL")
 		}
@@ -2649,7 +2751,7 @@ func TestCheckPrivateChangesErrors(t *testing.T) {
 				Changelists: []string{"https://go-internal-review.git.corp.google.com/c/go/+/1234"},
 			}},
 		}
-		_, err = deps.buildTasks.checkPrivateChanges(taskCtx, rm, securityBranchInfo{})
+		_, err = deps.buildTasks.checkPrivateChanges(taskCtx, rm, securityBranchInfo{}, nil)
 		if err == nil {
 			t.Fatal("expected error for non-submittable CL")
 		}

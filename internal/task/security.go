@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/build/gerrit"
 	wf "golang.org/x/build/internal/workflow"
+	goversion "golang.org/x/build/maintner/maintnerd/maintapi/version"
 	"golang.org/x/build/relmeta"
 )
 
@@ -83,9 +84,12 @@ func MoveAndRebase(ctx *wf.TaskContext, client GerritClient, changeID, branch st
 
 func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, cp Checkpoint, patches []*PatchChanges) ([]*PatchChanges, error) {
 	for _, p := range patches {
-		riders, err := securityRiders(p.Patch)
-		if err != nil {
-			return nil, err
+		var riders string
+		if len(p.Patch.DeploymentMap) == 0 {
+			var err error
+			if riders, err = securityRiders(p.Patch); err != nil {
+				return nil, err
+			}
 		}
 		for i, ci := range p.Changes {
 			ci, err := MoveAndRebase(ctx, client, ci.ID, cp.Branch)
@@ -93,6 +97,10 @@ func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, cp Checkpoint, p
 				return nil, err
 			}
 			if ci.Status == gerrit.ChangeStatusMerged {
+				p.Changes[i] = ci
+				continue
+			}
+			if riders == "" {
 				p.Changes[i] = ci
 				continue
 			}
@@ -167,7 +175,7 @@ func CheckDeploymentMap(p *relmeta.SecurityPatch, project string, branches []str
 	return nil
 }
 
-func CheckPrivateChanges(ctx *wf.TaskContext, client GerritClient, project string, patches []*relmeta.SecurityPatch) ([]*PatchChanges, error) {
+func CheckPrivateChanges(ctx *wf.TaskContext, client GerritClient, project string, patches []*relmeta.SecurityPatch, backports BackportManifest) ([]*PatchChanges, error) {
 	var (
 		checked  []*PatchChanges
 		lintErrs []error
@@ -208,14 +216,37 @@ func CheckPrivateChanges(ctx *wf.TaskContext, client GerritClient, project strin
 				if err != nil {
 					return nil, err
 				}
-				if commitCVERE.MatchString(cm) {
-					lintErrs = append(lintErrs, fmt.Errorf("change %s must not contain a CVE reference", PrivateChangeURL(project, num)))
-				}
-				if commitIssueRE.MatchString(cm) {
-					lintErrs = append(lintErrs, fmt.Errorf("change %s must not contain a GitHub issue reference", PrivateChangeURL(project, num)))
+				if len(p.DeploymentMap) != 0 {
+					if err := checkManualRiders(p, "public", cm, backports); err != nil {
+						lintErrs = append(lintErrs, fmt.Errorf("change %s: %w", PrivateChangeURL(project, num), err))
+					}
+				} else {
+					if commitCVERE.MatchString(cm) {
+						lintErrs = append(lintErrs, fmt.Errorf("change %s must not contain a CVE reference", PrivateChangeURL(project, num)))
+					}
+					if commitIssueRE.MatchString(cm) {
+						lintErrs = append(lintErrs, fmt.Errorf("change %s must not contain a GitHub issue reference", PrivateChangeURL(project, num)))
+					}
 				}
 			}
 			cls = append(cls, ci)
+		}
+		for _, clURL := range p.Changelists {
+			deployedProject, branch, _ := strings.Cut(p.DeploymentMap[clURL], ":")
+			if deployedProject != project || branch == "public" {
+				continue
+			}
+			_, num, ok := strings.Cut(clURL, "/+/")
+			if !ok {
+				return nil, fmt.Errorf("security patch %d: malformed changelist URL %q", p.ID, clURL)
+			}
+			cm, err := client.GetCommitMessage(ctx, num)
+			if err != nil {
+				return nil, err
+			}
+			if err := checkManualRiders(p, branch, cm, backports); err != nil {
+				lintErrs = append(lintErrs, fmt.Errorf("change %s: %w", PrivateChangeURL(project, num), err))
+			}
 		}
 		checked = append(checked, &PatchChanges{Patch: p, Changes: cls})
 	}
@@ -223,6 +254,43 @@ func CheckPrivateChanges(ctx *wf.TaskContext, client GerritClient, project strin
 		return nil, err
 	}
 	return checked, nil
+}
+
+func checkManualRiders(p *relmeta.SecurityPatch, branch, message string, backports BackportManifest) error {
+	if p.CVE == "" {
+		return fmt.Errorf("security patch %d has no CVE", p.ID)
+	}
+	if p.GitHubIssueID == 0 {
+		return fmt.Errorf("security patch %d has no GitHub issue", p.ID)
+	}
+	// TODO(nealpatel): Decide whether to require the [release-branch.go1.X] subject prefix.
+	lines := strings.Split(message, "\n")
+	hasIssue := func(verb string, number int64) bool {
+		return slices.Contains(lines, fmt.Sprintf("%s golang/go#%d", verb, number)) || slices.Contains(lines, fmt.Sprintf("%s #%d", verb, number))
+	}
+	var errs []error
+	if rider := "Fixes " + p.CVE; !slices.Contains(lines, rider) {
+		errs = append(errs, fmt.Errorf("missing rider %q", rider))
+	}
+	// TODO(nealpatel): Tighten this to just `For` for parity.
+	if !hasIssue("For", p.GitHubIssueID) && !hasIssue("Fixes", p.GitHubIssueID) {
+		errs = append(errs, fmt.Errorf("missing rider %q", fmt.Sprintf("For golang/go#%d", p.GitHubIssueID)))
+	}
+	if branch != "public" {
+		x, ok := goversion.Go1PointX(strings.TrimPrefix(branch, "internal-release-branch."))
+		if !ok {
+			return fmt.Errorf("branch %q is not an internal release branch", branch)
+		}
+		line := fmt.Sprintf("1.%d", x)
+		backport, ok := backports[p.ID][line]
+		if !ok {
+			return fmt.Errorf("security patch %d has no backport issue for %s", p.ID, line)
+		}
+		if !hasIssue("Fixes", backport) {
+			errs = append(errs, fmt.Errorf("missing rider %q", fmt.Sprintf("Fixes golang/go#%d", backport)))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func SubmitPrivateChanges(ctx *wf.TaskContext, client GerritClient, project string, patches []*PatchChanges) ([]*PatchChanges, error) {

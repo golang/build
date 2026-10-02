@@ -504,7 +504,7 @@ func createMinorReleaseWorkflow(build *BuildReleaseTasks, milestone *task.Milest
 		nextMinors    = wf.Task1(wd, "Get next minor versions", version.GetNextMinorVersions, currPrevMajor)
 	)
 	branchInfo := wf.Task3(wd, "Compute security branch names", computeSecurityBranchInfo, vt, major, nextMinors, wf.After(backports))
-	cls := wf.Task2(wd, "Check private changes", build.checkPrivateChanges, rm, branchInfo)
+	cls := wf.Task3(wd, "Check private changes", build.checkPrivateChanges, rm, branchInfo, backports)
 
 	// All checkpoint branches are created with timestamp
 	// trailers to ensure workflow restarts are idempotent.
@@ -931,7 +931,7 @@ func computeSecurityBranchInfo(ctx *wf.TaskContext, version *task.VersionTasks, 
 	return bi, nil
 }
 
-func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, bi securityBranchInfo) ([]*task.PatchChanges, error) {
+func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, bi securityBranchInfo, backports task.BackportManifest) ([]*task.PatchChanges, error) {
 	if rm == nil {
 		return nil, nil
 	}
@@ -944,7 +944,7 @@ func (b *BuildReleaseTasks) checkPrivateChanges(ctx *wf.TaskContext, rm *relmeta
 			return nil, err
 		}
 	}
-	patches, err := task.CheckPrivateChanges(ctx, b.PrivateGerritClient, b.PrivateGerritProject, rm.Patches)
+	patches, err := task.CheckPrivateChanges(ctx, b.PrivateGerritClient, b.PrivateGerritProject, rm.Patches, backports)
 	if err != nil {
 		return nil, err
 	}

@@ -94,7 +94,7 @@ func (x *PrivXPatch) FilterPatches(ctx *wf.TaskContext, rm *relmeta.ReleaseMiles
 		}
 		sps = append(sps, p)
 	}
-	return CheckPrivateChanges(ctx, x.PrivateGerrit, target, sps)
+	return CheckPrivateChanges(ctx, x.PrivateGerrit, target, sps, nil)
 }
 
 // repoName returns the repo implied by the
