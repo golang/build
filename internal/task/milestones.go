@@ -645,7 +645,7 @@ func (m *MilestoneTasks) CheckSecurityIssues(ctx *wf.TaskContext, rm *relmeta.Re
 	var problems []string
 	for _, p := range rm.Patches {
 		number := int(p.GitHubIssueID)
-		if untracked[number] {
+		if untracked[number] || p.Track == relmeta.Public {
 			// Prune issues found to be tracked.
 			delete(untracked, number)
 			continue

@@ -346,6 +346,12 @@ func TestCheckSecurityIssues(t *testing.T) {
 		}
 		return rm
 	}
+	publicPatches := func(rm *relmeta.ReleaseMilestone, issueIDs ...int64) *relmeta.ReleaseMilestone {
+		for _, id := range issueIDs {
+			rm.Patches = append(rm.Patches, &relmeta.SecurityPatch{ID: int64(len(rm.Patches) + 1), GitHubIssueID: id, Track: relmeta.Public})
+		}
+		return rm
+	}
 	for _, tc := range [...]struct {
 		name    string
 		rm      *relmeta.ReleaseMilestone
@@ -390,6 +396,22 @@ func TestCheckSecurityIssues(t *testing.T) {
 			name:    "two patches for one issue",
 			rm:      patches(123, 123),
 			issues:  map[int]*github.Issue{123: secIssue("release-blocker", "Security")},
+			wantErr: true,
+		},
+		{
+			name:   "PUBLIC patch with closed issue",
+			rm:     publicPatches(patches(123), 456),
+			issues: map[int]*github.Issue{123: secIssue("release-blocker", "Security")},
+		},
+		{
+			name:   "PUBLIC patch with open issue",
+			rm:     publicPatches(patches(123), 456),
+			issues: map[int]*github.Issue{123: secIssue("release-blocker", "Security"), 456: secIssue("release-blocker", "Security")},
+		},
+		{
+			name:    "PUBLIC patch does not excuse missing PRIVATE issue",
+			rm:      publicPatches(patches(123), 456),
+			issues:  map[int]*github.Issue{456: secIssue("release-blocker", "Security")},
 			wantErr: true,
 		},
 	} {
