@@ -1466,7 +1466,11 @@ def dimensions_of(host_type):
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
-            cpu = goarch + "-64-" + suffix.replace("power", "POWER")
+            # OSUOL removed their power8 machines, and moved the VMs to power9.
+            # Run power8 jobs on any bot, for now.
+            cpu = goarch + "-64"
+            if suffix != "power8":
+                cpu += "-" + suffix.replace("power", "POWER")
         elif goos == "linux" and goarch == "amd64" and "docker" in suffixes:
             os = "Ubuntu-22"
         elif goos == "darwin":
