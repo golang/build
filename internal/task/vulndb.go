@@ -96,7 +96,7 @@ func VulnReport(p *relmeta.SecurityPatch, mod VulnModuleInfo, announceURL string
 				// having a std counterpart; however, for now, in
 				// the worst case, we have to pull down a mailed
 				// CL, make a small edit, re-push to submit.
-				Packages: []*report.Package{{Package: p.Package}},
+				Packages: []*report.Package{{Package: p.Package, Symbols: mod.Symbols}},
 			},
 		},
 		Summary:      report.Summary(summary),
@@ -115,6 +115,7 @@ type VulnModuleInfo struct {
 	Module       string
 	Versions     report.Versions
 	VulnerableAt *report.Version
+	Symbols      []string
 }
 
 // stdVulnReportVersions converts the go1.m.n version string into a format
@@ -179,6 +180,7 @@ func StdVulnModuleInfo(p *relmeta.SecurityPatch) (VulnModuleInfo, error) {
 		Module:       VulnModule(p.Package),
 		Versions:     versions,
 		VulnerableAt: vulnerableAt,
+		Symbols:      DeployedSymbols(p, false),
 	}, nil
 }
 

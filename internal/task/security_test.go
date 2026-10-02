@@ -17,6 +17,7 @@ func manualPatch() *relmeta.SecurityPatch {
 	return &relmeta.SecurityPatch{
 		ID:          1,
 		Changelists: []string{clBase + "go/+/1", clBase + "go/+/2", clBase + "net/+/3"},
+		Symbols:     []string{"net/http.Transport.RoundTrip", "golang.org/x/mod/modfile.Parse"},
 		DeploymentMap: map[string]string{
 			clBase + "go/+/1":  "go:public",
 			clBase + "go/+/2":  "go:internal-release-branch.go1.25.1",
@@ -91,5 +92,27 @@ func TestDeployedChangelists(t *testing.T) {
 	p.DeploymentMap = nil
 	if got := DeployedChangelists(p, "net", "anything"); len(got) != len(p.Changelists) {
 		t.Errorf("non-manual DeployedChangelists = %v, want all changelists", got)
+	}
+}
+
+func TestDeployedSymbols(t *testing.T) {
+	p := manualPatch()
+	for _, tc := range []struct {
+		xrepo bool
+		want  []string
+	}{
+		{false, []string{"net/http.Transport.RoundTrip"}},
+		{true, []string{"golang.org/x/mod/modfile.Parse"}},
+	} {
+		got := DeployedSymbols(p, tc.xrepo)
+		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("DeployedSymbols(xrepo=%v) = %v, want %v", tc.xrepo, got, tc.want)
+		}
+	}
+	p.DeploymentMap = nil
+	for _, xrepo := range []bool{false, true} {
+		if got := DeployedSymbols(p, xrepo); len(got) != len(p.Symbols) {
+			t.Errorf("non-manual DeployedSymbols(xrepo=%v) = %v, want all symbols", xrepo, got)
+		}
 	}
 }

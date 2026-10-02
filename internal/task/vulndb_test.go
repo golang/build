@@ -64,7 +64,7 @@ func TestSubject(t *testing.T) {
 }
 
 func TestVulnReport(t *testing.T) {
-	mod := VulnModuleInfo{Module: "golang.org/x/net", Versions: report.Versions{report.Fixed("1.1.0")}, VulnerableAt: report.VulnerableAt("1.0.0")}
+	mod := VulnModuleInfo{Module: "golang.org/x/net", Versions: report.Versions{report.Fixed("1.1.0")}, VulnerableAt: report.VulnerableAt("1.0.0"), Symbols: []string{"golang.org/x/mod/modfile.Parse"}}
 	const announceURL = "https://groups.google.com/g/golang-announce/c/test"
 
 	t.Run("valid", func(t *testing.T) {
@@ -102,6 +102,9 @@ func TestVulnReport(t *testing.T) {
 		}
 		if r.Modules[0].Packages[0].Package != "golang.org/x/net/http2" {
 			t.Errorf("Package = %q", r.Modules[0].Packages[0].Package)
+		}
+		if !reflect.DeepEqual(r.Modules[0].Packages[0].Symbols, mod.Symbols) {
+			t.Errorf("Symbols = %v, want %v", r.Modules[0].Packages[0].Symbols, mod.Symbols)
 		}
 		if r.ReviewStatus != report.Reviewed {
 			t.Errorf("ReviewStatus = %v", r.ReviewStatus)
@@ -360,17 +363,20 @@ func TestStdVulnModuleInfo(t *testing.T) {
 		wantMod  string
 		wantVer  string
 		wantVers report.Versions
+		wantSyms []string
 		wantErr  bool
 	}{
 		{
 			name: "std package",
 			p: &relmeta.SecurityPatch{
 				Package:        "net/http",
+				Symbols:        []string{"net/http.Transport.RoundTrip", "golang.org/x/mod/modfile.Parse"},
 				TargetReleases: []string{"go1.26.3", "go1.25.10"},
 			},
 			wantMod:  "std",
 			wantVer:  "1.26.2",
 			wantVers: report.Versions{report.Fixed("1.25.10"), report.Introduced("1.26.0-0"), report.Fixed("1.26.3")},
+			wantSyms: []string{"net/http.Transport.RoundTrip", "golang.org/x/mod/modfile.Parse"},
 		},
 		{
 			name: "cmd package",
@@ -416,6 +422,9 @@ func TestStdVulnModuleInfo(t *testing.T) {
 			}
 			if !reflect.DeepEqual(mod.Versions, tt.wantVers) {
 				t.Errorf("Versions = %v, want %v", mod.Versions, tt.wantVers)
+			}
+			if !reflect.DeepEqual(mod.Symbols, tt.wantSyms) {
+				t.Errorf("Symbols = %v, want %v", mod.Symbols, tt.wantSyms)
 			}
 		})
 	}
@@ -618,4 +627,17 @@ security_patches:
 			}
 		})
 	})
+}
+
+func TestStdVulnModuleInfoManualSymbols(t *testing.T) {
+	p := manualPatch()
+	p.Package = "net/http"
+	p.TargetReleases = []string{"go1.26.3"}
+	mod, err := StdVulnModuleInfo(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"net/http.Transport.RoundTrip"}; !reflect.DeepEqual(mod.Symbols, want) {
+		t.Errorf("Symbols = %v, want %v", mod.Symbols, want)
+	}
 }

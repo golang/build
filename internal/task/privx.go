@@ -202,6 +202,7 @@ func (x *PrivXPatch) vulnModuleInfo(p *relmeta.SecurityPatch, tagged TagRepo, vu
 		Module:       tagged.ModPath,
 		Versions:     report.Versions{report.Fixed(strings.TrimPrefix(tagged.NewerVersion, "v"))},
 		VulnerableAt: vulnerableAt,
+		Symbols:      DeployedSymbols(p, true),
 	}, nil
 }
 

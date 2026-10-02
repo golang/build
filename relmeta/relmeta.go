@@ -27,6 +27,7 @@ type SecurityPatch struct {
 	Track          GoSecurityTrack   `yaml:"track"`
 	Toolchain      bool              `yaml:"is_toolchain"`
 	Package        string            `yaml:"package"`
+	Symbols        []string          `yaml:"symbols"`
 	Changelists    []string          `yaml:"changelists"`
 	ReleaseNote    string            `yaml:"release_note"`
 	TargetReleases []string          `yaml:"target_releases,omitempty"` // required for std/cmd; omit for x-repo

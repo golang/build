@@ -134,6 +134,19 @@ func DeployedChangelists(p *relmeta.SecurityPatch, project, branch string) []str
 	return cls
 }
 
+func DeployedSymbols(p *relmeta.SecurityPatch, xrepo bool) []string {
+	if len(p.DeploymentMap) == 0 {
+		return p.Symbols
+	}
+	var syms []string
+	for _, sym := range p.Symbols {
+		if strings.HasPrefix(sym, "golang.org/x/") == xrepo {
+			syms = append(syms, sym)
+		}
+	}
+	return syms
+}
+
 func CheckDeploymentMap(p *relmeta.SecurityPatch, project string, branches []string) error {
 	if len(p.DeploymentMap) == 0 {
 		return nil
