@@ -201,6 +201,7 @@ func main() {
 			TwitterClient:  twitterClient,
 			MastodonClient: mastodonClient,
 			BlueskyClient:  blueskyClient,
+			HTTPClient:     http.DefaultClient,
 		},
 	}
 	dh := relui.NewDefinitionHolder()
@@ -326,6 +327,7 @@ func main() {
 		GoProject:  "go",
 		GoDirectiveXReposTasks: task.GoDirectiveXReposTasks{
 			Gerrit:     gerritClient,
+			HTTPClient: http.DefaultClient,
 			CloudBuild: cloudBuildClient,
 		},
 		UpdateProxyTestRepoTasks: task.UpdateProxyTestRepoTasks{
@@ -356,6 +358,7 @@ func main() {
 	tagTasks := &task.TagXReposTasks{
 		IgnoreProjects: ignoreProjects,
 		Gerrit:         gerritClient,
+		HTTPClient:     http.DefaultClient,
 		CloudBuild:     cloudBuildClient,
 		BuildBucket:    buildBucketClient,
 	}

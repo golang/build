@@ -868,11 +868,7 @@ type BlogPost struct {
 }
 
 func (t SocialMediaTasks) GetBlogPostMetadata(ctx *workflow.TaskContext, atomURL string, blogPostURL string) (blogPost BlogPost, err error) {
-	client := t.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := ctxhttp.Get(ctx, client, atomURL)
+	resp, err := ctxhttp.Get(ctx, t.HTTPClient, atomURL)
 	if err != nil {
 		return BlogPost{}, fmt.Errorf("unable to query atom feed for blog post entries: %s", err)
 	}

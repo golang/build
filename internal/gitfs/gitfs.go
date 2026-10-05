@@ -377,12 +377,13 @@ func (f *dirFile) ReadDir(n int) (list []fs.DirEntry, err error) {
 
 // A Repo is a connection to a remote repository served over HTTP or HTTPS.
 type Repo struct {
-	client *http.Client
-	url    string // trailing slash removed
+	client *http.Client // Non-nil.
+	url    string       // trailing slash removed
 	caps   map[string]string
 }
 
 // NewRepo connects to a Git repository at the given http:// or https:// URL.
+// If client is nil, then http.DefaultClient is used.
 func NewRepo(client *http.Client, url string) (*Repo, error) {
 	if client == nil {
 		client = http.DefaultClient
