@@ -1290,6 +1290,11 @@ func (c *Client) SetCommitMessage(ctx context.Context, changeID string, cmi Comm
 	return c.do(ctx, &ok, "PUT", "/changes/"+changeID+"/message", reqBodyJSON{&cmi})
 }
 
+func (c *Client) MarkReady(ctx context.Context, changeID string) error {
+	var ok string
+	return c.do(ctx, &ok, "POST", "/changes/"+changeID+"/ready")
+}
+
 // CommitMessageInfo contains information about a commit message.
 //
 // See https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#commit-message-info.

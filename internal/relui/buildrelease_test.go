@@ -967,8 +967,8 @@ func TestMinorReleaseSecurityCoalesceCherryPickConflict(t *testing.T) {
 					t.Errorf("change %s: got %d cherry-picks on internal branches, want 2", num, len(cps))
 				}
 				for _, cp := range cps {
-					if cp.Status != "NEW" || !cp.ContainsGitConflicts {
-						t.Errorf("cherry-pick %s status = %q, conflicts = %v; want unresolved NEW while awaiting", cp.ID, cp.Status, cp.ContainsGitConflicts)
+					if cp.Status != "NEW" || !cp.ContainsGitConflicts || !cp.WorkInProgress {
+						t.Errorf("cherry-pick %s status = %q, conflicts = %v, wip = %v; want unresolved WIP NEW while awaiting", cp.ID, cp.Status, cp.ContainsGitConflicts, cp.WorkInProgress)
 					}
 					fixed := *cp
 					fixed.ContainsGitConflicts = false
@@ -2834,12 +2834,65 @@ func TestCreateSecurityCherryPicksConflict(t *testing.T) {
 				continue
 			}
 			conflicted++
-			if !cp.ContainsGitConflicts || cp.Submittable {
-				t.Errorf("cherry-pick %s on %s: conflicts = %v, submittable = %v; want conflicted and unsubmittable", cp.ID, cp.Branch, cp.ContainsGitConflicts, cp.Submittable)
+			if !cp.ContainsGitConflicts || !cp.WorkInProgress || cp.Submittable {
+				t.Errorf("cherry-pick %s on %s: conflicts = %v, wip = %v, submittable = %v; want conflicted WIP and unsubmittable", cp.ID, cp.Branch, cp.ContainsGitConflicts, cp.WorkInProgress, cp.Submittable)
 			}
 		}
 		if conflicted != len(releaseBranches) {
 			t.Errorf("got %d conflicted cherry-picks of 1234, want %d", conflicted, len(releaseBranches))
+		}
+	})
+}
+
+func TestSubmitCherryPicksUnownedWIP(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+
+		ci := &gerrit.ChangeInfo{
+			ID:             "9999",
+			ChangeID:       "9999",
+			ChangeNumber:   9999,
+			Branch:         "public",
+			Status:         "NEW",
+			Submittable:    true,
+			Mergeable:      true,
+			WorkInProgress: true,
+			Owner:          &gerrit.AccountInfo{Email: "owner@google.com"},
+		}
+		privGerrit.AddChange("go", "9999", ci, "crypto/tls: manual backport")
+
+		taskCtx := &workflow.TaskContext{Context: deps.ctx, Logger: &workflowtest.Logger{T: t, Task: t.Name()}}
+		done := make(chan error, 1)
+		go func() {
+			_, err := deps.buildTasks.submitCherryPicks(taskCtx, []*gerrit.ChangeInfo{ci})
+			done <- err
+		}()
+
+		time.Sleep(time.Hour)
+		select {
+		case err := <-done:
+			t.Fatalf("submitCherryPicks returned %v while CL is still WIP", err)
+		default:
+		}
+		got, err := privGerrit.GetChange(deps.ctx, "9999")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got.WorkInProgress || got.Status != "NEW" {
+			t.Fatalf("CL 9999: wip = %v, status = %q; want WIP and NEW while relui cannot mark it ready", got.WorkInProgress, got.Status)
+		}
+
+		ready := *got
+		ready.WorkInProgress = false
+		privGerrit.AddChange("go", "9999", &ready, "")
+		if err := <-done; err != nil {
+			t.Fatalf("submitCherryPicks after owner marked ready: %v", err)
+		}
+		if got, err = privGerrit.GetChange(deps.ctx, "9999"); err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != gerrit.ChangeStatusMerged {
+			t.Errorf("CL 9999 status = %q, want %q", got.Status, gerrit.ChangeStatusMerged)
 		}
 	})
 }

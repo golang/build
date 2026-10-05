@@ -803,6 +803,9 @@ func (g *FakeGerrit) SubmitChange(_ context.Context, changeID string) (gerrit.Ch
 	if ci.Status == gerrit.ChangeStatusMerged {
 		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, "change is merged\n")
 	}
+	if ci.WorkInProgress {
+		return gerrit.ChangeInfo{}, NewGerritHTTPError(http.StatusConflict, fmt.Sprintf("change %d is marked work in progress\n", ci.ChangeNumber))
+	}
 	project := g.clProjects[changeID]
 	repo, err := g.repo(project)
 	if err != nil {
@@ -812,6 +815,20 @@ func (g *FakeGerrit) SubmitChange(_ context.Context, changeID string) (gerrit.Ch
 	ci.Status = gerrit.ChangeStatusMerged
 	ci.Submittable = false
 	return *ci, nil
+}
+
+func (g *FakeGerrit) MarkReady(_ context.Context, changeID string) error {
+	g.changesMu.Lock()
+	defer g.changesMu.Unlock()
+	ci, ok := g.cls[changeID]
+	if !ok {
+		return NewGerritHTTPError(http.StatusNotFound, fmt.Sprintf("change %s not found\n", changeID))
+	}
+	if ci.Owner != nil {
+		return NewGerritHTTPError(http.StatusForbidden, "toggle work in progress state not permitted\n")
+	}
+	ci.WorkInProgress = false
+	return nil
 }
 
 func (g *FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, branch string, message string) (gerrit.ChangeInfo, bool, error) {
@@ -844,6 +861,7 @@ func (g *FakeGerrit) CreateCherryPick(ctx context.Context, changeID string, bran
 		Submittable:          !conflicts,
 		Mergeable:            true,
 		ContainsGitConflicts: conflicts,
+		WorkInProgress:       conflicts,
 	}
 	g.cls[cpID] = cp
 	g.commitMessages[cpID] = message

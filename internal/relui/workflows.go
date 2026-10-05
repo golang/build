@@ -1064,8 +1064,21 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 			if err != nil {
 				return "", false, err
 			}
-			if !ci.Submittable {
-				blocking = append(blocking, task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber))
+			url := task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber)
+			wip := ci.WorkInProgress
+			if ci.Submittable && wip {
+				var httpErr *gerrit.HTTPError
+				switch err := b.PrivateGerritClient.MarkReady(ctx, ci.ID); {
+				case err == nil:
+					wip = false
+				case errors.As(err, &httpErr) && httpErr.Res.StatusCode == http.StatusForbidden:
+					ctx.Printf("CL %s must be marked ready by its patch owner: %v", url, err)
+				default:
+					return "", false, err
+				}
+			}
+			if !ci.Submittable || wip {
+				blocking = append(blocking, url)
 				continue
 			}
 			submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
