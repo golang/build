@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -1052,50 +1053,89 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 // submits them, landing the security fixes on the internal release branches.
 // It returns a display map of internal release branch to submitted CL URLs.
 func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks []*gerrit.ChangeInfo) (map[string][]string, error) {
-	if _, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
-		unsubmitted := len(cherryPicks)
-		var blocking []string
+	var (
+		awaiting []string
+		seen     = make(map[string]string, len(cherryPicks))
+	)
+	for _, cp := range cherryPicks {
+		if cp.Status != gerrit.ChangeStatusMerged {
+			seen[cp.ID] = "not submittable"
+			awaiting = append(awaiting, task.PrivateChangeURL(b.PrivateGerritProject, cp.ChangeNumber))
+		}
+	}
+	ctx.Printf("awaiting submission of CL(s): %s", strings.Join(awaiting, ", "))
+
+	var (
+		done      = make(chan struct{})
+		ch        = make(chan string)
+		remaining atomic.Int64
+	)
+	go func() {
+		defer close(done)
+		tick := time.NewTicker(30 * time.Minute)
+		defer tick.Stop()
+		for {
+			select {
+			case u, ok := <-ch:
+				if !ok {
+					return
+				}
+				ctx.Printf("%s", u)
+			case <-tick.C:
+				ctx.Printf("Waiting on %d changes...", remaining.Load())
+			}
+		}
+	}()
+	remaining.Store(int64(len(awaiting)))
+
+	observe := func(ci *gerrit.ChangeInfo, state string) {
+		if seen[ci.ID] == state {
+			return
+		}
+		seen[ci.ID] = state
+		ch <- fmt.Sprintf("CL %s: %s", task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber), state)
+	}
+
+	_, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
 		for i, cp := range cherryPicks {
 			if cp.Status == gerrit.ChangeStatusMerged {
-				unsubmitted--
 				continue
 			}
 			ci, err := b.PrivateGerritClient.GetChange(ctx, cp.ID, gerrit.QueryChangesOpt{Fields: []string{"SUBMITTABLE"}})
 			if err != nil {
 				return "", false, err
 			}
-			url := task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber)
-			wip := ci.WorkInProgress
-			if ci.Submittable && wip {
+			if !ci.Submittable {
+				observe(ci, "not submittable")
+				continue
+			}
+			if ci.WorkInProgress {
 				var httpErr *gerrit.HTTPError
 				switch err := b.PrivateGerritClient.MarkReady(ctx, ci.ID); {
 				case err == nil:
-					wip = false
 				case errors.As(err, &httpErr) && httpErr.Res.StatusCode == http.StatusForbidden:
-					ctx.Printf("CL %s must be marked ready by its patch owner: %v", url, err)
+					observe(ci, fmt.Sprintf("must be marked ready by its patch owner: %v", err))
+					continue
 				default:
 					return "", false, err
 				}
-			}
-			if !ci.Submittable || wip {
-				blocking = append(blocking, url)
-				continue
 			}
 			submitted, err := b.PrivateGerritClient.SubmitChange(ctx, ci.ID)
 			if err != nil {
 				return "", false, err
 			}
 			cherryPicks[i] = &submitted
-			unsubmitted--
+			remaining.Add(-1)
+			observe(ci, "submitted")
 		}
-		if unsubmitted == 0 {
-			return "", true, nil
-		}
-		ctx.Printf("awaiting non-submittable CL(s): %s", strings.Join(blocking, ", "))
-		return "", false, nil
-	}); err != nil {
+		return "", remaining.Load() == 0, nil
+	})
+	close(ch)
+	<-done
+	if err != nil {
 		return nil, err
 	}
+
 	submitted := map[string][]string{}
 	for _, cp := range cherryPicks {
 		submitted[cp.Branch] = append(submitted[cp.Branch], task.PrivateChangeURL(b.PrivateGerritProject, cp.ChangeNumber))
