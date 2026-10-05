@@ -317,7 +317,7 @@ func TestFetchBackportManifest(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := &workflow.TaskContext{Context: context.Background(), Logger: &workflowtest.Logger{T: t}}
-			got, err := FetchBackportManifest(ctx, &FakeGitHub{Comments: tc.comments}, "golang", "go", tc.rm)
+			got, err := FetchBackportManifest(ctx, &FakeGitHub{Issues: map[int]*github.Issue{123: {}}, Comments: tc.comments}, "golang", "go", tc.rm)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("got error %v, want error: %v", err, tc.wantErr)
 			}
@@ -359,9 +359,15 @@ func TestCheckSecurityIssues(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "nil milestone is a no-op",
+			name:   "nil milestone without security issues",
 			rm:     nil,
-			issues: map[int]*github.Issue{123: secIssue("release-blocker", "Security")},
+			issues: map[int]*github.Issue{789: secIssue("release-blocker")},
+		},
+		{
+			name:    "nil milestone with security issue",
+			rm:      nil,
+			issues:  map[int]*github.Issue{123: secIssue("release-blocker", "Security")},
+			wantErr: true,
 		},
 		{
 			name:   "patches and issues are 1:1",
@@ -401,7 +407,7 @@ func TestCheckSecurityIssues(t *testing.T) {
 		{
 			name:   "PUBLIC patch with closed issue",
 			rm:     publicPatches(patches(123), 456),
-			issues: map[int]*github.Issue{123: secIssue("release-blocker", "Security")},
+			issues: map[int]*github.Issue{123: secIssue("release-blocker", "Security"), 456: {Milestone: &github.Milestone{ID: github.Int64(2)}}},
 		},
 		{
 			name:   "PUBLIC patch with open issue",

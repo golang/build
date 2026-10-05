@@ -119,7 +119,7 @@ func (l *VerboseListener) WorkflowStalled(workflowID uuid.UUID) error {
 	if l.OnStall != nil {
 		return l.OnStall()
 	}
-	return fmt.Errorf("workflow %s stalled with no handler", workflowID)
+	return fmt.Errorf("workflow %s stalled with no OnStall handler", workflowID)
 }
 
 func (l *VerboseListener) TaskStateChanged(_ uuid.UUID, _ string, st *wf.TaskState) error {

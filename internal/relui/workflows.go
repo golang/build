@@ -2135,9 +2135,6 @@ func (tasks *BuildReleaseTasks) awaitProxy(ctx *wf.TaskContext, version string, 
 }
 
 func checkFiles(ctx context.Context, client *http.Client, want map[string]bool) func() (int, bool, error) {
-	if client == nil {
-		client = http.DefaultClient
-	}
 	found := map[string]bool{}
 	return func() (int, bool, error) {
 		for url := range want {

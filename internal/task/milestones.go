@@ -621,11 +621,8 @@ func (c *GitHubClient) PostComment(ctx context.Context, id githubv4.ID, body str
 // CheckSecurityIssues ensures that point releases remain blocked if the known release-blocker,
 // Security issues set does not match the declared set of issues.
 //
-// When rm is nil, the coordinator has already approved a non-security point release.
+// When rm is nil, no security patches are declared, so any open release-blocker,Security issue is an error.
 func (m *MilestoneTasks) CheckSecurityIssues(ctx *wf.TaskContext, rm *relmeta.ReleaseMilestone, develVersion int) (BackportManifest, error) {
-	if rm == nil {
-		return nil, nil
-	}
 	milestoneName := fmt.Sprintf("Go1.%d", develVersion)
 	milestoneNumber, err := m.Client.FetchMilestone(ctx, m.RepoOwner, m.RepoName, milestoneName, false)
 	if err != nil {
@@ -643,15 +640,17 @@ func (m *MilestoneTasks) CheckSecurityIssues(ctx *wf.TaskContext, rm *relmeta.Re
 		}
 	}
 	var problems []string
-	for _, p := range rm.Patches {
-		number := int(p.GitHubIssueID)
-		if untracked[number] || p.Track == relmeta.Public {
-			// Prune issues found to be tracked.
-			delete(untracked, number)
-			continue
+	if rm != nil {
+		for _, p := range rm.Patches {
+			number := int(p.GitHubIssueID)
+			if untracked[number] || p.Track == relmeta.Public {
+				// Prune issues found to be tracked.
+				delete(untracked, number)
+				continue
+			}
+			const problemFmt = "security patch %d: https://go.dev/issue/%d is not an open release-blocker in %s"
+			problems = append(problems, fmt.Sprintf(problemFmt, p.ID, number, milestoneName))
 		}
-		const problemFmt = "security patch %d: https://go.dev/issue/%d is not an open release-blocker in %s"
-		problems = append(problems, fmt.Sprintf(problemFmt, p.ID, number, milestoneName))
 	}
 	for number := range untracked {
 		problems = append(problems, fmt.Sprintf("https://go.dev/issue/%d has no security patch", number))

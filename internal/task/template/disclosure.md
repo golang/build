@@ -1,3 +1,4 @@
+{{/* Template input is relmeta.SecurityPatch. */ -}}
 {{.ReleaseNote}}
 
 ---

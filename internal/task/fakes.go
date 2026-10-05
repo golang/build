@@ -1814,6 +1814,9 @@ func (*FakeGitHub) EditMilestone(_ context.Context, owner, repo string, number i
 func (f *FakeGitHub) ListIssueComments(_ context.Context, owner, repo string, number int) ([]*github.IssueComment, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if _, ok := f.Issues[number]; !ok {
+		return nil, fmt.Errorf("the issue %v does not exist", number)
+	}
 	return f.Comments[number], nil
 }
 
