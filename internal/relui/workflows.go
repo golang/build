@@ -991,10 +991,7 @@ func (b *BuildReleaseTasks) createInternalReleaseBranches(ctx *wf.TaskContext, b
 }
 
 func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, releaseBranches []string, patches []*task.PatchChanges, backports task.BackportManifest) ([]*gerrit.ChangeInfo, error) {
-	var (
-		cherryPicks  []*gerrit.ChangeInfo
-		conflictErrs []error
-	)
+	var cherryPicks []*gerrit.ChangeInfo
 	for _, p := range patches {
 		if len(p.Patch.DeploymentMap) != 0 {
 			continue
@@ -1040,18 +1037,13 @@ func (b *BuildReleaseTasks) createSecurityCherryPicks(ctx *wf.TaskContext, relea
 					return nil, err
 				}
 				if conflicts {
-					conflictErrs = append(conflictErrs, fmt.Errorf("cherry-pick of %s has merge conflicts against %s: %s",
-						task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber), releaseBranch, task.PrivateChangeURL(b.PrivateGerritProject, cpCI.ChangeNumber)))
-					continue
+					ctx.Printf("Cherry-pick of %s has merge conflicts against %s: %s",
+						task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber), releaseBranch, task.PrivateChangeURL(b.PrivateGerritProject, cpCI.ChangeNumber))
 				}
 				cp := cpCI
 				cherryPicks = append(cherryPicks, &cp)
 			}
 		}
-	}
-	if len(conflictErrs) > 0 {
-		ctx.DisableRetries()
-		return nil, errors.Join(conflictErrs...)
 	}
 	return cherryPicks, nil
 }
