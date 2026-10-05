@@ -2032,6 +2032,24 @@ func TestCheckPrivateChangesManual(t *testing.T) {
 		}
 	})
 
+	workflowtest.Subtest(t, "rejects_internal_subject_prefix", func(t *testing.T) {
+		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
+		seedManualPatch(t, deps, privGerrit)
+		taskCtx, bi, _ := mustSecuritySetup(t, deps, privGerrit)
+
+		privGerrit.AddChange("go", "9025", nil, "[internal-release-branch.go1.25.1] net/http: fix something\n\nFixes CVE-1985-0704\nFor golang/go#70002\nFixes golang/go#70125")
+		rm := &relmeta.ReleaseMilestone{Patches: []*relmeta.SecurityPatch{manualPatch()}}
+		_, err := deps.buildTasks.checkPrivateChanges(taskCtx, rm, bi, manualBackports)
+		for _, want := range []string{"c/go/+/9025", `missing subject prefix "[release-branch.go1.25]"`} {
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want mention of %q", err, want)
+			}
+		}
+		if err != nil && strings.Contains(err.Error(), "9026") {
+			t.Errorf("err = %v, must not mention the correct CL 9026", err)
+		}
+	})
+
 	workflowtest.Subtest(t, "accepts_bare_issue_riders", func(t *testing.T) {
 		deps, privGerrit := newMinorCoalesceTestDeps(t, true)
 		seedManualPatch(t, deps, privGerrit)

@@ -272,7 +272,6 @@ func checkManualRiders(p *relmeta.SecurityPatch, branch, message string, backpor
 	if p.GitHubIssueID == 0 {
 		return fmt.Errorf("security patch %d has no GitHub issue", p.ID)
 	}
-	// TODO(nealpatel): Decide whether to require the [release-branch.go1.X] subject prefix.
 	lines := strings.Split(message, "\n")
 	hasIssue := func(verb string, number int64) bool {
 		return slices.Contains(lines, fmt.Sprintf("%s golang/go#%d", verb, number)) || slices.Contains(lines, fmt.Sprintf("%s #%d", verb, number))
@@ -289,6 +288,9 @@ func checkManualRiders(p *relmeta.SecurityPatch, branch, message string, backpor
 		x, ok := goversion.Go1PointX(strings.TrimPrefix(branch, "internal-release-branch."))
 		if !ok {
 			return fmt.Errorf("branch %q is not an internal release branch", branch)
+		}
+		if prefix := fmt.Sprintf("[release-branch.go1.%d] ", x); !strings.HasPrefix(message, prefix) {
+			errs = append(errs, fmt.Errorf("missing subject prefix %q", strings.TrimSpace(prefix)))
 		}
 		line := fmt.Sprintf("1.%d", x)
 		backport, ok := backports[p.ID][line]
