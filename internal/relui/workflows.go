@@ -1067,21 +1067,20 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 
 	var (
 		done      = make(chan struct{})
-		ch        = make(chan string)
+		logCh     = make(chan string)
 		remaining atomic.Int64
 	)
 	go func() {
 		defer close(done)
-		tick := time.NewTicker(30 * time.Minute)
-		defer tick.Stop()
+		tick := time.Tick(30 * time.Minute)
 		for {
 			select {
-			case u, ok := <-ch:
+			case u, ok := <-logCh:
 				if !ok {
 					return
 				}
 				ctx.Printf("%s", u)
-			case <-tick.C:
+			case <-tick:
 				ctx.Printf("Waiting on %d changes...", remaining.Load())
 			}
 		}
@@ -1093,7 +1092,7 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 			return
 		}
 		seen[ci.ID] = state
-		ch <- fmt.Sprintf("CL %s: %s", task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber), state)
+		logCh <- fmt.Sprintf("CL %s: %s", task.PrivateChangeURL(b.PrivateGerritProject, ci.ChangeNumber), state)
 	}
 
 	_, err := task.AwaitCondition(ctx, time.Second*10, func() (string, bool, error) {
@@ -1130,7 +1129,7 @@ func (b *BuildReleaseTasks) submitCherryPicks(ctx *wf.TaskContext, cherryPicks [
 		}
 		return "", remaining.Load() == 0, nil
 	})
-	close(ch)
+	close(logCh)
 	<-done
 	if err != nil {
 		return nil, err
