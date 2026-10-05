@@ -59,6 +59,7 @@ func MoveAndRebase(ctx *wf.TaskContext, client GerritClient, changeID, branch st
 	// it landed on the target branch but it only
 	// landed on the `-staging` branch.
 	if ci.Status == gerrit.ChangeStatusMerged {
+		ctx.Printf("CL %d is already merged on %s; skipping", ci.ChangeNumber, ci.Branch)
 		return ci, nil
 	}
 	movedCI, err := client.MoveChange(ctx, ci.ID, branch)
@@ -67,7 +68,9 @@ func MoveAndRebase(ctx *wf.TaskContext, client GerritClient, changeID, branch st
 		if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already destined for the specified branch\n" {
 			return nil, err
 		}
+		ctx.Printf("CL %d is already on %s", ci.ChangeNumber, branch)
 	} else {
+		ctx.Printf("CL %d moved from %s to %s", ci.ChangeNumber, ci.Branch, branch)
 		ci = &movedCI
 	}
 	rebasedCI, err := client.RebaseChange(ctx, ci.ID, "")
@@ -76,8 +79,10 @@ func MoveAndRebase(ctx *wf.TaskContext, client GerritClient, changeID, branch st
 		if !errors.As(err, &httpErr) || httpErr.Res.StatusCode != http.StatusConflict || string(httpErr.Body) != "Change is already up to date.\n" {
 			return nil, err
 		}
+		ctx.Printf("CL %d is already up to date with %s", ci.ChangeNumber, branch)
 	} else {
 		ci = &rebasedCI
+		ctx.Printf("CL %d rebased onto %s", ci.ChangeNumber, branch)
 	}
 	return ci, nil
 }
@@ -101,6 +106,7 @@ func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, cp Checkpoint, p
 				continue
 			}
 			if riders == "" {
+				ctx.Printf("CL %d is manually deployed; leaving commit message as-is", ci.ChangeNumber)
 				p.Changes[i] = ci
 				continue
 			}
@@ -112,6 +118,9 @@ func MoveAndRebaseAll(ctx *wf.TaskContext, client GerritClient, cp Checkpoint, p
 				if err := client.SetCommitMessage(ctx, ci.ID, insertRiders(cm, riders)); err != nil {
 					return nil, err
 				}
+				ctx.Printf("CL %d: inserted riders", ci.ChangeNumber)
+			} else {
+				ctx.Printf("CL %d already has riders", ci.ChangeNumber)
 			}
 			p.Changes[i] = ci
 		}
