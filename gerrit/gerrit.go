@@ -1290,6 +1290,7 @@ func (c *Client) SetCommitMessage(ctx context.Context, changeID string, cmi Comm
 	return c.do(ctx, &ok, "PUT", "/changes/"+changeID+"/message", reqBodyJSON{&cmi})
 }
 
+// MarkReady marks the given work-in-progress change as ready for review.
 func (c *Client) MarkReady(ctx context.Context, changeID string) error {
 	var ok string
 	return c.do(ctx, &ok, "POST", "/changes/"+changeID+"/ready")

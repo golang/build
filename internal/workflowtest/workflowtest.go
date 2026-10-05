@@ -212,6 +212,8 @@ func Start(t testing.TB, wd *wf.Definition, params map[string]any) *wf.Workflow 
 	return w
 }
 
+// Run runs w to completion and returns its outputs, failing t on error.
+// If listener is nil, a [VerboseListener] logging to t is used.
 func Run(t testing.TB, ctx context.Context, w *wf.Workflow, listener wf.Listener) map[string]any {
 	t.Helper()
 	if listener == nil {

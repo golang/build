@@ -23,19 +23,19 @@ type PublicizeParams struct {
 	StartingHead   string
 	Private        GerritClient
 	PrivateProject string
-	PrivateBranch  string
+	PrivateBranch  string // a git branch that's expected to contain SecurityCommit
 	SecurityCommit string
 	Labels         []string
 	Reviewers      []string
 }
 
+// PublicizePrivateChanges fetches in.SecurityCommit and then upstreams it to the public origin
+// at in.Public.GitRepoURL(in.Project) onto a branch named in.TargetBranch. At a high-level,
+// it's doing the equivalent of:
+//
+//	git push {publicOrigin} {securityCommit}:refs/for/{targetBranch}
 func PublicizePrivateChanges(ctx *wf.TaskContext, in PublicizeParams) (changeIDs []string, _ error) {
 	/*
-		At this point we want to fetch the security commit and then upstream it to the public instance.
-		At a high-level what we're doing is:
-
-			git push {publicOrigin} {securityCommit}:refs/for/{targetBranch}
-
 		In practice we need to setup a temporary git repository that has securityCommit
 		available. It turns out not to be hard to use cherry-pick on a commit range to rewrite
 		the committer to be that of relui, so do that (it might be more clear and accurate,
@@ -91,19 +91,23 @@ func PublicizePrivateChanges(ctx *wf.TaskContext, in PublicizeParams) (changeIDs
 	}
 
 	var refspec strings.Builder
-	fmt.Fprintf(&refspec, "HEAD:refs/for/%s%%", in.TargetBranch)
+	fmt.Fprintf(&refspec, "HEAD:refs/for/%s", in.TargetBranch)
+	sep := "%"
 	for i, l := range in.Labels {
-		if i > 0 {
-			refspec.WriteString(",")
+		if i != 0 {
+			sep = ","
 		}
-		fmt.Fprintf(&refspec, "l=%s", l)
+		fmt.Fprintf(&refspec, "%sl=%s", sep, l)
 	}
 	reviewerEmails, err := coordinatorEmails(in.Reviewers)
 	if err != nil {
 		return nil, fmt.Errorf("resolving coordinator emails (safe to retry this step): %w", err)
 	}
-	for _, r := range reviewerEmails {
-		fmt.Fprintf(&refspec, ",r=%s", r)
+	for i, r := range reviewerEmails {
+		if i != 0 {
+			sep = ","
+		}
+		fmt.Fprintf(&refspec, "%sr=%s", sep, r)
 	}
 
 	// What's coming up next involves side-effects in external systems,
@@ -160,12 +164,10 @@ func checkAlreadyPublicized(ctx *wf.TaskContext, repo *GitDir, public GerritClie
 		if entry == "" {
 			continue
 		}
-		before, after, ok := strings.Cut(entry, " ")
+		hash, body, ok := strings.Cut(entry, " ")
 		if !ok {
 			continue
 		}
-		hash := before
-		body := after
 		m := changeIDRe.FindStringSubmatch(body)
 		if m == nil {
 			continue
