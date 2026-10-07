@@ -1446,7 +1446,7 @@ def dimensions_of(host_type):
             # linux-amd64_debiansid -> Debian-13
             os = suffix.replace("debian", "Debian-").replace("sid", "13")
         elif goos == "linux" and suffix == "n4dh32":
-            os = "Debian-12"
+            os = "Debian-11"
         elif goos == "linux" and suffix in ["avx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"]:
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
@@ -1756,8 +1756,8 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
     is_large_builder = "machine_type" in base_dims and base_dims["machine_type"] == "n4d-highcpu-32"
     force_all_mode = capacity_constrained or is_large_builder
-    if force_all_mode and env.shared_worker_pool != "":
-        # allmode builders live in the shared-workers pool when it is available.
+    if capacity_constrained and env.shared_worker_pool != "":
+        # Scarce resources live in the shared-workers pool when it is available.
         base_dims["pool"] = env.shared_worker_pool
 
     # On less-supported platforms, we may not have bootstraps before 1.21
