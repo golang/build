@@ -116,6 +116,9 @@ func TestSwarmingAddBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("client.AddBootstrap(ctx, %v) = %v, %s; want no error", req, got, err)
 	}
+	if got.GetBootstrapGoUrl() != "" {
+		t.Errorf("got.GetBootstrapGoUrl() = %q; want empty string", got.GetBootstrapGoUrl())
+	}
 }
 
 func TestSwarmingAddBootstrapError(t *testing.T) {

@@ -49,6 +49,7 @@ const (
 type GomoteServiceClient interface {
 	// Authenticate provides authentication information without any additional action.
 	Authenticate(ctx context.Context, in *AuthenticateRequest, opts ...grpc.CallOption) (*AuthenticateResponse, error)
+	// Deprecated: Do not use.
 	// AddBootstrap adds the bootstrap version of Go to the work directory.
 	AddBootstrap(ctx context.Context, in *AddBootstrapRequest, opts ...grpc.CallOption) (*AddBootstrapResponse, error)
 	// CreateInstance creates a gomote instance.
@@ -101,6 +102,7 @@ func (c *gomoteServiceClient) Authenticate(ctx context.Context, in *Authenticate
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *gomoteServiceClient) AddBootstrap(ctx context.Context, in *AddBootstrapRequest, opts ...grpc.CallOption) (*AddBootstrapResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddBootstrapResponse)
@@ -286,6 +288,7 @@ func (c *gomoteServiceClient) WriteTGZFromURL(ctx context.Context, in *WriteTGZF
 type GomoteServiceServer interface {
 	// Authenticate provides authentication information without any additional action.
 	Authenticate(context.Context, *AuthenticateRequest) (*AuthenticateResponse, error)
+	// Deprecated: Do not use.
 	// AddBootstrap adds the bootstrap version of Go to the work directory.
 	AddBootstrap(context.Context, *AddBootstrapRequest) (*AddBootstrapResponse, error)
 	// CreateInstance creates a gomote instance.

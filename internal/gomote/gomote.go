@@ -96,56 +96,22 @@ func (ss *SwarmingServer) Authenticate(ctx context.Context, req *protos.Authenti
 	return &protos.AuthenticateResponse{}, nil
 }
 
-// AddBootstrap adds the bootstrap version of Go to an instance and returns the URL for the bootstrap version. If no
-// bootstrap version is defined then the returned version URL will be empty.
+// AddBootstrap is a no-op retained for backwards compatibility with older clients.
+//
+// Deprecated: LUCI gomotes include a bootstrap version of Go during creation.
 func (ss *SwarmingServer) AddBootstrap(ctx context.Context, req *protos.AddBootstrapRequest) (*protos.AddBootstrapResponse, error) {
 	creds, err := access.IAPFromContext(ctx)
 	if err != nil {
 		log.Printf("AddBootstrap access.IAPFromContext(ctx) = nil, %s", err)
 		return nil, status.Errorf(codes.Unauthenticated, "request does not contain the required authentication")
 	}
-	ses, bc, err := ss.sessionAndClient(ctx, req.GetGomoteId(), creds.ID)
+	_, err = ss.session(req.GetGomoteId(), creds.ID)
 	if err != nil {
 		// the helper function returns meaningful GRPC error.
 		return nil, err
 	}
-	bs, err := ss.validBuilders(ctx)
-	if err != nil {
-		return nil, err
-	}
-	builder, ok := bs[ses.BuilderType]
-	if !ok {
-		return nil, status.Errorf(codes.Internal, "unable to determine builder definition")
-	}
-	cp, err := builderProperties(builder)
-	if err != nil {
-		log.Printf("AddBootstrap: bootstrap version not found for %s: %s", builder.GetId().GetBuilder(), err)
-		return &protos.AddBootstrapResponse{}, nil
-	}
-	if cp.BootstrapVersion == "latest" {
-		return &protos.AddBootstrapResponse{}, nil
-	}
-	var cipdPlatform string
-	for _, bd := range builder.GetConfig().GetDimensions() {
-		if !strings.HasPrefix(bd, "cipd_platform:") {
-			continue
-		}
-		var ok bool
-		_, cipdPlatform, ok = strings.Cut(bd, ":")
-		if !ok {
-			return nil, status.Errorf(codes.Internal, "unknown builder type")
-		}
-		break
-	}
-	goos, goarch, err := goluci.PlatformToGoValues(cipdPlatform)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "unknown platform type")
-	}
-	url := fmt.Sprintf("https://storage.googleapis.com/go-builder-data/gobootstrap-%s-%s-go%s.tar.gz", goos, goarch, cp.BootstrapVersion)
-	if err = bc.PutTarFromURL(ctx, url, cp.BootstrapVersion); err != nil {
-		return nil, status.Errorf(codes.Internal, "unable to download bootstrap Go")
-	}
-	return &protos.AddBootstrapResponse{BootstrapGoUrl: url}, nil
+	log.Printf("gomote: warning: deprecated RPC AddBootstrap called for instance %s", req.GetGomoteId())
+	return &protos.AddBootstrapResponse{}, nil
 }
 
 // CreateInstance will create a gomote instance within a swarming task for the authenticated user.
