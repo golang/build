@@ -152,7 +152,7 @@ func createInstances(ctx context.Context, builderType string, cfg *createConfig)
 				case err != nil:
 					return fmt.Errorf("failed to create buildlet (%d): %w", i+1, err)
 				case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE && cfg.printStatus:
-					log.Printf("still creating %s (%d) after %v; %d requests ahead of you\n", builderType, i+1, time.Since(start).Round(time.Second), update.GetWaitersAhead())
+					log.Printf("still creating %s (%d) after %v\n", builderType, i+1, time.Since(start).Round(time.Second))
 				case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
 					inst = update.GetInstance().GetGomoteId()
 				}

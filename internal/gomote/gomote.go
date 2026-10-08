@@ -174,8 +174,7 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 			return status.Errorf(codes.DeadlineExceeded, "timed out waiting for gomote instance to be created")
 		case <-ticker.C:
 			err := stream.Send(&protos.CreateInstanceResponse{
-				Status:       protos.CreateInstanceResponse_WAITING,
-				WaitersAhead: int64(0), // Not convinced querying for pending jobs is useful
+				Status: protos.CreateInstanceResponse_WAITING,
 			})
 			if err != nil {
 				return status.Errorf(codes.Internal, "unable to stream result: %s", err)
@@ -206,8 +205,7 @@ func (ss *SwarmingServer) CreateInstance(req *protos.CreateInstanceRequest, stre
 					Expires:     session.Expires.Unix(),
 					WorkingDir:  wd,
 				},
-				Status:       protos.CreateInstanceResponse_COMPLETE,
-				WaitersAhead: 0,
+				Status: protos.CreateInstanceResponse_COMPLETE,
 			})
 			if err != nil {
 				return status.Errorf(codes.Internal, "unable to stream result: %s", err)

@@ -90,7 +90,7 @@ message CreateInstanceResponse {
   Status status = 2;
   // Waiters ahead is the count of how many instances are being scheduled for
   // creation before the current instance creation request.
-  int64 waiters_ahead = 3;
+  int64 waiters_ahead = 3 [deprecated = true];
 }
 
 // DestroyInstanceRequest specifies the data needed to destroy a gomote instance.

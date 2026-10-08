@@ -47,9 +47,7 @@ func (c *GRPCCoordinatorClient) CreateBuildletWithStatus(ctx context.Context, bu
 		case err != nil:
 			return nil, err
 		case update.GetStatus() != protos.CreateInstanceResponse_COMPLETE:
-			status(types.BuildletWaitStatus{
-				Ahead: int(update.WaitersAhead),
-			})
+			status(types.BuildletWaitStatus{})
 
 		case update.GetStatus() == protos.CreateInstanceResponse_COMPLETE:
 			instance = update.GetInstance()
