@@ -58,7 +58,7 @@ func (rt ReleaseTargets) FirstClassPorts() map[OSArch]bool {
 // GOOS and GOARCH will be set automatically from the target name, but can be
 // overridden if necessary. Name will also be set and should not be overridden.
 var allFirstClass = map[int]ReleaseTargets{
-	25: {
+	26: {
 		"darwin-amd64": &Target{
 			MinMacOSVersion: "12", // go.dev/issue/69839
 		},
@@ -75,9 +75,6 @@ var allFirstClass = map[int]ReleaseTargets{
 		"windows-386":   &Target{},
 		"windows-amd64": &Target{},
 	},
-	26: {
-		// There aren't any release target changes specific to Go 1.26.
-	},
 	27: {
 		"darwin-amd64": &Target{
 			MinMacOSVersion: "13", // go.dev/issue/75836
@@ -85,6 +82,9 @@ var allFirstClass = map[int]ReleaseTargets{
 		"darwin-arm64": &Target{
 			MinMacOSVersion: "13", // go.dev/issue/75836
 		},
+	},
+	28: {
+		// There aren't any first-class port release target changes specific to Go 1.28.
 	},
 }
 
