@@ -1392,6 +1392,11 @@ def host_of(builder_type):
     Returns:
         The host builder type.
     """
+
+    # Use n4dh32 for linux-amd64-race.
+    if builder_type == "linux-amd64-race":
+        return "linux-amd64_n4dh32"
+
     goos, goarch, suffix, _ = split_builder_type(builder_type)
 
     # We run various builds on a Linux host.
