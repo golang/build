@@ -2281,6 +2281,14 @@ POST_ACTIONS = [
     ),
 ]
 
+# PROJECT_EXTRA_DRY_RUNNERS_AND_COMMITTERS is used to specify
+# additional dry-runners and committers for individual projects
+# on the https://go.googlesource.com/go Gerrit host.
+PROJECT_EXTRA_DRY_RUNNERS_AND_COMMITTERS = {
+    "open2opaque": ["mdb/golang-gob-protobuf-cl-approvers"],
+    "protobuf": ["mdb/golang-gob-protobuf-cl-approvers"],
+}
+
 def _define_go_ci():
     # Presubmit.
     for project in PROJECTS:
@@ -2292,11 +2300,11 @@ def _define_go_ci():
                 acls = [
                     acl.entry(
                         roles = acl.CQ_DRY_RUNNER,
-                        groups = ["project-golang-may-start-trybots"],
+                        groups = ["project-golang-may-start-trybots"] + PROJECT_EXTRA_DRY_RUNNERS_AND_COMMITTERS.get(project, []),
                     ),
                     acl.entry(
                         roles = acl.CQ_COMMITTER,
-                        groups = ["project-golang-approvers"],
+                        groups = ["project-golang-approvers"] + PROJECT_EXTRA_DRY_RUNNERS_AND_COMMITTERS.get(project, []),
                     ),
                 ],
                 watch = cq_group.watch,
