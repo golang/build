@@ -61,6 +61,8 @@ var (
 	gerritTokenFile = flag.String("gerrit-token-file", filepath.Join(os.Getenv("HOME"), "keys", "gerrit-gobot"), `File to load Gerrit token from. File should be of form <git-email>:<token>`)
 
 	onlyRun = flag.String("only-run", "", "if non-empty, the name of a task to run. Mostly for debugging, but tasks (like 'kicktrain') may choose to only run in explicit mode")
+
+	autoSubmitProject = flag.String("auto-submit-project", "", "if non-empty, the name of a project to run the 'auto-submit CLs' task on; prefix with '-' to invert logic")
 )
 
 func init() {
@@ -69,7 +71,7 @@ func init() {
 		fmt.Fprintf(output, "gopherbot runs Go's gopherbot role account on GitHub and Gerrit.\n\n")
 		flag.PrintDefaults()
 		fmt.Fprintln(output, "")
-		fmt.Fprintln(output, "Tasks (can be used for the --only-run flag):")
+		fmt.Fprintln(output, "Tasks (can be used for the -only-run flag):")
 		for _, t := range tasks {
 			fmt.Fprintf(output, "  %q\n", t.name)
 		}
@@ -852,7 +854,7 @@ func (b *gopherbot) addGerritComment(ctx context.Context, changeID, comment stri
 // Move any issue to "Unplanned" if it looks like it keeps getting kicked along between releases.
 func (b *gopherbot) getOffKickTrain(ctx context.Context) error {
 	// We only run this task if it was explicitly requested via
-	// the --only-run flag.
+	// the -only-run flag.
 	if *onlyRun == "" {
 		return nil
 	}
@@ -2459,7 +2461,7 @@ func (b *gopherbot) abandonScratchReviews(ctx context.Context) error {
 
 func (b *gopherbot) whoNeedsAccess(ctx context.Context) error {
 	// We only run this task if it was explicitly requested via
-	// the --only-run flag.
+	// the -only-run flag.
 	if *onlyRun == "" {
 		return nil
 	}
@@ -2584,6 +2586,15 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 		if gp.Server() != "go.googlesource.com" {
 			return nil
 		}
+		if *autoSubmitProject != "" {
+			if projToSkip, ok := strings.CutPrefix(*autoSubmitProject, "-"); ok && gp.Project() == projToSkip {
+				// The -auto-submit-project='-proj' flag value means to skip "proj".
+				return nil
+			} else if !ok && gp.Project() != *autoSubmitProject {
+				// The -auto-submit-project='proj' flag value means to skip all other projects but "proj".
+				return nil
+			}
+		}
 		return gp.ForeachOpenCL(func(cl *maintner.GerritCL) error {
 			gc := gerritChange{gp.Project(), cl.Number}
 			if b.deletedChanges[gc] {
@@ -2652,7 +2663,7 @@ func (b *gopherbot) autoSubmitCLs(ctx context.Context) error {
 			// GetRelatedChanges gives us the stack from top to bottom (the
 			// order of the git commits, from newest to oldest, see Gerrit
 			// documentation for RelatedChangesInfo), so first we find our
-			// change in the stack, then  check everything below it.
+			// change in the stack, then check everything below it.
 			relatedChanges, err := b.gerrit.GetRelatedChanges(ctx, fmt.Sprint(cl.Number), "current")
 			if err != nil {
 				return err

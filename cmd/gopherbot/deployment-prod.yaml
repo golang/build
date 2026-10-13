@@ -7,8 +7,10 @@ kind: Deployment
 metadata:
   namespace: prod
   name: gopherbot-deployment
+  labels:
+    app: gopherbot
 spec:
-  replicas: 1 # more than 1 might cause duplicate GitHub comments
+  replicas: 1  # more than 1 might cause a task like cl2issue to post duplicate GitHub comments
   selector:
     matchLabels:
       app: gopherbot
@@ -28,7 +30,7 @@ spec:
         env:
         - name: XDG_CACHE_HOME
           value: "/cache"
-        command: ["/gopherbot", "--daemon"]
+        command: ["/gopherbot", "-daemon", "-auto-submit-project=-build"]  # keep -auto-submit-project in sync with other deployment
         securityContext:
           seccompProfile:
             type: RuntimeDefault
@@ -41,7 +43,7 @@ spec:
           requests:
             cpu: "1"
             memory: "12Gi"
-            ephemeral-storage: "16Gi"
+            ephemeral-storage: "8Gi"
           limits:
             memory: "16Gi"
-            ephemeral-storage: "32Gi"
+            ephemeral-storage: "16Gi"

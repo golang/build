@@ -1,0 +1,49 @@
+# Copyright 2026 The Go Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: prod
+  name: gopherbot-autosubmit-deployment
+  labels:
+    app: gopherbot-autosubmit
+spec:
+  replicas: 1  # keep a single instance of the auto-submit task running at once
+  selector:
+    matchLabels:
+      app: gopherbot-autosubmit
+  template:
+    metadata:
+      labels:
+        app: gopherbot-autosubmit
+    spec:
+      serviceAccountName: gopherbot
+      volumes:
+      - name: cache-volume
+        emptyDir: {}
+      containers:
+      - name: gopherbot
+        image: gcr.io/symbolic-datum-552/gopherbot:latest
+        imagePullPolicy: Always
+        env:
+        - name: XDG_CACHE_HOME
+          value: "/cache"
+        command: ["/gopherbot", "-daemon", "-only-run=auto-submit CLs", "-auto-submit-project=build"]  # keep -auto-submit-project in sync with other deployment
+        securityContext:
+          seccompProfile:
+            type: RuntimeDefault
+          appArmorProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /cache
+          name: cache-volume
+        resources:
+          requests:
+            cpu: "1"
+            memory: "12Gi"
+            ephemeral-storage: "8Gi"
+          limits:
+            memory: "16Gi"
+            ephemeral-storage: "16Gi"
