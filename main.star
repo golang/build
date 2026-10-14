@@ -545,6 +545,7 @@ BUILDER_TYPES = [
     "linux-arm64_c4ah72-perf_vs_tip",
     "linux-arm64_c4ah72-perf_vs_oldest_stable",
     "linux-arm64_debian13",
+    "linux-arm64_n4ah32",
     "linux-loong64",
     "linux-mips",
     "linux-mips64",
@@ -632,6 +633,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
     "linux-amd64_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
+    "linux-arm64_n4ah32": known_issue(issue_number = 82017, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
@@ -1452,6 +1454,8 @@ def dimensions_of(host_type):
             os = suffix.replace("debian", "Debian-").replace("sid", "13")
         elif goos == "linux" and suffix == "n4dh32":
             os = "Debian-11"
+        elif goos == "linux" and suffix == "n4ah32":
+            os = "Debian-12"
         elif goos == "linux" and suffix in ["avx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"]:
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
@@ -1498,6 +1502,8 @@ def dimensions_of(host_type):
                 machine_type = "c4a-standard-16"
             elif suffix == "c4ah72":
                 machine_type = "c4a-highcpu-72"
+            elif suffix == "n4ah32":
+                machine_type = "n4a-highcpu-32"
             else:
                 machine_type = "t2a-standard-8"
 
@@ -1759,7 +1765,7 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     base_dims = dimensions_of(host_type)
     base_dims["pool"] = env.worker_pool
     capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
-    is_large_builder = "machine_type" in base_dims and base_dims["machine_type"] == "n4d-highcpu-32"
+    is_large_builder = "machine_type" in base_dims and base_dims["machine_type"] in ["n4a-highcpu-32", "n4d-highcpu-32"]
     force_all_mode = capacity_constrained or is_large_builder
     if capacity_constrained and env.shared_worker_pool != "":
         # Scarce resources live in the shared-workers pool when it is available.
