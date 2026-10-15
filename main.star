@@ -1827,10 +1827,7 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     experiments = {
         "golang.shard_by_weight": 100,
     }
-
-    # Roll out 'go test -artifacts' on the x/pkgsite Docker builders first.
-    # TODO: Expand to rest of fleet once stabilized.
-    if project == "pkgsite" and suffix == "docker":
+    if project != "go":
         experiments["golang.go_test_artifacts"] = 100
 
     # Construct the executable reference.
