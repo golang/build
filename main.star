@@ -1506,6 +1506,12 @@ def dimensions_of(host_type):
                 machine_type = "n4a-highcpu-32"
             else:
                 machine_type = "t2a-standard-8"
+    elif goos == "windows":
+        if goarch == "amd64":
+            if suffix == "n4dh32":
+                machine_type = "n4d-highcpu-32"
+            else:
+                machine_type = "n1-standard-16"
 
     # cipd_platform is almost "$GOHOSTOS-$GOHOSTARCH", with some deviations.
     if goos == "darwin":
