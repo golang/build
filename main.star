@@ -429,11 +429,11 @@ luci.list_view(
 
 # BUILDER_TYPES lists possible builder types.
 #
-# A builder type is a combination of a GOOS and GOARCH, an optional suffix that
-# specifies the OS version or CPU version, and a series of run-time modifications
+# A builder type is a combination of a GOOS and GOARCH, then optional suffixes that
+# specify the OS version and/or CPU version, and a series of run-time modifications
 # (listed in RUN_MODS).
 #
-# The format of a builder type is thus $GOOS-$GOARCH(_suffix)?(-$RUN_MOD)*.
+# The format of a builder type is thus $GOOS-$GOARCH(_suffix)*(-$RUN_MOD)*.
 BUILDER_TYPES = [
     "aix-ppc64",
     "android-386",
@@ -473,6 +473,7 @@ BUILDER_TYPES = [
     "linux-386-longtest",
     "linux-386-nogreenteagc",
     "linux-386-softfloat",
+    "linux-386_n4dh32",
     "linux-amd64",
     "linux-amd64-asan-clang15",
     "linux-amd64-boringcrypto",
@@ -522,6 +523,7 @@ BUILDER_TYPES = [
     "linux-amd64_c4dh96-perf_vs_tip",
     "linux-amd64_c4dh96-perf_vs_oldest_stable",
     "linux-amd64_debiansid",
+    "linux-amd64_debian13_n4dh32",
     "linux-amd64_docker",
     "linux-amd64_docker-screentest",
     "linux-amd64_n4dh32",
@@ -574,9 +576,13 @@ BUILDER_TYPES = [
     "plan9-arm",
     "solaris-amd64",
     "wasip1-wasm_wasmtime",
+    "wasip1-wasm_wasmtime_n4dh32",
     "wasip1-wasm_wazero",
+    "wasip1-wasm_wazero_n4dh32",
     "windows-386",
+    "windows-386_n4dh32",
     "windows-amd64",
+    "windows-amd64_n4dh32",
     "windows-amd64-longtest",
     "windows-amd64-race",
     "windows-arm64",
@@ -634,6 +640,12 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
     "linux-amd64_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
     "linux-arm64_n4ah32": known_issue(issue_number = 82017, skip_x_repos = True),
+    "linux-386_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
+    "linux-amd64_debian13_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
+    "wasip1-wasm_wasmtime_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
+    "wasip1-wasm_wazero_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
+    "windows-386_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
+    "windows-amd64_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
@@ -1361,13 +1373,13 @@ def split_builder_type(builder_type):
         builder_type: the builder type.
 
     Returns:
-        The builder type's GOOS, GOARCH, OS version, and run mods.
+        The builder type's GOOS, GOARCH, OS/CPU version suffixes (underscore-separated string), and run mods (list).
     """
     parts = builder_type.split("-")
     os, arch = parts[0], parts[1]
     suffix = ""
     if "_" in arch:
-        arch, suffix = arch.split("_", 2)
+        arch, suffix = arch.split("_", 1)
 
     return os, arch, suffix, parts[2:]
 
@@ -1403,7 +1415,10 @@ def host_of(builder_type):
 
     # We run various builds on a Linux host.
     if goarch == "wasm":
-        return "linux-amd64"
+        if "n4dh32" in suffix.split("_"):
+            return "linux-amd64_n4dh32"
+        else:
+            return "linux-amd64"
 
     port = "%s-%s" % (goos, goarch)
     if suffix != "":
@@ -1427,6 +1442,7 @@ def dimensions_of(host_type):
     # Set the default suffix, if we don't have one and one exists.
     if suffix == "" and host in DEFAULT_HOST_SUFFIX:
         suffix = DEFAULT_HOST_SUFFIX[host]
+    suffixes = suffix.split("_")
 
     # Fail if we don't have a suffix and this isn't a low capacity host.
     #
@@ -1448,30 +1464,30 @@ def dimensions_of(host_type):
         fail("failed to find required OS version for host %s" % host)
 
     if suffix != "":
-        if goos == "linux" and "debian" in suffix:
+        if goos == "linux" and "debian" in suffixes[0]:
             # linux-amd64_debian11  -> Debian-11
             # linux-amd64_debiansid -> Debian-13
-            os = suffix.replace("debian", "Debian-").replace("sid", "13")
-        elif goos == "linux" and suffix == "n4dh32":
+            os = suffixes[0].replace("debian", "Debian-").replace("sid", "13")
+        elif goos == "linux" and "n4dh32" in suffixes:
             os = "Debian-11"
-        elif goos == "linux" and suffix == "n4ah32":
+        elif goos == "linux" and "n4ah32" in suffixes:
             os = "Debian-12"
-        elif goos == "linux" and suffix in ["avx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"]:
+        elif goos == "linux" and any([s in ["avx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"] for s in suffixes]):
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
             cpu = goarch + "-64-" + suffix.replace("power", "POWER")
-        elif goos == "linux" and goarch == "amd64" and suffix == "docker":
+        elif goos == "linux" and goarch == "amd64" and "docker" in suffixes:
             os = "Ubuntu-22"
         elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
-            os = "Mac-" + suffix
+            os = "Mac-" + suffixes[0]
         elif goos == "windows":
-            os = "Windows-" + suffix
+            os = "Windows-" + suffixes[0]
         elif goos == "openbsd":
-            os = "openbsd-" + suffix
+            os = "openbsd-" + suffixes[0]
         elif goos == "freebsd":
-            os = "freebsd-" + suffix
+            os = "freebsd-" + suffixes[0]
         else:
             fail("unhandled suffix %s for host type %s" % (suffix, host_type))
 
@@ -1484,31 +1500,31 @@ def dimensions_of(host_type):
     machine_type = None
     if goos == "linux":
         if goarch == "amd64":
-            if suffix == "c2s16":
+            if "c2s16" in suffixes:
                 # Performance test machines.
                 machine_type = "c2-standard-16"
-            elif suffix == "c3h88":
+            elif "c3h88" in suffixes:
                 machine_type = "c3-highcpu-88"
-            elif suffix == "c4dh96":
+            elif "c4dh96" in suffixes:
                 machine_type = "c4d-highcpu-96"
-            elif suffix == "avx512":
+            elif "avx512" in suffixes:
                 machine_type = "c3-standard-8"
-            elif suffix == "n4dh32":
+            elif "n4dh32" in suffixes:
                 machine_type = "n4d-highcpu-32"
             else:
                 machine_type = "n1-standard-16"
         elif goarch == "arm64":
-            if suffix == "c4as16":
+            if "c4as16" in suffixes:
                 machine_type = "c4a-standard-16"
-            elif suffix == "c4ah72":
+            elif "c4ah72" in suffixes:
                 machine_type = "c4a-highcpu-72"
-            elif suffix == "n4ah32":
+            elif "n4ah32" in suffixes:
                 machine_type = "n4a-highcpu-32"
             else:
                 machine_type = "t2a-standard-8"
     elif goos == "windows":
         if goarch == "amd64":
-            if suffix == "n4dh32":
+            if "n4dh32" in suffixes:
                 machine_type = "n4d-highcpu-32"
             else:
                 machine_type = "n1-standard-16"
@@ -1735,10 +1751,10 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
                 fail("unknown GOOS=js builder suffix: %s" % suffix)
             base_props["node_version"] = "2@18.8.0"
         elif os == "wasip1":
-            if suffix == "wasmtime":
+            if "wasmtime" in suffix.split("_"):
                 base_props["env"]["GOWASIRUNTIME"] = "wasmtime"
                 base_props["wasmtime_version"] = "2@14.0.4"
-            elif suffix == "wazero":
+            elif "wazero" in suffix.split("_"):
                 base_props["env"]["GOWASIRUNTIME"] = "wazero"
                 base_props["wazero_version"] = "3@1.8.1"
             else:
