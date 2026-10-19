@@ -1391,36 +1391,11 @@ def host_of(builder_type):
         The host builder type.
     """
 
-    # Use newer machines for migrated builders. For now, redirect to n4dh32 suffix.
-    # Once n4-highcpu-32 is the default we won't need this anymore.
-    if builder_type in [
-        "linux-amd64",
-        "linux-amd64-race",
-        "linux-amd64-boringcrypto",
-        "linux-amd64-misccompile",
-    ]:
-        return "linux-amd64_n4dh32"
-    elif builder_type == "linux-amd64_debiansid":
-        return "linux-amd64_debian13_n4dh32"
-    elif builder_type == "linux-386":
-        return "linux-386_n4dh32"
-    elif builder_type == "linux-386_debiansid":
-        return "linux-386_debian13_n4dh32"
-    elif builder_type in ["linux-arm64", "linux-arm64-boringcrypto"]:
-        return "linux-arm64_n4ah32"
-    elif builder_type == "linux-arm64_debian13":
-        return "linux-arm64_debian13_n4ah32"
-    elif builder_type == "windows-amd64":
-        return "windows-amd64_n4dh32"
-    elif builder_type == "windows-386":
-        return "windows-386_n4dh32"
-
     goos, goarch, suffix, _ = split_builder_type(builder_type)
 
     # We run various builds on a Linux host.
     if goarch == "wasm":
-        # TODO(matloob): Change this back to "linux-amd64" once n4d-highcpu-32 is the default.
-        return "linux-amd64_n4dh32"
+        return "linux-amd64"
 
     port = "%s-%s" % (goos, goarch)
     if suffix != "":
@@ -1470,10 +1445,6 @@ def dimensions_of(host_type):
             # linux-amd64_debian11  -> Debian-11
             # linux-amd64_debiansid -> Debian-13
             os = suffixes[0].replace("debian", "Debian-").replace("sid", "13")
-        elif goos == "linux" and "n4dh32" in suffixes:
-            os = "Debian-11"
-        elif goos == "linux" and "n4ah32" in suffixes:
-            os = "Debian-12"
         elif goos == "linux" and any([s in ["avx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"] for s in suffixes]):
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
@@ -1484,8 +1455,6 @@ def dimensions_of(host_type):
         elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffixes[0]
-        elif goos == "windows" and "n4dh32" in suffixes:
-            os = "Windows-10"
         elif goos == "windows":
             os = "Windows-" + suffixes[0]
         elif goos == "openbsd":
@@ -1511,27 +1480,18 @@ def dimensions_of(host_type):
                 machine_type = "c3-highcpu-88"
             elif "c4dh96" in suffixes:
                 machine_type = "c4d-highcpu-96"
-            elif "avx512" in suffixes:
-                machine_type = "n4d-highcpu-32"
-            elif "n4dh32" in suffixes:
-                machine_type = "n4d-highcpu-32"
             else:
-                machine_type = "n1-standard-16"
+                machine_type = "n4d-highcpu-32"
         elif goarch == "arm64":
             if "c4as16" in suffixes:
                 machine_type = "c4a-standard-16"
             elif "c4ah72" in suffixes:
                 machine_type = "c4a-highcpu-72"
-            elif "n4ah32" in suffixes:
-                machine_type = "n4a-highcpu-32"
             else:
-                machine_type = "t2a-standard-8"
+                machine_type = "n4a-highcpu-32"
     elif goos == "windows":
         if goarch == "amd64":
-            if "n4dh32" in suffixes:
-                machine_type = "n4d-highcpu-32"
-            else:
-                machine_type = "n1-standard-16"
+            machine_type = "n4d-highcpu-32"
 
     # cipd_platform is almost "$GOHOSTOS-$GOHOSTARCH", with some deviations.
     if goos == "darwin":
