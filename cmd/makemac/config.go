@@ -61,21 +61,21 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-key",
 			Image:    "f48c5538d2ac7b91c592dcce18f247e3aad70503558f92b41bdc010f2c8728a9",
-			Count:    5, // Fewer because it runs on release branches only.
+			Count:    15, // Fewer because it runs on one release branch only.
 		},
 		{
 			Hostname: "darwin-amd64-13",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-13-key",
 			Image:    "3baa47241c34feeb46318f3e9f1f5ce26d79994088179ab8d6d60a1183bbacfe",
-			Count:    10,
+			Count:    30,
 		},
 		{
 			Hostname: "darwin-amd64-14",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-key",
 			Image:    "b16a8a5f2d1e383667c3764d915551f4af56d63edd0679539703688a6b9f6754",
-			Count:    20, // More to cover longtest, race, nocgo, etc.
+			Count:    45, // More to cover longtest, race, nocgo, etc.
 		},
 		// arm64
 		{
@@ -107,21 +107,21 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-security-key",
 			Image:    "f48c5538d2ac7b91c592dcce18f247e3aad70503558f92b41bdc010f2c8728a9",
-			Count:    4,
+			Count:    10, // Fewer because it runs on one release branch only.
 		},
 		{
 			Hostname: "darwin-amd64-13-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-13-security-key",
 			Image:    "3baa47241c34feeb46318f3e9f1f5ce26d79994088179ab8d6d60a1183bbacfe",
-			Count:    4,
+			Count:    20,
 		},
 		{
 			Hostname: "darwin-amd64-14-security",
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-security-key",
 			Image:    "b16a8a5f2d1e383667c3764d915551f4af56d63edd0679539703688a6b9f6754",
-			Count:    7, // More to cover longtest, race, nocgo, etc.
+			Count:    30, // More to cover longtest, race, nocgo, etc.
 		},
 		// arm64
 		{
