@@ -1486,6 +1486,8 @@ def dimensions_of(host_type):
         elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffixes[0]
+        elif goos == "windows" and "n4dh32" in suffixes:
+            os = "Windows-10"
         elif goos == "windows":
             os = "Windows-" + suffixes[0]
         elif goos == "openbsd":
