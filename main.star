@@ -1411,18 +1411,36 @@ def host_of(builder_type):
         The host builder type.
     """
 
-    # Use n4dh32 for standard and race linux-amd64 builders.
-    if builder_type in ["linux-amd64", "linux-amd64-race"]:
+    # Use newer machines for migrated builders. For now, redirect to n4dh32 suffix.
+    # Once n4-highcpu-32 is the default we won't need this anymore.
+    if builder_type in [
+        "linux-amd64",
+        "linux-amd64-race",
+        "linux-amd64-boringcrypto",
+        "linux-amd64-misccompile",
+    ]:
         return "linux-amd64_n4dh32"
+    elif builder_type == "linux-amd64_debiansid":
+        return "linux-amd64_debian13_n4dh32"
+    elif builder_type == "linux-386":
+        return "linux-386_n4dh32"
+    elif builder_type == "linux-386_debiansid":
+        return "linux-386_debian13_n4dh32"
+    elif builder_type in ["linux-arm64", "linux-arm64-boringcrypto"]:
+        return "linux-arm64_n4ah32"
+    elif builder_type == "linux-arm64_debian13":
+        return "linux-arm64_debian13_n4ah32"
+    elif builder_type == "windows-amd64":
+        return "windows-amd64_n4dh32"
+    elif builder_type == "windows-386":
+        return "windows-386_n4dh32"
 
     goos, goarch, suffix, _ = split_builder_type(builder_type)
 
     # We run various builds on a Linux host.
     if goarch == "wasm":
-        if "n4dh32" in suffix.split("_"):
-            return "linux-amd64_n4dh32"
-        else:
-            return "linux-amd64"
+        # TODO(matloob): Change this back to "linux-amd64" once n4d-highcpu-32 is the default.
+        return "linux-amd64_n4dh32"
 
     port = "%s-%s" % (goos, goarch)
     if suffix != "":
@@ -1514,7 +1532,7 @@ def dimensions_of(host_type):
             elif "c4dh96" in suffixes:
                 machine_type = "c4d-highcpu-96"
             elif "avx512" in suffixes:
-                machine_type = "c3-standard-8"
+                machine_type = "n4d-highcpu-32"
             elif "n4dh32" in suffixes:
                 machine_type = "n4d-highcpu-32"
             else:
