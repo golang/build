@@ -527,6 +527,8 @@ BUILDER_TYPES = [
     "linux-amd64_docker",
     "linux-amd64_docker-screentest",
     "linux-amd64_n4dh32",
+    "linux-amd64_n4dh32-longtest",
+    "linux-amd64_n4dh32-misccompile",
     "linux-arm",
     "linux-arm64",
     "linux-arm64-asan-clang15",
@@ -646,6 +648,8 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "wasip1-wasm_wazero_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
     "windows-386_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
     "windows-amd64_n4dh32": known_issue(issue_number = 82017, skip_x_repos = True),
+    "linux-amd64_n4dh32-longtest": known_issue(issue_number = 82017, skip_x_repos = True),
+    "linux-amd64_n4dh32-misccompile": known_issue(issue_number = 82017, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
