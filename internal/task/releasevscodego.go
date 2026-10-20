@@ -404,6 +404,11 @@ cat go-publish-output.log
 				Args: []string{"clone", "https://go.googlesource.com/vscode-go", "vscode-go"},
 			},
 			{
+				Name: "gcr.io/cloud-builders/git",
+				Args: []string{"checkout", versionString},
+				Dir:  "vscode-go",
+			},
+			{
 				// Copy the vsix files to the vscode-go/extension directory that is the
 				// default directory "go run tools/release/release.go" expects vsix
 				// files to publish.
@@ -1073,7 +1078,7 @@ func (r *ReleaseVSCodeGoTasks) NewReleaseDefinition() *wf.Definition {
 	submitted := wf.Task1(wd, "await CHANGELOG.md CL submission", clAwaiter{r.Gerrit}.awaitSubmission, changeID)
 	// Publish only after the CHANGELOG.md update is merged to ensure the change
 	// log reflects the latest released version.
-	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(submitted))
+	published := wf.Action2(wd, "publish to vscode marketplace", r.publishPackageExtension, release, build, wf.After(submitted), wf.After(tagged))
 
 	wf.Action4(wd, "mail announcement", r.mailAnnouncement, release, wf.Const(""), wf.Const(""), wf.Const(0), wf.After(released), wf.After(published))
 	return wd
