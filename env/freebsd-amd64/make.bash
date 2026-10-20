@@ -117,10 +117,22 @@ case $1 in
   readonly SHA256=bcdf55da5bf848de1427e752e1280bd0ec7c7ef2b65037dfea8fc60f97274ebd
   readonly BLIND_SWITCH_CONSOLE=1
 ;;
+14.5)
+  readonly VERSION=14.5-RELEASE
+  readonly VERSION_TRAILER=
+  readonly SHA256=1dd19661a4dd0ab80b2315a352245ff38b28f1e96b4ea982bf833daa826254e7
+  readonly BLIND_SWITCH_CONSOLE=1
+;;
 15.0)
   readonly VERSION=15.0-RELEASE
   readonly VERSION_TRAILER=-ufs
   readonly SHA256=311661446d4654a81a687afd6cbca72cf32848f5251f072a7d4067c42e173324
+  readonly BLIND_SWITCH_CONSOLE=1
+;;
+15.1)
+  readonly VERSION=15.1-RELEASE
+  readonly VERSION_TRAILER=-ufs
+  readonly SHA256=a8e2c0f8331be615ef008c167069076833a417e968ff6b7d8e83b4ac762e9409
   readonly BLIND_SWITCH_CONSOLE=1
 ;;
 *)
@@ -142,7 +154,7 @@ if ! [ -e FreeBSD-${VERSION:?}-amd64.raw ]; then
   download_image
 fi
 
-qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw -F raw disk.qcow2 16G
+qemu-img create -f qcow2 -b FreeBSD-${VERSION:?}-amd64${VERSION_TRAILER}.raw -F raw disk.qcow2 30G
 
 mkdir -p iso/boot iso/etc iso/usr/local/etc/rc.d iso/usr/local/bin
 cp loader.conf iso/boot
@@ -240,13 +252,13 @@ sleep 1
 set timeout -1
 # download updates
 if {$::env(DOWNLOAD_UPDATES)} {
-    send "env PAGER=cat freebsd-update fetch --not-running-from-cron\n"
+    send "env PAGER=cat freebsd-update fetch --not-running-from-cron </dev/null\n"
 
     expect {
         "The following files will be updated as part of updating to" {
             sleep 2
             expect -re $prompt
-            send "freebsd-update install\n"
+            send "freebsd-update install </dev/null\n"
             expect "Installing updates..."
             expect "done."
             sleep 1
@@ -256,6 +268,11 @@ if {$::env(DOWNLOAD_UPDATES)} {
         "No updates needed to update system to" {
             sleep 1
             send "\n"
+        }
+
+        "freebsd-update is incompatible with the use of packaged base." {
+            expect -re $prompt
+            send "pkg upgrade -y\n"
         }
 
         "No mirrors remaining, giving up." { exit 3 }
