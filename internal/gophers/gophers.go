@@ -2284,7 +2284,7 @@ func init() {
 	addPerson("Peter Waller", "p@pwaller.net", "5822@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Peter Waller", "p@pwaller.net", "@pwaller")
 	addPerson("Peter Wathall", "peter.wathall@gmail.com")
-	addPerson("Peter Weinberger", "pjw@golang.org", "pjw@google.com", "@pjweinb", "@pjweinbgo")
+	addPerson("Peter Weinberger", "pjw@google.com", "pjw@golang.org", "@pjweinb", "@pjweinbgo")
 	addPerson("Peter Weinberger", "pjw@google.com", "5260@62eb7196-b449-3ce5-99f1-c037f21e1705")
 	addPerson("Peter Williams", "pwil3058@gmail.com", "@pwil3058")
 	addPerson("Peter Wu", "peter@lekensteyn.nl", "24681@62eb7196-b449-3ce5-99f1-c037f21e1705")
