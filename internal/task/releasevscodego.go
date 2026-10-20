@@ -345,7 +345,7 @@ cat go-package-output.log
 				Dir:  "vscode-go",
 			},
 			{
-				Name:   "gcr.io/cloud-builders/npm",
+				Name:   "node:24.15.0",
 				Script: fmt.Sprintf(packageScriptFmt, versionString(release, prerelease)),
 				Dir:    "vscode-go/extension",
 			},
@@ -414,7 +414,7 @@ cat go-publish-output.log
 				Dir:  "vscode-go/extension",
 			},
 			{
-				Name:      "gcr.io/cloud-builders/npm",
+				Name:      "node:24.15.0",
 				Script:    fmt.Sprintf(publishScriptFmt, versionString),
 				Dir:       "vscode-go/extension",
 				SecretEnv: []string{"VSCE_PAT"},
@@ -887,7 +887,7 @@ cat npx-output.log
 				Dir:  "vscode-go",
 			},
 			{
-				Name:   "gcr.io/cloud-builders/npm",
+				Name:   "node:24.15.0",
 				Script: script,
 				Dir:    "vscode-go/extension",
 			},

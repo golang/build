@@ -1436,7 +1436,11 @@ func (cb *FakeCloudBuild) RunCustomSteps(ctx context.Context, steps func(resultU
 		}
 		tool, found := strings.CutPrefix(step.Name, "gcr.io/cloud-builders/")
 		if !found {
-			return CloudBuild{}, fmt.Errorf("does not support custom image: %s", step.Name)
+			if step.Name == "node" || strings.HasPrefix(step.Name, "node:") {
+				tool = "node"
+			} else {
+				return CloudBuild{}, fmt.Errorf("does not support custom image: %s", step.Name)
+			}
 		}
 		if tool == "git" && len(step.Args) > 0 && step.Args[0] == "clone" {
 			for _, arg := range step.Args {
