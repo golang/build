@@ -408,7 +408,7 @@ def host_execution_timeout(host):
 # do not specify one.
 DEFAULT_HOST_SUFFIX = {
     "darwin-amd64": "14",
-    "darwin-arm64": "15",
+    "darwin-arm64": "26",
     "freebsd-amd64": "14.3",
     "linux-amd64": "debian11",
     "linux-arm64": "debian12",
