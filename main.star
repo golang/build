@@ -577,6 +577,7 @@ BUILDER_TYPES = [
     "plan9-arm",
     "solaris-amd64",
     "wasip1-wasm_wasmtime",
+    "wasip1-wasm_wasmtime-stackswitch",
     "wasip1-wasm_wazero",
     "windows-386",
     "windows-amd64",
@@ -608,6 +609,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "freebsd-amd64_15.0": known_issue(issue_number = 77411, hide_from_presubmit = False),
     "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
     "openbsd-riscv64": known_issue(issue_number = 73569, hide_from_presubmit = False),
+    "wasip1-wasm_wasmtime-stackswitch": known_issue(issue_number = 81963, hide_from_presubmit = False),
 
     # power8 builders are known to be missing as of 2026-08-19.
     "linux-ppc64_power8": known_issue(issue_number = 80703, hide_from_presubmit = False),
@@ -1289,6 +1291,13 @@ RUN_MODS = {
         add_props = {"compile_only": True},
         add_env = {"GO_GCFLAGS": "-d=ssa/check/on"},
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/(ssa|ssagen)/.+"]),
+    ),
+
+    # Build and test with GOWASM=stackswitch, which enables WebAssembly
+    # stack switching support.
+    "stackswitch": make_run_mod(
+        add_env = {"GOWASM": "stackswitch"},
+        enabled = define_for_postsubmit(["go"], ["gotip"]),
     ),
 
     # Build and test with the staticlockranking GOEXPERIMENT, which validates the runtime's
