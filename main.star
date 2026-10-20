@@ -1761,8 +1761,6 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     base_dims = dimensions_of(host_type)
     base_dims["pool"] = env.worker_pool
     capacity_constrained = is_capacity_constrained(env.low_capacity_hosts, host_type)
-    is_large_builder = "machine_type" in base_dims and base_dims["machine_type"] in ["n4a-highcpu-32", "n4d-highcpu-32"]
-    force_all_mode = capacity_constrained or is_large_builder
     if capacity_constrained and env.shared_worker_pool != "":
         # Scarce resources live in the shared-workers pool when it is available.
         base_dims["pool"] = env.shared_worker_pool
@@ -1899,27 +1897,12 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     name = builder_name(project, go_branch_short, builder_type)
 
     # Determine if we should be sharding tests, and how many shards.
-    compile_only = "compile_only" in base_props
     misccompile = "misccompile" in run_mods
-    longtest = "longtest" in run_mods
-    perfmode = "perf_mode" in base_props
-    if compile_only:
-        if misccompile:
-            if project == "go":
-                test_shards = 12
-            else:
-                test_shards = 3
+    if misccompile:
+        if project == "go":
+            test_shards = 12
         else:
-            # Compile-only builders for a single platform should have just one shard, otherwise
-            # each shard will do repeat work.
-            test_shards = 1
-    elif perfmode:
-        test_shards = 1
-    elif project == "go" and not force_all_mode:
-        if longtest:
-            test_shards = 8
-        else:
-            test_shards = 4
+            test_shards = 3
     else:
         test_shards = 1
 
@@ -1939,9 +1922,10 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     #
     # The all-mode builder is used for everything else, but we must only select it if test_shards == 1.
     downstream_builders = []
+    perfmode = "perf_mode" in base_props
     if perfmode:
         define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
-    elif test_shards > 1 or (project == "go" and not force_all_mode):
+    elif misccompile:
         downstream_builders = define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
     elif test_shards == 1:
         define_allmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
