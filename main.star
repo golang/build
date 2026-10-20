@@ -410,7 +410,7 @@ DEFAULT_HOST_SUFFIX = {
     "darwin-amd64": "14",
     "darwin-arm64": "26",
     "freebsd-amd64": "14.3",
-    "linux-amd64": "debian11",
+    "linux-amd64": "debian12",
     "linux-arm64": "debian12",
     "openbsd-386": "7.6",
     "openbsd-amd64": "7.6",
