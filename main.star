@@ -457,7 +457,9 @@ BUILDER_TYPES = [
     "dragonfly-amd64",
     "freebsd-386",
     "freebsd-amd64",
+    "freebsd-amd64_14.5",
     "freebsd-amd64_15.0",
+    "freebsd-amd64_15.1",
     "freebsd-amd64-race",
     "freebsd-arm",
     "freebsd-arm64",
@@ -635,6 +637,8 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
     "openbsd-386_8.0": known_issue(issue_number = 82400, skip_x_repos = True),
     "openbsd-amd64_8.0": known_issue(issue_number = 82400, skip_x_repos = True),
+    "freebsd-amd64_14.5": known_issue(issue_number = 82401, skip_x_repos = True),
+    "freebsd-amd64_15.1": known_issue(issue_number = 82401, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
