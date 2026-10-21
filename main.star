@@ -563,7 +563,9 @@ BUILDER_TYPES = [
     "netbsd-arm",
     "netbsd-arm64",
     "openbsd-386",
+    "openbsd-386_8.0",
     "openbsd-amd64",
+    "openbsd-amd64_8.0",
     "openbsd-arm",
     "openbsd-arm64",
     "openbsd-ppc64",
@@ -631,6 +633,8 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
+    "openbsd-386_8.0": known_issue(issue_number = 82400, skip_x_repos = True),
+    "openbsd-amd64_8.0": known_issue(issue_number = 82400, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
