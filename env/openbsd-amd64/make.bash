@@ -63,10 +63,10 @@ moreres:\
   :vmemoryuse-cur=infinity: \
   :memoryuse-max=infinity: \
   :memoryuse-cur=infinity: \
-  :maxproc-max=2048: \
-  :maxproc-cur=2048: \
-  :openfiles-max=4096: \
-  :openfiles-cur=4096: \
+  :maxproc-max=4096: \
+  :maxproc-cur=4096: \
+  :openfiles-max=8192: \
+  :openfiles-cur=8192: \
   :tc=default:
 EOLOGIN
 usermod -L moreres swarming
@@ -116,6 +116,9 @@ EOF
 cat >${SITE}/etc/sysctl.conf <<EOF
 hw.smt=1
 kern.timecounter.hardware=tsc
+kern.maxproc=8192
+kern.maxthread=65536
+kern.maxfiles=16384
 EOF
 cat >${SITE}/etc/sudoers <<EOF
 root ALL=(ALL:ALL) ALL
