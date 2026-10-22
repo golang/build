@@ -381,6 +381,7 @@ SLOW_HOSTS = {
     ),
     "netbsd-arm64": struct(scale = 2),
     "openbsd-amd64": struct(scale = 4),
+    "openbsd-amd64_8.0": struct(scale = 4),
     "openbsd-arm": struct(scale = 5),
     "openbsd-arm64": struct(scale = 5),
     "openbsd-ppc64": struct(scale = 3),
