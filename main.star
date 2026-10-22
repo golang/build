@@ -1852,7 +1852,7 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     # these builders because they frequently go down for maintenance or just because they're flaky.
     expiration_timeout = 6 * time.hour
     wait_for_capacity = False
-    if capacity_constrained:
+    if capacity_constrained or host_type == "linux-amd64_docker":
         expiration_timeout = time.day
         wait_for_capacity = True
 
