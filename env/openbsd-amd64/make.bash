@@ -7,7 +7,7 @@ set -e
 set -u
 
 # Update to the version listed on https://openbsd.org
-readonly VERSION="${VERSION:-7.6}"
+readonly VERSION="${VERSION:-8.0}"
 readonly RELNO="${VERSION/./}"
 readonly SNAPSHOT=false
 
@@ -82,8 +82,8 @@ cat >${SITE}/etc/rc.local <<EOF
 (
   set -x
 
-  echo "Remounting root with softdep,noatime..."
-  mount -o softdep,noatime,update /
+  echo "Remounting root with async,noatime..."
+  mount -o async,noatime,update /
 
   echo "starting buildlet script"
   netstat -rn
