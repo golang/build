@@ -381,7 +381,6 @@ SLOW_HOSTS = {
     ),
     "netbsd-arm64": struct(scale = 2),
     "openbsd-amd64": struct(scale = 4),
-    "openbsd-amd64_8.0": struct(scale = 4),
     "openbsd-arm": struct(scale = 5),
     "openbsd-arm64": struct(scale = 5),
     "openbsd-ppc64": struct(scale = 3),
@@ -410,11 +409,11 @@ def host_execution_timeout(host):
 DEFAULT_HOST_SUFFIX = {
     "darwin-amd64": "14",
     "darwin-arm64": "26",
-    "freebsd-amd64": "14.3",
+    "freebsd-amd64": "14.5",
     "linux-amd64": "debian12",
     "linux-arm64": "debian12",
-    "openbsd-386": "7.6",
-    "openbsd-amd64": "7.6",
+    "openbsd-386": "8.0",
+    "openbsd-amd64": "8.0",
     "windows-386": "10",
     "windows-amd64": "10",
 }
@@ -458,8 +457,6 @@ BUILDER_TYPES = [
     "dragonfly-amd64",
     "freebsd-386",
     "freebsd-amd64",
-    "freebsd-amd64_14.5",
-    "freebsd-amd64_15.0",
     "freebsd-amd64_15.1",
     "freebsd-amd64-race",
     "freebsd-arm",
@@ -566,9 +563,7 @@ BUILDER_TYPES = [
     "netbsd-arm",
     "netbsd-arm64",
     "openbsd-386",
-    "openbsd-386_8.0",
     "openbsd-amd64",
-    "openbsd-amd64_8.0",
     "openbsd-arm",
     "openbsd-arm64",
     "openbsd-ppc64",
@@ -638,10 +633,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
-    "openbsd-386_8.0": known_issue(issue_number = 82400, skip_x_repos = True),
-    "openbsd-amd64_8.0": known_issue(issue_number = 82400, skip_x_repos = True),
-    "freebsd-amd64_14.5": known_issue(issue_number = 82401, skip_x_repos = True),
-    "freebsd-amd64_15.1": known_issue(issue_number = 82401, skip_x_repos = True),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
