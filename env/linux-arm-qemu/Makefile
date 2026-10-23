@@ -2,5 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+DOCKER ?= $(shell which docker >/dev/null 2>&1 && echo docker || echo podman)
+
 docker: Dockerfile
-	docker build -t gobuilders/linux-arm-qemu .
+	$(DOCKER) build -t gobuilders/linux-arm-qemu .

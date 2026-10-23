@@ -2,14 +2,16 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
+DOCKER ?= $(shell which docker >/dev/null 2>&1 && echo docker || echo podman)
+
 # Run on a arm64 or arm instance.
 prod-build: Dockerfile
-	sudo docker build -t gcr.io/symbolic-datum-552/gobuilder-arm-aws:latest .
+	sudo $(DOCKER) build -t gcr.io/symbolic-datum-552/gobuilder-arm-aws:latest .
 
 # Run on a arm64 or arm instance.
 prod-push: prod-build
-	sudo docker login -u oauth2accesstoken https://gcr.io
-	sudo docker push gcr.io/symbolic-datum-552/gobuilder-arm-aws:latest
+	sudo $(DOCKER) login -u oauth2accesstoken https://gcr.io
+	sudo $(DOCKER) push gcr.io/symbolic-datum-552/gobuilder-arm-aws:latest
 	sudo rm /root/.docker/config.json
 
 env-var-check:

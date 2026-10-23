@@ -65,7 +65,7 @@ func main() {
 			)
 		}
 		runCmd()
-	case "docker":
+	case "docker", "podman":
 		runDocker()
 	case "google-email":
 		out, err := exec.Command("gcloud", "config", "configurations", "list").CombinedOutput()

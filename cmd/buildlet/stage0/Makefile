@@ -18,6 +18,8 @@
 # automated VM/container creation scripts download them from.
 #
 
+DOCKER ?= $(shell which docker >/dev/null 2>&1 && echo docker || echo podman)
+
 ALL=\
 	buildlet-stage0.illumos-amd64 \
 	buildlet-stage0.linux-arm \
@@ -85,7 +87,7 @@ buildlet-stage0.%-s390x: $(GOFILES)
 
 docker: Dockerfile
 	go install golang.org/x/build/cmd/xb
-	xb docker build --force-rm -f Dockerfile --tag=golang/buildlet-stage0 ../../..
+	xb $(DOCKER) build --force-rm -f Dockerfile --tag=golang/buildlet-stage0 ../../..
 
 # Upload everything.
 upload: $(ALL:buildlet-stage0.%=upload.%)
