@@ -600,7 +600,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "linux-amd64-racegocommand-noopt": known_issue(issue_number = 79779, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
-    "freebsd-amd64_15.0": known_issue(issue_number = 77411, hide_from_presubmit = False),
     "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
     "openbsd-riscv64": known_issue(issue_number = 73569, hide_from_presubmit = False),
     "wasip1-wasm_wasmtime-stackswitch": known_issue(issue_number = 81963, hide_from_presubmit = False),
