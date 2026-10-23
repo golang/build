@@ -479,6 +479,7 @@ BUILDER_TYPES = [
     "linux-amd64-boringcrypto",
     "linux-amd64-clang15",
     "linux-amd64-goamd64v3",
+    "linux-amd64-goamd64v4",
     "linux-amd64-longtest",
     "linux-amd64-longtest-git2.24.0",
     "linux-amd64-longtest-race",
@@ -1067,6 +1068,12 @@ RUN_MODS = {
     # features are always available.
     "goamd64v3": make_run_mod(
         add_env = {"GOAMD64": "v3"},
+        enabled = define_for_postsubmit(["go"]),
+    ),
+    # Build and test with GOAMD64=v4, which makes the compiler assume certain amd64 CPU
+    # features are always available.
+    "goamd64v4": make_run_mod(
+        add_env = {"GOAMD64": "v4"},
         enabled = define_for_postsubmit(["go"]),
     ),
 
