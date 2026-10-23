@@ -367,6 +367,7 @@ SLOW_HOSTS = {
     for suffix in ("", "_12", "_13", "_14", "_15")
 } | {
     "freebsd-riscv64": struct(scale = 4),
+    "linux-amd64_noavx512": struct(scale = 2),  # runs on older GCE machines
     "linux-ppc64_power10": struct(scale = 2),
     "linux-ppc64_power8": struct(scale = 2),
     "linux-ppc64le_power10": struct(scale = 2),
@@ -523,6 +524,8 @@ BUILDER_TYPES = [
     "linux-amd64_debian13",
     "linux-amd64_docker",
     "linux-amd64_docker-screentest",
+    "linux-amd64_noavx512",
+    "linux-amd64_noavx512-simd",
     "linux-arm",
     "linux-arm64",
     "linux-arm64-asan-clang15",
@@ -1452,7 +1455,7 @@ def dimensions_of(host_type):
             # linux-amd64_debian11  -> Debian-11
             # linux-amd64_debiansid -> Debian-13
             os = suffixes[0].replace("debian", "Debian-").replace("sid", "13")
-        elif goos == "linux" and any([s in ["c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"] for s in suffixes]):
+        elif goos == "linux" and any([s in ["noavx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"] for s in suffixes]):
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
@@ -1487,6 +1490,8 @@ def dimensions_of(host_type):
                 machine_type = "c3-highcpu-88"
             elif "c4dh96" in suffixes:
                 machine_type = "c4d-highcpu-96"
+            elif "noavx512" in suffixes:
+                machine_type = "n2d-standard-16"
             else:
                 machine_type = "n4d-highcpu-32"
         elif goarch == "arm64":
@@ -2171,6 +2176,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     if suffix == "docker" and project == "pkgsite" and go_branch_short != "gotip":
         return False, PRESUBMIT.DISABLED, False, [], 0
     if suffix != "docker" and project == "vscode-go":
+        return False, PRESUBMIT.DISABLED, False, [], 0
+
+    # Only run noavx512 builders on the main Go repository, there's little value gained elsewhere.
+    if suffix == "noavx512" and project != "go":
         return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Apply basic policies about which projects run on what machine types,
