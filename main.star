@@ -1805,7 +1805,7 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
         base_props["xcode_version"] = xcode_versions[int(dimensions_of(host_type)["os"].split(".")[0].replace("Mac-", ""))]
 
     # Turn on the no-network check.
-    if builder_type in NO_NETWORK_BUILDERS:
+    if builder_type in NO_NETWORK_BUILDERS and project != "vscode-go":
         base_props["no_network"] = True
 
     # Increase the timeout for vscode-go and pkgsite Docker tests to accommodate
