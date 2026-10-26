@@ -495,6 +495,7 @@ BUILDER_TYPES = [
     "linux-amd64-racegocommand",
     "linux-amd64-racegocommand-noopt",
     "linux-amd64-runtimefreegc",
+    "linux-amd64-screentest",
     "linux-amd64-simd",
     "linux-amd64-spectre",
     "linux-amd64-ssacheck",
@@ -634,6 +635,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
+    "linux-amd64-screentest": known_issue(issue_number = 82561),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
@@ -1878,7 +1880,7 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
 
     # Add a notification for the x/pkgsite maintainers when a postsubmit Docker
     # builder fails.
-    if project == "pkgsite" and suffix == "docker" and env.bucket == "ci":
+    if project == "pkgsite" and (suffix == "docker" or "screentest" in run_mods) and env.bucket == "ci":
         notifiers.append(PKGSITE_DOCKER_NOTIFIER)
 
     # Create a helper to emit builder definitions, installing common fields from
