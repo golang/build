@@ -2186,7 +2186,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     # Restrict to gotip until the container uses the host Go version.
     if suffix == "docker" and project == "pkgsite" and go_branch_short != "gotip":
         return False, PRESUBMIT.DISABLED, False, [], 0
-    if suffix != "docker" and project == "vscode-go":
+    if suffix != "docker" and builder_type != "linux-amd64" and project == "vscode-go":
         return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Only run noavx512 builders on the main Go repository, there's little value gained elsewhere.
@@ -2393,7 +2393,7 @@ def _define_go_ci():
                 # See go.dev/issue/17626.
                 if project != "go" and go_branch_short != "gotip":
                     first_class_subset = builder_type in ["linux-amd64", "linux-386", "darwin-amd64_14", "windows-amd64"]
-                    vscode_go_special_case = project == "vscode-go" and builder_type == "linux-amd64_docker"
+                    vscode_go_special_case = project == "vscode-go" and (builder_type == "linux-amd64" or builder_type == "linux-amd64_docker")
 
                     in_postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)[2]
 
