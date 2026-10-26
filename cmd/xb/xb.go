@@ -154,7 +154,23 @@ func runDocker() {
 		}
 	}
 
-	runCmd()
+	var extraEnv []string
+	if flag.Arg(0) == "podman" && flag.Arg(1) == "push" {
+		// When rootless podman invokes docker-credential-gcloud, it runs inside
+		// podman's user namespace where gcloud's Enterprise Certificate Proxy (ECP)
+		// cannot access the host PKCS#11 socket. Refresh the token on the host first
+		// (where ECP works), then disable client certificates for the podman push
+		// invocation so docker-credential-gcloud uses the cached token without starting ECP.
+		helper := exec.Command("gcloud", "auth", "docker-helper", "get")
+		helper.Stdin = strings.NewReader("https://gcr.io\n")
+		helper.Stderr = os.Stderr
+		if b, err := helper.Output(); err != nil {
+			log.Fatalf("refreshing gcloud docker-helper token: %v\ncommand stdout: %q", err, b)
+		}
+		extraEnv = append(extraEnv, "CLOUDSDK_CONTEXT_AWARE_USE_CLIENT_CERTIFICATE=false")
+	}
+
+	runCmd(extraEnv...)
 }
 
 // fromLayers returns the layers named in the provided Dockerfile
@@ -182,8 +198,9 @@ func fromLayers(file string) (layers []string) {
 	return
 }
 
-func runCmd() {
+func runCmd(extraEnv ...string) {
 	cmd := exec.Command(flag.Arg(0), flag.Args()[1:]...)
+	envutil.SetEnv(cmd, extraEnv...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
