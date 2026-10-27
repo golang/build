@@ -363,7 +363,7 @@ PKGSITE_DOCKER_NOTIFIER = luci.notifier(
 # no better alternative. This has the downside of reducing coverage for the port.
 SLOW_HOSTS = {
     # see go.dev/issue/65040
-    "darwin-amd64%s" % suffix: struct(scale = 2)
+    "darwin-amd64%s" % suffix: struct(scale = 4)
     for suffix in ("", "_12", "_13", "_14", "_15")
 } | {
     "freebsd-riscv64": struct(scale = 4),
@@ -373,7 +373,7 @@ SLOW_HOSTS = {
     "linux-ppc64le_power10": struct(scale = 2),
     "linux-ppc64le_power8": struct(scale = 2),
     "linux-ppc64le_power9": struct(scale = 2),
-    "linux-riscv64": struct(scale = 2),
+    "linux-riscv64": struct(scale = 4),
     "linux-s390x": struct(scale = 2),  # see go.dev/issue/60413
     "netbsd-arm": struct(
         scale = 10,
@@ -383,13 +383,13 @@ SLOW_HOSTS = {
     "netbsd-arm64": struct(scale = 2),
     "openbsd-amd64": struct(scale = 4),
     "openbsd-arm": struct(scale = 5),
-    "openbsd-arm64": struct(scale = 5),
+    "openbsd-arm64": struct(scale = 10),
     "openbsd-ppc64": struct(scale = 3),
     "openbsd-riscv64": struct(
         scale = 4,
         scope = ["go@gotip", "net@gotip", "sys@gotip"],  # see go.dev/issue/67105#issuecomment-2265480107
     ),
-    "windows-arm64": struct(scale = 2),
+    "windows-arm64": struct(scale = 4),
 }
 
 # host_timeout_scale returns the default test timeout scale for a given host.
