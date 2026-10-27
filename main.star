@@ -1836,9 +1836,8 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     # Determine which experiments to apply.
     experiments = {
         "golang.shard_by_weight": 100,
+        "golang.go_test_artifacts": 100,
     }
-    if project != "go":
-        experiments["golang.go_test_artifacts"] = 100
 
     # Construct the executable reference.
     executable = luci.executable(
