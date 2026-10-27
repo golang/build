@@ -36,6 +36,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # bzr: Bazaar VCS supported by cmd/go
 # fonts-droid-fallback: required by x/mobile repo
 # fossil: Fossil VCS supported by cmd/go
+# fuse-overlayfs: needed by podman to overlay container images
 # gcc-multilib: for 32-bit builds
 # gcc: for building Go's bootstrap 'dist' prog
 # gdb: optionally used by runtime tests for gdb
@@ -55,11 +56,15 @@ ENV DEBIAN_FRONTEND noninteractive
 # nano: for interactive debugging convenience
 # netbase: for net package tests, issue 42750
 # patch: used for building some benchmarks
+# podman: used to run tests requiring docker
+# podman-compose: used to run tests requiring docker
 # procps: misc basic tool
 # psmisc: misc basic tool
+# slirp4netns: needed for podman networking without root
 # strace: optionally used by some net/http tests
 # subversion: subversion VCS supported by cmd/go
 # swig: used for c/c++ interop related tests
+# uidmap: needed for podman
 # unzip: used by racebuild
 # vim-tiny: for interactive debugging convenience
 RUN apt-get update && apt-get install -y \
@@ -70,6 +75,7 @@ RUN apt-get update && apt-get install -y \
 	ed \
 	fonts-droid-fallback \
 	fossil \
+	fuse-overlayfs \
 	gcc \
 	gcc-multilib \
 	gdb \
@@ -93,12 +99,16 @@ RUN apt-get update && apt-get install -y \
 	netbase \
 	openssh-server \
 	patch \
+	podman \
+	podman-compose \
 	procps \
 	psmisc \
+	slirp4netns \
 	strace \
 	subversion \
 	sudo \
 	swig \
+	uidmap \
 	unzip \
 	vim-tiny \
 	&& rm -rf /var/lib/apt/lists/*

@@ -75,6 +75,7 @@ RUN apt-get update && apt-get install -y \
 	ed \
 	fonts-droid-fallback \
 	fossil \
+	fuse-overlayfs \
 	gcc \
 	gcc-multilib \
 	gdb \
@@ -98,15 +99,18 @@ RUN apt-get update && apt-get install -y \
 	netbase \
 	openssh-server \
 	patch \
+	podman \
+	podman-compose \
 	procps \
 	psmisc \
+	slirp4netns \
 	strace \
 	subversion \
 	sudo \
 	swig \
+	uidmap \
 	unzip \
 	vim-tiny \
-	podman podman-compose uidmap slirp4netns fuse-overlayfs \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=stage0 /go/bin/* /usr/local/bin/
