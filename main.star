@@ -1100,6 +1100,7 @@ RUN_MODS = {
                 "src/crypto/tls/.+",
             ],
             "protobuf": [],
+            "vscode-go": [],
             "vuln": [],
         }),
     ),
@@ -1807,7 +1808,7 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
         base_props["xcode_version"] = xcode_versions[int(dimensions_of(host_type)["os"].split(".")[0].replace("Mac-", ""))]
 
     # Turn on the no-network check.
-    if builder_type in NO_NETWORK_BUILDERS and project != "vscode-go":
+    if builder_type in NO_NETWORK_BUILDERS:
         base_props["no_network"] = True
 
     # Increase the timeout for vscode-go and pkgsite Docker tests to accommodate
@@ -2179,8 +2180,8 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     # Filter out new ports on old release branches.
     # Nothing to do here at this time.
 
-    # Docker builder should only be used in VSCode-Go and pkgsite repos.
-    if suffix == "docker" and project not in ["vscode-go", "pkgsite"]:
+    # Docker builder should only be used in pkgsite repo.
+    if suffix == "docker" and project != "pkgsite":
         return False, PRESUBMIT.DISABLED, False, [], 0
 
     # TODO(golang/go#71558): pkgsite's compose.yaml currently uses a pinned
@@ -2188,7 +2189,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     # Restrict to gotip until the container uses the host Go version.
     if suffix == "docker" and project == "pkgsite" and go_branch_short != "gotip":
         return False, PRESUBMIT.DISABLED, False, [], 0
-    if suffix != "docker" and builder_type not in ["linux-amd64", "linux-amd64-longtest"] and project == "vscode-go":
+    if project == "vscode-go" and builder_type != "linux-amd64-longtest":
         return False, PRESUBMIT.DISABLED, False, [], 0
 
     # Only run noavx512 builders on the main Go repository, there's little value gained elsewhere.
