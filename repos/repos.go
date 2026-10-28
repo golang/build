@@ -136,13 +136,8 @@ func init() {
 
 	add(&Repo{
 		GoGerritProject: "protobuf",
-		MirrorToGitHub:  true,
-		MirrorToGitHubCustomRefspec: []string{
-			"+refs/heads/master:refs/heads/master", // mirror the main branch only, not other branches
-			"+refs/tags/*:refs/tags/*",
-		},
-		ImportPath: "google.golang.org/protobuf",
-		GitHubRepo: "protocolbuffers/protobuf-go",
+		ImportPath:      "google.golang.org/protobuf",
+		GitHubRepo:      "protocolbuffers/protobuf-go",
 	})
 
 	add(&Repo{
