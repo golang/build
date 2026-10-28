@@ -33,6 +33,7 @@ LABEL org.opencontainers.image.authors="golang-dev@googlegroups.com"
 
 ENV DEBIAN_FRONTEND noninteractive
 
+# aardvark-dns: needed for podman container DNS resolution
 # bzr: Bazaar VCS supported by cmd/go
 # fonts-droid-fallback: required by x/mobile repo
 # fossil: Fossil VCS supported by cmd/go
@@ -55,12 +56,13 @@ ENV DEBIAN_FRONTEND noninteractive
 # mercurial: mercurial VCS supported by cmd/go
 # nano: for interactive debugging convenience
 # netbase: for net package tests, issue 42750
+# nftables: needed for podman netavark firewall rules
+# passt: provides pasta, needed for podman networking without root
 # patch: used for building some benchmarks
 # podman: used to run tests requiring docker
 # podman-compose: used to run tests requiring docker
 # procps: misc basic tool
 # psmisc: misc basic tool
-# slirp4netns: needed for podman networking without root
 # strace: optionally used by some net/http tests
 # subversion: subversion VCS supported by cmd/go
 # swig: used for c/c++ interop related tests
@@ -69,6 +71,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # vim-tiny: for interactive debugging convenience
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
+	aardvark-dns \
 	bzr \
 	ca-certificates \
 	curl \
@@ -97,13 +100,14 @@ RUN apt-get update && apt-get install -y \
 	mercurial \
 	nano \
 	netbase \
+	nftables \
 	openssh-server \
+	passt \
 	patch \
 	podman \
 	podman-compose \
 	procps \
 	psmisc \
-	slirp4netns \
 	strace \
 	subversion \
 	sudo \
