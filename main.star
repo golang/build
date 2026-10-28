@@ -1811,12 +1811,6 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     if builder_type in NO_NETWORK_BUILDERS:
         base_props["no_network"] = True
 
-    # Increase the timeout for vscode-go and pkgsite Docker tests to accommodate
-    # significant setup overhead, including building Docker images and
-    # initializing the VS Code extension host.
-    if project == "vscode-go" or (project == "pkgsite" and suffix == "docker"):
-        base_props["test_timeout_scale"] = 2
-
     for mod in run_mods:
         if not mod in RUN_MODS:
             fail("unknown run mod: %s" % mod)
