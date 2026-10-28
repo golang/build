@@ -1913,11 +1913,8 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
 
     # Determine if we should be sharding tests, and how many shards.
     misccompile = "misccompile" in run_mods
-    if misccompile:
-        if project == "go":
-            test_shards = 12
-        else:
-            test_shards = 3
+    if misccompile and project == "go":
+        test_shards = 3
     else:
         test_shards = 1
 
