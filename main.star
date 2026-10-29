@@ -1918,20 +1918,17 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     # a sharded builder, which actually consists of 3 builders for coordination, build, and test, or a single
     # builder all-mode which does all 3 on the same machine.
     #
-    # The sharded builder is mainly used for sharding tests, but it is also useful for sharding misccompile
-    # builds. Even if we have only 1 shard, a sharded builder is still useful because only coordinator builders
-    # are allowed to spawn other builds, and so these coordination builders may spawn downstream builds.
-    # For example, builds of Go cache the toolchain. Triggering subrepo builds once the cache is filled is ideal,
-    # because the subrepo builds can use the cached toolchain. To actually run sharded builds we can't be
-    # capacity constrained, and we must only run for the main Go repo, because that's the only case we support
-    # for test sharding in golangbuild currently.
+    # For most builds make.bash is fast enough that the longer scaling/scheduling overhead is not worth
+    # it to have a sharded build: we can run make.bash faster than robocrop can scale. It's useful
+    # to shard the go repo's misccompile though because it will coordinate starting downstream builders
+    # so they can get cache hits for fetching a prebuilt go.
     #
     # The all-mode builder is used for everything else, but we must only select it if test_shards == 1.
     downstream_builders = []
     perfmode = "perf_mode" in base_props
     if perfmode:
         define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
-    elif misccompile:
+    elif test_shards > 1:
         downstream_builders = define_sharded_builder(env, project, name, test_shards, go_branch_short, builder_type, run_mods, base_props, base_dims, emit_builder)
     elif test_shards == 1:
         define_allmode_builder(env, name, builder_type, base_props, base_dims, emit_builder)
