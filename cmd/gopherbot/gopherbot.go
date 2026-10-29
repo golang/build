@@ -368,6 +368,8 @@ func main() {
 			{goRepo, 45201}: true,
 			{goRepo, 45202}: true,
 			{goRepo, 47140}: true,
+			{goRepo, 58080}: true,
+			{goRepo, 58091}: true,
 			{goRepo, 62987}: true,
 			{goRepo, 67913}: true,
 
@@ -790,10 +792,16 @@ func (b *gopherbot) closeGitHubIssue(ctx context.Context, repoID maintner.GitHub
 		log.Printf("[dry-run] would close go.dev/issue/%v%s", number, suffix)
 		return nil
 	}
-	_, _, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(number), &github.IssueRequest{
+	_, resp, err := b.ghc.Issues.Edit(ctx, repoID.Owner, repoID.Repo, int(number), &github.IssueRequest{
 		State:       new("closed"),
 		StateReason: reason,
 	})
+	if err != nil && resp != nil && (resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone) {
+		// An issue can become gone on GitHub without maintner realizing it. See go.dev/issue/30184.
+		log.Printf("closeGitHubIssue: Issue %v#%v returned %s when trying to close issue. Skipping. See go.dev/issue/30184.", repoID, number, resp.Status)
+		b.deletedIssues[githubIssue{repoID, number}] = true
+		return nil
+	}
 	return err
 }
 
