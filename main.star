@@ -635,7 +635,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
-    "linux-amd64-screentest": known_issue(issue_number = 82561),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
@@ -1099,6 +1098,7 @@ RUN_MODS = {
                 # so that the BoGo test suite is run.
                 "src/crypto/tls/.+",
             ],
+            "pkgsite": [],
             "protobuf": [],
             "vscode-go": [],
             "vuln": [],
@@ -2174,7 +2174,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     # TODO(golang/go#71558): pkgsite's compose.yaml currently uses a pinned
     # GO_VERSION from deploy-env.yaml rather than the builder's Go toolchain.
     # Restrict to gotip until the container uses the host Go version.
-    if suffix == "docker" and project == "pkgsite" and go_branch_short != "gotip":
+    if (suffix == "docker" or "longtest" in run_mods or "screentest" in run_mods) and project == "pkgsite" and go_branch_short != "gotip":
         return False, PRESUBMIT.DISABLED, False, [], 0
     if project == "vscode-go" and builder_type != "linux-amd64-longtest":
         return False, PRESUBMIT.DISABLED, False, [], 0
