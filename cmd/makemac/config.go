@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"go.chromium.org/luci/swarming/client/swarming"
+	"golang.org/x/build/internal/macservice"
 )
 
 // swarmingConfig describes a swarming server.
@@ -37,18 +38,26 @@ var (
 // imageConfig describes how many instances of a specific image type should
 // exist.
 type imageConfig struct {
-	Hostname string // LUCI hostname prefix
-	Cert     string // Bot certificate (resolved with internal/secret)
-	Key      string // bot key (resolved with internal/secret)
-	Image    string // image SHA
-	Count    int    // target instance count to maintain
+	Hostname string                    // LUCI hostname prefix
+	Cert     string                    // Bot certificate (resolved with internal/secret)
+	Key      string                    // bot key (resolved with internal/secret)
+	Image    string                    // image SHA
+	Profile  macservice.MachineProfile // machine profile (defaults to V1_MEDIUM_VM if empty)
+	Count    int                       // target instance count to maintain
+}
+
+func (c *imageConfig) profile() macservice.MachineProfile {
+	if c.Profile == "" {
+		return macservice.V1_MEDIUM_VM
+	}
+	return c.Profile
 }
 
 // Production image configuration for each swarming host.
 //
-// After changing an image here, makemac will automatically destroy instances
-// with the old image. Changing hostname, cert, or key will _not_ automatically
-// destroy instances.
+// After changing an image or profile here, makemac will automatically destroy
+// instances with the old image or profile. Changing hostname, cert, or key will
+// _not_ automatically destroy instances.
 //
 // TODO(prattmic): rather than storing secrets in secret manager, makemac could
 // use genbotcert to generate valid certificate/key pairs on the fly, unique to
@@ -61,6 +70,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-key",
 			Image:    "f48c5538d2ac7b91c592dcce18f247e3aad70503558f92b41bdc010f2c8728a9",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    15, // Fewer because it runs on one release branch only.
 		},
 		{
@@ -68,6 +78,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-13-key",
 			Image:    "3baa47241c34feeb46318f3e9f1f5ce26d79994088179ab8d6d60a1183bbacfe",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    30,
 		},
 		{
@@ -75,6 +86,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-key",
 			Image:    "b16a8a5f2d1e383667c3764d915551f4af56d63edd0679539703688a6b9f6754",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    45, // More to cover longtest, race, nocgo, etc.
 		},
 		// arm64
@@ -83,13 +95,15 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-arm64-14-cert",
 			Key:      "secret:symbolic-datum-552/darwin-arm64-14-key",
 			Image:    "edbf519386cb968127d9e682ac5bbc9ca9fbc9b8e8657bade9488089bb842405",
-			Count:    25,
+			Profile:  macservice.V1_MEDIUM_HIGH_CORE_VM,
+			Count:    13,
 		},
 		{
 			Hostname: "darwin-arm64-15",
 			Cert:     "secret:symbolic-datum-552/darwin-arm64-15-cert",
 			Key:      "secret:symbolic-datum-552/darwin-arm64-15-key",
 			Image:    "203520220bdfe6b42592d2ae731c9cb985768c701c569ff1bc572d1573e63ad6",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    25,
 		},
 		{
@@ -97,6 +111,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-arm64-26-cert",
 			Key:      "secret:symbolic-datum-552/darwin-arm64-26-key",
 			Image:    "b39d12df6bb6702c4ea1ae1d061b9964eb5912b514f073ece0fc5fd0bedec0cb",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    45, // More to cover longtest, race, nocgo, etc.
 		},
 	},
@@ -107,6 +122,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-12-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-12-security-key",
 			Image:    "f48c5538d2ac7b91c592dcce18f247e3aad70503558f92b41bdc010f2c8728a9",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    10, // Fewer because it runs on one release branch only.
 		},
 		{
@@ -114,6 +130,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-13-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-13-security-key",
 			Image:    "3baa47241c34feeb46318f3e9f1f5ce26d79994088179ab8d6d60a1183bbacfe",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    20,
 		},
 		{
@@ -121,6 +138,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-amd64-14-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-amd64-14-security-key",
 			Image:    "b16a8a5f2d1e383667c3764d915551f4af56d63edd0679539703688a6b9f6754",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    30, // More to cover longtest, race, nocgo, etc.
 		},
 		// arm64
@@ -129,13 +147,15 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-arm64-14-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-arm64-14-security-key",
 			Image:    "edbf519386cb968127d9e682ac5bbc9ca9fbc9b8e8657bade9488089bb842405",
-			Count:    15,
+			Profile:  macservice.V1_MEDIUM_HIGH_CORE_VM,
+			Count:    7,
 		},
 		{
 			Hostname: "darwin-arm64-15-security",
 			Cert:     "secret:symbolic-datum-552/darwin-arm64-15-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-arm64-15-security-key",
 			Image:    "203520220bdfe6b42592d2ae731c9cb985768c701c569ff1bc572d1573e63ad6",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    15,
 		},
 		{
@@ -143,6 +163,7 @@ var prodImageConfig = map[*swarmingConfig][]imageConfig{
 			Cert:     "secret:symbolic-datum-552/darwin-arm64-26-security-cert",
 			Key:      "secret:symbolic-datum-552/darwin-arm64-26-security-key",
 			Image:    "b39d12df6bb6702c4ea1ae1d061b9964eb5912b514f073ece0fc5fd0bedec0cb",
+			Profile:  macservice.V1_MEDIUM_VM,
 			Count:    25, // More to cover longtest, race, nocgo, etc.
 		},
 	},
@@ -182,6 +203,6 @@ func init() {
 func logImageConfig(sc *swarmingConfig, cc []imageConfig) {
 	log.Printf("%s image configuration:", sc.Host)
 	for _, c := range cc {
-		log.Printf("\t%s: image=%s\tcount=%d", c.Hostname, c.Image, c.Count)
+		log.Printf("\t%s: image=%s\tprofile=%s\tcount=%d", c.Hostname, c.Image, c.profile(), c.Count)
 	}
 }

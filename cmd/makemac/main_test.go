@@ -221,13 +221,16 @@ func TestHandleObsoleteLeases(t *testing.T) {
 	project2 := managedProjectPrefix + "/" + swarming2.Host
 
 	// Test leases:
-	// * "active-1" uses image "active-image"
+	// * "active-1" uses image "active-image" with default profile (V1_MEDIUM_VM)
 	// * "active-2" uses image "active-image" but is unwanted because config.Count is 1
+	// * "high-core-1-wrong-profile" uses image "high-core-image" with V1_MEDIUM_VM, unwanted because config.Profile is V1_MEDIUM_HIGH_CORE_VM
+	// * "high-core-2-active" uses image "high-core-image" with V1_MEDIUM_HIGH_CORE_VM
 	// * "obsolete" uses image "obsolete-image"
 	// * "obsolete-on-swarming2" uses image "obsolete-image" on "swarming2" (as configured)
 	// * "unmanaged" uses image "obsolete-image", but is not managed by makemac.
 	//
-	// handleObsoleteLeases should vacate "active-2" and "obsolete", and none of the others.
+	// handleObsoleteLeases should vacate "active-2", "high-core-1-wrong-profile",
+	// and "obsolete", and none of the others.
 	config := map[*swarmingConfig][]imageConfig{
 		swarming1: {
 			{
@@ -235,6 +238,14 @@ func TestHandleObsoleteLeases(t *testing.T) {
 				Cert:     "dummy-cert",
 				Key:      "dummy-key",
 				Image:    "active-image",
+				Count:    1,
+			},
+			{
+				Hostname: "high-core",
+				Cert:     "dummy-cert",
+				Key:      "dummy-key",
+				Image:    "high-core-image",
+				Profile:  macservice.V1_MEDIUM_HIGH_CORE_VM,
 				Count:    1,
 			},
 		},
@@ -255,6 +266,7 @@ func TestHandleObsoleteLeases(t *testing.T) {
 				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
 				DiskSelection: macservice.DiskSelection{
 					ImageHashes: macservice.ImageHashes{
 						BootSHA256: "active-image",
@@ -268,9 +280,38 @@ func TestHandleObsoleteLeases(t *testing.T) {
 				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
 				DiskSelection: macservice.DiskSelection{
 					ImageHashes: macservice.ImageHashes{
 						BootSHA256: "active-image",
+					},
+				},
+			},
+		},
+		"high-core-1-wrong-profile": {
+			Lease: macservice.Lease{
+				LeaseID:             "high-core-1-wrong-profile",
+				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
+			},
+			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
+				DiskSelection: macservice.DiskSelection{
+					ImageHashes: macservice.ImageHashes{
+						BootSHA256: "high-core-image",
+					},
+				},
+			},
+		},
+		"high-core-2-active": {
+			Lease: macservice.Lease{
+				LeaseID:             "high-core-2-active",
+				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
+			},
+			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_HIGH_CORE_VM,
+				DiskSelection: macservice.DiskSelection{
+					ImageHashes: macservice.ImageHashes{
+						BootSHA256: "high-core-image",
 					},
 				},
 			},
@@ -281,6 +322,7 @@ func TestHandleObsoleteLeases(t *testing.T) {
 				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
 				DiskSelection: macservice.DiskSelection{
 					ImageHashes: macservice.ImageHashes{
 						BootSHA256: "obsolete-image",
@@ -294,6 +336,7 @@ func TestHandleObsoleteLeases(t *testing.T) {
 				VMResourceNamespace: macservice.Namespace{ProjectName: project2},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
 				DiskSelection: macservice.DiskSelection{
 					ImageHashes: macservice.ImageHashes{
 						BootSHA256: "obsolete-image",
@@ -307,6 +350,7 @@ func TestHandleObsoleteLeases(t *testing.T) {
 				VMResourceNamespace: macservice.Namespace{ProjectName: "other"},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
 				DiskSelection: macservice.DiskSelection{
 					ImageHashes: macservice.ImageHashes{
 						BootSHA256: "obsolete-image",
@@ -320,7 +364,11 @@ func TestHandleObsoleteLeases(t *testing.T) {
 	handleObsoleteLeases(&mc, config, leases)
 
 	got := mc.vacate
-	want := []macservice.VacateRequest{{LeaseID: "active-2"}, {LeaseID: "obsolete"}}
+	want := []macservice.VacateRequest{
+		{LeaseID: "active-2"},
+		{LeaseID: "high-core-1-wrong-profile"},
+		{LeaseID: "obsolete"},
+	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Vacated leases mismatch (-want +got):\n%s", diff)
 	}
@@ -338,15 +386,16 @@ func TestAddNewLeases(t *testing.T) {
 	}
 
 	// Test leases:
-	// * "image-a-1" uses image "image-a" on "swarming1"
+	// * "image-a-1" uses image "image-a" (V1_MEDIUM_VM) on "swarming1"
+	// * "image-b-wrong-profile" uses image "image-b" on "swarming1", but has profile V1_MEDIUM_VM instead of V1_MEDIUM_HIGH_CORE_VM
 	// * "unmanaged" uses image "image-a", but is not managed by makemac.
 	//
 	// Test images:
 	// * On "swarming1":
-	//   * "image-a" wants 2 instances.
-	//   * "image-b" wants 2 instances.
+	//   * "image-a" wants 2 instances (default V1_MEDIUM_VM).
+	//   * "image-b" wants 2 instances (V1_MEDIUM_HIGH_CORE_VM).
 	// * On "swarming2":
-	//   * "image-a" wants 1 instances.
+	//   * "image-a" wants 1 instances (default V1_MEDIUM_VM).
 	//
 	// addNewLeases should add 4 leases that create:
 	// * 1 "image-a" instance on "swarming1"
@@ -367,6 +416,7 @@ func TestAddNewLeases(t *testing.T) {
 				Cert:     "dummy-cert",
 				Key:      "dummy-key",
 				Image:    "image-b",
+				Profile:  macservice.V1_MEDIUM_HIGH_CORE_VM,
 				Count:    2,
 			},
 		},
@@ -387,9 +437,24 @@ func TestAddNewLeases(t *testing.T) {
 				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
 				DiskSelection: macservice.DiskSelection{
 					ImageHashes: macservice.ImageHashes{
 						BootSHA256: "image-a",
+					},
+				},
+			},
+		},
+		"image-b-wrong-profile": {
+			Lease: macservice.Lease{
+				LeaseID:             "image-b-wrong-profile",
+				VMResourceNamespace: macservice.Namespace{ProjectName: project1},
+			},
+			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
+				DiskSelection: macservice.DiskSelection{
+					ImageHashes: macservice.ImageHashes{
+						BootSHA256: "image-b",
 					},
 				},
 			},
@@ -400,6 +465,7 @@ func TestAddNewLeases(t *testing.T) {
 				VMResourceNamespace: macservice.Namespace{ProjectName: "other"},
 			},
 			InstanceSpecification: macservice.InstanceSpecification{
+				Profile: macservice.V1_MEDIUM_VM,
 				DiskSelection: macservice.DiskSelection{
 					ImageHashes: macservice.ImageHashes{
 						BootSHA256: "image-a",
@@ -431,9 +497,15 @@ func TestAddNewLeases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("makeLeaseRequest(a, swarm1) got err %v want nil", err)
 	}
+	if got, want := leaseASwarm1.InstanceSpecification.Profile, macservice.V1_MEDIUM_VM; got != want {
+		t.Errorf("leaseASwarm1 profile = %q, want %q", got, want)
+	}
 	leaseBSwarm1, err := makeLeaseRequest(swarming1, &config[swarming1][1], resolveSecret)
 	if err != nil {
 		t.Fatalf("makeLeaseRequest(b, swarm1) got err %v want nil", err)
+	}
+	if got, want := leaseBSwarm1.InstanceSpecification.Profile, macservice.V1_MEDIUM_HIGH_CORE_VM; got != want {
+		t.Errorf("leaseBSwarm1 profile = %q, want %q", got, want)
 	}
 	leaseASwarm2, err := makeLeaseRequest(swarming2, &config[swarming2][0], resolveSecret)
 	if err != nil {

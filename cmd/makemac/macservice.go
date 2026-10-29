@@ -25,7 +25,7 @@ type readOnlyMacServiceClient struct {
 }
 
 func (r readOnlyMacServiceClient) Lease(req macservice.LeaseRequest) (macservice.LeaseResponse, error) {
-	log.Printf("DRY RUN: Create lease with image %s", req.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256)
+	log.Printf("DRY RUN: Create lease with image %s and profile %s", req.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256, req.InstanceSpecification.Profile)
 	return macservice.LeaseResponse{
 		PendingLease: macservice.Lease{LeaseID: "dry-run-lease"},
 	}, nil

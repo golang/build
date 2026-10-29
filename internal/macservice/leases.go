@@ -99,7 +99,8 @@ type ImageHashes struct {
 type MachineProfile string
 
 const (
-	V1_MEDIUM_VM MachineProfile = "V1_MEDIUM_VM"
+	V1_MEDIUM_VM           MachineProfile = "V1_MEDIUM_VM"           // 4 cores, 16GB RAM
+	V1_MEDIUM_HIGH_CORE_VM MachineProfile = "V1_MEDIUM_HIGH_CORE_VM" // 8 cores, 16GB RAM
 )
 
 type NetworkAccessLevel string

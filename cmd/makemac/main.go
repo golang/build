@@ -12,8 +12,8 @@
 //     thinks are dead (froze/crashed?) and destroys them.
 //   - Renews MacService leases that both MacService and LUCI agree are healthy
 //     to ensure they don't expire.
-//   - Destroys MacService leases with images that are not requested by the
-//     configuration in config.go.
+//   - Destroys MacService leases with images or profiles that are not requested
+//     by the configuration in config.go.
 //   - Launches new MacService leases to ensure that there are the at least as
 //     many leases of each type as specified in the configuration in config.go.
 package main
@@ -210,8 +210,9 @@ func logSummary(bots map[string]*spb.BotInfo, leases map[string]macservice.Insta
 		}
 
 		image := inst.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256
+		profile := inst.InstanceSpecification.Profile
 
-		log.Printf("\t%s: image=%s\tswarming=%s", k, image, swarming)
+		log.Printf("\t%s: image=%s\tprofile=%s\tswarming=%s", k, image, profile, swarming)
 	}
 }
 
@@ -420,11 +421,12 @@ func renewLeases(mc macServiceClient, leases map[string]macservice.Instance) {
 	}
 }
 
-// handleObsoleteLeases vacates any makemac-managed leases with images that are
-// not requested by imageConfigs. This typically occurs when makemac is updated
-// to roll out a new image version or if Count is reduced for an existing image.
+// handleObsoleteLeases vacates any makemac-managed leases with images or
+// profiles that are not requested by config, or that exceed the configured
+// Count. This typically occurs when makemac is updated to roll out a new image
+// version or machine profile, or if Count is reduced for an existing image.
 func handleObsoleteLeases(mc macServiceClient, config map[*swarmingConfig][]imageConfig, leases map[string]macservice.Instance) {
-	log.Printf("Checking for leases with obsolete images...")
+	log.Printf("Checking for leases with obsolete images or profiles...")
 
 	// swarming host -> image sha -> image config
 	swarmingImages := make(map[string]map[string]*imageConfig)
@@ -460,8 +462,11 @@ func handleObsoleteLeases(mc macServiceClient, config map[*swarmingConfig][]imag
 		var vacateReason string // A non-empty string means to vacate with said reason.
 
 		image := lease.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256
+		profile := lease.InstanceSpecification.Profile
 		if config, ok := images[image]; !ok {
 			vacateReason = fmt.Sprintf("it uses an obsolete image %s", image)
+		} else if profile != config.profile() {
+			vacateReason = fmt.Sprintf("it uses profile %s, want %s", profile, config.profile())
 		} else {
 			if _, ok := swarmingImageCount[swarming]; !ok {
 				swarmingImageCount[swarming] = make(map[string]int)
@@ -506,7 +511,7 @@ func makeLeaseRequest(sc *swarmingConfig, ic *imageConfig, resolveSecret func(st
 			ProjectName:  managedProjectPrefix + "/" + sc.Host,
 		},
 		InstanceSpecification: macservice.InstanceSpecification{
-			Profile:     macservice.V1_MEDIUM_VM,
+			Profile:     ic.profile(),
 			AccessLevel: macservice.GOLANG_OSS,
 			DiskSelection: macservice.DiskSelection{
 				ImageHashes: macservice.ImageHashes{
@@ -545,29 +550,14 @@ func addNewLeases(
 ) {
 	log.Printf("Checking if new leases are required...")
 
-	// Count images per swarming host. Each host gets a different
-	// configuration. Map of swarming host -> image sha -> count.
-	swarmingImageCount := make(map[string]map[string]int)
-	for _, lease := range leases {
-		swarming := leaseSwarmingHost(lease.Lease)
-		if swarming == "" {
-			// Don't count leases we don't manage.
-			continue
-		}
-		if _, ok := swarmingImageCount[swarming]; !ok {
-			swarmingImageCount[swarming] = make(map[string]int)
-		}
-
-		image := lease.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256
-		swarmingImageCount[swarming][image]++
-	}
-
 	// Iterate through configs in swarming order, then image order.
 	swarmingOrder := sortedSwarmingConfigs(config)
+	swarmingImages := make(map[string]map[string]*imageConfig, len(swarmingOrder))
 	imageMap := make([]map[string]*imageConfig, 0, len(swarmingOrder))
 	imageOrder := make([][]string, 0, len(swarmingOrder))
 	for _, sc := range swarmingOrder {
 		m := imageConfigMap(config[sc])
+		swarmingImages[sc.Host] = m
 		order := make([]string, 0, len(m))
 		for image := range m {
 			order = append(order, image)
@@ -577,12 +567,36 @@ func addNewLeases(
 		imageOrder = append(imageOrder, order)
 	}
 
+	// Count leases matching configured image and profile per swarming host.
+	// Each host gets a different configuration. Map of swarming host -> image sha -> count.
+	swarmingImageCount := make(map[string]map[string]int)
+	for _, lease := range leases {
+		swarming := leaseSwarmingHost(lease.Lease)
+		if swarming == "" {
+			// Don't count leases we don't manage.
+			continue
+		}
+		images, ok := swarmingImages[swarming]
+		if !ok {
+			continue
+		}
+		image := lease.InstanceSpecification.DiskSelection.ImageHashes.BootSHA256
+		ic, ok := images[image]
+		if !ok || lease.InstanceSpecification.Profile != ic.profile() {
+			continue
+		}
+		if _, ok := swarmingImageCount[swarming]; !ok {
+			swarmingImageCount[swarming] = make(map[string]int)
+		}
+		swarmingImageCount[swarming][image]++
+	}
+
 	log.Printf("Current image lease count:")
 	for i, sc := range swarmingOrder {
 		for _, image := range imageOrder[i] {
 			config := imageMap[i][image]
 			gotCount := swarmingImageCount[sc.Host][config.Image]
-			log.Printf("\tHost %s: image %s: have %d leases\twant %d leases", sc.Host, config.Image, gotCount, config.Count)
+			log.Printf("\tHost %s: image %s (profile %s): have %d leases\twant %d leases", sc.Host, config.Image, config.profile(), gotCount, config.Count)
 		}
 	}
 
@@ -595,7 +609,7 @@ func addNewLeases(
 				continue
 			}
 
-			log.Printf("Host %s: image %s: creating %d new leases", sc.Host, config.Image, need)
+			log.Printf("Host %s: image %s (profile %s): creating %d new leases", sc.Host, config.Image, config.profile(), need)
 			req, err := makeLeaseRequest(sc, config, resolveSecret)
 			if err != nil {
 				log.Printf("Host %s: image %s: creating lease request: error %v", sc.Host, config.Image, err)
