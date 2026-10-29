@@ -121,6 +121,7 @@ SECURITY_REALMS = [
     luci.bucket(name = "security-try-workers"),
 ]
 
+# Kept temporarily until luci.golang.prod is removed from infradata/config.
 luci.realm(name = "pools/prod")
 
 # Allow everyone to see public builds, pools, bots, and tasks.
@@ -208,19 +209,6 @@ luci.binding(
         "relui-tasks@symbolic-datum-552.iam.gserviceaccount.com",
     ],
 )
-
-# This is the cipd package name and version where the recipe bundler will put
-# the built recipes. This line makes it the default value for all `luci.recipe`
-# invocations in this configuration.
-#
-# The recipe bundler sets CIPD refs equal in name to the git refs that it
-# processed the recipe code from.
-#
-# Note: This will cause all recipe commits to automatically deploy as soon
-# as the recipe bundler compiles them from your refs/heads/luci-config branch.
-luci.recipe.defaults.cipd_package.set("golang/recipe_bundles/go.googlesource.com/build")
-luci.recipe.defaults.cipd_version.set("refs/heads/luci-config")
-luci.recipe.defaults.use_python3.set(True)
 
 def define_environment(gerrit_host, swarming_host, bucket, coordinator_sa, worker_sa, has_shared_pool, low_capacity, known_issue, priority = None):
     return struct(
@@ -418,15 +406,6 @@ DEFAULT_HOST_SUFFIX = {
     "windows-386": "10",
     "windows-amd64": "10",
 }
-
-# The prod bucket will include builders which work on post-commit code and
-# generate executable artifacts used by other users or machines.
-luci.bucket(name = "prod")
-
-# A list with builders in "prod" bucket.
-luci.list_view(
-    name = "prod",
-)
 
 # BUILDER_TYPES lists possible builder types.
 #
@@ -2578,5 +2557,3 @@ def _define_go_internal_ci():
 
 _define_go_ci()
 _define_go_internal_ci()
-
-exec("./recipes.star")
