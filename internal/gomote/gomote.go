@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -1060,6 +1061,7 @@ func (ss *SwarmingServer) newSwarmingTaskWithGolangbuild(ctx context.Context, na
 		TaskSlices: []*swarmpb.TaskSlice{
 			{
 				Properties: &swarmpb.TaskProperties{
+					Caches: properties.Caches,
 					CipdInput: &swarmpb.CipdInput{
 						Packages: packages,
 					},
@@ -1111,10 +1113,11 @@ func tryThenPeriodicallyDo(ctx context.Context, period time.Duration, f func(con
 }
 
 type configProperties struct {
-	BootstrapVersion string `json:"bootstrap_version"`
-	Mode             int    `json:"mode"`
-	KnownIssue       int    `json:"known_issue"`
-	BuilderId        string // <project>/<bucket>/<builder>
+	BootstrapVersion string                `json:"bootstrap_version"`
+	Mode             int                   `json:"mode"`
+	KnownIssue       int                   `json:"known_issue"`
+	BuilderId        string                `json:"-"` // <project>/<bucket>/<builder>
+	Caches           []*swarmpb.CacheEntry `json:"-"`
 }
 
 func builderProperties(builder *buildbucketpb.BuilderItem) (*configProperties, error) {
@@ -1127,6 +1130,15 @@ func builderProperties(builder *buildbucketpb.BuilderItem) (*configProperties, e
 	}
 	id := builder.GetId()
 	cp.BuilderId = fmt.Sprintf("%s/%s/%s", id.GetProject(), id.GetBucket(), id.GetBuilder())
+	for _, c := range builder.GetConfig().GetCaches() {
+		if c.GetName() == "" || c.GetPath() == "" {
+			continue
+		}
+		cp.Caches = append(cp.Caches, &swarmpb.CacheEntry{
+			Name: c.GetName(),
+			Path: path.Join("cache", c.GetPath()),
+		})
+	}
 	return cp, nil
 }
 

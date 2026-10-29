@@ -209,48 +209,82 @@ func TestSwarmingListSwarmingBuildersError(t *testing.T) {
 }
 
 func TestSwarmingCreateInstance(t *testing.T) {
-	ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
-	req := &protos.CreateInstanceRequest{BuilderType: "gotip-linux-amd64-boringcrypto"}
-
-	msc := mockSwarmClient()
-	msc.NewTaskMock = func(_ context.Context, req *swarmpb.NewTaskRequest) (*swarmpb.TaskRequestMetadataResponse, error) {
-		taskID := uuid.New().String()
-		return &swarmpb.TaskRequestMetadataResponse{
-			TaskId: taskID,
-			Request: &swarmpb.TaskRequestResponse{
-				TaskId: taskID,
-				Name:   req.Name,
+	testCases := []struct {
+		desc       string
+		req        *protos.CreateInstanceRequest
+		wantCaches []*swarmpb.CacheEntry
+	}{
+		{
+			desc: "golangbuild",
+			req:  &protos.CreateInstanceRequest{BuilderType: "gotip-linux-amd64-boringcrypto"},
+			wantCaches: []*swarmpb.CacheEntry{
+				{Name: "git", Path: "cache/git"},
+				{Name: "tools", Path: "cache/tools"},
 			},
-		}, nil
+		},
+		{
+			desc: "without golangbuild",
+			req: &protos.CreateInstanceRequest{
+				BuilderType:      "gotip-linux-amd64-boringcrypto",
+				ExperimentOption: []string{expDisableGolangbuild},
+			},
+			wantCaches: nil,
+		},
 	}
-	msc.TaskResultMock = func(_ context.Context, taskID string, _ *swarming.TaskResultFields) (*swarmpb.TaskResultResponse, error) {
-		return &swarmpb.TaskResultResponse{
-			TaskId: taskID,
-			State:  swarmpb.TaskState_RUNNING,
-		}, nil
-	}
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			ctx := access.FakeContextWithOutgoingIAPAuth(context.Background(), fakeIAP())
 
-	gomoteClient := setupGomoteSwarmingTest(t, context.Background(), msc)
+			var gotReq *swarmpb.NewTaskRequest
+			msc := mockSwarmClient()
+			msc.NewTaskMock = func(_ context.Context, req *swarmpb.NewTaskRequest) (*swarmpb.TaskRequestMetadataResponse, error) {
+				gotReq = req
+				taskID := uuid.New().String()
+				return &swarmpb.TaskRequestMetadataResponse{
+					TaskId: taskID,
+					Request: &swarmpb.TaskRequestResponse{
+						TaskId: taskID,
+						Name:   req.Name,
+					},
+				}, nil
+			}
+			msc.TaskResultMock = func(_ context.Context, taskID string, _ *swarming.TaskResultFields) (*swarmpb.TaskResultResponse, error) {
+				return &swarmpb.TaskResultResponse{
+					TaskId: taskID,
+					State:  swarmpb.TaskState_RUNNING,
+				}, nil
+			}
 
-	stream, err := gomoteClient.CreateInstance(ctx, req)
-	if err != nil {
-		t.Fatalf("client.CreateInstance(ctx, %v) = %v,  %s; want no error", req, stream, err)
-	}
-	var updateComplete bool
-	for {
-		update, err := stream.Recv()
-		if err == io.EOF && !updateComplete {
-			t.Fatal("stream.Recv = stream, io.EOF; want no EOF")
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("stream.Recv() = nil, %s; want no error", err)
-		}
-		if update.GetStatus() == protos.CreateInstanceResponse_COMPLETE {
-			updateComplete = true
-		}
+			gomoteClient := setupGomoteSwarmingTest(t, context.Background(), msc)
+
+			stream, err := gomoteClient.CreateInstance(ctx, tc.req)
+			if err != nil {
+				t.Fatalf("client.CreateInstance(ctx, %v) = %v,  %s; want no error", tc.req, stream, err)
+			}
+			var updateComplete bool
+			for {
+				update, err := stream.Recv()
+				if err == io.EOF && !updateComplete {
+					t.Fatal("stream.Recv = stream, io.EOF; want no EOF")
+				}
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatalf("stream.Recv() = nil, %s; want no error", err)
+				}
+				if update.GetStatus() == protos.CreateInstanceResponse_COMPLETE {
+					updateComplete = true
+				}
+			}
+			if len(gotReq.GetTaskSlices()) != 1 {
+				t.Fatalf("len(gotReq.GetTaskSlices()) = %d; want 1", len(gotReq.GetTaskSlices()))
+			}
+			gotCaches := gotReq.GetTaskSlices()[0].GetProperties().GetCaches()
+			if diff := cmp.Diff(tc.wantCaches, gotCaches, protocmp.Transform()); diff != "" {
+				t.Errorf("TaskProperties.Caches mismatch (-want, +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -1343,6 +1377,10 @@ func (fbc *FakeBuildersClient) ListBuilders(ctx context.Context, in *buildbucket
 						"cipd_platform:linux-amd64",
 					},
 					Properties: `{"mode": 0, "bootstrap_version":"latest"}`,
+					Caches: []*buildbucketpb.BuilderConfig_CacheEntry{
+						{Name: "git", Path: "git"},
+						{Name: "tools", Path: "tools"},
+					},
 				},
 			})
 		}
