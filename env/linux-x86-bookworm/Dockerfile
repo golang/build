@@ -33,6 +33,7 @@ MAINTAINER golang-dev <golang-dev@googlegroups.com>
 
 ENV DEBIAN_FRONTEND noninteractive
 
+# aardvark-dns: needed for podman container DNS resolution
 # bzr: Bazaar VCS supported by cmd/go
 # fonts-droid-fallback: required by x/mobile repo
 # fossil: Fossil VCS supported by cmd/go
@@ -54,6 +55,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # make: used for setting up benchmarks in the x/benchmark builders
 # mercurial: mercurial VCS supported by cmd/go
 # nano: for interactive debugging convenience
+# netavark: needed for podman container networking
 # netbase: for net package tests, issue 42750
 # patch: used for building some benchmarks
 # podman: used to run tests requiring docker
@@ -69,6 +71,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # vim-tiny: for interactive debugging convenience
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
+	aardvark-dns \
 	bzr \
 	ca-certificates \
 	curl \
@@ -96,6 +99,7 @@ RUN apt-get update && apt-get install -y \
 	make \
 	mercurial \
 	nano \
+	netavark \
 	netbase \
 	openssh-server \
 	patch \
