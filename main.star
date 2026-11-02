@@ -588,10 +588,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "openbsd-riscv64": known_issue(issue_number = 73569, hide_from_presubmit = False),
     "wasip1-wasm_wasmtime-stackswitch": known_issue(issue_number = 81963, hide_from_presubmit = False),
 
-    # power8 builders are known to be missing as of 2026-08-19.
-    "linux-ppc64_power8": known_issue(issue_number = 80703, hide_from_presubmit = False),
-    "linux-ppc64le_power8": known_issue(issue_number = 80703, hide_from_presubmit = False),
-
     # The known issue for these builder types tracks the work of starting to add them.
     # Skip the builder definitions for x/ repos to reduce noise.
     # Once the builder is added and starts working in the main repo, x/ repos can be unskipped
