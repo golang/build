@@ -226,14 +226,14 @@ func (m *gitMirror) addRepo(meta *repospkg.Repo) *repo {
 func (m *gitMirror) addMirrors() error {
 	for _, repo := range m.repos {
 		if m.mirrorGitHub && repo.meta.MirrorToGitHub {
-			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git", ""); err != nil {
+			if err := repo.addRemote("github", "git@github.com:"+repo.meta.GitHubRepo+".git", "", repo.meta.MirrorToGitHubCustomRefspec); err != nil {
 				return fmt.Errorf("adding GitHub remote: %v", err)
 			}
 		}
 		if m.mirrorCSR && repo.meta.MirrorToCSRProject != "" {
 			// Option "nokeycheck" skips Cloud Source Repositories' private
 			// key checking. We have dummy keys checked in as test data.
-			if err := repo.addRemote("csr", "https://source.developers.google.com/p/"+repo.meta.MirrorToCSRProject+"/r/"+repo.name, "nokeycheck"); err != nil {
+			if err := repo.addRemote("csr", "https://source.developers.google.com/p/"+repo.meta.MirrorToCSRProject+"/r/"+repo.name, "nokeycheck", nil); err != nil {
 				return fmt.Errorf("adding CSR remote: %v", err)
 			}
 		}
@@ -453,7 +453,7 @@ func (r *repo) setStatus(status string) {
 	r.status.add(status)
 }
 
-func (r *repo) addRemote(name, url, pushOption string) error {
+func (r *repo) addRemote(name, url, pushOption string, customPushRefspec []string) error {
 	r.dests = append(r.dests, remote{
 		name:       name,
 		pushOption: pushOption,
@@ -468,6 +468,12 @@ func (r *repo) addRemote(name, url, pushOption string) error {
 	remote := "URL: " + url + "\n" +
 		"Push: +refs/heads/*:refs/heads/*\n" +
 		"Push: +refs/tags/*:refs/tags/*\n"
+	if len(customPushRefspec) != 0 {
+		remote = "URL: " + url + "\n"
+		for _, refspec := range customPushRefspec {
+			remote += "Push: " + refspec + "\n"
+		}
+	}
 	return os.WriteFile(filepath.Join(r.root, "remotes", name), []byte(remote), 0777)
 }
 

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/build/internal/envutil"
 	repospkg "golang.org/x/build/repos"
 )
@@ -189,8 +190,8 @@ func newTestMirror(t *testing.T) *testMirror {
 	// Manually add mirror repos. We can't use tm.m.addMirrors, as they
 	// hard-codes the real remotes, but we need to use local test
 	// directories.
-	tm.buildRepo.addRemote("github", tm.github.gitDir, "")
-	tm.buildRepo.addRemote("csr", tm.csr.gitDir, "")
+	tm.buildRepo.addRemote("github", tm.github.gitDir, "", nil)
+	tm.buildRepo.addRemote("csr", tm.csr.gitDir, "", nil)
 
 	return tm
 }
@@ -241,4 +242,42 @@ func (tm *testMirror) get(path string) string {
 		tm.t.Fatalf("request for %q failed", path)
 	}
 	return string(body)
+}
+
+func TestCustomPushRefspec(t *testing.T) {
+	r := repo{root: t.TempDir()}
+	r.addRemote("default", "https://example.com", "", nil)
+	r.addRemote("custom-refspec", "https://example.com", "", []string{
+		"+refs/heads/custom1:refs/heads/custom1",
+		"+refs/heads/custom2:refs/heads/custom2",
+		"+refs/tags/*:refs/tags/*",
+	})
+
+	t.Run("default", func(t *testing.T) {
+		got, err := os.ReadFile(filepath.Join(r.root, "remotes", "default"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		const want = `URL: https://example.com
+Push: +refs/heads/*:refs/heads/*
+Push: +refs/tags/*:refs/tags/*
+`
+		if diff := cmp.Diff(want, string(got)); diff != "" {
+			t.Errorf("remote config mismatch (-want +got):\n%s", diff)
+		}
+	})
+	t.Run("custom-refspec", func(t *testing.T) {
+		got, err := os.ReadFile(filepath.Join(r.root, "remotes", "custom-refspec"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		const want = `URL: https://example.com
+Push: +refs/heads/custom1:refs/heads/custom1
+Push: +refs/heads/custom2:refs/heads/custom2
+Push: +refs/tags/*:refs/tags/*
+`
+		if diff := cmp.Diff(want, string(got)); diff != "" {
+			t.Errorf("remote config mismatch (-want +got):\n%s", diff)
+		}
+	})
 }

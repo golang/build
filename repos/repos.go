@@ -24,6 +24,11 @@ type Repo struct {
 	// from Gerrit to GitHub. If true, GoGerritProject and
 	// gitHubRepo must both be defined.
 	MirrorToGitHub bool
+	// MirrorToGitHubCustomRefspec optionally specifies custom refspec
+	// to use when mirroring from Gerrit to GitHub. Empty list means to use the
+	// default behavior of mirroring all branches and tags, which is equivalent
+	// to specifying "+refs/heads/*:refs/heads/*" and "+refs/tags/*:refs/tags/*".
+	MirrorToGitHubCustomRefspec []string
 
 	// MirrorToCSRProject controls whether this repo is mirrored from
 	// Gerrit to Cloud Source Repositories. If not empty, GoGerritProject
@@ -131,8 +136,12 @@ func init() {
 	add(&Repo{
 		GoGerritProject: "protobuf",
 		MirrorToGitHub:  true,
-		ImportPath:      "google.golang.org/protobuf",
-		GitHubRepo:      "protocolbuffers/protobuf-go",
+		MirrorToGitHubCustomRefspec: []string{
+			"+refs/heads/master:refs/heads/master", // mirror the main branch only, not other branches
+			"+refs/tags/*:refs/tags/*",
+		},
+		ImportPath: "google.golang.org/protobuf",
+		GitHubRepo: "protocolbuffers/protobuf-go",
 	})
 
 	add(&Repo{
@@ -214,6 +223,9 @@ func add(r *Repo) {
 	}
 	if r.MirrorToGitHub && r.GitHubRepo == "" {
 		panic(fmt.Sprintf("project %+v has MirrorToGitHub but no gitHubRepo", r))
+	}
+	if len(r.MirrorToGitHubCustomRefspec) != 0 && !r.MirrorToGitHub {
+		panic(fmt.Sprintf("project %+v has MirrorToGitHubCustomRefspec but no MirrorToGitHub", r))
 	}
 	if r.showOnDashboard && !r.CoordinatorCanBuild {
 		panic(fmt.Sprintf("project %+v is showOnDashboard but not marked buildable by coordinator", r))
