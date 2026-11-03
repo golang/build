@@ -92,7 +92,7 @@ func init() {
 	x("blog", noDashNoAuto)
 	x("build", desc("build.golang.org's implementation"))
 	x("crypto", desc("additional cryptography packages"))
-	x("debug", desc("an experimental debugger for Go"))
+	x("debug", desc("utilities and libraries for debugging Go programs"))
 	x("example", noDashNoAuto)
 	x("exp", desc("experimental and deprecated packages (handle with care; may change without warning)"))
 	x("image", desc("additional imaging packages"))
