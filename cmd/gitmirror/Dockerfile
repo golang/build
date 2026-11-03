@@ -24,7 +24,7 @@ RUN go install golang.org/x/build/cmd/gitmirror
 FROM debian:trixie
 LABEL maintainer="golang-dev@googlegroups.com"
 
-# For interacting with the Go source & subrepos
+# For interacting with the Go source & subrepos.
 RUN apt-get update && apt-get install -y \
 	--no-install-recommends \
 	ca-certificates \
@@ -34,12 +34,12 @@ RUN apt-get update && apt-get install -y \
 	curl tini \
 	&& rm -rf /var/lib/apt/lists/*
 
-# Install gcloud for auth to CSR, see https://cloud.google.com/sdk/docs/install#deb
+# Install gcloud for auth to CSR, see https://cloud.google.com/sdk/docs/install#deb.
 RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | \
 	tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
 	curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
 	gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg && \
-	apt-get update -y && apt-get install google-cloud-sdk -y && \
+	apt-get update -y && apt-get install google-cloud-cli -y && \
 	rm -rf /var/lib/apt/lists/*
 
 # Add github.com's known_hosts entries, so git push calls later don't
