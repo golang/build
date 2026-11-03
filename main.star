@@ -1270,9 +1270,10 @@ RUN_MODS = {
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/(ssa|ssagen)/.+"]),
     ),
 
-    # Build and test with GOWASM=stackswitch, which enables WebAssembly
-    # stack switching support.
+    # Build and test with GOWASM=stackswitch feature, which enables WebAssembly
+    # stack switching support. Wasmtime 35.0.0 is the minimum version that supports it.
     "stackswitch": make_run_mod(
+        add_props = {"wasmtime_version": "3@50.0.1"},
         add_env = {"GOWASM": "stackswitch"},
         enabled = define_for_postsubmit(["go"], ["gotip"]),
     ),
