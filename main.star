@@ -447,7 +447,6 @@ BUILDER_TYPES = [
     "ios-arm64",
     "js-wasm",
     "js-wasm-simd",
-    "js-wasm-stackswitch",
     "linux-386",
     "linux-386-clang15",
     "linux-386_debian13",
@@ -581,12 +580,11 @@ def known_issue(issue_number, skip_x_repos = False, hide_from_presubmit = True):
 # An optional "@go_branch_short" suffix means to apply the known issue only for the named Go branch.
 # An optional " in repo" suffix means to apply the known issue only for the named Go repository.
 KNOWN_ISSUE_BUILDER_TYPES = {
-    "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
-    "js-wasm-stackswitch": known_issue(issue_number = 81963, hide_from_presubmit = False),
     "linux-amd64-racegocommand": known_issue(issue_number = 79779, hide_from_presubmit = False),
     "linux-amd64-racegocommand-noopt": known_issue(issue_number = 79779, hide_from_presubmit = False),
     "linux-arm64-msan-clang15": known_issue(issue_number = 71614),
     "linux-mipsle": known_issue(issue_number = 67304, hide_from_presubmit = False),
+    "freebsd-riscv64": known_issue(issue_number = 73568, hide_from_presubmit = False),
     "openbsd-riscv64": known_issue(issue_number = 73569, hide_from_presubmit = False),
     "wasip1-wasm_wasmtime-stackswitch": known_issue(issue_number = 81963, hide_from_presubmit = False),
 
@@ -1272,9 +1270,10 @@ RUN_MODS = {
         enabled = define_for_go_postsubmit_or_presubmit_with_filters(["src/cmd/compile/internal/(ssa|ssagen)/.+"]),
     ),
 
-    # Build and test with GOWASM=stackswitch feature, which enables WASM
-    # stack switching support.
+    # Build and test with GOWASM=stackswitch feature, which enables WebAssembly
+    # stack switching support. Wasmtime 35.0.0 is the minimum version that supports it.
     "stackswitch": make_run_mod(
+        add_props = {"wasmtime_version": "3@50.0.1"},
         add_env = {"GOWASM": "stackswitch"},
         enabled = define_for_postsubmit(["go"], ["gotip"]),
     ),
@@ -1716,11 +1715,11 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
         if os == "js":
             if suffix != "":
                 fail("unknown GOOS=js builder suffix: %s" % suffix)
-            base_props["node_version"] = "3@26.13.0"
+            base_props["node_version"] = "2@18.8.0"
         elif os == "wasip1":
             if "wasmtime" in suffix.split("_"):
                 base_props["env"]["GOWASIRUNTIME"] = "wasmtime"
-                base_props["wasmtime_version"] = "3@50.0.1"
+                base_props["wasmtime_version"] = "2@14.0.4"
             elif "wazero" in suffix.split("_"):
                 base_props["env"]["GOWASIRUNTIME"] = "wazero"
                 base_props["wazero_version"] = "3@1.8.1"
