@@ -332,8 +332,8 @@ PKGSITE_MAINTAINER_EMAILS = [
     "jba@google.com",
     "ethanalee@google.com",
 ]
-PKGSITE_DOCKER_NOTIFIER = luci.notifier(
-    name = "pkgsite-docker-ci",
+PKGSITE_SCREENTEST_NOTIFIER = luci.notifier(
+    name = "pkgsite-screentest-ci",
     on_new_status = ["FAILURE"],
     notify_emails = PKGSITE_MAINTAINER_EMAILS,
 )
@@ -503,8 +503,6 @@ BUILDER_TYPES = [
     "linux-amd64_c4dh96-perf_vs_oldest_stable",
     "linux-amd64_debian11",
     "linux-amd64_debian13",
-    "linux-amd64_docker",
-    "linux-amd64_docker-screentest",
     "linux-amd64_noavx512",
     "linux-amd64_noavx512-simd",
     "linux-arm",
@@ -1450,8 +1448,6 @@ def dimensions_of(host_type):
             cpu = goarch + "-64"
             if suffix != "power8":
                 cpu += "-" + suffix.replace("power", "POWER")
-        elif goos == "linux" and goarch == "amd64" and "docker" in suffixes:
-            os = "Ubuntu-22"
         elif goos == "darwin":
             # darwin-amd64_12.6 -> Mac-12.6
             os = "Mac-" + suffixes[0]
@@ -1518,10 +1514,6 @@ def dimensions_of(host_type):
         dims["cpu"] = cpu
     if machine_type != None:
         dims["machine_type"] = machine_type
-
-    # machines with docker installed have a special dimension.
-    if suffix == "docker":
-        dims["docker_installed"] = "true"
     return dims
 
 def is_capacity_constrained(low_capacity_hosts, host_type):
@@ -1848,10 +1840,10 @@ def define_builder(env, project, go_branch_short, builder_type, known_issue):
     if host_type in HOST_NOTIFIERS:
         notifiers.append(HOST_NOTIFIERS[host_type])
 
-    # Add a notification for the x/pkgsite maintainers when a postsubmit Docker
+    # Add a notification for the x/pkgsite maintainers when a postsubmit screentest
     # builder fails.
-    if project == "pkgsite" and (suffix == "docker" or "screentest" in run_mods) and env.bucket == "ci":
-        notifiers.append(PKGSITE_DOCKER_NOTIFIER)
+    if project == "pkgsite" and "screentest" in run_mods and env.bucket == "ci":
+        notifiers.append(PKGSITE_SCREENTEST_NOTIFIER)
 
     # Create a helper to emit builder definitions, installing common fields from
     # the current context.
@@ -2143,14 +2135,10 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     # Filter out new ports on old release branches.
     # Nothing to do here at this time.
 
-    # Docker builder should only be used in pkgsite repo.
-    if suffix == "docker" and project != "pkgsite":
-        return False, PRESUBMIT.DISABLED, False, [], 0
-
     # TODO(golang/go#71558): pkgsite's compose.yaml currently uses a pinned
     # GO_VERSION from deploy-env.yaml rather than the builder's Go toolchain.
     # Restrict to gotip until the container uses the host Go version.
-    if (suffix == "docker" or "longtest" in run_mods or "screentest" in run_mods) and project == "pkgsite" and go_branch_short != "gotip":
+    if ("longtest" in run_mods or "screentest" in run_mods) and project == "pkgsite" and go_branch_short != "gotip":
         return False, PRESUBMIT.DISABLED, False, [], 0
     if project == "vscode-go" and builder_type != "linux-amd64-longtest":
         return False, PRESUBMIT.DISABLED, False, [], 0
@@ -2359,7 +2347,7 @@ def _define_go_ci():
                 # See go.dev/issue/17626.
                 if project != "go" and go_branch_short != "gotip":
                     first_class_subset = builder_type in ["linux-amd64", "linux-386", "darwin-amd64_14", "windows-amd64"]
-                    vscode_go_special_case = project == "vscode-go" and (builder_type == "linux-amd64" or builder_type == "linux-amd64_docker")
+                    vscode_go_special_case = project == "vscode-go" and builder_type == "linux-amd64"
 
                     in_postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)[2]
 
