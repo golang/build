@@ -28,6 +28,7 @@ type Repo struct {
 	// to use when mirroring from Gerrit to GitHub. Empty list means to use the
 	// default behavior of mirroring all branches and tags, which is equivalent
 	// to specifying "+refs/heads/*:refs/heads/*" and "+refs/tags/*:refs/tags/*".
+	// With a custom refspec, GitHub refs that it doesn't match are left alone.
 	MirrorToGitHubCustomRefspec []string
 
 	// MirrorToCSRProject controls whether this repo is mirrored from

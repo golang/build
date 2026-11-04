@@ -95,6 +95,42 @@ func TestMirrorInitiallyEmpty(t *testing.T) {
 	}
 }
 
+// Tests that mirroring with a custom push refspec leaves alone the refs in the
+// destination that the refspec doesn't match, such as branches that are pushed
+// to the destination directly, and still deletes the ones that it matches.
+func TestMirrorCustomRefspec(t *testing.T) {
+	tm := newTestMirror(t)
+	branch := strings.TrimSpace(tm.git(tm.gerrit, "symbolic-ref", "--short", "HEAD"))
+	tm.buildRepo.dests = nil
+	if err := tm.buildRepo.addRemote("github", tm.github.gitDir, "", []string{
+		"+refs/heads/" + branch + ":refs/heads/" + branch,
+		"+refs/tags/*:refs/tags/*",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	tm.commit("first commit")
+	tm.git(tm.gerrit, "tag", "v0")
+	tm.git(tm.gerrit, "tag", "v1")
+	tm.git(tm.gerrit, "branch", "unmirrored")
+	tm.loopOnce()
+	tm.git(tm.github, "branch", "pushed-directly", branch)
+
+	tm.git(tm.gerrit, "tag", "-d", "v0")
+	tm.commit("second commit")
+	tm.loopOnce()
+
+	rev := tm.git(tm.gerrit, "rev-parse", "HEAD")
+	if githubRev := tm.git(tm.github, "rev-parse", branch); rev != githubRev {
+		t.Errorf("github %s is %v, want %v", branch, githubRev, rev)
+	}
+	got := tm.git(tm.github, "for-each-ref", "--format=%(refname)")
+	want := "refs/heads/" + branch + "\nrefs/heads/pushed-directly\nrefs/tags/v1\n"
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("github refs mismatch (-want +got):\n%s", diff)
+	}
+}
+
 type testMirror struct {
 	// Local paths to the copies of the build repo.
 	gerrit, github, csr explicitRepo

@@ -323,6 +323,9 @@ func (r *statusRing) foreachDesc(fn func(statusEntry)) {
 type remote struct {
 	name       string // name as configured in the repo.
 	pushOption string // optional extra push option (--push-option).
+	// customRefspec is whether the remote has a custom push refspec,
+	// rather than the default of all branches and tags.
+	customRefspec bool
 }
 
 // repo represents a repository to be watched.
@@ -455,8 +458,9 @@ func (r *repo) setStatus(status string) {
 
 func (r *repo) addRemote(name, url, pushOption string, customPushRefspec []string) error {
 	r.dests = append(r.dests, remote{
-		name:       name,
-		pushOption: pushOption,
+		name:          name,
+		pushOption:    pushOption,
+		customRefspec: len(customPushRefspec) != 0,
 	})
 	if err := os.MkdirAll(filepath.Join(r.root, "remotes"), 0777); err != nil {
 		return err
@@ -540,12 +544,19 @@ func (r *repo) fetch() error {
 	return err
 }
 
-// push runs "git push -f --mirror dest" in the repository root.
+// push runs "git push -f --mirror dest" in the repository root,
+// or "git push -f --prune dest" if dest has a custom push refspec.
 // It tries three times, just in case it failed because of a transient error.
 func (r *repo) push(dest remote) error {
 	err := r.try(3, func(attempt int) error {
 		r.setStatus(fmt.Sprintf("syncing to %v, attempt %d", dest, attempt))
 		args := []string{"push", "-f", "--mirror"}
+		if dest.customRefspec {
+			// --mirror deletes all the refs in dest that the custom refspec
+			// doesn't push, such as branches that are pushed to dest directly.
+			// --prune only deletes the refs that the refspec matches.
+			args = []string{"push", "-f", "--prune"}
+		}
 		if dest.pushOption != "" {
 			args = append(args, "--push-option", dest.pushOption)
 		}
