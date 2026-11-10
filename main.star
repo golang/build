@@ -356,6 +356,7 @@ SLOW_HOSTS = {
 } | {
     "freebsd-riscv64": struct(scale = 4),
     "linux-amd64_noavx512": struct(scale = 2),  # runs on older GCE machines
+    "linux-loong64": struct(scale = 2),
     "linux-ppc64_power10": struct(scale = 2),
     "linux-ppc64_power8": struct(scale = 2),
     "linux-ppc64le_power10": struct(scale = 2),
