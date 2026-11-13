@@ -825,7 +825,6 @@ PROJECTS = {
     "pkgsite": PT.TOOL,
     "pkgsite-metrics": PT.TOOL,
     "playground": PT.TOOL,
-    "protobuf": PT.SPECIAL,
     "review": PT.TOOL,
     "scratch": PT.TOOL,
     "sync": PT.CORE,
@@ -1075,7 +1074,6 @@ RUN_MODS = {
                 "src/crypto/tls/.+",
             ],
             "pkgsite": [],
-            "protobuf": [],
             "vscode-go": [],
             "vuln": [],
         }),
@@ -1301,16 +1299,7 @@ RUN_MODS = {
 
 # EXTRA_DEPENDENCIES specifies custom additional dependencies
 # to append when applies(project, port, run_mods) matches.
-EXTRA_DEPENDENCIES = [
-    # The protobuf repo needs extra dependencies for its integration test.
-    # See its integration_test.go file and go.dev/issue/64066.
-    struct(
-        applies = lambda project, port, run_mods: project == "protobuf" and port == "linux-amd64" and "longtest" in run_mods,
-        test_deps = """@Subdir bin
-golang/third_party/protoc_with_conformance/${platform} version:v36.2
-""",
-    ),
-]
+EXTRA_DEPENDENCIES = []
 
 def go_cq_group(project, go_branch_short):
     """go_cq_group returns the CQ group name and watch for project and
@@ -1563,7 +1552,7 @@ def builder_name(project, go_branch_short, builder_type):
         # it's clear what the builder is building and testing.
         return "%s-%s" % (go_branch_short, builder_type)
 
-    elif project in ["dl", "protobuf", "open2opaque"]:
+    elif project in ["dl", "open2opaque"]:
         # A special, non-golang.org/x/* repository.
         # Put "z" at the beginning to sort this at the bottom of the builder list.
         return "z_%s-%s-%s" % (project, go_branch_short, builder_type)
@@ -1579,7 +1568,7 @@ def project_title(project):
         fail("project_title doesn't have support for the 'go' project")
     elif project == "dl":
         return "golang.org/dl"
-    elif project in ["protobuf", "open2opaque"]:
+    elif project in ["open2opaque"]:
         return "google.golang.org/%s" % project
     else:
         # A golang.org/x/* repository. Since these are very common,
@@ -2164,7 +2153,7 @@ def enabled(low_capacity_hosts, project, go_branch_short, builder_type, known_is
     elif project == "exp":
         # Not quite sure what to do with exp/shiny. For now just run on major platforms.
         enable_types = ["linux-386", "linux-amd64", "linux-arm64", "windows-386", "windows-amd64", "darwin-amd64"]
-    elif project in ["protobuf", "open2opaque"]:
+    elif project in ["open2opaque"]:
         enable_types = ["linux-amd64"]  # See issue go.dev/issue/63597.
     elif project == "vscode-go":
         enable_types = ["linux-amd64"]
@@ -2253,7 +2242,6 @@ POST_ACTIONS = [
 # on the https://go.googlesource.com/go Gerrit host.
 PROJECT_EXTRA_DRY_RUNNERS_AND_COMMITTERS = {
     "open2opaque": ["mdb/golang-gob-protobuf-cl-approvers"],
-    "protobuf": ["mdb/golang-gob-protobuf-cl-approvers"],
 }
 
 def _define_go_ci():
