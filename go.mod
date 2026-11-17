@@ -54,18 +54,18 @@ require (
 	go.chromium.org/luci v0.0.0-20240207061751-3ff7b3e74e1c
 	go.opencensus.io v0.24.0
 	go4.org v0.0.0-20180809161055-417644f6feb5
-	golang.org/x/crypto v0.58.0
-	golang.org/x/image v0.47.0
-	golang.org/x/mod v0.42.0
-	golang.org/x/net v0.61.0
-	golang.org/x/oauth2 v0.37.0
-	golang.org/x/perf v0.0.0-20261009192801-be2c69fb417e
-	golang.org/x/sync v0.24.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/term v0.47.0
+	golang.org/x/crypto v0.59.0
+	golang.org/x/image v0.48.0
+	golang.org/x/mod v0.43.0
+	golang.org/x/net v0.63.0
+	golang.org/x/oauth2 v0.38.0
+	golang.org/x/perf v0.0.0-20261117185222-4febdb082b2c
+	golang.org/x/sync v0.25.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.48.0
 	golang.org/x/time v0.16.0
-	golang.org/x/tools v0.52.0
-	golang.org/x/vulndb v0.0.0-20261008223109-f5aaa67f6ede
+	golang.org/x/tools v0.53.0
+	golang.org/x/vulndb v0.0.0-20261111025111-e91d8491530f
 	google.golang.org/api v0.290.0
 	google.golang.org/appengine/v2 v2.0.6
 	google.golang.org/genproto/googleapis/api v0.0.0-20260630182238-925bb5da69e7
@@ -183,9 +183,9 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	golang.org/x/exp v0.0.0-20261009195045-ca0d7ba23607 // indirect
-	golang.org/x/telemetry v0.0.0-20261010193011-f71dc92da45e // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/exp v0.0.0-20261113113407-e3970619a1a4 // indirect
+	golang.org/x/telemetry v0.0.0-20261116191925-e77a43154acb // indirect
+	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20260319201613-d00831a3d3e7 // indirect
 	google.golang.org/genproto/googleapis/bytestream v0.0.0-20260706201446-f0a921348800 // indirect
