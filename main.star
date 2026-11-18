@@ -2047,21 +2047,21 @@ def define_perfmode_builder(env, name, builder_type, base_props, base_dims, emit
         bucket = env.bucket,
         dimensions = perf_dims,
         properties = perf_props,
-        triggering_policy = triggering_policy(env, builder_type, concurrent_builds = 10),
+        triggering_policy = triggering_policy(env, builder_type, concurrent_builds = 10, pending_timeout = 30 * time.day),
         service_account = env.worker_sa,
         execution_timeout = timeout,
     )
 
 # triggering_policy defines the LUCI Scheduler triggering policy for postsubmit builders.
 # Returns None for presubmit builders.
-def triggering_policy(env, builder_type, concurrent_builds = 5):
+def triggering_policy(env, builder_type, concurrent_builds = 5, pending_timeout = time.week):
     if env.bucket not in ["ci", "ci-workers"]:
         return None
     if is_capacity_constrained(env.low_capacity_hosts, host_of(builder_type)):
         concurrent_builds = 1
     return scheduler.newest_first(
         max_concurrent_invocations = concurrent_builds,
-        pending_timeout = time.week,
+        pending_timeout = pending_timeout,
     )
 
 def display_for_builder_type(builder_type):
