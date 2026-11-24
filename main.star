@@ -465,7 +465,6 @@ BUILDER_TYPES = [
     "linux-amd64-longtest-git2.24.0",
     "linux-amd64-longtest-race",
     "linux-amd64-misccompile",
-    "linux-amd64_n4dh96-misccompile",
     "linux-amd64-msan-clang15",
     "linux-amd64-mapsplitgroup",
     "linux-amd64-newinliner",
@@ -612,7 +611,6 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
-    "linux-amd64_n4dh96-misccompile": known_issue(issue_number = 82017),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
@@ -1378,6 +1376,9 @@ def host_of(builder_type):
     Returns:
         The host builder type.
     """
+
+    if builder_type == "linux-amd64-misccompile":
+        return "linux-amd64_n4dh96"
 
     goos, goarch, suffix, _ = split_builder_type(builder_type)
 
