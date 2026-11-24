@@ -465,6 +465,7 @@ BUILDER_TYPES = [
     "linux-amd64-longtest-git2.24.0",
     "linux-amd64-longtest-race",
     "linux-amd64-misccompile",
+    "linux-amd64_n4dh96-misccompile",
     "linux-amd64-msan-clang15",
     "linux-amd64-mapsplitgroup",
     "linux-amd64-newinliner",
@@ -611,6 +612,7 @@ KNOWN_ISSUE_BUILDER_TYPES = {
     "netbsd-amd64": known_issue(issue_number = 61121, skip_x_repos = True),
     "openbsd-386": known_issue(issue_number = 61122, skip_x_repos = True),
     "openbsd-arm": known_issue(issue_number = 67103, skip_x_repos = True),
+    "linux-amd64_n4dh96-misccompile": known_issue(issue_number = 82017),
 }
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES = dict(KNOWN_ISSUE_BUILDER_TYPES)
 SECURITY_KNOWN_ISSUE_BUILDER_TYPES.update({
@@ -1431,7 +1433,7 @@ def dimensions_of(host_type):
             # linux-amd64_debian11  -> Debian-11
             # linux-amd64_debiansid -> Debian-13
             os = suffixes[0].replace("debian", "Debian-").replace("sid", "13")
-        elif goos == "linux" and any([s in ["noavx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72"] for s in suffixes]):
+        elif goos == "linux" and any([s in ["noavx512", "c2s16", "c3h88", "c4dh96", "c4as16", "c4ah72", "n4dh96"] for s in suffixes]):
             # Machines with special architecture and performance test machines.
             os = "Debian-12"
         elif goos == "linux" and goarch in ["ppc64", "ppc64le"]:
@@ -1468,6 +1470,8 @@ def dimensions_of(host_type):
                 machine_type = "c3-highcpu-88"
             elif "c4dh96" in suffixes:
                 machine_type = "c4d-highcpu-96"
+            elif "n4dh96" in suffixes:
+                machine_type = "n4d-highcpu-96"
             elif "noavx512" in suffixes:
                 machine_type = "n2d-standard-16"
             else:
