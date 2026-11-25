@@ -2348,7 +2348,7 @@ def _define_go_ci():
                         # vscode-go special case: it only has a longtest linux/amd64 builder, not a short one,
                         # and it's considered acceptably fast.
                         is_fast_linux = builder_type in ["linux-amd64-longtest"]
-                    is_fast_darwin = builder_type in ["darwin-amd64_14"]  # TODO(go.dev/issue/65040): switch to darwin/arm64 which is faster
+                    is_fast_darwin = builder_type in ["darwin-arm64_14"]
                     is_fast_windows = builder_type in ["windows-amd64"]
                     first_class_subset = is_fast_linux or is_fast_darwin or is_fast_windows
                     in_postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)[2]
