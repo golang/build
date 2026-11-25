@@ -2339,19 +2339,25 @@ def _define_go_ci():
 
                 # For golang.org/x repos, include the ability to run presubmit
                 # against all supported releases in addition to testing with tip.
-                # Make presubmit enabled by default for builders deemed "fast".
-                # See go.dev/issue/17626.
+                # Make presubmit enabled by default for a subset of builders
+                # that cover first-class ports and are deemed acceptably fast.
+                # See go.dev/issue/17626 and go.dev/issue/65235.
                 if project != "go" and go_branch_short != "gotip":
-                    first_class_subset = builder_type in ["linux-amd64", "linux-386", "darwin-amd64_14", "windows-amd64"]
-                    vscode_go_special_case = project == "vscode-go" and builder_type == "linux-amd64"
-
+                    is_fast_linux = builder_type in ["linux-amd64", "linux-386"]
+                    if project == "vscode-go":
+                        # vscode-go special case: it only has a longtest linux/amd64 builder, not a short one,
+                        # and it's considered acceptably fast.
+                        is_fast_linux = builder_type in ["linux-amd64-longtest"]
+                    is_fast_darwin = builder_type in ["darwin-amd64_14"]  # TODO(go.dev/issue/65040): switch to darwin/arm64 which is faster
+                    is_fast_windows = builder_type in ["windows-amd64"]
+                    first_class_subset = is_fast_linux or is_fast_darwin or is_fast_windows
                     in_postsubmit = enabled(LOW_CAPACITY_HOSTS, project, go_branch_short, builder_type, KNOWN_ISSUE_BUILDER_TYPES)[2]
+                    x_repo_presubmit_optional = (not first_class_subset) or (not in_postsubmit)
 
-                    x_repo_presubmit = in_postsubmit and (first_class_subset or vscode_go_special_case)
                     luci.cq_tryjob_verifier(
                         builder = name,
                         cq_group = go_cq_group(project, "gotip").name,
-                        includable_only = not x_repo_presubmit,
+                        includable_only = x_repo_presubmit_optional,
                         disable_reuse = True,
                     )
 
