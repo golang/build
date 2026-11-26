@@ -401,15 +401,7 @@ func reportBrokenBots(ctx context.Context, c *LUCIClient) {
 		log.Printf("failed querying for existing builder issues: %s", err)
 		return
 	}
-	// map used as set to check for existing issues for a bot ID.
-	// botID -> issue number
-	botIssues := make(map[string]int)
-	for _, issue := range existingIssues {
-		if botID, ok := botIDFromIssueBody(issue.Body); ok {
-			fmt.Printf("found existing issue: %+v for %s\n", issue, botID)
-			botIssues[botID] = issue.Number
-		}
-	}
+	botIssues := botIssuesByID(existingIssues)
 	po, err := getPlatformOwners()
 	if err != nil {
 		log.Printf("failed to query for platform owners: %s", err)
@@ -426,9 +418,13 @@ func reportBrokenBots(ctx context.Context, c *LUCIClient) {
 			fmt.Printf("broken bot %q has not been dead for %s. Skipping issue creation/updates.", bot.ID, lastSeenThreshold.String())
 			continue
 		}
-		if issueID, ok := botIssues[bot.ID]; ok {
-			fmt.Printf("issue #%d found for broken bot %s\n", issueID, bot.ID)
-			continue
+		prev := 0
+		if issue, ok := botIssues[bot.ID]; ok {
+			if !issue.Closed {
+				fmt.Printf("issue #%d found for broken bot %s\n", issue.Number, bot.ID)
+				continue
+			}
+			prev = issue.Number
 		}
 		title := brokenBotIssueTitle(bot.ID)
 		var botOwners []string
@@ -446,13 +442,31 @@ func reportBrokenBots(ctx context.Context, c *LUCIClient) {
 			fmt.Printf("dry-run: skipped posting a new broken bot issue for %s\n", bot.ID)
 			continue
 		}
-		i, err := postNewBrokenBot(title, brokenBotIssueBody(bot, botOwners))
+		i, err := postNewBrokenBot(title, brokenBotIssueBody(bot, botOwners, prev))
 		if err != nil {
 			log.Printf("failed to post broken bot issue: %s", err)
 			continue
 		}
 		fmt.Printf("Posted new broken bot issue for %s, issue: %d\n", bot.ID, i.Number)
 	}
+}
+
+// botIssuesByID maps each bot ID to its broken bot issue.
+// If a bot has more than one issue, an open issue wins over a
+// closed one; otherwise the issue that comes last (the newest) wins.
+func botIssuesByID(issues []*Issue) map[string]*Issue {
+	m := make(map[string]*Issue)
+	for _, issue := range issues {
+		botID, ok := botIDFromIssueBody(issue.Body)
+		if !ok {
+			continue
+		}
+		if old, ok := m[botID]; ok && !old.Closed {
+			continue // keep the open issue
+		}
+		m[botID] = issue
+	}
+	return m
 }
 
 func getPlatformOwners() (map[string][]string, error) {
@@ -509,7 +523,7 @@ func brokenBotIssueTitle(botID string) string {
 	return fmt.Sprintf("x/build: bot %s reported as broken", botID)
 }
 
-func brokenBotIssueBody(bot Bot, owners []string) string {
+func brokenBotIssueBody(bot Bot, owners []string, prev int) string {
 	var state string
 	if bot.Dead {
 		state = "dead"
@@ -521,7 +535,11 @@ func brokenBotIssueBody(bot Bot, owners []string) string {
 	botURL := fmt.Sprintf("https://chromium-swarm.appspot.com/bot?id=%s", bot.ID)
 	body := "The bot [%s](%s) has been reported as broken. It is currently in %q state. Please work to resolve the issue.\n\n%s\n%s"
 	footer := fmt.Sprintf("<!-- DO NOT EDIT: %s -->", bot.ID)
-	return fmt.Sprintf(body, bot.ID, botURL, state, strings.Join(owners, "\n"), footer)
+	s := fmt.Sprintf(body, bot.ID, botURL, state, strings.Join(owners, "\n"), footer)
+	if prev != 0 {
+		s = fmt.Sprintf("This bot was previously reported as broken in #%d.\n\n", prev) + s
+	}
+	return s
 }
 
 const SKIP = bbpb.Status_STATUS_UNSPECIFIED // for smashing the status to skip a non-flake failure
