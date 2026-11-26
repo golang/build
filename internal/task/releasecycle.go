@@ -251,6 +251,7 @@ CC @aclements, @ianlancetaylor, @golang/release.`))
 		Milestone: new(tracking.Milestone),
 	})
 	if err != nil {
+		ctx.Printf("Failed to create an API audit issue. For reference, the generated issue title and body were:\n\n%s\n\n%s", title, body.String())
 		return 0, err
 	}
 
